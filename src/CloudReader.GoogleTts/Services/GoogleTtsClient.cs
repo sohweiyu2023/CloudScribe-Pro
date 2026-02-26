@@ -1,6 +1,7 @@
 using CloudReader.Core.Models;
 using CloudReader.GoogleTts.Models;
 using Google.Api.Gax;
+using Google.Api.Gax.Grpc;
 using Polly;
 using V1 = Google.Cloud.TextToSpeech.V1;
 using V1Beta1 = Google.Cloud.TextToSpeech.V1Beta1;
