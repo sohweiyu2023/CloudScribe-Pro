@@ -1,0 +1,6 @@
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.GoogleTts\obj\Debug\net10.0\CloudReader.GoogleTts.csproj.AssemblyReference.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.GoogleTts\obj\Debug\net10.0\CloudReader.GoogleTts.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.GoogleTts\obj\Debug\net10.0\CloudReader.GoogleTts.AssemblyInfoInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.GoogleTts\obj\Debug\net10.0\CloudReader.GoogleTts.AssemblyInfo.cs
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.GoogleTts\obj\Debug\net10.0\CloudReader.GoogleTts.csproj.CoreCompileInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.GoogleTts\obj\Debug\net10.0\CloudReader.GoogleTts.sourcelink.json

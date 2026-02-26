@@ -1,0 +1,16 @@
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudReader.Audio.csproj.AssemblyReference.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudReader.Audio.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudReader.Audio.AssemblyInfoInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudReader.Audio.AssemblyInfo.cs
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudReader.Audio.csproj.CoreCompileInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudReader.Audio.sourcelink.json
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\bin\Debug\net10.0\CloudReader.Audio.deps.json
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\bin\Debug\net10.0\CloudReader.Audio.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\bin\Debug\net10.0\CloudReader.Audio.pdb
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\bin\Debug\net10.0\CloudReader.Core.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\bin\Debug\net10.0\CloudReader.Core.pdb
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudRea.9B9A207C.Up2Date
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudReader.Audio.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\refint\CloudReader.Audio.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\CloudReader.Audio.pdb
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Audio\obj\Debug\net10.0\ref\CloudReader.Audio.dll

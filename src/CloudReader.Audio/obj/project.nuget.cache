@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "dgSpecHash": "kuLz4CLxcUE=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\cyber\\OneDrive\\Documents\\repos\\CloudScribe-Pro\\src\\CloudReader.Audio\\CloudReader.Audio.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\cyber\\.nuget\\packages\\communitytoolkit.mvvm\\8.4.0\\communitytoolkit.mvvm.8.4.0.nupkg.sha512",
+    "C:\\Users\\cyber\\.nuget\\packages\\polly\\8.5.0\\polly.8.5.0.nupkg.sha512",
+    "C:\\Users\\cyber\\.nuget\\packages\\polly.core\\8.5.0\\polly.core.8.5.0.nupkg.sha512",
+    "C:\\Users\\cyber\\.nuget\\packages\\system.threading.ratelimiting\\8.0.0\\system.threading.ratelimiting.8.0.0.nupkg.sha512",
+    "C:\\Users\\cyber\\.nuget\\packages\\xabe.ffmpeg\\6.0.2\\xabe.ffmpeg.6.0.2.nupkg.sha512",
+    "C:\\Users\\cyber\\.nuget\\packages\\xabe.ffmpeg.downloader\\6.0.2\\xabe.ffmpeg.downloader.6.0.2.nupkg.sha512"
+  ],
+  "logs": []
+}
