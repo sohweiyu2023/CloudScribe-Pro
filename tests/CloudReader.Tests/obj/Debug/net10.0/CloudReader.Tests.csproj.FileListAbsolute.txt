@@ -1,0 +1,7 @@
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\tests\CloudReader.Tests\bin\Debug\net10.0\.msCoverageSourceRootsMapping_CloudReader.Tests
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\tests\CloudReader.Tests\obj\Debug\net10.0\CloudReader.Tests.csproj.AssemblyReference.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\tests\CloudReader.Tests\obj\Debug\net10.0\CloudReader.Tests.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\tests\CloudReader.Tests\obj\Debug\net10.0\CloudReader.Tests.AssemblyInfoInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\tests\CloudReader.Tests\obj\Debug\net10.0\CloudReader.Tests.AssemblyInfo.cs
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\tests\CloudReader.Tests\obj\Debug\net10.0\CloudReader.Tests.csproj.CoreCompileInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\tests\CloudReader.Tests\obj\Debug\net10.0\CloudReader.Tests.sourcelink.json

@@ -1,0 +1,16 @@
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudReader.Infrastructure.csproj.AssemblyReference.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudReader.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudReader.Infrastructure.AssemblyInfoInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudReader.Infrastructure.AssemblyInfo.cs
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudReader.Infrastructure.csproj.CoreCompileInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudReader.Infrastructure.sourcelink.json
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\bin\Debug\net10.0\CloudReader.Infrastructure.deps.json
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\bin\Debug\net10.0\CloudReader.Infrastructure.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\bin\Debug\net10.0\CloudReader.Infrastructure.pdb
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\bin\Debug\net10.0\CloudReader.Core.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\bin\Debug\net10.0\CloudReader.Core.pdb
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudRea.17887730.Up2Date
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudReader.Infrastructure.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\refint\CloudReader.Infrastructure.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\CloudReader.Infrastructure.pdb
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Infrastructure\obj\Debug\net10.0\ref\CloudReader.Infrastructure.dll

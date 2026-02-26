@@ -1,0 +1,13 @@
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\CloudReader.Core.csproj.AssemblyReference.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\CloudReader.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\CloudReader.Core.AssemblyInfoInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\CloudReader.Core.AssemblyInfo.cs
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\CloudReader.Core.csproj.CoreCompileInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\CloudReader.Core.sourcelink.json
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\bin\Debug\net10.0\CloudReader.Core.deps.json
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\bin\Debug\net10.0\CloudReader.Core.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\bin\Debug\net10.0\CloudReader.Core.pdb
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\CloudReader.Core.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\refint\CloudReader.Core.dll
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\CloudReader.Core.pdb
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.Core\obj\Debug\net10.0\ref\CloudReader.Core.dll

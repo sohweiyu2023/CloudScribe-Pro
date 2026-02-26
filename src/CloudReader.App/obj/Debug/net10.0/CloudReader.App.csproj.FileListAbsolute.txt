@@ -1,0 +1,8 @@
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.App\obj\Debug\net10.0\CloudReader.App.csproj.AssemblyReference.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.App\obj\Debug\net10.0\Avalonia\Resources.Inputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.App\obj\Debug\net10.0\Avalonia\resources
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.App\obj\Debug\net10.0\CloudReader.App.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.App\obj\Debug\net10.0\CloudReader.App.AssemblyInfoInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.App\obj\Debug\net10.0\CloudReader.App.AssemblyInfo.cs
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.App\obj\Debug\net10.0\CloudReader.App.csproj.CoreCompileInputs.cache
+C:\Users\cyber\OneDrive\Documents\repos\CloudScribe-Pro\src\CloudReader.App\obj\Debug\net10.0\CloudReader.App.sourcelink.json
