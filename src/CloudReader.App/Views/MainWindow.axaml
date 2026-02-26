@@ -4,7 +4,7 @@
         Width="1280"
         Height="820"
         Title="CloudScribe Pro">
-  <Grid ColumnDefinitions="240,*,320" RowDefinitions="Auto,*">
+  <Grid ColumnDefinitions="240,*,360" RowDefinitions="Auto,*">
     <Border Grid.ColumnSpan="3" Background="{DynamicResource SystemControlBackgroundAccentBrush}" Padding="12">
       <TextBlock Text="CloudScribe Pro" FontSize="20" FontWeight="SemiBold" />
     </Border>
@@ -19,13 +19,26 @@
         <ComboBoxItem Content="Mode A - Local Chunked" />
         <ComboBoxItem Content="Mode B - Long Audio (GCS)" />
       </ComboBox>
-      <TextBox AcceptsReturn="True" Height="620" Text="{Binding EditorText}"/>
+      <TextBox AcceptsReturn="True" Height="620" Text="{Binding EditorText}" Watermark="Paste text or SSML here..." />
     </StackPanel>
     <StackPanel Grid.Row="1" Grid.Column="2" Spacing="8" Margin="12">
       <TextBlock Text="Voice &amp; Preset" FontWeight="SemiBold" />
       <TextBox Watermark="Search voices..." />
       <Button Content="Preview Voice" />
       <Button Content="Generate" Classes="accent"/>
+
+      <Separator Margin="0,8,0,8" />
+      <TextBlock Text="Preprocessing" FontWeight="SemiBold" />
+      <CheckBox Content="Skip URLs" IsChecked="{Binding SkipUrls}" />
+      <CheckBox Content="Skip (...)" IsChecked="{Binding SkipRoundBrackets}" />
+      <CheckBox Content="Skip [...]" IsChecked="{Binding SkipSquareBrackets}" />
+      <CheckBox Content="Skip {...}" IsChecked="{Binding SkipCurlyBrackets}" />
+      <CheckBox Content="Do not apply skip rules inside SSML tags" IsChecked="{Binding ExcludeInsideSsmlTags}" />
+      <Button Content="Preview sanitized text" Command="{Binding PreviewSanitizedTextCommand}" />
+      <TextBlock Text="{Binding RemovedSpanCount, StringFormat='Removed spans: {0}'}" />
+      <TextBlock Text="{Binding CharactersRemoved, StringFormat='Characters removed: {0}'}" />
+      <TextBlock Text="Sanitized preview" FontWeight="SemiBold" Margin="0,4,0,0" />
+      <TextBox AcceptsReturn="True" IsReadOnly="True" Height="230" Text="{Binding SanitizedPreview}" />
     </StackPanel>
   </Grid>
 </Window>
