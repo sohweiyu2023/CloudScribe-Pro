@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using CloudReader.Core.Models;
 
@@ -42,7 +43,7 @@ public sealed class TextSanitizer
 
     private static string RemoveNested(string text, char open, char close)
     {
-        var output = new List<Rune>();
+        var output = new List<System.Text.Rune>();
         var depth = 0;
 
         foreach (var rune in text.EnumerateRunes())
