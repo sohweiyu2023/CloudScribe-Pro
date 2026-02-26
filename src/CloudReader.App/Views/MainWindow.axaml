@@ -22,7 +22,7 @@
       <TextBox AcceptsReturn="True" Height="620" Text="{Binding EditorText}"/>
     </StackPanel>
     <StackPanel Grid.Row="1" Grid.Column="2" Spacing="8" Margin="12">
-      <TextBlock Text="Voice & Preset" FontWeight="SemiBold" />
+      <TextBlock Text="Voice &amp; Preset" FontWeight="SemiBold" />
       <TextBox Watermark="Search voices..." />
       <Button Content="Preview Voice" />
       <Button Content="Generate" Classes="accent"/>
