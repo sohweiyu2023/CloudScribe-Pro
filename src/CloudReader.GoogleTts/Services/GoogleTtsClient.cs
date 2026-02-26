@@ -8,7 +8,7 @@ using V1Beta1 = Google.Cloud.TextToSpeech.V1Beta1;
 
 namespace CloudReader.GoogleTts.Services;
 
-public sealed class GoogleTtsClient
+public sealed class GoogleTtsClient : IGoogleTtsClient
 {
     private readonly V1.TextToSpeechClient _v1;
     private readonly V1Beta1.TextToSpeechLongAudioSynthesizeClient _v1Beta1;

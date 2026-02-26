@@ -1,31 +1,55 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="CloudReader.App.Views.MainWindow"
-        Width="1280"
-        Height="820"
+        Width="1320"
+        Height="860"
         Title="CloudScribe Pro">
-  <Grid ColumnDefinitions="240,*,360" RowDefinitions="Auto,*">
+  <Grid ColumnDefinitions="260,*,380" RowDefinitions="Auto,*">
     <Border Grid.ColumnSpan="3" Background="{DynamicResource SystemControlBackgroundAccentBrush}" Padding="12">
-      <TextBlock Text="CloudScribe Pro" FontSize="20" FontWeight="SemiBold" />
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Text="CloudScribe Pro" FontSize="20" FontWeight="SemiBold" />
+        <TextBlock VerticalAlignment="Center" Text="{Binding StatusMessage}" Opacity="0.9" />
+      </StackPanel>
     </Border>
+
     <StackPanel Grid.Row="1" Grid.Column="0" Spacing="8" Margin="12">
       <TextBlock Text="Library" FontWeight="SemiBold" />
       <TextBox Watermark="Search documents..." />
-      <Button Content="Import" />
-      <Button Content="New Document" />
+      <Button Content="Import" Command="{Binding ImportDocumentCommand}" />
+      <Button Content="New Document" Command="{Binding NewDocumentCommand}" />
     </StackPanel>
+
     <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8" Margin="12">
       <ComboBox SelectedItem="{Binding SelectedMode}">
         <ComboBoxItem Content="Mode A - Local Chunked" />
         <ComboBoxItem Content="Mode B - Long Audio (GCS)" />
       </ComboBox>
-      <TextBox AcceptsReturn="True" Height="620" Text="{Binding EditorText}" Watermark="Paste text or SSML here..." />
+      <TextBox AcceptsReturn="True" Height="690" Text="{Binding EditorText}" Watermark="Paste text or SSML here..." />
     </StackPanel>
+
     <StackPanel Grid.Row="1" Grid.Column="2" Spacing="8" Margin="12">
-      <TextBlock Text="Voice &amp; Preset" FontWeight="SemiBold" />
-      <TextBox Watermark="Search voices..." />
-      <Button Content="Preview Voice" />
-      <Button Content="Generate" Classes="accent"/>
+      <TextBlock Text="Voice Catalog" FontWeight="SemiBold" />
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="Load voices" Command="{Binding LoadVoicesCommand}" />
+        <Button Content="Preview Voice" Command="{Binding PreviewVoiceCommand}" />
+      </StackPanel>
+      <TextBox Watermark="Search voice name..." Text="{Binding VoiceSearch}" />
+      <Grid ColumnDefinitions="*,*,*">
+        <ComboBox Grid.Column="0" Margin="0,0,6,0" ItemsSource="{Binding TierOptions}" SelectedItem="{Binding SelectedTier}" />
+        <ComboBox Grid.Column="1" Margin="0,0,6,0" ItemsSource="{Binding GenderOptions}" SelectedItem="{Binding SelectedGender}" />
+        <ComboBox Grid.Column="2" ItemsSource="{Binding LanguageOptions}" SelectedItem="{Binding SelectedLanguage}" />
+      </Grid>
+      <ListBox Height="180" ItemsSource="{Binding Voices}" SelectedItem="{Binding SelectedVoice}">
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <StackPanel Margin="0,2">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding Tier}" Opacity="0.8" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <Button Content="Generate" Classes="accent" Command="{Binding GenerateAudioCommand}"/>
 
       <Separator Margin="0,8,0,8" />
       <TextBlock Text="Preprocessing" FontWeight="SemiBold" />
@@ -38,7 +62,7 @@
       <TextBlock Text="{Binding RemovedSpanCount, StringFormat='Removed spans: {0}'}" />
       <TextBlock Text="{Binding CharactersRemoved, StringFormat='Characters removed: {0}'}" />
       <TextBlock Text="Sanitized preview" FontWeight="SemiBold" Margin="0,4,0,0" />
-      <TextBox AcceptsReturn="True" IsReadOnly="True" Height="230" Text="{Binding SanitizedPreview}" />
+      <TextBox AcceptsReturn="True" IsReadOnly="True" Height="170" Text="{Binding SanitizedPreview}" />
     </StackPanel>
   </Grid>
 </Window>
