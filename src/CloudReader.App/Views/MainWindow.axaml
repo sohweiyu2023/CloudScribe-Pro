@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CloudReader.App.Views.MainWindow"
+        Width="1280"
+        Height="820"
+        Title="CloudScribe Pro">
+  <Grid ColumnDefinitions="240,*,320" RowDefinitions="Auto,*">
+    <Border Grid.ColumnSpan="3" Background="{DynamicResource SystemControlBackgroundAccentBrush}" Padding="12">
+      <TextBlock Text="CloudScribe Pro" FontSize="20" FontWeight="SemiBold" />
+    </Border>
+    <StackPanel Grid.Row="1" Grid.Column="0" Spacing="8" Margin="12">
+      <TextBlock Text="Library" FontWeight="SemiBold" />
+      <TextBox Watermark="Search documents..." />
+      <Button Content="Import" />
+      <Button Content="New Document" />
+    </StackPanel>
+    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8" Margin="12">
+      <ComboBox SelectedItem="{Binding SelectedMode}">
+        <ComboBoxItem Content="Mode A - Local Chunked" />
+        <ComboBoxItem Content="Mode B - Long Audio (GCS)" />
+      </ComboBox>
+      <TextBox AcceptsReturn="True" Height="620" Text="{Binding EditorText}"/>
+    </StackPanel>
+    <StackPanel Grid.Row="1" Grid.Column="2" Spacing="8" Margin="12">
+      <TextBlock Text="Voice &amp; Preset" FontWeight="SemiBold" />
+      <TextBox Watermark="Search voices..." />
+      <Button Content="Preview Voice" />
+      <Button Content="Generate" Classes="accent"/>
+    </StackPanel>
+  </Grid>
+</Window>
