@@ -20,10 +20,7 @@
     </StackPanel>
 
     <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8" Margin="12">
-      <ComboBox SelectedItem="{Binding SelectedMode}">
-        <ComboBoxItem Content="Mode A - Local Chunked" />
-        <ComboBoxItem Content="Mode B - Long Audio (GCS)" />
-      </ComboBox>
+      <ComboBox ItemsSource="{Binding ModeOptions}" SelectedItem="{Binding SelectedMode}" />
       <TextBox AcceptsReturn="True" Height="690" Text="{Binding EditorText}" Watermark="Paste text or SSML here..." />
     </StackPanel>
 

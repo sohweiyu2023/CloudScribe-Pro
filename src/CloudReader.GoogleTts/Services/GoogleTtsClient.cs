@@ -81,7 +81,15 @@ public sealed class GoogleTtsClient : IGoogleTtsClient
     public async Task<bool> PollLongAudioCompleteAsync(string operationName, CancellationToken ct)
     {
         var operation = await _v1Beta1.PollOnceSynthesizeLongAudioAsync(operationName, CallSettings.FromCancellationToken(ct));
-        return operation.IsCompleted;
+        if (!operation.IsCompleted)
+        {
+            return false;
+        }
+
+        // Completed operations can still be terminal failures; force result materialization
+        // so callers don't treat failed jobs as successful completions.
+        _ = operation.Result;
+        return true;
     }
 
     private static string InferTier(string voiceName)

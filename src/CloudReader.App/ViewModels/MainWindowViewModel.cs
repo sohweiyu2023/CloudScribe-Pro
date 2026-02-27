@@ -41,6 +41,7 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private VoiceCatalogItem? _selectedVoice;
 
     public ObservableCollection<VoiceCatalogItem> Voices { get; } = [];
+    public IReadOnlyList<string> ModeOptions { get; } = ["Mode A - Local Chunked", "Mode B - Long Audio (GCS)"];
     public IReadOnlyList<string> TierOptions { get; } = ["All", "Standard", "WaveNet", "Neural2", "Chirp3-HD", "Studio", "Unknown"];
     public IReadOnlyList<string> GenderOptions { get; } = ["All", "Male", "Female", "Neutral", "SsmlVoiceGenderUnspecified"];
     public ObservableCollection<string> LanguageOptions { get; } = ["All"];
