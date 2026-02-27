@@ -1,13 +1,14 @@
 using CloudReader.Core.Models;
 using CloudReader.GoogleTts.Models;
 using Google.Api.Gax;
+using Google.Api.Gax.Grpc;
 using Polly;
 using V1 = Google.Cloud.TextToSpeech.V1;
 using V1Beta1 = Google.Cloud.TextToSpeech.V1Beta1;
 
 namespace CloudReader.GoogleTts.Services;
 
-public sealed class GoogleTtsClient
+public sealed class GoogleTtsClient : IGoogleTtsClient
 {
     private readonly V1.TextToSpeechClient _v1;
     private readonly V1Beta1.TextToSpeechLongAudioSynthesizeClient _v1Beta1;
@@ -80,7 +81,15 @@ public sealed class GoogleTtsClient
     public async Task<bool> PollLongAudioCompleteAsync(string operationName, CancellationToken ct)
     {
         var operation = await _v1Beta1.PollOnceSynthesizeLongAudioAsync(operationName, CallSettings.FromCancellationToken(ct));
-        return operation.IsCompleted;
+        if (!operation.IsCompleted)
+        {
+            return false;
+        }
+
+        // Completed operations can still be terminal failures; force result materialization
+        // so callers don't treat failed jobs as successful completions.
+        _ = operation.Result;
+        return true;
     }
 
     private static string InferTier(string voiceName)
