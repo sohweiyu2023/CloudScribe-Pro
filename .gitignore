@@ -1,0 +1,10 @@
+# Build artifacts
+**/bin/
+**/obj/
+
+# IDE
+.vs/
+
+# Repo internals and local settings
+*.user
+*.suo

@@ -1,19 +1,20 @@
 using CloudReader.Core.Models;
 using CloudReader.GoogleTts.Models;
 using Google.Api.Gax;
-using Google.Cloud.TextToSpeech.V1;
-using Google.Cloud.TextToSpeech.V1Beta1;
+using Google.Api.Gax.Grpc;
 using Polly;
+using V1 = Google.Cloud.TextToSpeech.V1;
+using V1Beta1 = Google.Cloud.TextToSpeech.V1Beta1;
 
 namespace CloudReader.GoogleTts.Services;
 
-public sealed class GoogleTtsClient
+public sealed class GoogleTtsClient : IGoogleTtsClient
 {
-    private readonly TextToSpeechClient _v1;
-    private readonly TextToSpeechLongAudioSynthesizeClient _v1Beta1;
+    private readonly V1.TextToSpeechClient _v1;
+    private readonly V1Beta1.TextToSpeechLongAudioSynthesizeClient _v1Beta1;
     private readonly ResiliencePipeline _retry;
 
-    public GoogleTtsClient(TextToSpeechClient v1, TextToSpeechLongAudioSynthesizeClient v1Beta1)
+    public GoogleTtsClient(V1.TextToSpeechClient v1, V1Beta1.TextToSpeechLongAudioSynthesizeClient v1Beta1)
     {
         _v1 = v1;
         _v1Beta1 = v1Beta1;
@@ -32,7 +33,7 @@ public sealed class GoogleTtsClient
 
     public async Task<IReadOnlyList<VoiceCatalogItem>> ListVoicesAsync(CancellationToken ct)
     {
-        var response = await _v1.ListVoicesAsync(new ListVoicesRequest(), cancellationToken: ct);
+        var response = await _v1.ListVoicesAsync(new V1.ListVoicesRequest(), cancellationToken: ct);
         return response.Voices.Select(v => new VoiceCatalogItem(
             v.Name,
             v.LanguageCodes,
@@ -45,13 +46,13 @@ public sealed class GoogleTtsClient
     {
         return await _retry.ExecuteAsync(async _ =>
         {
-            var response = await _v1.SynthesizeSpeechAsync(new SynthesizeSpeechRequest
+            var response = await _v1.SynthesizeSpeechAsync(new V1.SynthesizeSpeechRequest
             {
-                Input = request.IsSsml ? new SynthesisInput { Ssml = request.Input } : new SynthesisInput { Text = request.Input },
-                Voice = new VoiceSelectionParams { Name = request.VoiceName, LanguageCode = request.LanguageCode },
-                AudioConfig = new AudioConfig
+                Input = request.IsSsml ? new V1.SynthesisInput { Ssml = request.Input } : new V1.SynthesisInput { Text = request.Input },
+                Voice = new V1.VoiceSelectionParams { Name = request.VoiceName, LanguageCode = request.LanguageCode },
+                AudioConfig = new V1.AudioConfig
                 {
-                    AudioEncoding = Enum.Parse<AudioEncoding>(request.AudioEncoding, true),
+                    AudioEncoding = Enum.Parse<V1.AudioEncoding>(request.AudioEncoding, true),
                     SpeakingRate = request.SpeakingRate,
                     Pitch = request.Pitch,
                     VolumeGainDb = request.VolumeGainDb,
@@ -65,12 +66,12 @@ public sealed class GoogleTtsClient
     public async Task<string> StartLongAudioAsync(string projectId, string location, string input, string outputGcsUri, string voiceName, string languageCode, CancellationToken ct)
     {
         var parent = $"projects/{projectId}/locations/{location}";
-        var operation = await _v1Beta1.SynthesizeLongAudioAsync(new SynthesizeLongAudioRequest
+        var operation = await _v1Beta1.SynthesizeLongAudioAsync(new V1Beta1.SynthesizeLongAudioRequest
         {
             Parent = parent,
-            Input = new Google.Cloud.TextToSpeech.V1Beta1.SynthesisInput { Text = input },
-            AudioConfig = new Google.Cloud.TextToSpeech.V1Beta1.AudioConfig { AudioEncoding = Google.Cloud.TextToSpeech.V1Beta1.AudioEncoding.Mp3 },
-            Voice = new Google.Cloud.TextToSpeech.V1Beta1.VoiceSelectionParams { Name = voiceName, LanguageCode = languageCode },
+            Input = new V1Beta1.SynthesisInput { Text = input },
+            AudioConfig = new V1Beta1.AudioConfig { AudioEncoding = V1Beta1.AudioEncoding.Mp3 },
+            Voice = new V1Beta1.VoiceSelectionParams { Name = voiceName, LanguageCode = languageCode },
             OutputGcsUri = outputGcsUri
         }, CallSettings.FromCancellationToken(ct));
 

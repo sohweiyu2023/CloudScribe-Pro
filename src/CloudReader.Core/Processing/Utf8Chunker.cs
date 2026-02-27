@@ -6,7 +6,7 @@ namespace CloudReader.Core.Processing;
 
 public sealed class Utf8Chunker : IUtf8Chunker
 {
-    private static readonly HashSet<Rune> SentenceBreaks =
+    private static readonly HashSet<System.Text.Rune> SentenceBreaks =
     [new('.'), new('?'), new('!'), new(';'), new(':'), new('。'), new('？'), new('！'), new('；'), new('：')];
 
     public IReadOnlyList<ChunkResult> Chunk(string text, int maxChunkBytes = 4500)
@@ -29,7 +29,7 @@ public sealed class Utf8Chunker : IUtf8Chunker
         return chunks;
     }
 
-    private static int FindSafeEnd(Rune[] runes, int start, int maxChunkBytes)
+    private static int FindSafeEnd(System.Text.Rune[] runes, int start, int maxChunkBytes)
     {
         var bytes = 0;
         var bestBoundary = -1;
@@ -42,7 +42,7 @@ public sealed class Utf8Chunker : IUtf8Chunker
             if (bytes + runeBytes > maxChunkBytes) break;
 
             bytes += runeBytes;
-            if (SentenceBreaks.Contains(runes[i]) || Rune.IsWhiteSpace(runes[i])) bestBoundary = i + 1;
+            if (SentenceBreaks.Contains(runes[i]) || System.Text.Rune.IsWhiteSpace(runes[i])) bestBoundary = i + 1;
             i++;
         }
 

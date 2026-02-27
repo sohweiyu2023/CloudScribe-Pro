@@ -48,7 +48,8 @@ Planned migration flow:
 2. `QueueAndCacheEnhancements` adds queue-state/cache indexes.
 3. `VersioningAndBookmarks` adds generation version metadata and bookmarks.
 
-> In this environment `dotnet` is unavailable, so SQL migration script placeholder is checked in under `src/CloudReader.Infrastructure/Migrations/0001_initial.sql`.
+> Prerequisite: install the .NET 10 SDK before building (Ubuntu: `sudo apt-get update && sudo apt-get install -y dotnet-sdk-10.0`).
+> If EF tooling is unavailable in a constrained environment, a SQL migration script placeholder is checked in under `src/CloudReader.Infrastructure/Migrations/0001_initial.sql`.
 
 ## Implemented MVP Steps
 
