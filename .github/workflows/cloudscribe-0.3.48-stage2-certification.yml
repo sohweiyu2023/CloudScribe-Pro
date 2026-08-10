@@ -171,7 +171,7 @@ jobs:
 
           $smokeOverlay = Join-Path $env:GITHUB_WORKSPACE '.cloudscribe-ci/final-overlay/smoke-stage1-windows.ps1'
           $smokePath = Join-Path $env:CS_ROOT 'scripts/smoke-stage1-windows.ps1'
-          $smokeFinal = 'f4df86fbfe7d11929d0f3121eaee57b24ddf9db8727e53c297bb1d290e9abf31'
+          $smokeFinal = '7b1a564dde8677bf20809c5a582a7491caa76c00efc8e80088fcad6f34e892df'
           $smokeText = [IO.File]::ReadAllText($smokeOverlay).Replace("`r`n","`n").Replace("`r","`n")
           [IO.File]::WriteAllText($smokePath,$smokeText,$utf8NoBom)
           $smokeHash = (Get-FileHash -LiteralPath $smokePath -Algorithm SHA256).Hash.ToLowerInvariant()
