@@ -95,18 +95,18 @@ Write-Host "Verified MainWindow.VisualCapture.cs interface-based solid-brush pos
 # The evidence harness must not immediately fight that product behavior by clearing focus, and the
 # manifest must describe the focused state that the product contract guarantees for Focus Reading.
 # Preserve the explicit editor-selection setup for the dedicated keyboard-focus cases only.
-$focusReadingClearOld = @'
-        else
-        {
-            FocusManager?.Focus(null!, Avalonia.Input.NavigationMethod.Unspecified, Avalonia.Input.KeyModifiers.None);
-        }
-'@
-$focusReadingClearNew = @'
-        else if (!captureCase.FocusReading)
-        {
-            FocusManager?.Focus(null!, Avalonia.Input.NavigationMethod.Unspecified, Avalonia.Input.KeyModifiers.None);
-        }
-'@
+$focusReadingClearOld = (@(
+    '        else',
+    '        {',
+    '            FocusManager?.Focus(null!, Avalonia.Input.NavigationMethod.Unspecified, Avalonia.Input.KeyModifiers.None);',
+    '        }'
+) -join "`n") + "`n"
+$focusReadingClearNew = (@(
+    '        else if (!captureCase.FocusReading)',
+    '        {',
+    '            FocusManager?.Focus(null!, Avalonia.Input.NavigationMethod.Unspecified, Avalonia.Input.KeyModifiers.None);',
+    '        }'
+) -join "`n") + "`n"
 $focusReadingClearCount = ([regex]::Matches($visualCaptureText, [regex]::Escape($focusReadingClearOld))).Count
 if ($focusReadingClearCount -ne 1) {
     throw "Expected exactly one unfocused-case focus-clear block, found $focusReadingClearCount."
