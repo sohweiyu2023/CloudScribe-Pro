@@ -1,0 +1,99 @@
+name: CloudScribe 0.3.48 Visual Sizing Regression Windows
+
+on:
+  push:
+    branches:
+      - cloudscribe-0.3.48-stage2-certification
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  visual-sizing-regression:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+
+      - name: Reconstruct exact repaired source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $payloadRoot = '.cloudscribe-ci/payload'
+          $partNames = @(
+            '000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin',
+            '007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin'
+          )
+          $archive = Join-Path $env:RUNNER_TEMP 'CloudScribe-0.3.48-native-ci-min.tar.xz'
+          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($name in $partNames) {
+              $path = Join-Path $payloadRoot $name
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing carrier part: $name" }
+              $bytes = [IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          $info = Get-Item $archive
+          if ($info.Length -ne 95596) { throw "Carrier length mismatch: $($info.Length)" }
+          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') { throw "Carrier SHA-256 mismatch: $sha" }
+          $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-0.3.48-visual-regression-src'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          & tar.exe -xJf $archive -C $root
+          if ($LASTEXITCODE -ne 0) { throw "Source extraction failed: $LASTEXITCODE" }
+          "CS_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Overlay and verify exact sizing regression source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $utf8NoBom = [Text.UTF8Encoding]::new($false)
+          $files = @{
+            '.cloudscribe-ci/final-overlay/MainWindow.VisualCapture.cs' = @('src/CloudScribe.App/MainWindow.VisualCapture.cs','43d3cb6e9b1af5cfe35d294cf32a7598736ca1dcd67d7697bc6d01fe0d2ff838')
+            '.cloudscribe-ci/final-overlay/VisualCaptureSizingContractTests.cs' = @('tests/CloudScribe.Architecture.Tests/VisualCaptureSizingContractTests.cs','756e8212269c1d996efbd74f15dc8808edcce1e305f589d419f01863d78a5035')
+          }
+          foreach ($sourceRelative in $files.Keys) {
+            $targetRelative, $expected = $files[$sourceRelative]
+            $source = Join-Path $env:GITHUB_WORKSPACE $sourceRelative
+            $target = Join-Path $env:CS_ROOT $targetRelative
+            $text = [IO.File]::ReadAllText($source).Replace("`r`n","`n").Replace("`r","`n")
+            [IO.File]::WriteAllText($target,$text,$utf8NoBom)
+            $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) { throw "Overlay hash mismatch for ${targetRelative}: $actual" }
+          }
+
+      - name: Restore and execute new compiled regression test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          $project = 'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj'
+          dotnet restore $project --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw "Locked restore failed: $LASTEXITCODE" }
+          $results = Join-Path $env:RUNNER_TEMP 'visual-sizing-regression'
+          New-Item -ItemType Directory -Path $results -Force | Out-Null
+          dotnet test $project -c Release --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false `
+            --filter 'FullyQualifiedName~VisualCaptureSizingContractTests' `
+            --results-directory $results --logger 'trx;LogFileName=visual-sizing.trx'
+          if ($LASTEXITCODE -ne 0) { throw "Visual sizing regression test failed: $LASTEXITCODE" }
+          [xml]$xml = Get-Content -LiteralPath (Join-Path $results 'visual-sizing.trx') -Raw
+          $counters = $xml.SelectSingleNode("//*[local-name()='Counters']")
+          $total = [int]$counters.GetAttribute('total')
+          $failed = [int]$counters.GetAttribute('failed')
+          $skippedText = $counters.GetAttribute('skipped')
+          $skipped = if ([string]::IsNullOrWhiteSpace($skippedText)) { 0 } else { [int]$skippedText }
+          if ($total -ne 1 -or $failed -ne 0 -or $skipped -ne 0) {
+            throw "Unexpected visual sizing regression inventory: total=$total failed=$failed skipped=$skipped"
+          }
+          Write-Host 'PASS: VisualCaptureSizingContractTests 1/1 on native Windows.'
