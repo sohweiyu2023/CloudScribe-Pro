@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - cloudscribe-0.3.48-late-gate-diagnostic
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -67,7 +70,7 @@ jobs:
           $wrapper=Join-Path $env:RUNNER_TEMP 'working-wrapper.ps1'
           Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/sohweiyu2023/CloudScribe-Pro/9e0a363f1f38a0655723b797ff70034d926a372a/.cloudscribe-ci/invoke-cloudscribe-048-certification.ps1' -OutFile $wrapper
           & pwsh -NoProfile -File $wrapper -SourceRoot $env:CS_ROOT
-          if($LASTEXITCODE -ne 0){throw "Certified wrapper failed: $LASTEXITCODE"}
+          if($LASTEXITCODE-ne0){throw "Certified wrapper failed: $LASTEXITCODE"}
 
       - name: Run material gate and print compact failure diagnosis
         shell: pwsh
@@ -78,7 +81,7 @@ jobs:
           $env:CLOUDSCRIBE_STAGE2_EVIDENCE_DIR=$evidence
           & pwsh -NoProfile -File (Join-Path $env:CS_ROOT 'scripts/verify-stage2.ps1') *> $log
           $code=$LASTEXITCODE
-          if($code -ne 0){
+          if($code-ne0){
             Write-Host '=== MATERIAL FAILURE TAIL ==='
             Get-Content -LiteralPath $log -Tail 160
             Write-Host '=== MATERIAL FAILURE TOKENS ==='
