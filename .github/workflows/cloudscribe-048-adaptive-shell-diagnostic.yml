@@ -15,58 +15,33 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct exact source and print diagnostic logger tests and implementation
+      - name: Reconstruct exact source and print diagnostic logger tail/defaults
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-diagnostic-src'
           New-Item -ItemType Directory -Path $root -Force | Out-Null
-
-          $payloadRoot = '.cloudscribe-ci/payload'
-          $payloadNames = @(
-            '000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin',
-            '007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin'
-          )
-          $payload = Join-Path $env:RUNNER_TEMP 'CloudScribe-0.3.48-native-ci-min.tar.xz'
+          $payloadNames = @('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin')
+          $payload = Join-Path $env:RUNNER_TEMP 'base.tar.xz'
           $stream = [IO.File]::Open($payload,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try {
-            foreach ($name in $payloadNames) {
-              $bytes = [IO.File]::ReadAllBytes((Join-Path $payloadRoot $name))
-              $stream.Write($bytes,0,$bytes.Length)
-            }
-          } finally { $stream.Dispose() }
-          if ((Get-Item $payload).Length -ne 95596) { throw 'Base payload length mismatch.' }
-          $sha = (Get-FileHash $payload -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($sha -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') { throw "Base payload hash mismatch: $sha" }
+          try { foreach ($name in $payloadNames) { $bytes=[IO.File]::ReadAllBytes((Join-Path '.cloudscribe-ci/payload' $name)); $stream.Write($bytes,0,$bytes.Length) } } finally { $stream.Dispose() }
+          if ((Get-FileHash $payload -Algorithm SHA256).Hash.ToLowerInvariant() -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') { throw 'base hash mismatch' }
           & tar.exe -xJf $payload -C $root
-          if ($LASTEXITCODE -ne 0) { throw "Base payload extraction failed: $LASTEXITCODE" }
-
-          $hotfixRoot = '.cloudscribe-ci/hotfix'
-          $hotfixNames = @('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin')
-          $hotfix = Join-Path $env:RUNNER_TEMP 'candidate-hotfixes.tar.xz'
-          $stream = [IO.File]::Open($hotfix,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try {
-            foreach ($name in $hotfixNames) {
-              $bytes = [IO.File]::ReadAllBytes((Join-Path $hotfixRoot $name))
-              $stream.Write($bytes,0,$bytes.Length)
-            }
-          } finally { $stream.Dispose() }
-          if ((Get-Item $hotfix).Length -ne 11364) { throw 'Hotfix payload length mismatch.' }
-          $sha = (Get-FileHash $hotfix -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($sha -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa') { throw "Hotfix payload hash mismatch: $sha" }
+          if ($LASTEXITCODE -ne 0) { throw 'base extract failed' }
+          $hotfixNames=@('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin')
+          $hotfix=Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz'
+          $stream=[IO.File]::Open($hotfix,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try { foreach ($name in $hotfixNames) { $bytes=[IO.File]::ReadAllBytes((Join-Path '.cloudscribe-ci/hotfix' $name)); $stream.Write($bytes,0,$bytes.Length) } } finally { $stream.Dispose() }
+          if ((Get-FileHash $hotfix -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa') { throw 'hotfix hash mismatch' }
           & tar.exe -xJf $hotfix -C $root
-          if ($LASTEXITCODE -ne 0) { throw "Hotfix extraction failed: $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw 'hotfix extract failed' }
 
-          $tests = Join-Path $root 'tests/CloudScribe.Infrastructure.Tests/StartupAndDiagnosticsResilienceTests.cs'
-          Write-Host '=== StartupAndDiagnosticsResilienceTests.cs ==='
-          $lines = Get-Content -LiteralPath $tests
-          for ($i = 1; $i -le [Math]::Min(320,$lines.Count); $i++) { '{0,4}: {1}' -f $i,$lines[$i-1] }
+          $provider=Join-Path $root 'src/CloudScribe.Infrastructure/Diagnostics/BoundedJsonFileLoggerProvider.cs'
+          Write-Host '=== BoundedJsonFileLoggerProvider.cs lines 490-end ==='
+          $lines=Get-Content -LiteralPath $provider
+          for($i=490;$i -le $lines.Count;$i++){ '{0,4}: {1}' -f $i,$lines[$i-1] }
 
-          $diag = Join-Path $root 'src/CloudScribe.Infrastructure/Diagnostics'
-          Write-Host '=== Diagnostics files ==='
-          Get-ChildItem -LiteralPath $diag -File | ForEach-Object { Write-Host $_.Name }
-          foreach ($file in Get-ChildItem -LiteralPath $diag -Filter '*.cs' -File) {
-            Write-Host "=== $($file.Name) ==="
-            $body = Get-Content -LiteralPath $file.FullName
-            for ($i = 1; $i -le [Math]::Min(500,$body.Count); $i++) { '{0,4}: {1}' -f $i,$body[$i-1] }
-          }
+          $options=Join-Path $root 'src/CloudScribe.Infrastructure/Configuration/CloudScribeOptions.cs'
+          Write-Host '=== CloudScribeOptions.cs ==='
+          $lines=Get-Content -LiteralPath $options
+          for($i=1;$i -le $lines.Count;$i++){ '{0,4}: {1}' -f $i,$lines[$i-1] }
