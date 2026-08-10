@@ -1,4 +1,4 @@
-name: CloudScribe 0.3.48 Focus Reading Diagnostic
+name: CloudScribe 0.3.48 Material Gate Diagnostic
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct exact repaired source and inspect focus-reading evidence contract
+      - name: Reconstruct exact repaired source and inspect Stage 2 material gate
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -29,22 +29,12 @@ jobs:
           Join-Carrier '.cloudscribe-ci/payload' @('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin') (Join-Path $env:RUNNER_TEMP 'base.tar.xz') '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b'
           Join-Carrier '.cloudscribe-ci/fixtures' @('000.bin','001.bin','002.bin') (Join-Path $env:RUNNER_TEMP 'fixtures.tar.xz') 'a866788937570bd4be228c76035b170aec47d929712e96d7a08b9152239a6d11'
           Join-Carrier '.cloudscribe-ci/hotfix' @('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin') (Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz') '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa'
-          $carrierCommit='54e1882557b13e8ea548c568995c94807dce23f8'; $carrierRoot="https://raw.githubusercontent.com/sohweiyu2023/CloudScribe-Pro/$carrierCommit/.cloudscribe-ci/focus-fix-carrier"
-          $b64=Join-Path $env:RUNNER_TEMP 'focus.b64'; $xz=Join-Path $env:RUNNER_TEMP 'focus.tar.xz'; Remove-Item $b64,$xz -Force -ErrorAction SilentlyContinue
-          foreach($part in @('000.b64','001.b64','002.b64','003.b64')) { $partPath=Join-Path $env:RUNNER_TEMP $part; Invoke-WebRequest -Uri "$carrierRoot/$part" -OutFile $partPath; [IO.File]::AppendAllText($b64,([IO.File]::ReadAllText($partPath)).Trim()) }
-          [IO.File]::WriteAllBytes($xz,[Convert]::FromBase64String([IO.File]::ReadAllText($b64))); $focusSha=(Get-FileHash $xz -Algorithm SHA256).Hash.ToLowerInvariant()
-          if($focusSha -ne 'd182d7686fe80b863d8986c2170464efc22aaff4ec584167d804d3a82cf620d6'){throw "focus hash mismatch: $focusSha"}; & tar.exe -xJf $xz -C $root; if($LASTEXITCODE -ne 0){throw 'focus extract failed'}
-
-          Write-Host '=== Product Focus Reading focus contract ==='
-          $main=Join-Path $root 'src/CloudScribe.App/MainWindow.axaml.cs'; Get-Content -LiteralPath $main | Select-String -Pattern 'SetFocusReadingAsync|PostFocus\(DocumentEditor\)|DocumentEditor\.IsFocused' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
-          Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Recurse -File -Filter '*.cs' | Select-String -Pattern 'FocusReadingPreservesKeyboardFocus|DocumentEditor\.IsFocused' | ForEach-Object { "{0}:{1}: {2}" -f $_.Path.Substring($root.Length+1),$_.LineNumber,$_.Line.Trim() }
-
-          Write-Host '=== Visual capture Focus Reading metadata ==='
-          $capture=Join-Path $root 'src/CloudScribe.App/MainWindow.VisualCapture.cs'; Get-Content -LiteralPath $capture | Select-String -Pattern '06-full-focus-reading|captureCase\.FocusEditor|captureCase\.FocusReading|ClearFocus|FocusManager' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
-
-          Write-Host '=== Visual validator expected case 06 ==='
-          $validator=Join-Path $root 'tools/verify_stage2_visual_evidence.py'; Get-Content -LiteralPath $validator | Select-String -Pattern '06-full-focus-reading|EditorFocused|EXPECTED_CASES' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
-
-          Write-Host '=== Verification-tool tests touching focus metadata ==='
-          $toolTests=Join-Path $root 'tests/test_verification_tools.py'; Get-Content -LiteralPath $toolTests | Select-String -Pattern '06-full-focus-reading|EditorFocused|FocusReading|focus-metadata' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
-          Write-Host 'FOCUS_READING_EVIDENCE_DIAGNOSTIC_COMPLETE'
+          $verify=Join-Path $root 'scripts/verify-stage2.ps1'
+          Write-Host '=== verify-stage2.ps1 first 140 lines ==='
+          $lines=Get-Content -LiteralPath $verify
+          for($i=1;$i -le [Math]::Min(140,$lines.Count);$i++){ '{0,4}: {1}' -f $i,$lines[$i-1] }
+          Write-Host '=== verify-stage2.ps1 gate markers and outputs ==='
+          for($i=1;$i -le $lines.Count;$i++){ if($lines[$i-1] -match 'PREP|STEP|Output|Evidence|Screenshot|Package|Visual|Result|param|Source|Candidate|Archive|zip|PASS|FAIL'){ '{0,4}: {1}' -f $i,$lines[$i-1] } }
+          Write-Host '=== SESSION_STATE next action ==='
+          $state=Join-Path $root 'SESSION_STATE.json'; if(Test-Path $state){ Get-Content -LiteralPath $state -Raw }
+          Write-Host 'MATERIAL_GATE_DIAGNOSTIC_COMPLETE'
