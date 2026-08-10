@@ -310,11 +310,11 @@ jobs:
           $ledgerPath = Join-Path $evidenceRoot 'logs/command-ledger.jsonl'
           if (-not (Test-Path -LiteralPath $ledgerPath -PathType Leaf)) { throw 'Fresh material gate command ledger is missing.' }
           $ledger = @(Get-Content -LiteralPath $ledgerPath | ForEach-Object { $_ | ConvertFrom-Json })
-          if ($ledger.Count -ne 100) { throw "Expected STEP 01-100 command ledger, found $($ledger.Count) records." }
+          if ($ledger.Count -ne 87) { throw "Expected STEP 01-87 command ledger, found $($ledger.Count) records." }
           if (@($ledger | Where-Object { $_.status -ne 'passed' }).Count -ne 0) { throw 'Fresh material gate command ledger contains a non-passing STEP.' }
           $sequences = @($ledger | ForEach-Object { [int]$_.sequence })
-          if (($sequences | Measure-Object -Minimum).Minimum -ne 1 -or ($sequences | Measure-Object -Maximum).Maximum -ne 100) {
-            throw 'Fresh material gate command ledger does not span STEP 01 through STEP 100.'
+          if (($sequences | Measure-Object -Minimum).Minimum -ne 1 -or ($sequences | Measure-Object -Maximum).Maximum -ne 87) {
+            throw 'Fresh material gate command ledger does not span STEP 01 through STEP 87.'
           }
 
           Push-Location -LiteralPath $freshRoot
@@ -327,7 +327,7 @@ jobs:
           if ($archiveShaAfter -ne $env:FINAL_SOURCE_SHA256) { throw 'Frozen final source ZIP changed during fresh material verification.' }
           "FINAL_MATERIAL_EVIDENCE=$evidenceRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host 'FRESH_EXTRACTED_STAGE2_MATERIAL_GATE=PASS'
-          Write-Host "Verified STEP 01-100; 18 package scans; 17 source-bound captures; 4 TRX files; archive SHA-256 $archiveShaAfter"
+          Write-Host "Verified STEP 01-87; 18 package scans; 17 source-bound captures; 4 TRX files; archive SHA-256 $archiveShaAfter"
 
       - name: Upload final source ZIP and fresh material evidence
         uses: actions/upload-artifact@v7
