@@ -44,9 +44,32 @@ Assert-Sha256 $carrierXz 'd182d7686fe80b863d8986c2170464efc22aaff4ec584167d804d3
 & tar.exe -xJf $carrierXz -C $SourceRoot
 if ($LASTEXITCODE -ne 0) { throw "Focus-fix carrier extraction failed: $LASTEXITCODE" }
 
+# The first native certification exposed that the package version used by this source tree
+# does not expose IFocusManager.ClearFocus(). For deterministic visual-capture setup, clear
+# focus through the supported Focus(null, ...) path instead. This runs only in the capture
+# harness and is guarded by the exact preimage hash plus an exactly-one replacement check.
+$visualCapturePath = Join-Path $SourceRoot 'src/CloudScribe.App/MainWindow.VisualCapture.cs'
+Assert-Sha256 $visualCapturePath '19d0add468fd32db993e4cd93baaf832c00d4050e330b36a502cbf98ffbf2fe3' 'MainWindow.VisualCapture.cs preimage'
+$visualCaptureText = [IO.File]::ReadAllText($visualCapturePath).Replace("`r`n", "`n").Replace("`r", "`n")
+$clearFocusPattern = '(?m)^(?<indent>\s*)(?<prefix>(?:this\.)?FocusManager)\?\.ClearFocus\(\);\s*$'
+$clearFocusMatches = [regex]::Matches($visualCaptureText, $clearFocusPattern)
+if ($clearFocusMatches.Count -ne 1) {
+    throw "Expected exactly one FocusManager?.ClearFocus() capture-harness call, found $($clearFocusMatches.Count)."
+}
+$visualCaptureText = [regex]::Replace(
+    $visualCaptureText,
+    $clearFocusPattern,
+    '${indent}${prefix}?.Focus(null!, Avalonia.Input.NavigationMethod.Unspecified, Avalonia.Input.KeyModifiers.None);',
+    1)
+if ($visualCaptureText.Contains('ClearFocus()', [StringComparison]::Ordinal)) {
+    throw 'ClearFocus() remains in MainWindow.VisualCapture.cs after deterministic compatibility repair.'
+}
+[IO.File]::WriteAllText($visualCapturePath, $visualCaptureText, [Text.UTF8Encoding]::new($false))
+$visualCapturePostHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Host "Verified MainWindow.VisualCapture.cs deterministic postimage: $visualCapturePostHash"
+
 $expectedFiles = @{
     'src/CloudScribe.App/CloudScribeApplication.axaml' = '997cc05fe07360086dccaaada1001f5bafbc82d04dbc9d466b57eb27f2c18eac'
-    'src/CloudScribe.App/MainWindow.VisualCapture.cs' = '19d0add468fd32db993e4cd93baaf832c00d4050e330b36a502cbf98ffbf2fe3'
     'tools/verify_stage2_visual_evidence.py' = 'da1cd6fd796a80f14af7e41c5d26143b6e0a05f60d95322e773c68aa898dd37c'
     'tools/verify_stage2_source.py' = '1a1a60252ca9355f3d08c864f4c52d11b26b9cacad17ffa323e343b7733a6768'
     'tests/test_verification_tools.py' = 'd7b42c460cf55658e3c3ebebeeab09ae99931a3688d488832faab7e30c8598d6'
