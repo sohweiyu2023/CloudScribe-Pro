@@ -182,7 +182,7 @@ jobs:
       - name: Run full native Windows certification
         shell: pwsh
         run: |
-          & pwsh -NoProfile -File .cloudscribe-ci/run-cloudscribe-048-certification.ps1 -SourceRoot $env:CS_ROOT
+          & pwsh -NoProfile -File .cloudscribe-ci/invoke-cloudscribe-048-certification.ps1 -SourceRoot $env:CS_ROOT
           if ($LASTEXITCODE -ne 0) { throw "Native certification failed: $LASTEXITCODE" }
 
       - name: Upload native Windows evidence
