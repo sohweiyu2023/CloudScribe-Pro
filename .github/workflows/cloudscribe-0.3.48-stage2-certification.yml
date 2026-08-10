@@ -30,35 +30,20 @@ jobs:
 
       - name: Reconstruct exact repaired source
         shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $blobShas = @(
-            'be0d08db74181e3a7e3cc7e5ca4a1937e5d8a479',
-            '9e97f91f7cb20bbc999db918f2117aabf514373e',
-            '099930ac9e4571706cdf411deb15085c1ed16504',
-            'e95d6a586de3d114230a4f5aa312db9f51959a9f',
-            'b79ee847006b26fcf34fdf09c540942101b9a407',
-            'b1039d9d71dcfd36470ea2c84716ba0c4345d43a',
-            'b908069e048b4995a7410efc131612271e0fe3ad',
-            'a83f1c6cdffac422e185452982717a585feaf97b',
-            'eaec70e1273b60db1ac691d9e17eff9ae4057da6',
-            'ded6a13cb653c4cba10bb33bff301ae6b3e57459',
-            '4460935bc3eff3213006a9f5df3167ea49a4d23e',
-            'ec486fb8834ac5ff54e94e8b497afce0dcd91833',
-            '8d638eeae7640462749e8fcd64f452e540c7cee7',
-            '780f890d20bbcd8f85be7ef92e6493062e8ebe6b',
-            'da2ef40240fb97a9aee8c035e2e246cc3d1582ea'
+          $payloadRoot = '.cloudscribe-ci/payload'
+          $partNames = @(
+            '000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin',
+            '007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin'
           )
-          $headers = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
           $archive = Join-Path $env:RUNNER_TEMP 'CloudScribe-0.3.48-native-ci-min.tar.xz'
           $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
           try {
-            foreach ($blobSha in $blobShas) {
-              $obj = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/blobs/$blobSha"
-              if ($obj.sha -ne $blobSha -or $obj.encoding -ne 'base64') { throw "Blob verification failed: $blobSha" }
-              $bytes = [Convert]::FromBase64String(([string]$obj.content -replace '\s',''))
+            foreach ($name in $partNames) {
+              $path = Join-Path $payloadRoot $name
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing carrier part: $name" }
+              $bytes = [IO.File]::ReadAllBytes($path)
               $stream.Write($bytes,0,$bytes.Length)
             }
           } finally { $stream.Dispose() }
@@ -69,10 +54,45 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-0.3.48-src'
           New-Item -ItemType Directory -Path $root -Force | Out-Null
           & tar.exe -xJf $archive -C $root
-          if ($LASTEXITCODE -ne 0) { throw "tar extraction failed: $LASTEXITCODE" }
-          if (-not (Test-Path (Join-Path $root 'CloudScribe.sln'))) { throw 'CloudScribe.sln missing after extraction.' }
+          if ($LASTEXITCODE -ne 0) { throw "Source extraction failed: $LASTEXITCODE" }
+          if (-not (Test-Path (Join-Path $root 'CloudScribe.sln'))) { throw 'CloudScribe.sln missing after source extraction.' }
           "CS_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Exact carrier verified: $sha ($($info.Length) bytes)"
+          Write-Host "Exact source carrier verified: $sha ($($info.Length) bytes)"
+
+      - name: Reconstruct hash-bound architecture fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtureRoot = '.cloudscribe-ci/fixtures'
+          $fixtureNames = @('000.bin','001.bin','002.bin')
+          $archive = Join-Path $env:RUNNER_TEMP 'architecture-fixtures.tar.xz'
+          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($name in $fixtureNames) {
+              $path = Join-Path $fixtureRoot $name
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing fixture part: $name" }
+              $bytes = [IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          $info = Get-Item $archive
+          if ($info.Length -ne 8812) { throw "Fixture carrier length mismatch: $($info.Length)" }
+          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne 'a866788937570bd4be228c76035b170aec47d929712e96d7a08b9152239a6d11') { throw "Fixture carrier SHA-256 mismatch: $sha" }
+          & tar.exe -xJf $archive -C $env:CS_ROOT
+          if ($LASTEXITCODE -ne 0) { throw "Fixture extraction failed: $LASTEXITCODE" }
+          $expected = @{
+            'scripts/verify-stage2.sh' = 'b57f01ec004db6850ee0170d0410b0515089da58645b2643153cec1f8eedd28c'
+            'scripts/verify-stage2.ps1' = '6c33fc799e1d26882ebc8398f0e89fc84c3787d8fa6f7acff7f24d320149e23a'
+            'scripts/capture-stage2-linux.sh' = 'c9b1018a799b460d1ba004fd45b792febdade90eda88f71d7e2255adf37f689f'
+            'scripts/invoke-nuget-audit-scan.sh' = '573264ce2f752cd59834ddd68dc51b0fe87411cb643e84a0bb225876286b2de5'
+          }
+          foreach ($relative in $expected.Keys) {
+            $path = Join-Path $env:CS_ROOT $relative
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected[$relative]) { throw "Fixture hash mismatch for ${relative}: $actual" }
+          }
+          Write-Host "Exact architecture fixture carrier verified: $sha ($($info.Length) bytes)"
 
       - name: Run full native Windows certification
         shell: pwsh
