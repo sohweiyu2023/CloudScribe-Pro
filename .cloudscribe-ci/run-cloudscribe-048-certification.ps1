@@ -16,7 +16,7 @@ $wrapperBefore = (Get-FileHash -LiteralPath $wrapperPath -Algorithm SHA256).Hash
 if ($wrapperBefore -eq $wrapperOldHash) {
     Copy-Item -LiteralPath $overlayPath -Destination $wrapperPath -Force
 }
-elif ($wrapperBefore -ne $wrapperNewHash) {
+elseif ($wrapperBefore -ne $wrapperNewHash) {
     throw "Unexpected Windows audit wrapper preimage: $wrapperBefore"
 }
 $wrapperAfter = (Get-FileHash -LiteralPath $wrapperPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -40,7 +40,7 @@ if ($architectureBefore -eq $architectureOldHash) {
     $text = $text.Replace($old, $new)
     [IO.File]::WriteAllText($architecturePath, $text, [Text.UTF8Encoding]::new($false))
 }
-elif ($architectureBefore -ne $architectureNewHash) {
+elseif ($architectureBefore -ne $architectureNewHash) {
     throw "Unexpected architecture-test preimage: $architectureBefore"
 }
 $architectureAfter = (Get-FileHash -LiteralPath $architecturePath -Algorithm SHA256).Hash.ToLowerInvariant()
