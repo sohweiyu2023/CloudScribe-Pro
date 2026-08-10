@@ -71,10 +71,10 @@ try {
                 try {
                     $candidateContent = Get-Content -LiteralPath $candidate.FullName -Raw -ErrorAction Stop
                 }
-                catch (IOException) {
+                catch [System.IO.IOException] {
                     continue
                 }
-                catch (UnauthorizedAccessException) {
+                catch [System.UnauthorizedAccessException] {
                     continue
                 }
                 if ($candidateContent.Contains('"EventName":"ApplicationReady"', [System.StringComparison]::Ordinal) -and
