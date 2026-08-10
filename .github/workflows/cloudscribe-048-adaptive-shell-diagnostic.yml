@@ -1,4 +1,4 @@
-name: CloudScribe 0.3.48 Diagnostic Logger Inspection
+name: CloudScribe 0.3.48 Diagnostic Logger Isolation
 
 on:
   pull_request:
@@ -15,7 +15,10 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct exact source and print diagnostic logger tail/defaults
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+      - name: Reconstruct exact source and run four logger regressions individually
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -36,12 +39,20 @@ jobs:
           & tar.exe -xJf $hotfix -C $root
           if ($LASTEXITCODE -ne 0) { throw 'hotfix extract failed' }
 
-          $provider=Join-Path $root 'src/CloudScribe.Infrastructure/Diagnostics/BoundedJsonFileLoggerProvider.cs'
-          Write-Host '=== BoundedJsonFileLoggerProvider.cs lines 490-end ==='
-          $lines=Get-Content -LiteralPath $provider
-          for($i=490;$i -le $lines.Count;$i++){ '{0,4}: {1}' -f $i,$lines[$i-1] }
+          Set-Location $root
+          dotnet restore tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'restore failed' }
+          dotnet build tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'build failed' }
 
-          $options=Join-Path $root 'src/CloudScribe.Infrastructure/Configuration/CloudScribeOptions.cs'
-          Write-Host '=== CloudScribeOptions.cs ==='
-          $lines=Get-Content -LiteralPath $options
-          for($i=1;$i -le $lines.Count;$i++){ '{0,4}: {1}' -f $i,$lines[$i-1] }
+          $tests = @(
+            'OneFileDiagnosticPolicyReplacesFullCurrentLogInsteadOfDisablingLogging',
+            'IncomingRecordRotatesBeforeItCanExceedPerFileCap',
+            'RuntimeMetadataEntriesDoNotConsumeManagedJsonLogFileLimit',
+            'StructuredDiagnosticRecordContainsSessionAndRedactedExceptionDetail'
+          )
+          foreach ($name in $tests) {
+            Write-Host "=== isolated test: $name ==="
+            dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~$name" --logger "console;verbosity=detailed"
+            if ($LASTEXITCODE -ne 0) { Write-Host "ISOLATED_RESULT_${name}=FAIL" } else { Write-Host "ISOLATED_RESULT_${name}=PASS" }
+          }
