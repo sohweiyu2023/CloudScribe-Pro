@@ -100,7 +100,7 @@ foreach ($configuration in @('Debug','Release')) {
     }
 }
 
-$resultRoot = Join-Path $env:RUNNER_TEMP 'focus-fix-test-results'
+$resultRoot = Join-Path $env:RUNNER_TEMP 'test-results'
 New-Item -ItemType Directory -Path $resultRoot -Force | Out-Null
 for ($i = 0; $i -lt $testProjects.Count; $i++) {
     $dir = Join-Path $resultRoot $i
@@ -127,8 +127,8 @@ Write-Host 'PASS: 147/147 .NET tests.'
 
 Invoke-Checked 'dotnet format --verify-no-changes' { dotnet format CloudScribe.sln --verify-no-changes --no-restore }
 
-$scanRoot = Join-Path $env:RUNNER_TEMP 'focus-fix-package-scans'
-$scanLogRoot = Join-Path $env:RUNNER_TEMP 'focus-fix-package-scan-logs'
+$scanRoot = Join-Path $env:RUNNER_TEMP 'package-scans'
+$scanLogRoot = Join-Path $env:RUNNER_TEMP 'package-scan-logs'
 New-Item -ItemType Directory -Path $scanRoot, $scanLogRoot -Force | Out-Null
 for ($i = 0; $i -lt $projects.Count; $i++) {
     $vuln = Join-Path $scanRoot "$i-vulnerable.json"
@@ -141,12 +141,12 @@ for ($i = 0; $i -lt $projects.Count; $i++) {
 }
 Invoke-Checked 'Validate paired package scan JSON reports' { python tools/verify_dotnet_package_scan.py $scanRoot }
 
-$publishRoot = Join-Path $env:RUNNER_TEMP 'CloudScribe-focus-fix-publish'
+$publishRoot = Join-Path $env:RUNNER_TEMP 'CloudScribe-publish'
 Invoke-Checked 'Publish Windows candidate' {
     pwsh -NoProfile -File scripts/publish-stage2-windows.ps1 -OutputDirectory $publishRoot -Configuration Release -Status verification-pending
 }
 Invoke-Checked 'Native Windows launch + secondary activation smoke' { pwsh -NoProfile -File scripts/smoke-stage1-windows.ps1 }
-$screenRoot = Join-Path $env:RUNNER_TEMP 'stage2-focus-fix-screenshots'
+$screenRoot = Join-Path $env:RUNNER_TEMP 'stage2-screenshots'
 Invoke-Checked 'Native 17-case Stage 2 visual capture + editor contrast audit' { pwsh -NoProfile -File scripts/capture-stage2-windows.ps1 $screenRoot }
 Invoke-Checked 'Final source manifest re-check' { python tools/update_sha256_manifest.py --check }
 
