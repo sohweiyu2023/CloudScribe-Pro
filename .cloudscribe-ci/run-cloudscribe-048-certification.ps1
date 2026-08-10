@@ -28,27 +28,29 @@ if ($sdk -ne '10.0.302') { throw "Expected .NET SDK 10.0.302, got $sdk." }
 
 # Overlay the exact user-reported editor-focus repair and its current regression coverage.
 # The carrier is stored on an isolated helper branch and pinned here by immutable commit SHA.
-$carrierCommit = '94f1991bf975379e161a5bcaf918ffb410a10d27'
+$carrierCommit = '54e1882557b13e8ea548c568995c94807dce23f8'
 $carrierRoot = "https://raw.githubusercontent.com/sohweiyu2023/CloudScribe-Pro/$carrierCommit/.cloudscribe-ci/focus-fix-carrier"
 $carrierB64 = Join-Path $env:RUNNER_TEMP 'cloudscribe-focus-fix.b64'
 $carrierXz = Join-Path $env:RUNNER_TEMP 'cloudscribe-focus-fix.tar.xz'
 Remove-Item $carrierB64, $carrierXz -Force -ErrorAction SilentlyContinue
-foreach ($part in @('000.b64','001.b64','002.b64')) {
+foreach ($part in @('000.b64','001.b64','002.b64','003.b64')) {
     $partPath = Join-Path $env:RUNNER_TEMP $part
     Invoke-WebRequest -Uri "$carrierRoot/$part" -OutFile $partPath
     [IO.File]::AppendAllText($carrierB64, ([IO.File]::ReadAllText($partPath)).Trim())
 }
 [IO.File]::WriteAllBytes($carrierXz, [Convert]::FromBase64String([IO.File]::ReadAllText($carrierB64)))
-if ((Get-Item $carrierXz).Length -ne 21144) { throw 'Focus-fix carrier length mismatch.' }
-Assert-Sha256 $carrierXz 'f558d9cfafcc270a33b13e91a52bdb7615592f92c90a4cfdef1af3ed401bbb41' 'focus-fix carrier'
+if ((Get-Item $carrierXz).Length -ne 42108) { throw 'Focus-fix carrier length mismatch.' }
+Assert-Sha256 $carrierXz 'd182d7686fe80b863d8986c2170464efc22aaff4ec584167d804d3a82cf620d6' 'focus-fix carrier'
 & tar.exe -xJf $carrierXz -C $SourceRoot
 if ($LASTEXITCODE -ne 0) { throw "Focus-fix carrier extraction failed: $LASTEXITCODE" }
 
 $expectedFiles = @{
     'src/CloudScribe.App/CloudScribeApplication.axaml' = '997cc05fe07360086dccaaada1001f5bafbc82d04dbc9d466b57eb27f2c18eac'
-    'src/CloudScribe.App/MainWindow.VisualCapture.cs' = 'd97162ececc7afa82a2c6a67e2eb6a48aec279872463cfa7a7b19249567687a5'
-    'tools/verify_stage2_visual_evidence.py' = 'b17966e22d7cc7c584be5bf7df539a337eca496d838c5dfcfc2c4892c9378627'
-    'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs' = '1cdc19200404c5f8f3f51cdad08d95d7b47bcb4e8ce00d8e03b51584158e4dd1'
+    'src/CloudScribe.App/MainWindow.VisualCapture.cs' = '19d0add468fd32db993e4cd93baaf832c00d4050e330b36a502cbf98ffbf2fe3'
+    'tools/verify_stage2_visual_evidence.py' = 'da1cd6fd796a80f14af7e41c5d26143b6e0a05f60d95322e773c68aa898dd37c'
+    'tools/verify_stage2_source.py' = '1a1a60252ca9355f3d08c864f4c52d11b26b9cacad17ffa323e343b7733a6768'
+    'tests/test_verification_tools.py' = 'd7b42c460cf55658e3c3ebebeeab09ae99931a3688d488832faab7e30c8598d6'
+    'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs' = 'f52c3606a4c093b4053b1faf265f0bd6c267eabd8004c83e0ff6011488e4b26e'
     'tests/CloudScribe.Architecture.Tests/VisualCaptureSizingContractTests.cs' = '756e8212269c1d996efbd74f15dc8808edcce1e305f589d419f01863d78a5035'
 }
 foreach ($relative in $expectedFiles.Keys) {
