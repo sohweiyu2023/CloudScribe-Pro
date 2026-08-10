@@ -1,0 +1,91 @@
+name: CloudScribe 0.3.48 Stage 2 Windows Certification
+
+on:
+  push:
+    branches:
+      - cloudscribe-0.3.48-stage2-certification
+
+permissions:
+  contents: read
+
+jobs:
+  windows-stage2:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+
+      - name: Reconstruct exact repaired source
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $blobShas = @(
+            'be0d08db74181e3a7e3cc7e5ca4a1937e5d8a479',
+            '9e97f91f7cb20bbc999db918f2117aabf514373e',
+            '099930ac9e4571706cdf411deb15085c1ed16504',
+            'e95d6a586de3d114230a4f5aa312db9f51959a9f',
+            'b79ee847006b26fcf34fdf09c540942101b9a407',
+            'b1039d9d71dcfd36470ea2c84716ba0c4345d43a',
+            'b908069e048b4995a7410efc131612271e0fe3ad',
+            'a83f1c6cdffac422e185452982717a585feaf97b',
+            'eaec70e1273b60db1ac691d9e17eff9ae4057da6',
+            'ded6a13cb653c4cba10bb33bff301ae6b3e57459',
+            '4460935bc3eff3213006a9f5df3167ea49a4d23e',
+            'ec486fb8834ac5ff54e94e8b497afce0dcd91833',
+            '8d638eeae7640462749e8fcd64f452e540c7cee7',
+            '780f890d20bbcd8f85be7ef92e6493062e8ebe6b',
+            'da2ef40240fb97a9aee8c035e2e246cc3d1582ea'
+          )
+          $headers = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $archive = Join-Path $env:RUNNER_TEMP 'CloudScribe-0.3.48-native-ci-min.tar.xz'
+          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($blobSha in $blobShas) {
+              $obj = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/blobs/$blobSha"
+              if ($obj.sha -ne $blobSha -or $obj.encoding -ne 'base64') { throw "Blob verification failed: $blobSha" }
+              $bytes = [Convert]::FromBase64String(([string]$obj.content -replace '\s',''))
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          $info = Get-Item $archive
+          if ($info.Length -ne 95596) { throw "Carrier length mismatch: $($info.Length)" }
+          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') { throw "Carrier SHA-256 mismatch: $sha" }
+          $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-0.3.48-src'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          & tar.exe -xJf $archive -C $root
+          if ($LASTEXITCODE -ne 0) { throw "tar extraction failed: $LASTEXITCODE" }
+          if (-not (Test-Path (Join-Path $root 'CloudScribe.sln'))) { throw 'CloudScribe.sln missing after extraction.' }
+          "CS_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Exact carrier verified: $sha ($($info.Length) bytes)"
+
+      - name: Run full native Windows certification
+        shell: pwsh
+        run: |
+          & pwsh -NoProfile -File .cloudscribe-ci/run-cloudscribe-048-certification.ps1 -SourceRoot $env:CS_ROOT
+          if ($LASTEXITCODE -ne 0) { throw "Native certification failed: $LASTEXITCODE" }
+
+      - name: Upload native Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cloudscribe-0.3.48-windows-certification-evidence
+          path: |
+            ${{ runner.temp }}/test-results
+            ${{ runner.temp }}/package-scans
+            ${{ runner.temp }}/stage2-screenshots
+            ${{ runner.temp }}/CloudScribe-publish
+          if-no-files-found: warn
+          retention-days: 7
