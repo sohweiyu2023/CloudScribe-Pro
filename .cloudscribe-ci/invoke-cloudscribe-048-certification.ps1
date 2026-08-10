@@ -86,7 +86,44 @@ $visualCaptureText = $visualCaptureText.Replace(
     [StringComparison]::Ordinal)
 [IO.File]::WriteAllText($visualCapturePath, $visualCaptureText, [Text.UTF8Encoding]::new($false))
 $visualCapturePostHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($visualCapturePostHash -ne '06797e3d893c4f5a57206072b2ccef69788b510280cfa1df7c8bd41ed8eb48b9') {
+    throw "Unexpected visual-capture postimage after solid-brush contract repair: $visualCapturePostHash"
+}
 Write-Host "Verified MainWindow.VisualCapture.cs interface-based solid-brush postimage: $visualCapturePostHash"
+
+# Focus Reading intentionally posts keyboard focus to the document editor in MainWindow.axaml.cs.
+# The evidence harness must not immediately fight that product behavior by clearing focus, and the
+# manifest must describe the focused state that the product contract guarantees for Focus Reading.
+# Preserve the explicit editor-selection setup for the dedicated keyboard-focus cases only.
+$focusReadingClearOld = @'
+        else
+        {
+            FocusManager?.Focus(null!, Avalonia.Input.NavigationMethod.Unspecified, Avalonia.Input.KeyModifiers.None);
+        }
+'@
+$focusReadingClearNew = @'
+        else if (!captureCase.FocusReading)
+        {
+            FocusManager?.Focus(null!, Avalonia.Input.NavigationMethod.Unspecified, Avalonia.Input.KeyModifiers.None);
+        }
+'@
+$focusReadingClearCount = ([regex]::Matches($visualCaptureText, [regex]::Escape($focusReadingClearOld))).Count
+if ($focusReadingClearCount -ne 1) {
+    throw "Expected exactly one unfocused-case focus-clear block, found $focusReadingClearCount."
+}
+$visualCaptureText = $visualCaptureText.Replace($focusReadingClearOld, $focusReadingClearNew, [StringComparison]::Ordinal)
+$manifestFocusOld = '            captureCase.FocusEditor,'
+$manifestFocusCount = ([regex]::Matches($visualCaptureText, [regex]::Escape($manifestFocusOld))).Count
+if ($manifestFocusCount -ne 1) {
+    throw "Expected exactly one editor-focused manifest field, found $manifestFocusCount."
+}
+$visualCaptureText = $visualCaptureText.Replace(
+    $manifestFocusOld,
+    '            captureCase.FocusEditor || captureCase.FocusReading,',
+    [StringComparison]::Ordinal)
+[IO.File]::WriteAllText($visualCapturePath, $visualCaptureText, [Text.UTF8Encoding]::new($false))
+$visualCapturePostHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Host "Verified MainWindow.VisualCapture.cs Focus Reading evidence-contract postimage: $visualCapturePostHash"
 '@
 $text = $text.Insert($visualMarkerIndex + $visualMarker.Length, $visualInsert + "`n")
 
@@ -112,7 +149,7 @@ $text = $text.Insert($architectureMarkerIndex, $architectureInsert + "`n")
 
 $tempScript = Join-Path $env:RUNNER_TEMP 'run-cloudscribe-048-certification-analyzer-clean.ps1'
 [IO.File]::WriteAllText($tempScript, $text, [Text.UTF8Encoding]::new($false))
-Write-Host "Prepared analyzer-clean certification driver with interface-based editor brush audit: $tempScript"
+Write-Host "Prepared analyzer-clean certification driver with interface-based editor brush and Focus Reading evidence repairs: $tempScript"
 
 & pwsh -NoProfile -File $tempScript -SourceRoot $SourceRoot
 if ($LASTEXITCODE -ne 0) {
