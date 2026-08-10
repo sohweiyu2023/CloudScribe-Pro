@@ -1,11 +1,11 @@
-name: CloudScribe Material Tool Contract Diagnostic
+name: CloudScribe Hybrid Carrier Diagnostic
 
 on:
   pull_request:
     branches: [ main ]
     paths:
       - '.github/workflows/cloudscribe-full-carrier-diagnostic.yml'
-      - '.cloudscribe-ci/**'
+      - '.cloudscribe-ci/payload/**'
 
 permissions:
   contents: read
@@ -15,64 +15,32 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct current exact source and inspect missing-tool contracts
+      - name: Test current split carrier followed by legacy continuation parts
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $root=Join-Path $env:RUNNER_TEMP 'src'; New-Item -ItemType Directory -Path $root -Force | Out-Null
-          function Join-Carrier([string]$folder,[string[]]$names,[string]$out,[string]$expectedSha) {
-            $s=[IO.File]::Open($out,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-            try { foreach($n in $names){ $b=[IO.File]::ReadAllBytes((Join-Path $folder $n)); $s.Write($b,0,$b.Length) } } finally { $s.Dispose() }
-            $sha=(Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant(); if($sha -ne $expectedSha){throw "carrier hash mismatch for ${folder}: $sha"}
-            & tar.exe -xJf $out -C $root; if($LASTEXITCODE -ne 0){throw "carrier extract failed: $folder"}
+          $root='.cloudscribe-ci/payload'
+          $names=@('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin')
+          $names += (12..25 | ForEach-Object { '{0:D3}.bin' -f $_ })
+          $hybrid=Join-Path $env:RUNNER_TEMP 'hybrid.tar.xz'
+          $s=[IO.File]::Open($hybrid,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try { foreach($n in $names){ $b=[IO.File]::ReadAllBytes((Join-Path $root $n)); $s.Write($b,0,$b.Length) } } finally { $s.Dispose() }
+          $info=Get-Item $hybrid; $sha=(Get-FileHash $hybrid -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "HYBRID bytes=$($info.Length) sha256=$sha parts=$($names.Count)"
+          $extract=Join-Path $env:RUNNER_TEMP 'hybrid-extract'; New-Item -ItemType Directory -Path $extract -Force|Out-Null
+          & tar.exe -xJf $hybrid -C $extract
+          $tarExit=$LASTEXITCODE
+          Write-Host "TAR_EXIT=$tarExit"
+          $files=@(Get-ChildItem -LiteralPath $extract -Recurse -File -Force -ErrorAction SilentlyContinue)
+          Write-Host "EXTRACTED_FILES=$($files.Count)"
+          foreach($wanted in @('tools/verify_dotnet_sdk_version.py','tools/run_python_regression_shards.py','tools/verify_project_dependencies.py','tools/verify_repository.py','tools/verify_stage1_source.py','tools/verify_stage2_evidence_inventory.py','tools/verify_stage2_source.py','tools/create_source_archive.py','tools/verify_source_release.py','tests/test_verification_tools.py')) {
+            $p=Join-Path $extract $wanted
+            Write-Host "WANTED exists=$(Test-Path -LiteralPath $p -PathType Leaf) path=$wanted"
           }
-          Join-Carrier '.cloudscribe-ci/payload' @('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin') (Join-Path $env:RUNNER_TEMP 'base.tar.xz') '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b'
-          Join-Carrier '.cloudscribe-ci/fixtures' @('000.bin','001.bin','002.bin') (Join-Path $env:RUNNER_TEMP 'fixtures.tar.xz') 'a866788937570bd4be228c76035b170aec47d929712e96d7a08b9152239a6d11'
-          Join-Carrier '.cloudscribe-ci/hotfix' @('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin') (Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz') '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa'
-
-          Write-Host '=== Python test inventory/framework ==='
-          $pyTests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Recurse -File -Filter 'test*.py' | Sort-Object FullName)
-          Write-Host "PY_TEST_FILES=$($pyTests.Count)"
-          foreach($f in $pyTests){
-            Write-Host "--- $($f.FullName.Substring($root.Length+1)) ---"
-            $lines=Get-Content -LiteralPath $f.FullName
-            for($i=1;$i -le [Math]::Min(80,$lines.Count);$i++){
-              if($lines[$i-1] -match '^import |^from |^class |^\s*def test_|unittest|pytest|subprocess|verify_|run_python') { '{0,4}: {1}' -f $i,$lines[$i-1] }
-            }
+          if(Test-Path -LiteralPath (Join-Path $extract 'tools')){
+            Write-Host '=== TOOLS ==='; Get-ChildItem -LiteralPath (Join-Path $extract 'tools') -File | Sort-Object Name | ForEach-Object { Write-Host $_.Name }
           }
-
-          Write-Host '=== Project inventory and references ==='
-          $projects=@(Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.csproj' | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } | Sort-Object FullName)
-          Write-Host "CSPROJ_COUNT=$($projects.Count)"
-          foreach($p in $projects){
-            [xml]$x=Get-Content -LiteralPath $p.FullName -Raw
-            $rel=$p.FullName.Substring($root.Length+1)
-            $refs=@($x.Project.ItemGroup.ProjectReference | ForEach-Object { $_.Include })
-            $pkgs=@($x.Project.ItemGroup.PackageReference | ForEach-Object { "$($_.Include)@$($_.Version)" })
-            Write-Host "PROJECT $rel refs=[$($refs -join ';')] packages=[$($pkgs -join ';')] lock=$(Test-Path -LiteralPath (Join-Path $p.DirectoryName 'packages.lock.json'))"
+          if(Test-Path -LiteralPath (Join-Path $extract 'tests')){
+            Write-Host '=== PY TESTS ==='; Get-ChildItem -LiteralPath (Join-Path $extract 'tests') -Recurse -File -Filter '*.py' | Sort-Object FullName | ForEach-Object { Write-Host $_.FullName.Substring($extract.Length+1) }
           }
-
-          Write-Host '=== Required root/config/session files ==='
-          foreach($p in @('CloudScribe.sln','Directory.Build.props','Directory.Build.targets','global.json','NuGet.config','SHA256SUMS.txt','SESSION_STATE.json','README.md')){
-            Write-Host "ROOTFILE exists=$(Test-Path -LiteralPath (Join-Path $root $p) -PathType Leaf) path=$p"
-          }
-          $state=Join-Path $root 'SESSION_STATE.json'; if(Test-Path $state){ Get-Content -LiteralPath $state -Raw }
-
-          Write-Host '=== Stage 2 source contract markers ==='
-          foreach($spec in @(
-            @{p='src/CloudScribe.App/MainWindow.VisualCapture.cs'; pat='CaptureCase|FocusReading|FocusEditor|ISolidColorBrush|EditorFocused|Stage 2|17'},
-            @{p='src/CloudScribe.App/MainWindow.axaml.cs'; pat='SetFocusReadingAsync|PostFocus|DocumentEditor.IsFocused'},
-            @{p='tools/verify_stage2_visual_evidence.py'; pat='EXPECTED_CASES|06-full-focus-reading|EditorFocused|contrast|17'},
-            @{p='tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs'; pat='FocusReadingPreservesKeyboardFocus|DocumentEditor.IsFocused|verify_stage2_evidence_inventory|CaptureEditorVisualAudit'}
-          )){
-            $p=Join-Path $root $spec.p
-            Write-Host "--- $($spec.p) exists=$(Test-Path -LiteralPath $p -PathType Leaf) ---"
-            if(Test-Path $p){ Get-Content -LiteralPath $p | Select-String -Pattern $spec.pat | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() } }
-          }
-
-          Write-Host '=== verify-stage2 summary/ledger/evidence postconditions ==='
-          $verify=Join-Path $root 'scripts/verify-stage2.ps1'; $lines=Get-Content -LiteralPath $verify
-          for($i=1;$i -le $lines.Count;$i++){
-            if($lines[$i-1] -match 'verification-summary|command-ledger|package_scan_files|screenshot_files|test_result_files|status|evidence inventory|STEP|sequence') { '{0,4}: {1}' -f $i,$lines[$i-1] }
-          }
-          Write-Host 'MATERIAL_TOOL_CONTRACT_DIAGNOSTIC_COMPLETE'
+          if($tarExit -ne 0){ Write-Host 'HYBRID_NOT_VALID_ARCHIVE' } else { Write-Host 'HYBRID_VALID_ARCHIVE' }
