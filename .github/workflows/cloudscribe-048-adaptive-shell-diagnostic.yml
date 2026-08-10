@@ -1,0 +1,42 @@
+name: CloudScribe 0.3.48 AdaptiveShell Diagnostic
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/cloudscribe-048-adaptive-shell-diagnostic.yml'
+      - '.cloudscribe-ci/**'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reconstruct focus-fix carrier and print offending method
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $carrierCommit = '54e1882557b13e8ea548c568995c94807dce23f8'
+          $carrierRoot = "https://raw.githubusercontent.com/sohweiyu2023/CloudScribe-Pro/$carrierCommit/.cloudscribe-ci/focus-fix-carrier"
+          $b64 = Join-Path $env:RUNNER_TEMP 'focus-fix.b64'
+          $xz = Join-Path $env:RUNNER_TEMP 'focus-fix.tar.xz'
+          $root = Join-Path $env:RUNNER_TEMP 'focus-fix'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          foreach ($part in @('000.b64','001.b64','002.b64','003.b64')) {
+            $partPath = Join-Path $env:RUNNER_TEMP $part
+            Invoke-WebRequest -Uri "$carrierRoot/$part" -OutFile $partPath
+            [IO.File]::AppendAllText($b64, ([IO.File]::ReadAllText($partPath)).Trim())
+          }
+          [IO.File]::WriteAllBytes($xz, [Convert]::FromBase64String([IO.File]::ReadAllText($b64)))
+          $sha = (Get-FileHash $xz -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne 'd182d7686fe80b863d8986c2170464efc22aaff4ec584167d804d3a82cf620d6') { throw "Carrier hash mismatch: $sha" }
+          & tar.exe -xJf $xz -C $root
+          if ($LASTEXITCODE -ne 0) { throw "tar failed: $LASTEXITCODE" }
+          $path = Join-Path $root 'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs'
+          $lines = Get-Content -LiteralPath $path
+          for ($i = 420; $i -le [Math]::Min(510, $lines.Count); $i++) {
+            '{0,4}: {1}' -f $i, $lines[$i-1]
+          }
