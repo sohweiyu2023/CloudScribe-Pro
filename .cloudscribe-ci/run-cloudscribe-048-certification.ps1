@@ -98,9 +98,13 @@ foreach ($trx in Get-ChildItem -LiteralPath $resultRoot -Filter '*.trx' -File -R
     [xml]$xml = Get-Content -LiteralPath $trx.FullName -Raw
     $c = $xml.SelectSingleNode("//*[local-name()='Counters']")
     if (-not $c) { throw "Missing counters in $($trx.FullName)." }
-    $total += [int]$c.total
-    $failed += [int]$c.failed
-    if ($c.skipped) { $skipped += [int]$c.skipped }
+    $totalValue = $c.GetAttribute('total')
+    $failedValue = $c.GetAttribute('failed')
+    $skippedValue = $c.GetAttribute('skipped')
+    if ([string]::IsNullOrWhiteSpace($totalValue) -or [string]::IsNullOrWhiteSpace($failedValue)) { throw "Missing required counter attributes in $($trx.FullName)." }
+    $total += [int]$totalValue
+    $failed += [int]$failedValue
+    if (-not [string]::IsNullOrWhiteSpace($skippedValue)) { $skipped += [int]$skippedValue }
 }
 if ($trxCount -ne 4 -or $total -ne 146 -or $failed -ne 0 -or $skipped -ne 0) {
     throw "Unexpected test inventory: trx=$trxCount total=$total failed=$failed skipped=$skipped; expected 4/146/0/0."
