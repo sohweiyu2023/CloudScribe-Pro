@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct exact repaired source and inspect focus-reading behavior
+      - name: Reconstruct exact repaired source and inspect focus-reading evidence contract
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -34,11 +34,17 @@ jobs:
           foreach($part in @('000.b64','001.b64','002.b64','003.b64')) { $partPath=Join-Path $env:RUNNER_TEMP $part; Invoke-WebRequest -Uri "$carrierRoot/$part" -OutFile $partPath; [IO.File]::AppendAllText($b64,([IO.File]::ReadAllText($partPath)).Trim()) }
           [IO.File]::WriteAllBytes($xz,[Convert]::FromBase64String([IO.File]::ReadAllText($b64))); $focusSha=(Get-FileHash $xz -Algorithm SHA256).Hash.ToLowerInvariant()
           if($focusSha -ne 'd182d7686fe80b863d8986c2170464efc22aaff4ec584167d804d3a82cf620d6'){throw "focus hash mismatch: $focusSha"}; & tar.exe -xJf $xz -C $root; if($LASTEXITCODE -ne 0){throw 'focus extract failed'}
-          Write-Host '=== MainWindow.axaml.cs focus context ==='
-          $main=Join-Path $root 'src/CloudScribe.App/MainWindow.axaml.cs'; $lines=Get-Content -LiteralPath $main
-          for($i=1;$i -le $lines.Count;$i++){ if($lines[$i-1] -match 'Focus|DocumentEditor|Reading'){ '{0,4}: {1}' -f $i,$lines[$i-1] } }
-          Write-Host '=== ShellViewModel focus-reading context ==='
-          Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.cs' | Select-String -Pattern 'FocusReading|Focus Reading|IsFocusReading|ToggleFocus|DocumentEditor.Focus|PostFocus' | ForEach-Object { "{0}:{1}: {2}" -f $_.Path.Substring($root.Length+1),$_.LineNumber,$_.Line.Trim() }
-          Write-Host '=== capture matrix focus flags ==='
-          $capture=Join-Path $root 'src/CloudScribe.App/MainWindow.VisualCapture.cs'; Get-Content -LiteralPath $capture | Select-String -Pattern 'CaptureCase|FocusReading|FocusEditor|ClearFocus|FocusManager' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
-          Write-Host 'FOCUS_READING_DIAGNOSTIC_COMPLETE'
+
+          Write-Host '=== Product Focus Reading focus contract ==='
+          $main=Join-Path $root 'src/CloudScribe.App/MainWindow.axaml.cs'; Get-Content -LiteralPath $main | Select-String -Pattern 'SetFocusReadingAsync|PostFocus\(DocumentEditor\)|DocumentEditor\.IsFocused' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
+          Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Recurse -File -Filter '*.cs' | Select-String -Pattern 'FocusReadingPreservesKeyboardFocus|DocumentEditor\.IsFocused' | ForEach-Object { "{0}:{1}: {2}" -f $_.Path.Substring($root.Length+1),$_.LineNumber,$_.Line.Trim() }
+
+          Write-Host '=== Visual capture Focus Reading metadata ==='
+          $capture=Join-Path $root 'src/CloudScribe.App/MainWindow.VisualCapture.cs'; Get-Content -LiteralPath $capture | Select-String -Pattern '06-full-focus-reading|captureCase\.FocusEditor|captureCase\.FocusReading|ClearFocus|FocusManager' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
+
+          Write-Host '=== Visual validator expected case 06 ==='
+          $validator=Join-Path $root 'tools/verify_stage2_visual_evidence.py'; Get-Content -LiteralPath $validator | Select-String -Pattern '06-full-focus-reading|EditorFocused|EXPECTED_CASES' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
+
+          Write-Host '=== Verification-tool tests touching focus metadata ==='
+          $toolTests=Join-Path $root 'tests/test_verification_tools.py'; Get-Content -LiteralPath $toolTests | Select-String -Pattern '06-full-focus-reading|EditorFocused|FocusReading|focus-metadata' | ForEach-Object { "{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
+          Write-Host 'FOCUS_READING_EVIDENCE_DIAGNOSTIC_COMPLETE'
