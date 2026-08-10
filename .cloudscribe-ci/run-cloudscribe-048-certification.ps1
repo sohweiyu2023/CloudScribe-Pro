@@ -20,7 +20,7 @@ function Assert-Sha256 {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "$Label is missing: $Path" }
     $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $Expected) { throw "$Label hash mismatch: $actual" }
-    Write-Host "Verified $Label: $actual"
+    Write-Host "Verified ${Label}: $actual"
 }
 
 $sdk = (& dotnet --version).Trim()
