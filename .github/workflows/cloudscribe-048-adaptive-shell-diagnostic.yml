@@ -1,4 +1,4 @@
-name: CloudScribe 0.3.48 Diagnostic Logger Class Isolation
+name: CloudScribe 0.3.48 Editor Brush Diagnostic
 
 on:
   pull_request:
@@ -15,26 +15,35 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.0.302'
-      - name: Reconstruct exact source and run diagnostics resilience class
+      - name: Reconstruct exact focus-fix carrier and inspect editor brush audit
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $root=Join-Path $env:RUNNER_TEMP 'src'; New-Item -ItemType Directory -Path $root -Force | Out-Null
-          $names=@('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin')
-          $arc=Join-Path $env:RUNNER_TEMP 'base.tar.xz'; $s=[IO.File]::Open($arc,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try{foreach($n in $names){$b=[IO.File]::ReadAllBytes((Join-Path '.cloudscribe-ci/payload' $n));$s.Write($b,0,$b.Length)}}finally{$s.Dispose()}
-          if((Get-FileHash $arc -Algorithm SHA256).Hash.ToLowerInvariant() -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b'){throw 'base hash'}
-          & tar.exe -xJf $arc -C $root; if($LASTEXITCODE -ne 0){throw 'base extract'}
-          $names=@('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin')
-          $arc=Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz'; $s=[IO.File]::Open($arc,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try{foreach($n in $names){$b=[IO.File]::ReadAllBytes((Join-Path '.cloudscribe-ci/hotfix' $n));$s.Write($b,0,$b.Length)}}finally{$s.Dispose()}
-          if((Get-FileHash $arc -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa'){throw 'hotfix hash'}
-          & tar.exe -xJf $arc -C $root; if($LASTEXITCODE -ne 0){throw 'hotfix extract'}
-          Set-Location $root
-          dotnet restore tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj --locked-mode --disable-parallel --configfile NuGet.config; if($LASTEXITCODE -ne 0){throw 'restore'}
-          dotnet build tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false; if($LASTEXITCODE -ne 0){throw 'build'}
-          dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~StartupAndDiagnosticsResilienceTests' --logger 'console;verbosity=detailed'
-          if($LASTEXITCODE -ne 0){throw 'diagnostics resilience class failed'}
+          $carrierCommit='54e1882557b13e8ea548c568995c94807dce23f8'
+          $carrierRoot="https://raw.githubusercontent.com/sohweiyu2023/CloudScribe-Pro/$carrierCommit/.cloudscribe-ci/focus-fix-carrier"
+          $b64=Join-Path $env:RUNNER_TEMP 'focus.b64'
+          $xz=Join-Path $env:RUNNER_TEMP 'focus.tar.xz'
+          Remove-Item $b64,$xz -Force -ErrorAction SilentlyContinue
+          foreach($part in @('000.b64','001.b64','002.b64','003.b64')) {
+            $partPath=Join-Path $env:RUNNER_TEMP $part
+            Invoke-WebRequest -Uri "$carrierRoot/$part" -OutFile $partPath
+            [IO.File]::AppendAllText($b64,([IO.File]::ReadAllText($partPath)).Trim())
+          }
+          [IO.File]::WriteAllBytes($xz,[Convert]::FromBase64String([IO.File]::ReadAllText($b64)))
+          if((Get-Item $xz).Length -ne 42108){throw 'focus carrier length mismatch'}
+          $sha=(Get-FileHash $xz -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne 'd182d7686fe80b863d8986c2170464efc22aaff4ec584167d804d3a82cf620d6'){throw "focus carrier hash mismatch: $sha"}
+          $root=Join-Path $env:RUNNER_TEMP 'focus-overlay'; New-Item -ItemType Directory -Path $root -Force | Out-Null
+          & tar.exe -xJf $xz -C $root; if($LASTEXITCODE -ne 0){throw 'focus carrier extract failed'}
+          Write-Host '=== focus carrier files ==='
+          Get-ChildItem -LiteralPath $root -Recurse -File | ForEach-Object { Write-Host $_.FullName.Substring($root.Length+1) }
+          Write-Host '=== solid editor surface error context ==='
+          $matches=Get-ChildItem -LiteralPath $root -Recurse -File | Select-String -SimpleMatch 'solid editor surface background brush'
+          if(-not $matches){throw 'expected editor surface error message not found in focus carrier'}
+          foreach($m in $matches){
+            $lines=Get-Content -LiteralPath $m.Path
+            $from=[Math]::Max(1,$m.LineNumber-25); $to=[Math]::Min($lines.Count,$m.LineNumber+25)
+            for($i=$from;$i -le $to;$i++){ '{0,4}: {1}' -f $i,$lines[$i-1] }
+          }
+          Write-Host '=== editor/theme resource context ==='
+          Get-ChildItem -LiteralPath $root -Recurse -File | Select-String -Pattern 'EditorSurface|DocumentEditor|TextBox|ISolidColorBrush|SolidColorBrush' | ForEach-Object { "{0}:{1}: {2}" -f $_.Path.Substring($root.Length+1),$_.LineNumber,$_.Line.Trim() }
