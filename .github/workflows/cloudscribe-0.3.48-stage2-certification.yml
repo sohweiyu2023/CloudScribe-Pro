@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - cloudscribe-0.3.48-stage2-certification
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
