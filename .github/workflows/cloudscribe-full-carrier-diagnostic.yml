@@ -1,11 +1,11 @@
-name: CloudScribe Full Carrier Diagnostic
+name: CloudScribe Material Tool Inventory Diagnostic
 
 on:
   pull_request:
     branches: [ main ]
     paths:
       - '.github/workflows/cloudscribe-full-carrier-diagnostic.yml'
-      - '.cloudscribe-ci/payload/**'
+      - '.cloudscribe-ci/**'
 
 permissions:
   contents: read
@@ -15,51 +15,48 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - name: Inspect numbered full carrier and split equivalence
+      - name: Reconstruct current exact source and inventory material-gate dependencies
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $root='.cloudscribe-ci/payload'
-          foreach($stem in @('007','010','011')) {
-            $joined=Join-Path $env:RUNNER_TEMP "$stem-joined.bin"
-            $s=[IO.File]::Open($joined,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-            try {
-              foreach($suffix in @('a','b')) {
-                $b=[IO.File]::ReadAllBytes((Join-Path $root ($stem+$suffix+'.bin')))
-                $s.Write($b,0,$b.Length)
-              }
-            } finally { $s.Dispose() }
-            $orig=Join-Path $root ($stem+'.bin')
-            $joinedSha=(Get-FileHash $joined -Algorithm SHA256).Hash.ToLowerInvariant()
-            $origSha=(Get-FileHash $orig -Algorithm SHA256).Hash.ToLowerInvariant()
-            Write-Host "$stem original_bytes=$((Get-Item $orig).Length) joined_bytes=$((Get-Item $joined).Length) original_sha=$origSha joined_sha=$joinedSha equal=$($origSha -eq $joinedSha)"
+          $root=Join-Path $env:RUNNER_TEMP 'src'; New-Item -ItemType Directory -Path $root -Force | Out-Null
+          function Join-Carrier([string]$folder,[string[]]$names,[string]$out,[string]$expectedSha) {
+            $s=[IO.File]::Open($out,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try { foreach($n in $names){ $b=[IO.File]::ReadAllBytes((Join-Path $folder $n)); $s.Write($b,0,$b.Length) } } finally { $s.Dispose() }
+            $sha=(Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant(); if($sha -ne $expectedSha){throw "carrier hash mismatch for ${folder}: $sha"}
+            & tar.exe -xJf $out -C $root; if($LASTEXITCODE -ne 0){throw "carrier extract failed: $folder"}
+          }
+          Join-Carrier '.cloudscribe-ci/payload' @('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin') (Join-Path $env:RUNNER_TEMP 'base.tar.xz') '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b'
+          Join-Carrier '.cloudscribe-ci/fixtures' @('000.bin','001.bin','002.bin') (Join-Path $env:RUNNER_TEMP 'fixtures.tar.xz') 'a866788937570bd4be228c76035b170aec47d929712e96d7a08b9152239a6d11'
+          Join-Carrier '.cloudscribe-ci/hotfix' @('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin') (Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz') '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa'
+
+          $verify=Join-Path $root 'scripts/verify-stage2.ps1'
+          $text=[IO.File]::ReadAllText($verify).Replace("`r`n","`n").Replace("`r","`n")
+          Write-Host '=== all tool/script path tokens referenced by verify-stage2.ps1 ==='
+          $matches=[regex]::Matches($text,'(?<![A-Za-z0-9_.-])(?<p>(?:tools|scripts)/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)')
+          $paths=@($matches | ForEach-Object { $_.Groups['p'].Value } | Sort-Object -Unique)
+          foreach($p in $paths){
+            $exists=Test-Path -LiteralPath (Join-Path $root $p) -PathType Leaf
+            Write-Host "REF exists=$exists path=$p"
+          }
+          $missing=@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf) })
+          Write-Host "REFERENCED_PATHS=$($paths.Count) MISSING_REFERENCED_PATHS=$($missing.Count)"
+          foreach($p in $missing){Write-Host "MISSING $p"}
+
+          Write-Host '=== actual tools directory ==='
+          Get-ChildItem -LiteralPath (Join-Path $root 'tools') -File | Sort-Object Name | ForEach-Object { Write-Host $_.Name }
+          Write-Host '=== actual scripts directory ==='
+          Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -File | Sort-Object Name | ForEach-Object { Write-Host $_.Name }
+
+          Write-Host '=== verify-stage2 commands containing python/tools/scripts ==='
+          $lines=Get-Content -LiteralPath $verify
+          for($i=1;$i -le $lines.Count;$i++){
+            if($lines[$i-1] -match 'python|tools/|scripts/') { '{0,4}: {1}' -f $i,$lines[$i-1] }
           }
 
-          $full=Join-Path $env:RUNNER_TEMP 'CloudScribe-full-numbered-carrier.bin'
-          $stream=[IO.File]::Open($full,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try {
-            foreach($i in 0..25) {
-              $name=('{0:D3}.bin' -f $i)
-              $path=Join-Path $root $name
-              if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw "missing $name"}
-              $bytes=[IO.File]::ReadAllBytes($path)
-              $stream.Write($bytes,0,$bytes.Length)
-            }
-          } finally { $stream.Dispose() }
-          $fullInfo=Get-Item $full
-          $fullSha=(Get-FileHash $full -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "FULL_NUMBERED bytes=$($fullInfo.Length) sha256=$fullSha"
-          $extract=Join-Path $env:RUNNER_TEMP 'full-numbered-extract'; New-Item -ItemType Directory -Path $extract -Force|Out-Null
-          & tar.exe -xJf $full -C $extract
-          Write-Host "TAR_EXIT=$LASTEXITCODE"
-          if($LASTEXITCODE -eq 0) {
-            $files=@(Get-ChildItem -LiteralPath $extract -Recurse -File -Force)
-            Write-Host "EXTRACTED_FILES=$($files.Count)"
-            foreach($wanted in @('tools/verify_dotnet_sdk_version.py','tools/create_source_archive.py','tools/verify_source_release.py','tools/verify_stage2_source.py','scripts/verify-stage2.ps1')) {
-              $p=Join-Path $extract $wanted
-              Write-Host "WANTED $wanted exists=$(Test-Path -LiteralPath $p -PathType Leaf)"
-            }
-            Write-Host '=== tools files ==='
-            Get-ChildItem -LiteralPath (Join-Path $extract 'tools') -File -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { Write-Host $_.Name }
+          Write-Host '=== tests referencing absent material helpers ==='
+          foreach($p in $missing){
+            $leaf=[IO.Path]::GetFileName($p)
+            Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Recurse -File | Select-String -SimpleMatch $leaf | ForEach-Object { "TESTREF $leaf $($_.Path.Substring($root.Length+1)):$($_.LineNumber): $($_.Line.Trim())" }
           }
-          Write-Host 'FULL_CARRIER_DIAGNOSTIC_COMPLETE'
+          Write-Host 'MATERIAL_TOOL_INVENTORY_DIAGNOSTIC_COMPLETE'
