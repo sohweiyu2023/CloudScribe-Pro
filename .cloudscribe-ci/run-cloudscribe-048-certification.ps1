@@ -68,12 +68,37 @@ if ($visualCaptureText.Contains('ClearFocus()', [StringComparison]::Ordinal)) {
 $visualCapturePostHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
 Write-Host "Verified MainWindow.VisualCapture.cs deterministic postimage: $visualCapturePostHash"
 
+# Preserve all architecture assertions while keeping the analyzer's method-size contract.
+# The focus regression added one assertion to a method already at its 40-statement ceiling.
+# Fold the two equivalent forbidden-FontSize checks into a single Assert.All statement, and
+# update the focus-harness expectation to the stable Focus(null, ...) API used above.
+$adaptiveShellPath = Join-Path $SourceRoot 'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs'
+Assert-Sha256 $adaptiveShellPath 'f52c3606a4c093b4053b1faf265f0bd6c267eabd8004c83e0ff6011488e4b26e' 'AdaptiveShellTests.cs preimage'
+$adaptiveShellText = [IO.File]::ReadAllText($adaptiveShellPath).Replace("`r`n", "`n").Replace("`r", "`n")
+$fontSizeOld = '        Assert.DoesNotContain("FontSize=\"10\"", window, StringComparison.Ordinal);' + "`n" + '        Assert.DoesNotContain("FontSize=\"30\"", window, StringComparison.Ordinal);'
+$fontSizeNew = '        Assert.All(new[] { "FontSize=\"10\"", "FontSize=\"30\"" }, forbidden => Assert.DoesNotContain(forbidden, window, StringComparison.Ordinal));'
+if (-not $adaptiveShellText.Contains($fontSizeOld, [StringComparison]::Ordinal)) {
+    throw 'AdaptiveShellTests.cs forbidden-FontSize assertion block was not found exactly once.'
+}
+$adaptiveShellText = $adaptiveShellText.Replace($fontSizeOld, $fontSizeNew, [StringComparison]::Ordinal)
+$focusAssertionOld = '        Assert.Contains("FocusManager?.ClearFocus()", capture, StringComparison.Ordinal);'
+$focusAssertionNew = '        Assert.Contains("FocusManager?.Focus(null!, Avalonia.Input.NavigationMethod.Unspecified, Avalonia.Input.KeyModifiers.None)", capture, StringComparison.Ordinal);'
+if (-not $adaptiveShellText.Contains($focusAssertionOld, [StringComparison]::Ordinal)) {
+    throw 'AdaptiveShellTests.cs legacy ClearFocus assertion was not found.'
+}
+$adaptiveShellText = $adaptiveShellText.Replace($focusAssertionOld, $focusAssertionNew, [StringComparison]::Ordinal)
+if ($adaptiveShellText.Contains('FocusManager?.ClearFocus()', [StringComparison]::Ordinal)) {
+    throw 'Legacy ClearFocus architecture expectation remains after deterministic repair.'
+}
+[IO.File]::WriteAllText($adaptiveShellPath, $adaptiveShellText, [Text.UTF8Encoding]::new($false))
+$adaptiveShellPostHash = (Get-FileHash -LiteralPath $adaptiveShellPath -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Host "Verified AdaptiveShellTests.cs deterministic postimage: $adaptiveShellPostHash"
+
 $expectedFiles = @{
     'src/CloudScribe.App/CloudScribeApplication.axaml' = '997cc05fe07360086dccaaada1001f5bafbc82d04dbc9d466b57eb27f2c18eac'
     'tools/verify_stage2_visual_evidence.py' = 'da1cd6fd796a80f14af7e41c5d26143b6e0a05f60d95322e773c68aa898dd37c'
     'tools/verify_stage2_source.py' = '1a1a60252ca9355f3d08c864f4c52d11b26b9cacad17ffa323e343b7733a6768'
     'tests/test_verification_tools.py' = 'd7b42c460cf55658e3c3ebebeeab09ae99931a3688d488832faab7e30c8598d6'
-    'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs' = 'f52c3606a4c093b4053b1faf265f0bd6c267eabd8004c83e0ff6011488e4b26e'
     'tests/CloudScribe.Architecture.Tests/VisualCaptureSizingContractTests.cs' = '756e8212269c1d996efbd74f15dc8808edcce1e305f589d419f01863d78a5035'
 }
 foreach ($relative in $expectedFiles.Keys) {
