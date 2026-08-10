@@ -131,6 +131,54 @@ jobs:
           }
           Write-Host "Exact candidate hotfix carrier verified: $sha ($($info.Length) bytes)"
 
+      - name: Finalize exact 0.3.48 repair state
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $utf8NoBom = [Text.UTF8Encoding]::new($false)
+
+          $wrapperPath = Join-Path $env:CS_ROOT 'scripts/invoke-nuget-audit-scan.ps1'
+          $wrapperHotfix = '3c70d5c1cb30c5c8f805353c81cc1a6aed2fc365da9a9d52092cf14e339f0be3'
+          $wrapperFinal = 'de5981b2ef579c6b85261cd5ef8543cf937b79243688804777987c2274e41841'
+          $wrapperHash = (Get-FileHash -LiteralPath $wrapperPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($wrapperHash -eq $wrapperHotfix) {
+            $text = [IO.File]::ReadAllText($wrapperPath).Replace("`r`n","`n").Replace("`r","`n")
+            $anchor = '}' + "`n" + '$projectPath = $projectItem.FullName'
+            $replacement = '}' + "`n" + 'if ($null -eq $cursor) {' + "`n" + '    throw "Audit target must resolve beneath the CloudScribe repository: $Project"' + "`n" + '}' + "`n" + '$projectPath = $projectItem.FullName'
+            if (-not $text.Contains($anchor)) { throw 'Windows audit finalization anchor was not found.' }
+            $text = $text.Replace($anchor,$replacement)
+            [IO.File]::WriteAllText($wrapperPath,$text,$utf8NoBom)
+          }
+          elseif ($wrapperHash -ne $wrapperFinal) { throw "Unexpected Windows audit wrapper preimage: $wrapperHash" }
+          $wrapperHash = (Get-FileHash -LiteralPath $wrapperPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($wrapperHash -ne $wrapperFinal) { throw "Final Windows audit wrapper hash mismatch: $wrapperHash" }
+
+          $architecturePath = Join-Path $env:CS_ROOT 'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs'
+          $architectureHotfix = 'ccf6b1d09e0c7a0cc232d5f2d19fc2a742006a13cc91727bdba00eacf30c81a3'
+          $architectureFinal = 'f92c0f76d5e278efe91e071056bb853117100a6b0702463d4fbd35ca18fe1819'
+          $architectureHash = (Get-FileHash -LiteralPath $architecturePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($architectureHash -eq $architectureHotfix) {
+            $text = [IO.File]::ReadAllText($architecturePath).Replace("`r`n","`n").Replace("`r","`n")
+            $old = '        Assert.Contains("$projectItem.Directory", windowsAudit, StringComparison.Ordinal);' + "`n" + '        Assert.Contains("projectItem.Attributes", windowsAudit, StringComparison.Ordinal);'
+            $new = '        Assert.Contains("$cursor = $projectItem.Directory", windowsAudit, StringComparison.Ordinal);' + "`n" + '        Assert.DoesNotContain("$cursor = $projectItem\n", windowsAudit, StringComparison.Ordinal);'
+            if (-not $text.Contains($old)) { throw 'Architecture regression finalization block was not found.' }
+            $text = $text.Replace($old,$new)
+            [IO.File]::WriteAllText($architecturePath,$text,$utf8NoBom)
+          }
+          elseif ($architectureHash -ne $architectureFinal) { throw "Unexpected architecture test preimage: $architectureHash" }
+          $architectureHash = (Get-FileHash -LiteralPath $architecturePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($architectureHash -ne $architectureFinal) { throw "Final architecture test hash mismatch: $architectureHash" }
+
+          $smokeOverlay = Join-Path $env:GITHUB_WORKSPACE '.cloudscribe-ci/final-overlay/smoke-stage1-windows.ps1'
+          $smokePath = Join-Path $env:CS_ROOT 'scripts/smoke-stage1-windows.ps1'
+          $smokeFinal = 'f4df86fbfe7d11929d0f3121eaee57b24ddf9db8727e53c297bb1d290e9abf31'
+          $smokeText = [IO.File]::ReadAllText($smokeOverlay).Replace("`r`n","`n").Replace("`r","`n")
+          [IO.File]::WriteAllText($smokePath,$smokeText,$utf8NoBom)
+          $smokeHash = (Get-FileHash -LiteralPath $smokePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($smokeHash -ne $smokeFinal) { throw "Final Windows smoke hash mismatch: $smokeHash" }
+
+          Write-Host "Exact final repair state verified: wrapper=$wrapperHash architecture=$architectureHash smoke=$smokeHash"
+
       - name: Run full native Windows certification
         shell: pwsh
         run: |
@@ -147,5 +195,6 @@ jobs:
             ${{ runner.temp }}/package-scans
             ${{ runner.temp }}/stage2-screenshots
             ${{ runner.temp }}/CloudScribe-publish
+            ${{ runner.temp }}/cloudscribe-stage1-smoke-*
           if-no-files-found: warn
           retention-days: 7
