@@ -38,11 +38,22 @@ $compileArguments = @('-m','py_compile') + @($toolNames | ForEach-Object { Join-
 if ($LASTEXITCODE -ne 0) { throw "Restored material verifier syntax validation failed: $LASTEXITCODE" }
 Write-Host "Restored and syntax-checked $($toolNames.Count) material/release verifiers from immutable commit $carrierCommit."
 
-$coreWrapper = Join-Path $env:RUNNER_TEMP 'cloudscribe-048-certified-core-wrapper.ps1'
+# The certified wrapper resolves its driver through $PSScriptRoot, so restore both files
+# into the same isolated directory. This preserves the exact sibling-file contract of the
+# already-certified wrapper instead of rewriting its behavior.
+$coreDirectory = Join-Path $env:RUNNER_TEMP 'cloudscribe-048-certified-core'
+Remove-Item -LiteralPath $coreDirectory -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $coreDirectory -Force | Out-Null
+$coreWrapper = Join-Path $coreDirectory 'invoke-cloudscribe-048-certification.ps1'
+$coreDriver = Join-Path $coreDirectory 'run-cloudscribe-048-certification.ps1'
 Invoke-WebRequest -Uri "$carrierRoot/invoke-cloudscribe-048-certification.ps1" -OutFile $coreWrapper
-if (-not (Test-Path -LiteralPath $coreWrapper -PathType Leaf) -or (Get-Item -LiteralPath $coreWrapper).Length -le 0) {
-    throw 'Certified core wrapper download failed or was empty.'
+Invoke-WebRequest -Uri "$carrierRoot/run-cloudscribe-048-certification.ps1" -OutFile $coreDriver
+foreach ($required in @($coreWrapper, $coreDriver)) {
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf) -or (Get-Item -LiteralPath $required).Length -le 0) {
+        throw "Certified core script download failed or was empty: $required"
+    }
 }
+Write-Host "Restored certified wrapper/driver sibling pair from immutable commit $carrierCommit."
 
 & pwsh -NoProfile -File $coreWrapper -SourceRoot $SourceRoot
 if ($LASTEXITCODE -ne 0) {
