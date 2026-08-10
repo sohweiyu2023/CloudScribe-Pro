@@ -62,9 +62,57 @@ if ($text.Contains('[Collection("Diagnostic writer integration")]', [StringCompa
     throw 'Obsolete targeted diagnostic writer collection attribute remains in patched certification script.'
 }
 
+# Avalonia can resolve solid-color resources to either mutable SolidColorBrush instances or
+# immutable solid brushes. The visual evidence contract cares about solidness, opacity and color,
+# not mutability. Patch the capture audit to accept the ISolidColorBrush contract while keeping
+# every opacity/contrast assertion intact. Guard both the exact preimage hash and replacement count.
+$visualMarker = 'Write-Host "Verified MainWindow.VisualCapture.cs deterministic postimage: $visualCapturePostHash"' + "`n"
+$visualMarkerIndex = $text.IndexOf($visualMarker, [StringComparison]::Ordinal)
+if ($visualMarkerIndex -lt 0 -or $text.IndexOf($visualMarker, $visualMarkerIndex + $visualMarker.Length, [StringComparison]::Ordinal) -ge 0) {
+    throw 'Expected exactly one visual-capture deterministic postimage marker.'
+}
+$visualInsert = @'
+if ($visualCapturePostHash -ne '723c9ba9d21a6fccebb5390aa329662062711a95d91ec15e82817f00465ba905') {
+    throw "Unexpected visual-capture preimage before solid-brush contract repair: $visualCapturePostHash"
+}
+$mutableSolidPattern = 'brush is not SolidColorBrush solidBrush'
+$mutableSolidCount = ([regex]::Matches($visualCaptureText, [regex]::Escape($mutableSolidPattern))).Count
+if ($mutableSolidCount -ne 2) {
+    throw "Expected exactly two concrete SolidColorBrush audit checks, found $mutableSolidCount."
+}
+$visualCaptureText = $visualCaptureText.Replace(
+    $mutableSolidPattern,
+    'brush is not ISolidColorBrush solidBrush',
+    [StringComparison]::Ordinal)
+[IO.File]::WriteAllText($visualCapturePath, $visualCaptureText, [Text.UTF8Encoding]::new($false))
+$visualCapturePostHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Host "Verified MainWindow.VisualCapture.cs interface-based solid-brush postimage: $visualCapturePostHash"
+'@
+$text = $text.Insert($visualMarkerIndex + $visualMarker.Length, $visualInsert + "`n")
+
+# Keep statement count unchanged in the architecture test: strengthen the existing capture-audit
+# assertion so it also locks the interface-based brush contract instead of adding a new statement.
+$architectureMarker = '$focusAssertionOld = ''        Assert.Contains("FocusManager?.ClearFocus()", capture, StringComparison.Ordinal);''' + "`n"
+$architectureMarkerIndex = $text.IndexOf($architectureMarker, [StringComparison]::Ordinal)
+if ($architectureMarkerIndex -lt 0 -or $text.IndexOf($architectureMarker, $architectureMarkerIndex + $architectureMarker.Length, [StringComparison]::Ordinal) -ge 0) {
+    throw 'Expected exactly one adaptive-shell focus assertion marker.'
+}
+$architectureInsert = @'
+$brushAuditAssertionOld = '        Assert.Contains("CaptureEditorVisualAudit", capture, StringComparison.Ordinal);'
+$brushAuditAssertionNew = '        Assert.Matches(@"CaptureEditorVisualAudit[\s\S]*ISolidColorBrush", capture);'
+if (-not $adaptiveShellText.Contains($brushAuditAssertionOld, [StringComparison]::Ordinal)) {
+    throw 'AdaptiveShellTests.cs editor visual-audit assertion was not found.'
+}
+$adaptiveShellText = $adaptiveShellText.Replace(
+    $brushAuditAssertionOld,
+    $brushAuditAssertionNew,
+    [StringComparison]::Ordinal)
+'@
+$text = $text.Insert($architectureMarkerIndex, $architectureInsert + "`n")
+
 $tempScript = Join-Path $env:RUNNER_TEMP 'run-cloudscribe-048-certification-analyzer-clean.ps1'
 [IO.File]::WriteAllText($tempScript, $text, [Text.UTF8Encoding]::new($false))
-Write-Host "Prepared analyzer-clean certification driver: $tempScript"
+Write-Host "Prepared analyzer-clean certification driver with interface-based editor brush audit: $tempScript"
 
 & pwsh -NoProfile -File $tempScript -SourceRoot $SourceRoot
 if ($LASTEXITCODE -ne 0) {
