@@ -1,0 +1,65 @@
+name: CloudScribe Full Carrier Diagnostic
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/cloudscribe-full-carrier-diagnostic.yml'
+      - '.cloudscribe-ci/payload/**'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+      - name: Inspect numbered full carrier and split equivalence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='.cloudscribe-ci/payload'
+          foreach($stem in @('007','010','011')) {
+            $joined=Join-Path $env:RUNNER_TEMP "$stem-joined.bin"
+            $s=[IO.File]::Open($joined,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try {
+              foreach($suffix in @('a','b')) {
+                $b=[IO.File]::ReadAllBytes((Join-Path $root ($stem+$suffix+'.bin')))
+                $s.Write($b,0,$b.Length)
+              }
+            } finally { $s.Dispose() }
+            $orig=Join-Path $root ($stem+'.bin')
+            $joinedSha=(Get-FileHash $joined -Algorithm SHA256).Hash.ToLowerInvariant()
+            $origSha=(Get-FileHash $orig -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Host "$stem original_bytes=$((Get-Item $orig).Length) joined_bytes=$((Get-Item $joined).Length) original_sha=$origSha joined_sha=$joinedSha equal=$($origSha -eq $joinedSha)"
+          }
+
+          $full=Join-Path $env:RUNNER_TEMP 'CloudScribe-full-numbered-carrier.bin'
+          $stream=[IO.File]::Open($full,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach($i in 0..25) {
+              $name=('{0:D3}.bin' -f $i)
+              $path=Join-Path $root $name
+              if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw "missing $name"}
+              $bytes=[IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          $fullInfo=Get-Item $full
+          $fullSha=(Get-FileHash $full -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "FULL_NUMBERED bytes=$($fullInfo.Length) sha256=$fullSha"
+          $extract=Join-Path $env:RUNNER_TEMP 'full-numbered-extract'; New-Item -ItemType Directory -Path $extract -Force|Out-Null
+          & tar.exe -xJf $full -C $extract
+          Write-Host "TAR_EXIT=$LASTEXITCODE"
+          if($LASTEXITCODE -eq 0) {
+            $files=@(Get-ChildItem -LiteralPath $extract -Recurse -File -Force)
+            Write-Host "EXTRACTED_FILES=$($files.Count)"
+            foreach($wanted in @('tools/verify_dotnet_sdk_version.py','tools/create_source_archive.py','tools/verify_source_release.py','tools/verify_stage2_source.py','scripts/verify-stage2.ps1')) {
+              $p=Join-Path $extract $wanted
+              Write-Host "WANTED $wanted exists=$(Test-Path -LiteralPath $p -PathType Leaf)"
+            }
+            Write-Host '=== tools files ==='
+            Get-ChildItem -LiteralPath (Join-Path $extract 'tools') -File -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { Write-Host $_.Name }
+          }
+          Write-Host 'FULL_CARRIER_DIAGNOSTIC_COMPLETE'
