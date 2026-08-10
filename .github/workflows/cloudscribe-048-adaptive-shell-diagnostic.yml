@@ -1,4 +1,4 @@
-name: CloudScribe 0.3.48 Material Gate Diagnostic
+name: CloudScribe 0.3.48 Source Release Diagnostic
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct exact repaired source and inspect Stage 2 material gate
+      - name: Reconstruct exact repaired source and inspect source release tools
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -29,12 +29,16 @@ jobs:
           Join-Carrier '.cloudscribe-ci/payload' @('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin') (Join-Path $env:RUNNER_TEMP 'base.tar.xz') '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b'
           Join-Carrier '.cloudscribe-ci/fixtures' @('000.bin','001.bin','002.bin') (Join-Path $env:RUNNER_TEMP 'fixtures.tar.xz') 'a866788937570bd4be228c76035b170aec47d929712e96d7a08b9152239a6d11'
           Join-Carrier '.cloudscribe-ci/hotfix' @('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin') (Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz') '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa'
-          $verify=Join-Path $root 'scripts/verify-stage2.ps1'
-          Write-Host '=== verify-stage2.ps1 first 140 lines ==='
-          $lines=Get-Content -LiteralPath $verify
-          for($i=1;$i -le [Math]::Min(140,$lines.Count);$i++){ '{0,4}: {1}' -f $i,$lines[$i-1] }
-          Write-Host '=== verify-stage2.ps1 gate markers and outputs ==='
-          for($i=1;$i -le $lines.Count;$i++){ if($lines[$i-1] -match 'PREP|STEP|Output|Evidence|Screenshot|Package|Visual|Result|param|Source|Candidate|Archive|zip|PASS|FAIL'){ '{0,4}: {1}' -f $i,$lines[$i-1] } }
-          Write-Host '=== SESSION_STATE next action ==='
-          $state=Join-Path $root 'SESSION_STATE.json'; if(Test-Path $state){ Get-Content -LiteralPath $state -Raw }
-          Write-Host 'MATERIAL_GATE_DIAGNOSTIC_COMPLETE'
+          Push-Location $root
+          try {
+            Write-Host '=== create_source_archive.py --help ==='
+            python tools/create_source_archive.py --help
+            if($LASTEXITCODE -ne 0){throw 'create_source_archive help failed'}
+            Write-Host '=== verify_source_release.py --help ==='
+            python tools/verify_source_release.py --help
+            if($LASTEXITCODE -ne 0){throw 'verify_source_release help failed'}
+            Write-Host '=== release tool source markers ==='
+            Get-Content tools/create_source_archive.py | Select-String -Pattern 'EXPECTED|archive|output|version|argparse|sha256|zip' | ForEach-Object { "create:{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
+            Get-Content tools/verify_source_release.py | Select-String -Pattern 'EXPECTED|archive|extract|test|manifest|argparse|sha256|zip' | ForEach-Object { "verify:{0}: {1}" -f $_.LineNumber,$_.Line.Trim() }
+          } finally { Pop-Location }
+          Write-Host 'SOURCE_RELEASE_DIAGNOSTIC_COMPLETE'
