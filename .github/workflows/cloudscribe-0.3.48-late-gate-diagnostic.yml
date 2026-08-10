@@ -60,7 +60,9 @@ jobs:
           if($text.Contains($old)){[IO.File]::WriteAllText($architecturePath,$text.Replace($old,$new),$utf8)}
 
           $smokePath=Join-Path $root 'scripts/smoke-stage1-windows.ps1'
-          [IO.File]::WriteAllText($smokePath,[IO.File]::ReadAllText('.cloudscribe-ci/final-overlay/smoke-stage1-windows.ps1').Replace("`r`n","`n").Replace("`r","`n"),$utf8)
+          $smokeSource=Join-Path $env:RUNNER_TEMP 'smoke-stage1-windows.ps1'
+          Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/sohweiyu2023/CloudScribe-Pro/9e0a363f1f38a0655723b797ff70034d926a372a/.cloudscribe-ci/final-overlay/smoke-stage1-windows.ps1' -OutFile $smokeSource
+          [IO.File]::WriteAllText($smokePath,[IO.File]::ReadAllText($smokeSource).Replace("`r`n","`n").Replace("`r","`n"),$utf8)
           "CS_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Materialize fully repaired source with certified wrapper
