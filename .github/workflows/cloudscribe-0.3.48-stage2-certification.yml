@@ -185,6 +185,161 @@ jobs:
           & pwsh -NoProfile -File .cloudscribe-ci/invoke-cloudscribe-048-certification.ps1 -SourceRoot $env:CS_ROOT
           if ($LASTEXITCODE -ne 0) { throw "Native certification failed: $LASTEXITCODE" }
 
+      - name: Freeze exact repaired source ZIP and verify extracted bytes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          Set-Location -LiteralPath $env:CS_ROOT
+
+          python tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Final source manifest is not clean before archive freeze.' }
+
+          $releaseName = 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
+          $releaseRoot = Join-Path $env:RUNNER_TEMP 'final-source-release'
+          $archivePath = Join-Path $releaseRoot ($releaseName + '.zip')
+          $shaPath = $archivePath + '.sha256'
+          $extractParent = Join-Path $env:RUNNER_TEMP 'final-source-fresh-extract'
+          Remove-Item -LiteralPath $releaseRoot,$extractParent -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $releaseRoot,$extractParent -Force | Out-Null
+
+          $excludedSegments = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+          foreach ($segment in @('bin','obj','TestResults','__pycache__','.vs','.git')) { [void]$excludedSegments.Add($segment) }
+
+          function Get-ReleasableFiles([string]$Root) {
+            Get-ChildItem -LiteralPath $Root -Recurse -File -Force | ForEach-Object {
+              $relative = [IO.Path]::GetRelativePath($Root,$_.FullName).Replace('\','/')
+              $segments = $relative.Split('/',[StringSplitOptions]::RemoveEmptyEntries)
+              if (-not ($segments | Where-Object { $excludedSegments.Contains($_) })) {
+                [pscustomobject]@{ FullName = $_.FullName; Relative = $relative }
+              }
+            } | Sort-Object Relative
+          }
+
+          $sourceFiles = @(Get-ReleasableFiles $env:CS_ROOT)
+          if ($sourceFiles.Count -lt 100) { throw "Refusing to archive unexpectedly small source tree: $($sourceFiles.Count) files." }
+          if ($sourceFiles.Relative -notcontains 'CloudScribe.sln' -or $sourceFiles.Relative -notcontains 'SHA256SUMS.txt') {
+            throw 'Release file inventory is missing CloudScribe.sln or SHA256SUMS.txt.'
+          }
+
+          Add-Type -AssemblyName System.IO.Compression
+          $fileStream = [IO.File]::Open($archivePath,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+          try {
+            $zip = [IO.Compression.ZipArchive]::new($fileStream,[IO.Compression.ZipArchiveMode]::Create,$true)
+            try {
+              $fixedTime = [DateTimeOffset]::new(2026,8,10,0,0,0,[TimeSpan]::Zero)
+              foreach ($file in $sourceFiles) {
+                $entry = $zip.CreateEntry(($releaseName + '/' + $file.Relative),[IO.Compression.CompressionLevel]::Optimal)
+                $entry.LastWriteTime = $fixedTime
+                $input = [IO.File]::OpenRead($file.FullName)
+                try {
+                  $output = $entry.Open()
+                  try { $input.CopyTo($output) } finally { $output.Dispose() }
+                } finally { $input.Dispose() }
+              }
+            } finally { $zip.Dispose() }
+          } finally { $fileStream.Dispose() }
+
+          if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) { throw 'Final source ZIP was not created.' }
+          $archiveInfo = Get-Item -LiteralPath $archivePath
+          if ($archiveInfo.Length -le 0) { throw 'Final source ZIP is empty.' }
+          $archiveSha = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText($shaPath,"$archiveSha *$($archiveInfo.Name)`n",[Text.UTF8Encoding]::new($false))
+
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractParent
+          $freshRoot = Join-Path $extractParent $releaseName
+          if (-not (Test-Path -LiteralPath (Join-Path $freshRoot 'CloudScribe.sln') -PathType Leaf)) {
+            throw 'Fresh extraction is missing CloudScribe.sln.'
+          }
+
+          $freshFiles = @(Get-ReleasableFiles $freshRoot)
+          if ($freshFiles.Count -ne $sourceFiles.Count) {
+            throw "Fresh extraction file-count mismatch: source=$($sourceFiles.Count) extracted=$($freshFiles.Count)."
+          }
+          for ($i = 0; $i -lt $sourceFiles.Count; $i++) {
+            if ($sourceFiles[$i].Relative -ne $freshFiles[$i].Relative) {
+              throw "Fresh extraction path mismatch at index ${i}: source=$($sourceFiles[$i].Relative) extracted=$($freshFiles[$i].Relative)."
+            }
+            $sourceSha = (Get-FileHash -LiteralPath $sourceFiles[$i].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $freshSha = (Get-FileHash -LiteralPath $freshFiles[$i].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($sourceSha -ne $freshSha) { throw "Fresh extraction byte mismatch: $($sourceFiles[$i].Relative)" }
+          }
+
+          Push-Location -LiteralPath $freshRoot
+          try {
+            python tools/update_sha256_manifest.py --check
+            if ($LASTEXITCODE -ne 0) { throw 'Fresh-extracted source manifest verification failed.' }
+          } finally { Pop-Location }
+
+          "FINAL_SOURCE_RELEASE_NAME=$releaseName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FINAL_SOURCE_ARCHIVE=$archivePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FINAL_SOURCE_SHA256=$archiveSha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FINAL_SOURCE_FRESH_ROOT=$freshRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Frozen exact repaired source ZIP: $archivePath"
+          Write-Host "Final source ZIP SHA-256: $archiveSha"
+          Write-Host "Fresh-extracted byte parity PASS: $($sourceFiles.Count) files"
+
+      - name: Run complete Stage 2 material gate on fresh-extracted final ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $freshRoot = $env:FINAL_SOURCE_FRESH_ROOT
+          $evidenceRoot = Join-Path $env:RUNNER_TEMP 'fresh-extracted-stage2-material-evidence'
+          Remove-Item -LiteralPath $evidenceRoot -Recurse -Force -ErrorAction SilentlyContinue
+          $env:CLOUDSCRIBE_STAGE2_EVIDENCE_DIR = $evidenceRoot
+
+          & pwsh -NoProfile -File (Join-Path $freshRoot 'scripts/verify-stage2.ps1')
+          if ($LASTEXITCODE -ne 0) { throw "Fresh-extracted complete Stage 2 material gate failed: $LASTEXITCODE" }
+
+          $summaryPath = Join-Path $evidenceRoot 'verification-summary.json'
+          if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) { throw 'Fresh material gate did not produce verification-summary.json.' }
+          $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+          if ($summary.status -ne 'passed') { throw "Fresh material gate summary status is not passed: $($summary.status)" }
+          if ([int]$summary.package_scan_files -ne 18) { throw "Expected 18 package scan files in material summary, got $($summary.package_scan_files)." }
+          if ([int]$summary.screenshot_files -ne 17) { throw "Expected 17 screenshots in material summary, got $($summary.screenshot_files)." }
+          if ([int]$summary.test_result_files -ne 4) { throw "Expected 4 test result files in material summary, got $($summary.test_result_files)." }
+
+          $scanCount = @(Get-ChildItem -LiteralPath (Join-Path $evidenceRoot 'package-scans') -Filter '*.json' -File).Count
+          $pngCount = @(Get-ChildItem -LiteralPath (Join-Path $evidenceRoot 'visual') -Filter '*.png' -File).Count
+          $trxCount = @(Get-ChildItem -LiteralPath (Join-Path $evidenceRoot 'test-results') -Filter '*.trx' -File -Recurse).Count
+          if ($scanCount -ne 18 -or $pngCount -ne 17 -or $trxCount -ne 4) {
+            throw "Fresh material evidence inventory mismatch: scans=$scanCount png=$pngCount trx=$trxCount; expected 18/17/4."
+          }
+
+          $ledgerPath = Join-Path $evidenceRoot 'logs/command-ledger.jsonl'
+          if (-not (Test-Path -LiteralPath $ledgerPath -PathType Leaf)) { throw 'Fresh material gate command ledger is missing.' }
+          $ledger = @(Get-Content -LiteralPath $ledgerPath | ForEach-Object { $_ | ConvertFrom-Json })
+          if ($ledger.Count -ne 100) { throw "Expected STEP 01-100 command ledger, found $($ledger.Count) records." }
+          if (@($ledger | Where-Object { $_.status -ne 'passed' }).Count -ne 0) { throw 'Fresh material gate command ledger contains a non-passing STEP.' }
+          $sequences = @($ledger | ForEach-Object { [int]$_.sequence })
+          if (($sequences | Measure-Object -Minimum).Minimum -ne 1 -or ($sequences | Measure-Object -Maximum).Maximum -ne 100) {
+            throw 'Fresh material gate command ledger does not span STEP 01 through STEP 100.'
+          }
+
+          Push-Location -LiteralPath $freshRoot
+          try {
+            python tools/update_sha256_manifest.py --check
+            if ($LASTEXITCODE -ne 0) { throw 'Fresh source manifest changed during complete Stage 2 material gate.' }
+          } finally { Pop-Location }
+
+          $archiveShaAfter = (Get-FileHash -LiteralPath $env:FINAL_SOURCE_ARCHIVE -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($archiveShaAfter -ne $env:FINAL_SOURCE_SHA256) { throw 'Frozen final source ZIP changed during fresh material verification.' }
+          "FINAL_MATERIAL_EVIDENCE=$evidenceRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host 'FRESH_EXTRACTED_STAGE2_MATERIAL_GATE=PASS'
+          Write-Host "Verified STEP 01-100; 18 package scans; 17 source-bound captures; 4 TRX files; archive SHA-256 $archiveShaAfter"
+
+      - name: Upload final source ZIP and fresh material evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: cloudscribe-0.3.48-final-source-and-material-evidence
+          path: |
+            ${{ runner.temp }}/final-source-release
+            ${{ runner.temp }}/fresh-extracted-stage2-material-evidence
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
       - name: Upload native Windows evidence
         if: always()
         uses: actions/upload-artifact@v7
