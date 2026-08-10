@@ -1,4 +1,4 @@
-name: CloudScribe 0.3.48 Diagnostic Logger Isolation
+name: CloudScribe 0.3.48 Diagnostic Logger Class Isolation
 
 on:
   pull_request:
@@ -18,41 +18,23 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.302'
-      - name: Reconstruct exact source and run four logger regressions individually
+      - name: Reconstruct exact source and run diagnostics resilience class
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-diagnostic-src'
-          New-Item -ItemType Directory -Path $root -Force | Out-Null
-          $payloadNames = @('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin')
-          $payload = Join-Path $env:RUNNER_TEMP 'base.tar.xz'
-          $stream = [IO.File]::Open($payload,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try { foreach ($name in $payloadNames) { $bytes=[IO.File]::ReadAllBytes((Join-Path '.cloudscribe-ci/payload' $name)); $stream.Write($bytes,0,$bytes.Length) } } finally { $stream.Dispose() }
-          if ((Get-FileHash $payload -Algorithm SHA256).Hash.ToLowerInvariant() -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') { throw 'base hash mismatch' }
-          & tar.exe -xJf $payload -C $root
-          if ($LASTEXITCODE -ne 0) { throw 'base extract failed' }
-          $hotfixNames=@('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin')
-          $hotfix=Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz'
-          $stream=[IO.File]::Open($hotfix,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try { foreach ($name in $hotfixNames) { $bytes=[IO.File]::ReadAllBytes((Join-Path '.cloudscribe-ci/hotfix' $name)); $stream.Write($bytes,0,$bytes.Length) } } finally { $stream.Dispose() }
-          if ((Get-FileHash $hotfix -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa') { throw 'hotfix hash mismatch' }
-          & tar.exe -xJf $hotfix -C $root
-          if ($LASTEXITCODE -ne 0) { throw 'hotfix extract failed' }
-
+          $ErrorActionPreference='Stop'
+          $root=Join-Path $env:RUNNER_TEMP 'src'; New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $names=@('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin')
+          $arc=Join-Path $env:RUNNER_TEMP 'base.tar.xz'; $s=[IO.File]::Open($arc,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try{foreach($n in $names){$b=[IO.File]::ReadAllBytes((Join-Path '.cloudscribe-ci/payload' $n));$s.Write($b,0,$b.Length)}}finally{$s.Dispose()}
+          if((Get-FileHash $arc -Algorithm SHA256).Hash.ToLowerInvariant() -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b'){throw 'base hash'}
+          & tar.exe -xJf $arc -C $root; if($LASTEXITCODE -ne 0){throw 'base extract'}
+          $names=@('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin')
+          $arc=Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz'; $s=[IO.File]::Open($arc,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try{foreach($n in $names){$b=[IO.File]::ReadAllBytes((Join-Path '.cloudscribe-ci/hotfix' $n));$s.Write($b,0,$b.Length)}}finally{$s.Dispose()}
+          if((Get-FileHash $arc -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa'){throw 'hotfix hash'}
+          & tar.exe -xJf $arc -C $root; if($LASTEXITCODE -ne 0){throw 'hotfix extract'}
           Set-Location $root
-          dotnet restore tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj --locked-mode --disable-parallel --configfile NuGet.config
-          if ($LASTEXITCODE -ne 0) { throw 'restore failed' }
-          dotnet build tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false
-          if ($LASTEXITCODE -ne 0) { throw 'build failed' }
-
-          $tests = @(
-            'OneFileDiagnosticPolicyReplacesFullCurrentLogInsteadOfDisablingLogging',
-            'IncomingRecordRotatesBeforeItCanExceedPerFileCap',
-            'RuntimeMetadataEntriesDoNotConsumeManagedJsonLogFileLimit',
-            'StructuredDiagnosticRecordContainsSessionAndRedactedExceptionDetail'
-          )
-          foreach ($name in $tests) {
-            Write-Host "=== isolated test: $name ==="
-            dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~$name" --logger "console;verbosity=detailed"
-            if ($LASTEXITCODE -ne 0) { Write-Host "ISOLATED_RESULT_${name}=FAIL" } else { Write-Host "ISOLATED_RESULT_${name}=PASS" }
-          }
+          dotnet restore tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj --locked-mode --disable-parallel --configfile NuGet.config; if($LASTEXITCODE -ne 0){throw 'restore'}
+          dotnet build tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false; if($LASTEXITCODE -ne 0){throw 'build'}
+          dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~StartupAndDiagnosticsResilienceTests' --logger 'console;verbosity=detailed'
+          if($LASTEXITCODE -ne 0){throw 'diagnostics resilience class failed'}
