@@ -1,0 +1,237 @@
+name: CloudScribe 0.3.48 Stage 2 Windows Certification
+
+on:
+  push:
+    branches:
+      - cloudscribe-0.3.48-stage2-certification
+
+permissions:
+  contents: read
+
+jobs:
+  windows-stage2:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Checkout certification carrier
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Set up pinned .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+
+      - name: Reconstruct, hash-check, and extract exact CloudScribe source carrier
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $parts = @(Get-ChildItem -LiteralPath '.cloudscribe-ci/payload' -Filter '*.bin' -File | Sort-Object Name)
+          if ($parts.Count -ne 26) { throw "Expected 26 carrier parts, found $($parts.Count)." }
+          $archive = Join-Path $env:RUNNER_TEMP 'CloudScribe-0.3.48-native-ci-min.tar.xz'
+          $stream = [IO.File]::Open($archive, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+          try {
+            foreach ($part in $parts) {
+              $bytes = [IO.File]::ReadAllBytes($part.FullName)
+              $stream.Write($bytes, 0, $bytes.Length)
+            }
+          }
+          finally { $stream.Dispose() }
+          $info = Get-Item -LiteralPath $archive
+          if ($info.Length -ne 95596) { throw "Carrier length mismatch: $($info.Length)." }
+          $sha = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') {
+            throw "Carrier SHA-256 mismatch: $sha"
+          }
+          $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-0.3.48-src'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          & tar.exe -xJf $archive -C $root
+          if ($LASTEXITCODE -ne 0) { throw "tar extraction failed: $LASTEXITCODE" }
+          if (-not (Test-Path -LiteralPath (Join-Path $root 'CloudScribe.sln') -PathType Leaf)) {
+            throw 'Extracted carrier is missing CloudScribe.sln.'
+          }
+          "CS_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Verified exact carrier: $sha ($($info.Length) bytes)"
+
+      - name: Verify pinned toolchain and generate deterministic source manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          $sdk = (& dotnet --version).Trim()
+          if ($sdk -ne '10.0.302') { throw "Expected .NET SDK 10.0.302, got $sdk." }
+          python tools/update_sha256_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to generate SHA256SUMS.txt.' }
+          python tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Generated SHA256SUMS.txt failed its self-check.' }
+
+      - name: Locked restore all 9 projects
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          $projects = @(
+            'src/CloudScribe.App/CloudScribe.App.csproj',
+            'src/CloudScribe.Application/CloudScribe.Application.csproj',
+            'src/CloudScribe.Domain/CloudScribe.Domain.csproj',
+            'src/CloudScribe.Infrastructure/CloudScribe.Infrastructure.csproj',
+            'src/CloudScribe.Providers.Abstractions/CloudScribe.Providers.Abstractions.csproj',
+            'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+            'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+            'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+            'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj'
+          )
+          foreach ($p in $projects) {
+            & dotnet build-server shutdown | Out-Null
+            & dotnet restore $p --locked-mode --disable-parallel --configfile NuGet.config
+            if ($LASTEXITCODE -ne 0) { throw "Locked restore failed: $p" }
+          }
+
+      - name: Debug and Release builds with zero-warning policy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          $order = @(
+            'src/CloudScribe.Domain/CloudScribe.Domain.csproj',
+            'src/CloudScribe.Providers.Abstractions/CloudScribe.Providers.Abstractions.csproj',
+            'src/CloudScribe.Application/CloudScribe.Application.csproj',
+            'src/CloudScribe.Infrastructure/CloudScribe.Infrastructure.csproj',
+            'src/CloudScribe.App/CloudScribe.App.csproj',
+            'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+            'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+            'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+            'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj'
+          )
+          foreach ($configuration in @('Debug','Release')) {
+            foreach ($p in $order) {
+              & dotnet build $p -c $configuration --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildProjectReferences=false -p:BuildInParallel=false -p:UseSharedCompilation=false
+              if ($LASTEXITCODE -ne 0) { throw "$configuration build failed: $p" }
+            }
+          }
+
+      - name: Run all four .NET test projects and enforce 146-test inventory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          $resultRoot = Join-Path $env:RUNNER_TEMP 'test-results'
+          New-Item -ItemType Directory -Path $resultRoot -Force | Out-Null
+          $tests = @(
+            'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+            'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+            'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+            'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj'
+          )
+          for ($i = 0; $i -lt $tests.Count; $i++) {
+            $dir = Join-Path $resultRoot $i
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            & dotnet test $tests[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=stage2-tests.trx'
+            if ($LASTEXITCODE -ne 0) { throw "Test project failed: $($tests[$i])" }
+          }
+          $total = 0; $failed = 0; $skipped = 0
+          foreach ($trx in Get-ChildItem -LiteralPath $resultRoot -Filter '*.trx' -File -Recurse) {
+            [xml]$xml = Get-Content -LiteralPath $trx.FullName -Raw
+            $c = $xml.SelectSingleNode("//*[local-name()='Counters']")
+            if (-not $c) { throw "Missing counters in $($trx.FullName)" }
+            $total += [int]$c.total; $failed += [int]$c.failed
+            if ($c.skipped) { $skipped += [int]$c.skipped }
+          }
+          if ($total -ne 146 -or $failed -ne 0 -or $skipped -ne 0) {
+            throw "Unexpected test inventory: total=$total failed=$failed skipped=$skipped; expected 146/0/0."
+          }
+          Write-Host 'PASS: 146/146 .NET tests.'
+
+      - name: Verify dotnet format
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          & dotnet format CloudScribe.sln --verify-no-changes --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'dotnet format verification failed.' }
+
+      - name: Strict NuGet vulnerability and deprecation scans
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          $projects = @(
+            'src/CloudScribe.App/CloudScribe.App.csproj',
+            'src/CloudScribe.Application/CloudScribe.Application.csproj',
+            'src/CloudScribe.Domain/CloudScribe.Domain.csproj',
+            'src/CloudScribe.Infrastructure/CloudScribe.Infrastructure.csproj',
+            'src/CloudScribe.Providers.Abstractions/CloudScribe.Providers.Abstractions.csproj',
+            'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+            'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+            'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+            'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj'
+          )
+          $scanRoot = Join-Path $env:RUNNER_TEMP 'package-scans'
+          $vulnDir = Join-Path $scanRoot 'vulnerable'; $depDir = Join-Path $scanRoot 'deprecated'
+          New-Item -ItemType Directory -Path $vulnDir,$depDir -Force | Out-Null
+          for ($i = 0; $i -lt $projects.Count; $i++) {
+            $vuln = Join-Path $vulnDir "$i.json"; $vulnErr = Join-Path $vulnDir "$i.stderr.log"
+            & pwsh -NoProfile -File scripts/invoke-nuget-audit-scan.ps1 -Project $projects[$i] 1> $vuln 2> $vulnErr
+            if ($LASTEXITCODE -ne 0) { Get-Content $vulnErr; throw "NuGet vulnerability audit failed: $($projects[$i])" }
+            & dotnet package list --project $projects[$i] --deprecated --include-transitive --no-restore --format json --output-version 1 | Set-Content -LiteralPath (Join-Path $depDir "$i.json") -Encoding utf8
+            if ($LASTEXITCODE -ne 0) { throw "NuGet deprecation scan failed: $($projects[$i])" }
+          }
+          python tools/verify_dotnet_package_scan.py --mode vulnerable --kind vulnerability --input-directory $vulnDir --expected-project-count 9
+          if ($LASTEXITCODE -ne 0) { throw 'Vulnerability scan validator failed.' }
+          python tools/verify_dotnet_package_scan.py --mode deprecated --kind deprecation --input-directory $depDir --expected-project-count 9
+          if ($LASTEXITCODE -ne 0) { throw 'Deprecation scan validator failed.' }
+
+      - name: Publish Windows candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          $out = Join-Path $env:RUNNER_TEMP 'CloudScribe-publish'
+          & pwsh -NoProfile -File scripts/publish-stage2-windows.ps1 -OutputDirectory $out -Configuration Release -Status verification-pending
+          if ($LASTEXITCODE -ne 0) { throw 'Windows publish gate failed.' }
+
+      - name: Native Windows launch and secondary-activation smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          & pwsh -NoProfile -File scripts/smoke-stage1-windows.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows smoke test failed.' }
+
+      - name: Native Stage 2 14-case visual capture and validation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          $out = Join-Path $env:RUNNER_TEMP 'stage2-screenshots'
+          & pwsh -NoProfile -File scripts/capture-stage2-windows.ps1 $out
+          if ($LASTEXITCODE -ne 0) { throw 'Native visual-evidence gate failed.' }
+
+      - name: Re-check source manifest after all gates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location $env:CS_ROOT
+          python tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Source bytes changed during certification.' }
+
+      - name: Upload native Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cloudscribe-0.3.48-windows-certification-evidence
+          path: |
+            ${{ runner.temp }}/test-results
+            ${{ runner.temp }}/package-scans
+            ${{ runner.temp }}/stage2-screenshots
+            ${{ runner.temp }}/CloudScribe-publish
+          if-no-files-found: warn
+          retention-days: 7
