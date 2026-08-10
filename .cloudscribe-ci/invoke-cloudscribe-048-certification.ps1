@@ -12,42 +12,27 @@ if (-not (Test-Path -LiteralPath $sourceScript -PathType Leaf)) {
 }
 
 $text = [IO.File]::ReadAllText($sourceScript).Replace("`r`n", "`n").Replace("`r", "`n")
-$old = @'
-# Four diagnostics-writer integration tests passed individually and as a class, but failed only
-# when unrelated xUnit test collections saturated the hosted Windows runner. Keep every assertion
-# intact and place only this filesystem/background-writer integration class in a collection that
-# xUnit will not run concurrently with other collections. This removes scheduler-dependent timing
-# without reducing behavioral coverage or increasing product timeouts.
-$diagnosticsTestsPath = Join-Path $SourceRoot 'tests/CloudScribe.Infrastructure.Tests/StartupAndDiagnosticsResilienceTests.cs'
-Assert-Sha256 $diagnosticsTestsPath 'd0d6a3d8e2a88aa09ecb1fb6a00943d71a6b4c92d0d36e37e94c0b5e83edb764' 'StartupAndDiagnosticsResilienceTests.cs preimage'
-$diagnosticsTestsText = [IO.File]::ReadAllText($diagnosticsTestsPath).Replace("`r`n", "`n").Replace("`r", "`n")
-$classAnchor = 'public sealed class StartupAndDiagnosticsResilienceTests'
-if (($diagnosticsTestsText.Split($classAnchor).Length - 1) -ne 1) {
-    throw 'Expected exactly one StartupAndDiagnosticsResilienceTests declaration.'
+$startMarker = '# Four diagnostics-writer integration tests passed individually and as a class, but failed only'
+$endMarker = '$expectedFiles = @{'
+$startIndex = $text.IndexOf($startMarker, [StringComparison]::Ordinal)
+if ($startIndex -lt 0) {
+    throw 'Obsolete diagnostics serialization block start marker was not found.'
 }
-$diagnosticsTestsText = $diagnosticsTestsText.Replace(
-    $classAnchor,
-    '[Collection("Diagnostic writer integration")]' + "`n" + $classAnchor,
-    [StringComparison]::Ordinal)
-$collectionDefinition = @'
-
-[CollectionDefinition("Diagnostic writer integration", DisableParallelization = true)]
-public sealed class DiagnosticWriterIntegrationCollection
-{
+$secondStartIndex = $text.IndexOf($startMarker, $startIndex + $startMarker.Length, [StringComparison]::Ordinal)
+if ($secondStartIndex -ge 0) {
+    throw 'Obsolete diagnostics serialization block start marker was found more than once.'
 }
-'@
-$diagnosticsTestsText = $diagnosticsTestsText.TrimEnd() + $collectionDefinition + "`n"
-[IO.File]::WriteAllText($diagnosticsTestsPath, $diagnosticsTestsText, [Text.UTF8Encoding]::new($false))
-$diagnosticsTestsPostHash = (Get-FileHash -LiteralPath $diagnosticsTestsPath -Algorithm SHA256).Hash.ToLowerInvariant()
-Write-Host "Verified StartupAndDiagnosticsResilienceTests.cs deterministic postimage: $diagnosticsTestsPostHash"
-'@
+$endIndex = $text.IndexOf($endMarker, $startIndex, [StringComparison]::Ordinal)
+if ($endIndex -le $startIndex) {
+    throw 'Expected-files marker after obsolete diagnostics serialization block was not found.'
+}
 
-$new = @'
+$replacement = @'
 # The diagnostics writer integration tests passed individually and as a complete class, but
 # timed out only while unrelated xUnit collections ran concurrently on the hosted runner.
 # Preserve every test and assertion and serialize this test assembly instead of weakening
-# product behavior or extending production timeouts. xUnit's assembly-level switch is the
-# analyzer-clean way to remove cross-collection scheduler contention for this integration suite.
+# product behavior or extending production timeouts. xUnit's assembly-level switch removes
+# cross-collection scheduler contention without introducing an analyzer-conflicting helper type.
 $diagnosticsTestsPath = Join-Path $SourceRoot 'tests/CloudScribe.Infrastructure.Tests/StartupAndDiagnosticsResilienceTests.cs'
 Assert-Sha256 $diagnosticsTestsPath 'd0d6a3d8e2a88aa09ecb1fb6a00943d71a6b4c92d0d36e37e94c0b5e83edb764' 'StartupAndDiagnosticsResilienceTests.cs preimage'
 $diagnosticsTestsText = [IO.File]::ReadAllText($diagnosticsTestsPath).Replace("`r`n", "`n").Replace("`r", "`n")
@@ -66,15 +51,15 @@ $diagnosticsTestsText = $diagnosticsTestsText.Replace(
 [IO.File]::WriteAllText($diagnosticsTestsPath, $diagnosticsTestsText, [Text.UTF8Encoding]::new($false))
 $diagnosticsTestsPostHash = (Get-FileHash -LiteralPath $diagnosticsTestsPath -Algorithm SHA256).Hash.ToLowerInvariant()
 Write-Host "Verified StartupAndDiagnosticsResilienceTests.cs serialized-test postimage: $diagnosticsTestsPostHash"
+
 '@
 
-$occurrences = ([regex]::Matches($text, [regex]::Escape($old))).Count
-if ($occurrences -ne 1) {
-    throw "Expected exactly one obsolete diagnostics serialization block in certification script, found $occurrences."
-}
-$text = $text.Replace($old, $new, [StringComparison]::Ordinal)
+$text = $text.Substring(0, $startIndex) + $replacement + $text.Substring($endIndex)
 if ($text.Contains('DiagnosticWriterIntegrationCollection', [StringComparison]::Ordinal)) {
     throw 'Obsolete analyzer-conflicting collection-definition type remains in patched certification script.'
+}
+if ($text.Contains('[Collection("Diagnostic writer integration")]', [StringComparison]::Ordinal)) {
+    throw 'Obsolete targeted diagnostic writer collection attribute remains in patched certification script.'
 }
 
 $tempScript = Join-Path $env:RUNNER_TEMP 'run-cloudscribe-048-certification-analyzer-clean.ps1'
