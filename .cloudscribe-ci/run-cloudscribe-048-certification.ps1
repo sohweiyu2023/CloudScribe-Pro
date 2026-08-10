@@ -70,13 +70,13 @@ Write-Host "Verified MainWindow.VisualCapture.cs deterministic postimage: $visua
 
 # Preserve all architecture assertions while keeping the analyzer's method-size contract.
 # The focus regression added one assertion to a method already at its 40-statement ceiling.
-# Fold the two equivalent forbidden-FontSize checks into a single Assert.All statement, and
-# update the focus-harness expectation to the stable Focus(null, ...) API used above.
+# Fold the two equivalent forbidden-FontSize checks into one regex assertion, and update the
+# focus-harness expectation to the stable Focus(null, ...) API used above.
 $adaptiveShellPath = Join-Path $SourceRoot 'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs'
 Assert-Sha256 $adaptiveShellPath 'f52c3606a4c093b4053b1faf265f0bd6c267eabd8004c83e0ff6011488e4b26e' 'AdaptiveShellTests.cs preimage'
 $adaptiveShellText = [IO.File]::ReadAllText($adaptiveShellPath).Replace("`r`n", "`n").Replace("`r", "`n")
 $fontSizeOld = '        Assert.DoesNotContain("FontSize=\"10\"", window, StringComparison.Ordinal);' + "`n" + '        Assert.DoesNotContain("FontSize=\"30\"", window, StringComparison.Ordinal);'
-$fontSizeNew = '        Assert.All(new[] { "FontSize=\"10\"", "FontSize=\"30\"" }, forbidden => Assert.DoesNotContain(forbidden, window, StringComparison.Ordinal));'
+$fontSizeNew = '        Assert.DoesNotMatch("FontSize=\"(?:10|30)\"", window);'
 if (-not $adaptiveShellText.Contains($fontSizeOld, [StringComparison]::Ordinal)) {
     throw 'AdaptiveShellTests.cs forbidden-FontSize assertion block was not found exactly once.'
 }
