@@ -1,4 +1,4 @@
-name: CloudScribe 0.3.48 AdaptiveShell Diagnostic
+name: CloudScribe 0.3.48 Diagnostic Logger Inspection
 
 on:
   pull_request:
@@ -15,28 +15,58 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct focus-fix carrier and print offending method
+      - name: Reconstruct exact source and print diagnostic logger tests and implementation
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $carrierCommit = '54e1882557b13e8ea548c568995c94807dce23f8'
-          $carrierRoot = "https://raw.githubusercontent.com/sohweiyu2023/CloudScribe-Pro/$carrierCommit/.cloudscribe-ci/focus-fix-carrier"
-          $b64 = Join-Path $env:RUNNER_TEMP 'focus-fix.b64'
-          $xz = Join-Path $env:RUNNER_TEMP 'focus-fix.tar.xz'
-          $root = Join-Path $env:RUNNER_TEMP 'focus-fix'
+          $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-diagnostic-src'
           New-Item -ItemType Directory -Path $root -Force | Out-Null
-          foreach ($part in @('000.b64','001.b64','002.b64','003.b64')) {
-            $partPath = Join-Path $env:RUNNER_TEMP $part
-            Invoke-WebRequest -Uri "$carrierRoot/$part" -OutFile $partPath
-            [IO.File]::AppendAllText($b64, ([IO.File]::ReadAllText($partPath)).Trim())
-          }
-          [IO.File]::WriteAllBytes($xz, [Convert]::FromBase64String([IO.File]::ReadAllText($b64)))
-          $sha = (Get-FileHash $xz -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($sha -ne 'd182d7686fe80b863d8986c2170464efc22aaff4ec584167d804d3a82cf620d6') { throw "Carrier hash mismatch: $sha" }
-          & tar.exe -xJf $xz -C $root
-          if ($LASTEXITCODE -ne 0) { throw "tar failed: $LASTEXITCODE" }
-          $path = Join-Path $root 'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs'
-          $lines = Get-Content -LiteralPath $path
-          for ($i = 420; $i -le [Math]::Min(510, $lines.Count); $i++) {
-            '{0,4}: {1}' -f $i, $lines[$i-1]
+
+          $payloadRoot = '.cloudscribe-ci/payload'
+          $payloadNames = @(
+            '000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin',
+            '007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin'
+          )
+          $payload = Join-Path $env:RUNNER_TEMP 'CloudScribe-0.3.48-native-ci-min.tar.xz'
+          $stream = [IO.File]::Open($payload,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($name in $payloadNames) {
+              $bytes = [IO.File]::ReadAllBytes((Join-Path $payloadRoot $name))
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          if ((Get-Item $payload).Length -ne 95596) { throw 'Base payload length mismatch.' }
+          $sha = (Get-FileHash $payload -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') { throw "Base payload hash mismatch: $sha" }
+          & tar.exe -xJf $payload -C $root
+          if ($LASTEXITCODE -ne 0) { throw "Base payload extraction failed: $LASTEXITCODE" }
+
+          $hotfixRoot = '.cloudscribe-ci/hotfix'
+          $hotfixNames = @('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin')
+          $hotfix = Join-Path $env:RUNNER_TEMP 'candidate-hotfixes.tar.xz'
+          $stream = [IO.File]::Open($hotfix,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($name in $hotfixNames) {
+              $bytes = [IO.File]::ReadAllBytes((Join-Path $hotfixRoot $name))
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          if ((Get-Item $hotfix).Length -ne 11364) { throw 'Hotfix payload length mismatch.' }
+          $sha = (Get-FileHash $hotfix -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa') { throw "Hotfix payload hash mismatch: $sha" }
+          & tar.exe -xJf $hotfix -C $root
+          if ($LASTEXITCODE -ne 0) { throw "Hotfix extraction failed: $LASTEXITCODE" }
+
+          $tests = Join-Path $root 'tests/CloudScribe.Infrastructure.Tests/StartupAndDiagnosticsResilienceTests.cs'
+          Write-Host '=== StartupAndDiagnosticsResilienceTests.cs ==='
+          $lines = Get-Content -LiteralPath $tests
+          for ($i = 1; $i -le [Math]::Min(320,$lines.Count); $i++) { '{0,4}: {1}' -f $i,$lines[$i-1] }
+
+          $diag = Join-Path $root 'src/CloudScribe.Infrastructure/Diagnostics'
+          Write-Host '=== Diagnostics files ==='
+          Get-ChildItem -LiteralPath $diag -File | ForEach-Object { Write-Host $_.Name }
+          foreach ($file in Get-ChildItem -LiteralPath $diag -Filter '*.cs' -File) {
+            Write-Host "=== $($file.Name) ==="
+            $body = Get-Content -LiteralPath $file.FullName
+            for ($i = 1; $i -le [Math]::Min(500,$body.Count); $i++) { '{0,4}: {1}' -f $i,$body[$i-1] }
           }
