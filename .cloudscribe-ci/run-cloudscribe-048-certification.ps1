@@ -39,109 +39,23 @@ $rotationTestAfter = (Get-FileHash -LiteralPath $rotationTestPath -Algorithm SHA
 if ($rotationTestAfter -ne $rotationTestNewHash) { throw "Rotation-test repair hash mismatch: $rotationTestAfter" }
 Write-Host "Verified deterministic rotation-test repair: $rotationTestAfter"
 
-# Native Windows hosted runners constrain the visible top-level Window to the desktop
-# working area. Stage 2 evidence must still exercise the declared 1600/1280/etc layout
-# matrix, so render the attached root visual after an explicit target-size layout pass.
+# GitHub-hosted Windows constrains the visible top-level Window to the desktop working
+# area. Use an exact, hash-bound source overlay that renders the attached root visual
+# after an explicit target-size Measure/Arrange pass so the declared evidence matrix
+# remains 1600/1280/etc instead of silently inheriting screen-clamped Window.Bounds.
 $visualCapturePath = Join-Path $SourceRoot 'src/CloudScribe.App/MainWindow.VisualCapture.cs'
+$visualCaptureOverlay = Join-Path $env:GITHUB_WORKSPACE '.cloudscribe-ci/final-overlay/MainWindow.VisualCapture.cs'
 $visualCaptureOldHash = '6ad921ee741a10010e7ffde653e5bd88263a094c13cd853ef0c95d1fbed0c10e'
 $visualCaptureNewHash = '43d3cb6e9b1af5cfe35d294cf32a7598736ca1dcd67d7697bc6d01fe0d2ff838'
 $visualCaptureHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($visualCaptureHash -eq $visualCaptureOldHash) {
-    $text = [IO.File]::ReadAllText($visualCapturePath).Replace("`r`n","`n").Replace("`r","`n")
-    $oldLoop = @'
-            CaptureWindow(path);
-            results.Add(new(
-                captureCase.Name,
-                fileName,
-                (int)Math.Ceiling(Bounds.Width),
-                (int)Math.Ceiling(Bounds.Height),
-'@
-    $newLoop = @'
-            PixelSize capturedSize = CaptureWindow(path, captureCase.Width, captureCase.Height);
-            results.Add(new(
-                captureCase.Name,
-                fileName,
-                capturedSize.Width,
-                capturedSize.Height,
-'@
-    if (-not $text.Contains($oldLoop)) { throw 'Visual capture result-size repair anchor was not found.' }
-    $text = $text.Replace($oldLoop, $newLoop)
-
-    $oldMethod = @'
-    private void CaptureWindow(string path)
-    {
-        PixelSize size = new(
-            Math.Max(1, (int)Math.Ceiling(Bounds.Width)),
-            Math.Max(1, (int)Math.Ceiling(Bounds.Height)));
-        using RenderTargetBitmap bitmap = new(size, new Vector(CaptureBitmapDpi, CaptureBitmapDpi));
-        bitmap.Render(this);
-        using FileStream stream = new(
-            path,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            bufferSize: 4096,
-            FileOptions.WriteThrough);
-        bitmap.Save(stream, PngBitmapEncoderOptions.Default);
-        stream.Flush(flushToDisk: true);
+    if (-not (Test-Path -LiteralPath $visualCaptureOverlay -PathType Leaf)) {
+        throw "Visual capture overlay is missing: $visualCaptureOverlay"
     }
-'@
-    $newMethod = @'
-    private PixelSize CaptureWindow(string path, double width, double height)
-    {
-        PixelSize size = new(
-            Math.Max(1, (int)Math.Ceiling(width)),
-            Math.Max(1, (int)Math.Ceiling(height)));
-        if (Content is not Control captureRoot)
-        {
-            throw new InvalidOperationException("The Stage 2 visual capture root is unavailable.");
-        }
-
-        double previousWidth = captureRoot.Width;
-        double previousHeight = captureRoot.Height;
-        try
-        {
-            Size targetSize = new(size.Width, size.Height);
-            captureRoot.Width = targetSize.Width;
-            captureRoot.Height = targetSize.Height;
-            captureRoot.InvalidateMeasure();
-            captureRoot.InvalidateArrange();
-            captureRoot.Measure(targetSize);
-            captureRoot.Arrange(new Rect(0, 0, targetSize.Width, targetSize.Height));
-            if ((int)Math.Ceiling(captureRoot.Bounds.Width) != size.Width ||
-                (int)Math.Ceiling(captureRoot.Bounds.Height) != size.Height)
-            {
-                throw new InvalidOperationException(
-                    $"Stage 2 visual capture root arranged to {captureRoot.Bounds.Width}x{captureRoot.Bounds.Height}; expected {size.Width}x{size.Height}.");
-            }
-
-            using RenderTargetBitmap bitmap = new(size, new Vector(CaptureBitmapDpi, CaptureBitmapDpi));
-            bitmap.Render(captureRoot);
-            using FileStream stream = new(
-                path,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 4096,
-                FileOptions.WriteThrough);
-            bitmap.Save(stream, PngBitmapEncoderOptions.Default);
-            stream.Flush(flushToDisk: true);
-            return size;
-        }
-        finally
-        {
-            captureRoot.Width = previousWidth;
-            captureRoot.Height = previousHeight;
-            captureRoot.InvalidateMeasure();
-            captureRoot.InvalidateArrange();
-        }
-    }
-'@
-    if (-not $text.Contains($oldMethod)) { throw 'Visual capture rendering repair anchor was not found.' }
-    $text = $text.Replace($oldMethod, $newMethod)
-    [IO.File]::WriteAllText($visualCapturePath, $text, $utf8NoBom)
+    $overlayText = [IO.File]::ReadAllText($visualCaptureOverlay).Replace("`r`n","`n").Replace("`r","`n")
+    [IO.File]::WriteAllText($visualCapturePath, $overlayText, $utf8NoBom)
 }
-elseif ($visualCaptureHash -ne $visualCaptureNewHash) {
+elif ($visualCaptureHash -ne $visualCaptureNewHash) {
     throw "Unexpected visual capture source hash before certification repair: $visualCaptureHash"
 }
 $visualCaptureHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
