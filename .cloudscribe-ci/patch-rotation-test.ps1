@@ -21,7 +21,7 @@ if ($before -eq $oldHash) {
     $text = $text.Replace($old, $new)
     [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
 }
-elif ($before -ne $newHash) {
+elseif ($before -ne $newHash) {
     throw "Unexpected rotation-test source hash before certification repair: $before"
 }
 
