@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Set-Location -LiteralPath $SourceRoot
+$utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 function Invoke-Checked {
     param([Parameter(Mandatory=$true)][string]$Label,[Parameter(Mandatory=$true)][scriptblock]$Action)
@@ -17,9 +18,8 @@ function Invoke-Checked {
 $sdk = (& dotnet --version).Trim()
 if ($sdk -ne '10.0.302') { throw "Expected .NET SDK 10.0.302, got $sdk." }
 
-# Deterministic regression-test repair for a Windows filesystem race discovered by the
-# first native certification run. The carrier is immutable; only the exact known
-# preimage may be changed, and the exact postimage hash is verified before any build.
+# Deterministic regression-test repair for a Windows filesystem race discovered by
+# native certification. Only the known preimage may be changed.
 $rotationTestPath = Join-Path $SourceRoot 'tests/CloudScribe.Infrastructure.Tests/StartupAndDiagnosticsResilienceTests.cs'
 $rotationTestBefore = (Get-FileHash -LiteralPath $rotationTestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $rotationTestOldHash = '0f989eb73e648484086ddbd473e0fc1ae4defd9f20e76c66b770ecb4434f6ddd'
@@ -30,7 +30,7 @@ if ($rotationTestBefore -eq $rotationTestOldHash) {
     $new = "if (files.Length == 2 && files.All(file => file.Length is >= 1 and <= 1024 * 1024))"
     if (-not $text.Contains($old)) { throw 'Known rotation-test preimage hash matched but expected assertion text was absent.' }
     $text = $text.Replace($old, $new)
-    [IO.File]::WriteAllText($rotationTestPath, $text, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($rotationTestPath, $text, $utf8NoBom)
 }
 elseif ($rotationTestBefore -ne $rotationTestNewHash) {
     throw "Unexpected rotation-test source hash before certification repair: $rotationTestBefore"
@@ -38,6 +38,124 @@ elseif ($rotationTestBefore -ne $rotationTestNewHash) {
 $rotationTestAfter = (Get-FileHash -LiteralPath $rotationTestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($rotationTestAfter -ne $rotationTestNewHash) { throw "Rotation-test repair hash mismatch: $rotationTestAfter" }
 Write-Host "Verified deterministic rotation-test repair: $rotationTestAfter"
+
+# Native Windows hosted runners constrain the visible top-level Window to the desktop
+# working area. Stage 2 evidence must still exercise the declared 1600/1280/etc layout
+# matrix, so render the attached root visual after an explicit target-size layout pass.
+$visualCapturePath = Join-Path $SourceRoot 'src/CloudScribe.App/MainWindow.VisualCapture.cs'
+$visualCaptureOldHash = '6ad921ee741a10010e7ffde653e5bd88263a094c13cd853ef0c95d1fbed0c10e'
+$visualCaptureNewHash = '43d3cb6e9b1af5cfe35d294cf32a7598736ca1dcd67d7697bc6d01fe0d2ff838'
+$visualCaptureHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($visualCaptureHash -eq $visualCaptureOldHash) {
+    $text = [IO.File]::ReadAllText($visualCapturePath).Replace("`r`n","`n").Replace("`r","`n")
+    $oldLoop = @'
+            CaptureWindow(path);
+            results.Add(new(
+                captureCase.Name,
+                fileName,
+                (int)Math.Ceiling(Bounds.Width),
+                (int)Math.Ceiling(Bounds.Height),
+'@
+    $newLoop = @'
+            PixelSize capturedSize = CaptureWindow(path, captureCase.Width, captureCase.Height);
+            results.Add(new(
+                captureCase.Name,
+                fileName,
+                capturedSize.Width,
+                capturedSize.Height,
+'@
+    if (-not $text.Contains($oldLoop)) { throw 'Visual capture result-size repair anchor was not found.' }
+    $text = $text.Replace($oldLoop, $newLoop)
+
+    $oldMethod = @'
+    private void CaptureWindow(string path)
+    {
+        PixelSize size = new(
+            Math.Max(1, (int)Math.Ceiling(Bounds.Width)),
+            Math.Max(1, (int)Math.Ceiling(Bounds.Height)));
+        using RenderTargetBitmap bitmap = new(size, new Vector(CaptureBitmapDpi, CaptureBitmapDpi));
+        bitmap.Render(this);
+        using FileStream stream = new(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 4096,
+            FileOptions.WriteThrough);
+        bitmap.Save(stream, PngBitmapEncoderOptions.Default);
+        stream.Flush(flushToDisk: true);
+    }
+'@
+    $newMethod = @'
+    private PixelSize CaptureWindow(string path, double width, double height)
+    {
+        PixelSize size = new(
+            Math.Max(1, (int)Math.Ceiling(width)),
+            Math.Max(1, (int)Math.Ceiling(height)));
+        if (Content is not Control captureRoot)
+        {
+            throw new InvalidOperationException("The Stage 2 visual capture root is unavailable.");
+        }
+
+        double previousWidth = captureRoot.Width;
+        double previousHeight = captureRoot.Height;
+        try
+        {
+            Size targetSize = new(size.Width, size.Height);
+            captureRoot.Width = targetSize.Width;
+            captureRoot.Height = targetSize.Height;
+            captureRoot.InvalidateMeasure();
+            captureRoot.InvalidateArrange();
+            captureRoot.Measure(targetSize);
+            captureRoot.Arrange(new Rect(0, 0, targetSize.Width, targetSize.Height));
+            if ((int)Math.Ceiling(captureRoot.Bounds.Width) != size.Width ||
+                (int)Math.Ceiling(captureRoot.Bounds.Height) != size.Height)
+            {
+                throw new InvalidOperationException(
+                    $"Stage 2 visual capture root arranged to {captureRoot.Bounds.Width}x{captureRoot.Bounds.Height}; expected {size.Width}x{size.Height}.");
+            }
+
+            using RenderTargetBitmap bitmap = new(size, new Vector(CaptureBitmapDpi, CaptureBitmapDpi));
+            bitmap.Render(captureRoot);
+            using FileStream stream = new(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.WriteThrough);
+            bitmap.Save(stream, PngBitmapEncoderOptions.Default);
+            stream.Flush(flushToDisk: true);
+            return size;
+        }
+        finally
+        {
+            captureRoot.Width = previousWidth;
+            captureRoot.Height = previousHeight;
+            captureRoot.InvalidateMeasure();
+            captureRoot.InvalidateArrange();
+        }
+    }
+'@
+    if (-not $text.Contains($oldMethod)) { throw 'Visual capture rendering repair anchor was not found.' }
+    $text = $text.Replace($oldMethod, $newMethod)
+    [IO.File]::WriteAllText($visualCapturePath, $text, $utf8NoBom)
+}
+elseif ($visualCaptureHash -ne $visualCaptureNewHash) {
+    throw "Unexpected visual capture source hash before certification repair: $visualCaptureHash"
+}
+$visualCaptureHash = (Get-FileHash -LiteralPath $visualCapturePath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($visualCaptureHash -ne $visualCaptureNewHash) { throw "Visual capture sizing repair hash mismatch: $visualCaptureHash" }
+$visualCaptureContract = [IO.File]::ReadAllText($visualCapturePath)
+foreach ($required in @(
+    'captureRoot.Measure(targetSize)',
+    'captureRoot.Arrange(new Rect(0, 0, targetSize.Width, targetSize.Height))',
+    'bitmap.Render(captureRoot)',
+    'PixelSize capturedSize = CaptureWindow(path, captureCase.Width, captureCase.Height)')) {
+    if (-not $visualCaptureContract.Contains($required)) { throw "Visual capture sizing contract is missing: $required" }
+}
+if ($visualCaptureContract.Contains('bitmap.Render(this)')) { throw 'Visual capture must not render the screen-clamped top-level Window.' }
+Write-Host "Verified deterministic visual-capture sizing repair: $visualCaptureHash"
 
 Invoke-Checked 'Generate deterministic SHA256SUMS.txt' { python tools/update_sha256_manifest.py }
 Invoke-Checked 'Verify deterministic SHA256SUMS.txt' { python tools/update_sha256_manifest.py --check }
@@ -135,7 +253,7 @@ $publish = Join-Path $env:RUNNER_TEMP 'CloudScribe-publish'
 Invoke-Checked 'Publish Windows candidate' { pwsh -NoProfile -File scripts/publish-stage2-windows.ps1 -OutputDirectory $publish -Configuration Release -Status verification-pending }
 Invoke-Checked 'Native Windows launch + secondary activation smoke' { pwsh -NoProfile -File scripts/smoke-stage1-windows.ps1 }
 $screens = Join-Path $env:RUNNER_TEMP 'stage2-screenshots'
-Invoke-Checked 'Native 14-case Stage 2 visual capture' { pwsh -NoProfile -File scripts/capture-stage2-windows.ps1 $screens }
+Invoke-Checked 'Native 17-case Stage 2 visual capture' { pwsh -NoProfile -File scripts/capture-stage2-windows.ps1 $screens }
 Invoke-Checked 'Final source manifest re-check' { python tools/update_sha256_manifest.py --check }
 
 Write-Host 'CLOUDSCRIBE_STAGE2_NATIVE_WINDOWS_CERTIFICATION=PASS'
