@@ -1,0 +1,3 @@
+CloudScribe 0.3.48 native Windows certification trigger.
+Source carrier SHA-256: 1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b
+Fixture carrier SHA-256: a866788937570bd4be228c76035b170aec47d929712e96d7a08b9152239a6d11
