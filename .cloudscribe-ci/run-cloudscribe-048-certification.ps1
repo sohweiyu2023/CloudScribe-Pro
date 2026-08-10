@@ -31,7 +31,7 @@ function Assert-Sha256 {
     if ($actual -ne $Expected) {
         throw "$Label hash mismatch: $actual"
     }
-    Write-Host "Verified $Label: $actual"
+    Write-Host ('Verified {0}: {1}' -f $Label, $actual)
 }
 
 $sdk = (& dotnet --version).Trim()
@@ -39,8 +39,6 @@ if ($sdk -ne '10.0.302') {
     throw "Expected .NET SDK 10.0.302, got $sdk."
 }
 
-# The workflow has already reconstructed and hash-verified these exact repaired bytes.
-# Assert them again before any build so the certification driver never accepts drift.
 Assert-Sha256 -Path (Join-Path $SourceRoot 'scripts/invoke-nuget-audit-scan.ps1') `
     -Expected 'de5981b2ef579c6b85261cd5ef8543cf937b79243688804777987c2274e41841' `
     -Label 'final Windows NuGet audit wrapper'
@@ -54,10 +52,6 @@ Assert-Sha256 -Path (Join-Path $SourceRoot 'scripts/smoke-stage1-windows.ps1') `
     -Expected '7b1a564dde8677bf20809c5a582a7491caa76c00efc8e80088fcad6f34e892df' `
     -Label 'final native Windows smoke script'
 
-# A GitHub-hosted visible Window is constrained by its desktop work area. The Stage 2
-# matrix deliberately tests larger and smaller layouts, so use the exact reviewed source
-# overlay that performs a target-size Measure/Arrange on the attached root visual before
-# RenderTargetBitmap capture. The validator still requires every declared pixel size.
 $visualCaptureTarget = Join-Path $SourceRoot 'src/CloudScribe.App/MainWindow.VisualCapture.cs'
 $visualCaptureOverlay = Join-Path $env:GITHUB_WORKSPACE '.cloudscribe-ci/final-overlay/MainWindow.VisualCapture.cs'
 $visualCaptureExpected = '43d3cb6e9b1af5cfe35d294cf32a7598736ca1dcd67d7697bc6d01fe0d2ff838'
@@ -119,7 +113,6 @@ foreach ($project in $projects) {
         dotnet restore $project --locked-mode --disable-parallel --configfile NuGet.config
     }
 }
-
 foreach ($configuration in @('Debug', 'Release')) {
     foreach ($project in $buildOrder) {
         Invoke-Checked "$configuration build $project" {
@@ -150,9 +143,7 @@ foreach ($trx in Get-ChildItem -LiteralPath $resultRoot -Filter '*.trx' -File -R
     $trxCount++
     [xml]$xml = Get-Content -LiteralPath $trx.FullName -Raw
     $counters = $xml.SelectSingleNode("//*[local-name()='Counters']")
-    if (-not $counters) {
-        throw "Missing counters in $($trx.FullName)."
-    }
+    if (-not $counters) { throw "Missing counters in $($trx.FullName)." }
     $totalValue = $counters.GetAttribute('total')
     $failedValue = $counters.GetAttribute('failed')
     $skippedValue = $counters.GetAttribute('skipped')
@@ -161,9 +152,7 @@ foreach ($trx in Get-ChildItem -LiteralPath $resultRoot -Filter '*.trx' -File -R
     }
     $total += [int]$totalValue
     $failed += [int]$failedValue
-    if (-not [string]::IsNullOrWhiteSpace($skippedValue)) {
-        $skipped += [int]$skippedValue
-    }
+    if (-not [string]::IsNullOrWhiteSpace($skippedValue)) { $skipped += [int]$skippedValue }
 }
 if ($trxCount -ne 4 -or $total -ne 146 -or $failed -ne 0 -or $skipped -ne 0) {
     throw "Unexpected test inventory: trx=$trxCount total=$total failed=$failed skipped=$skipped; expected 4/146/0/0."
@@ -184,19 +173,14 @@ for ($index = 0; $index -lt $projects.Count; $index++) {
     & pwsh -NoProfile -File scripts/invoke-nuget-audit-scan.ps1 `
         -Project $projects[$index] 1> $vulnerableJson 2> $vulnerableError
     if ($LASTEXITCODE -ne 0) {
-        if (Test-Path -LiteralPath $vulnerableError) {
-            Get-Content -LiteralPath $vulnerableError
-        }
+        if (Test-Path -LiteralPath $vulnerableError) { Get-Content -LiteralPath $vulnerableError }
         throw "NuGet vulnerability audit failed: $($projects[$index])"
     }
-
     Write-Host "== Deprecation scan $($projects[$index]) =="
     & dotnet package list --project $projects[$index] --deprecated --include-transitive `
         --no-restore --format json --output-version 1 |
         Set-Content -LiteralPath (Join-Path $scanRoot "$index-deprecated.json") -Encoding utf8
-    if ($LASTEXITCODE -ne 0) {
-        throw "NuGet deprecation scan failed: $($projects[$index])"
-    }
+    if ($LASTEXITCODE -ne 0) { throw "NuGet deprecation scan failed: $($projects[$index])" }
 }
 Invoke-Checked 'Validate paired package scan JSON reports' {
     python tools/verify_dotnet_package_scan.py $scanRoot
