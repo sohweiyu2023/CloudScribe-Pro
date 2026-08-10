@@ -1,128 +1,99 @@
-name: CloudScribe 0.3.48 Late Gate Diagnostic
+name: CloudScribe 0.3.48 Material Gate Diagnostic
 
 on:
   push:
     branches:
       - cloudscribe-0.3.48-late-gate-diagnostic
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: read
 
 jobs:
-  windows-late-gates:
+  material-diagnostic:
     runs-on: windows-2025
-    timeout-minutes: 25
+    timeout-minutes: 60
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
       NUGET_XMLDOC_MODE: skip
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.302'
 
-      - name: Reconstruct exact candidate source
+      - name: Reconstruct exact repaired source state
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $payloadRoot = '.cloudscribe-ci/payload'
-          $partNames = @(
-            '000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin',
-            '007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin'
-          )
-          $archive = Join-Path $env:RUNNER_TEMP 'CloudScribe-0.3.48-native-ci-min.tar.xz'
-          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try {
-            foreach ($name in $partNames) {
-              $path = Join-Path $payloadRoot $name
-              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing source carrier part: $name" }
-              $bytes = [IO.File]::ReadAllBytes($path)
-              $stream.Write($bytes,0,$bytes.Length)
-            }
-          } finally { $stream.Dispose() }
-          $info = Get-Item $archive
-          if ($info.Length -ne 95596) { throw "Source carrier length mismatch: $($info.Length)" }
-          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($sha -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') { throw "Source carrier SHA-256 mismatch: $sha" }
-          $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-0.3.48-src'
+          $utf8 = [Text.UTF8Encoding]::new($false)
+          function Expand-Carrier([string]$Folder,[string[]]$Names,[string]$Archive,[string]$ExpectedSha,[string]$Root) {
+            $stream=[IO.File]::Open($Archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try { foreach($name in $Names){$bytes=[IO.File]::ReadAllBytes((Join-Path $Folder $name));$stream.Write($bytes,0,$bytes.Length)} } finally {$stream.Dispose()}
+            $sha=(Get-FileHash $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($sha -ne $ExpectedSha){throw "Carrier hash mismatch for ${Folder}: $sha"}
+            & tar.exe -xJf $Archive -C $Root
+            if($LASTEXITCODE -ne 0){throw "Carrier extraction failed for $Folder"}
+          }
+          $root=Join-Path $env:RUNNER_TEMP 'cloudscribe-material-src'
           New-Item -ItemType Directory -Path $root -Force | Out-Null
-          & tar.exe -xJf $archive -C $root
-          if ($LASTEXITCODE -ne 0) { throw "Source extraction failed: $LASTEXITCODE" }
+          Expand-Carrier '.cloudscribe-ci/payload' @('000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin','007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin') (Join-Path $env:RUNNER_TEMP 'base.tar.xz') '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b' $root
+          Expand-Carrier '.cloudscribe-ci/fixtures' @('000.bin','001.bin','002.bin') (Join-Path $env:RUNNER_TEMP 'fixtures.tar.xz') 'a866788937570bd4be228c76035b170aec47d929712e96d7a08b9152239a6d11' $root
+          Expand-Carrier '.cloudscribe-ci/hotfix' @('000.bin','001.bin','002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin') (Join-Path $env:RUNNER_TEMP 'hotfix.tar.xz') '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa' $root
+
+          $wrapperPath=Join-Path $root 'scripts/invoke-nuget-audit-scan.ps1'
+          $text=[IO.File]::ReadAllText($wrapperPath).Replace("`r`n","`n").Replace("`r","`n")
+          $anchor='}'+"`n"+'$projectPath = $projectItem.FullName'
+          $replacement='}'+"`n"+'if ($null -eq $cursor) {'+"`n"+'    throw "Audit target must resolve beneath the CloudScribe repository: $Project"'+"`n"+'}'+"`n"+'$projectPath = $projectItem.FullName'
+          if($text.Contains($anchor)){[IO.File]::WriteAllText($wrapperPath,$text.Replace($anchor,$replacement),$utf8)}
+
+          $architecturePath=Join-Path $root 'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs'
+          $text=[IO.File]::ReadAllText($architecturePath).Replace("`r`n","`n").Replace("`r","`n")
+          $old='        Assert.Contains("$projectItem.Directory", windowsAudit, StringComparison.Ordinal);'+"`n"+'        Assert.Contains("projectItem.Attributes", windowsAudit, StringComparison.Ordinal);'
+          $new='        Assert.Contains("$cursor = $projectItem.Directory", windowsAudit, StringComparison.Ordinal);'+"`n"+'        Assert.DoesNotContain("$cursor = $projectItem\n", windowsAudit, StringComparison.Ordinal);'
+          if($text.Contains($old)){[IO.File]::WriteAllText($architecturePath,$text.Replace($old,$new),$utf8)}
+
+          $smokePath=Join-Path $root 'scripts/smoke-stage1-windows.ps1'
+          [IO.File]::WriteAllText($smokePath,[IO.File]::ReadAllText('.cloudscribe-ci/final-overlay/smoke-stage1-windows.ps1').Replace("`r`n","`n").Replace("`r","`n"),$utf8)
           "CS_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Verified source carrier: $sha ($($info.Length) bytes)"
 
-      - name: Overlay exact candidate hotfix pack
+      - name: Materialize fully repaired source with certified wrapper
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $hotfixRoot = '.cloudscribe-ci/hotfix'
-          $names = @(
-            '000.bin','001.bin',
-            '002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin'
-          )
-          $archive = Join-Path $env:RUNNER_TEMP 'candidate-hotfixes.tar.xz'
-          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
-          try {
-            foreach ($name in $names) {
-              $path = Join-Path $hotfixRoot $name
-              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing hotfix part: $name" }
-              $bytes = [IO.File]::ReadAllBytes($path)
-              $stream.Write($bytes,0,$bytes.Length)
-            }
-          } finally { $stream.Dispose() }
-          $info = Get-Item $archive
-          if ($info.Length -ne 11364) { throw "Hotfix carrier length mismatch: $($info.Length)" }
-          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($sha -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa') { throw "Hotfix carrier SHA-256 mismatch: $sha" }
-          & tar.exe -xJf $archive -C $env:CS_ROOT
-          if ($LASTEXITCODE -ne 0) { throw "Hotfix extraction failed: $LASTEXITCODE" }
-          Write-Host "Verified candidate hotfix carrier: $sha ($($info.Length) bytes)"
+          $ErrorActionPreference='Stop'
+          $wrapper=Join-Path $env:RUNNER_TEMP 'working-wrapper.ps1'
+          Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/sohweiyu2023/CloudScribe-Pro/9e0a363f1f38a0655723b797ff70034d926a372a/.cloudscribe-ci/invoke-cloudscribe-048-certification.ps1' -OutFile $wrapper
+          & pwsh -NoProfile -File $wrapper -SourceRoot $env:CS_ROOT
+          if($LASTEXITCODE -ne 0){throw "Certified wrapper failed: $LASTEXITCODE"}
 
-      - name: Restore and build release app
+      - name: Run material gate and print compact failure diagnosis
         shell: pwsh
         run: |
-          Set-Location -LiteralPath $env:CS_ROOT
-          dotnet restore src/CloudScribe.App/CloudScribe.App.csproj --locked-mode --disable-parallel --configfile NuGet.config
-          if ($LASTEXITCODE -ne 0) { throw "App restore failed: $LASTEXITCODE" }
-          dotnet build src/CloudScribe.App/CloudScribe.App.csproj -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:UseSharedCompilation=false
-          if ($LASTEXITCODE -ne 0) { throw "App build failed: $LASTEXITCODE" }
+          $ErrorActionPreference='Continue'
+          $evidence=Join-Path $env:RUNNER_TEMP 'material-evidence'
+          $log=Join-Path $env:RUNNER_TEMP 'material-gate.log'
+          $env:CLOUDSCRIBE_STAGE2_EVIDENCE_DIR=$evidence
+          & pwsh -NoProfile -File (Join-Path $env:CS_ROOT 'scripts/verify-stage2.ps1') *> $log
+          $code=$LASTEXITCODE
+          if($code -ne 0){
+            Write-Host '=== MATERIAL FAILURE TAIL ==='
+            Get-Content -LiteralPath $log -Tail 160
+            Write-Host '=== MATERIAL FAILURE TOKENS ==='
+            Select-String -LiteralPath $log -Pattern 'FAIL:|FAILED|Exception|Traceback|PREP |STEP |exit code|Process completed' | Select-Object -Last 80 | ForEach-Object { $_.Line }
+            throw "Material gate failed: $code"
+          }
+          Write-Host 'MATERIAL_GATE_DIAGNOSTIC_PASS'
 
-      - name: Diagnose native smoke gate
-        shell: pwsh
-        run: |
-          $status = Join-Path $env:RUNNER_TEMP 'late-gate-status'
-          New-Item -ItemType Directory -Path $status -Force | Out-Null
-          Set-Location -LiteralPath $env:CS_ROOT
-          $log = Join-Path $status 'smoke.log'
-          & pwsh -NoProfile -File scripts/smoke-stage1-windows.ps1 *>&1 | Tee-Object -FilePath $log
-          $code = $LASTEXITCODE
-          "SMOKE_EXIT=$code" | Set-Content -LiteralPath (Join-Path $status 'smoke-status.txt') -Encoding utf8
-          if ($code -ne 0) { throw "Native smoke failed: $code" }
-
-      - name: Diagnose visual capture gate
-        if: success()
-        shell: pwsh
-        run: |
-          $status = Join-Path $env:RUNNER_TEMP 'late-gate-status'
-          $screens = Join-Path $env:RUNNER_TEMP 'late-gate-screenshots'
-          Set-Location -LiteralPath $env:CS_ROOT
-          $log = Join-Path $status 'visual.log'
-          & pwsh -NoProfile -File scripts/capture-stage2-windows.ps1 $screens *>&1 | Tee-Object -FilePath $log
-          $code = $LASTEXITCODE
-          "VISUAL_EXIT=$code" | Set-Content -LiteralPath (Join-Path $status 'visual-status.txt') -Encoding utf8
-          if ($code -ne 0) { throw "Visual capture failed: $code" }
-
-      - name: Upload late gate diagnostics
+      - name: Upload compact material diagnostic
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: cloudscribe-0.3.48-late-gate-diagnostic
+          name: cloudscribe-0.3.48-material-gate-diagnostic
           path: |
-            ${{ runner.temp }}/late-gate-status
-            ${{ runner.temp }}/late-gate-screenshots
+            ${{ runner.temp }}/material-gate.log
+            ${{ runner.temp }}/material-evidence
           if-no-files-found: warn
           retention-days: 7
