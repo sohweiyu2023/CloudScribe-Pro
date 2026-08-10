@@ -94,6 +94,43 @@ jobs:
           }
           Write-Host "Exact architecture fixture carrier verified: $sha ($($info.Length) bytes)"
 
+      - name: Overlay hash-bound candidate hotfixes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $hotfixRoot = '.cloudscribe-ci/hotfix'
+          $hotfixNames = @(
+            '000.bin','001.bin',
+            '002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin'
+          )
+          $archive = Join-Path $env:RUNNER_TEMP 'candidate-hotfixes.tar.xz'
+          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($name in $hotfixNames) {
+              $path = Join-Path $hotfixRoot $name
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing hotfix part: $name" }
+              $bytes = [IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          $info = Get-Item $archive
+          if ($info.Length -ne 11364) { throw "Hotfix carrier length mismatch: $($info.Length)" }
+          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa') { throw "Hotfix carrier SHA-256 mismatch: $sha" }
+          & tar.exe -xJf $archive -C $env:CS_ROOT
+          if ($LASTEXITCODE -ne 0) { throw "Hotfix extraction failed: $LASTEXITCODE" }
+          $expected = @{
+            'scripts/invoke-nuget-audit-scan.ps1' = '3c70d5c1cb30c5c8f805353c81cc1a6aed2fc365da9a9d52092cf14e339f0be3'
+            'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs' = 'ccf6b1d09e0c7a0cc232d5f2d19fc2a742006a13cc91727bdba00eacf30c81a3'
+            'tests/CloudScribe.Infrastructure.Tests/StartupAndDiagnosticsResilienceTests.cs' = 'd0d6a3d8e2a88aa09ecb1fb6a00943d71a6b4c92d0d36e37e94c0b5e83edb764'
+          }
+          foreach ($relative in $expected.Keys) {
+            $path = Join-Path $env:CS_ROOT $relative
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected[$relative]) { throw "Candidate hotfix hash mismatch for ${relative}: $actual" }
+          }
+          Write-Host "Exact candidate hotfix carrier verified: $sha ($($info.Length) bytes)"
+
       - name: Run full native Windows certification
         shell: pwsh
         run: |
