@@ -16,7 +16,7 @@ POSTIMAGE_SHA256 = {
     "src/CloudScribe.App/MainWindow.VisualCapture.cs": "79ff7f4023b7e3138dcf0d5e1bd09914e44d4f240fd69684db7f0dd358c57bfb",
     "src/CloudScribe.App/MainWindow.axaml": "137590eee91c7593a0b0e7239c2c8089cc830264a30ca91d734ba52ad0e7742d",
     "src/CloudScribe.App/Controls/PaperTextBox.cs": "16b3dad6f4edf29da02b8337c7f3270d943275c5a3e567f04fb1fdd2acd826af",
-    "tools/verify_stage2_source.py": "b2d22b34a6940920d4b62d822fbca6c4c7e0e877d170fb7ac942a4d1d8827420",
+    "tools/verify_stage2_source.py": "d8c69570db150022c221f9e9dcd8efaa847019bb936a46c05974835ffc70e635",
     "tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs": "9313bf6a7681d0000c36b8af2ae4453f26e8ac9a8fc165c4334a458fec4054d5",
     "tools/run_python_regression_shards.py": "62c10f15a1f8e2c39796d3863e9b3f7e462f37da30999a5b2577b5703cf67ca5",
 }
@@ -132,8 +132,8 @@ def patch_stage2_verifier(root: pathlib.Path) -> None:
     text = replace_once(
         text,
         '''    if "PaperTextBoxTheme" not in window or 'BasedOn="{StaticResource {x:Type TextBox}}"' not in window:\n        return fail("paper editor does not own a derived TextBox control theme")\n''',
-        '''    if "PaperTextBoxTheme" not in window or 'TargetType="controls:PaperTextBox"' not in window or 'BasedOn="{StaticResource {x:Type TextBox}}"' not in window:\n        return fail("paper editor does not own a derived PaperTextBox control theme")\n''',
-        "Stage 2 PaperTextBox theme contract",
+        '''    if "PaperTextBoxTheme" not in window or 'TargetType="controls:PaperTextBox"' not in window or 'BasedOn="{StaticResource {x:Type TextBox}}"' not in window:\n        return fail("paper editor does not own a derived PaperTextBox control theme")\n    paper_text_box = (root / "src/CloudScribe.App/Controls/PaperTextBox.cs").read_text(encoding="utf-8-sig")\n    if 'PseudoClasses.Set(":pointerover", value)' not in paper_text_box:\n        return fail("PaperTextBox capture seam does not toggle Avalonia's inherited :pointerover pseudoclass")\n''',
+        "Stage 2 PaperTextBox theme and pseudoclass contract",
     )
     write_lf(path, text)
 
