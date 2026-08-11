@@ -1,0 +1,108 @@
+name: CloudScribe Focus Postimage Diagnostic
+
+on:
+  push:
+    branches:
+      - cloudscribe-0.3.48-focus-postimage-diagnostic
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Download exact previously certified 0.3.48 source
+        uses: actions/download-artifact@v5
+        with:
+          name: cloudscribe-0.3.48-final-source-and-material-evidence
+          path: ${{ runner.temp }}/certified-artifact
+          run-id: 31446294763
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Diagnose focus patch postimage on exact certified source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $artifactRoot=Join-Path $env:RUNNER_TEMP 'certified-artifact'
+          $zip=Get-ChildItem -LiteralPath $artifactRoot -Filter 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress.zip' -File -Recurse | Select-Object -First 1
+          if($null -eq $zip){throw 'Certified source ZIP not found.'}
+          $extract=Join-Path $env:RUNNER_TEMP 'focus-diag-source'
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $extract
+          $root=Join-Path $extract 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
+          $env:FOCUS_DIAG_ROOT=$root
+          @'
+          import base64, gzip, hashlib, importlib.util, pathlib, subprocess, tempfile, os, shutil
+
+          checkout = pathlib.Path.cwd()
+          helper_path = checkout / '.cloudscribe-ci' / 'apply-stage2-focus-acceptance-overlay.py'
+          carrier = checkout / '.cloudscribe-ci' / 'apply-stage2-focus-acceptance-overlay.ps1'
+          spec = importlib.util.spec_from_file_location('focus_helper', helper_path)
+          helper = importlib.util.module_from_spec(spec)
+          assert spec.loader is not None
+          spec.loader.exec_module(helper)
+
+          root = pathlib.Path(os.environ['FOCUS_DIAG_ROOT'])
+          target_rel = pathlib.Path('src/CloudScribe.App/MainWindow.VisualCapture.cs')
+          target = root / target_rel
+          before = target.read_bytes()
+          before_copy = pathlib.Path(tempfile.gettempdir()) / 'MainWindow.VisualCapture.before.cs'
+          before_copy.write_bytes(before)
+
+          encoded = helper.assemble_payload(carrier)
+          compressed = base64.b64decode(encoded, validate=True)
+          patch = gzip.decompress(compressed)
+          print('compressed_sha256=' + hashlib.sha256(compressed).hexdigest())
+          print('patch_sha256=' + hashlib.sha256(patch).hexdigest())
+          patch_path = pathlib.Path(tempfile.gettempdir()) / 'cloudscribe-focus-diag.patch'
+          patch_path.write_bytes(patch)
+          subprocess.run(['git','apply','--check','--whitespace=nowarn',str(patch_path)],cwd=root,check=True)
+          subprocess.run(['git','apply','--whitespace=nowarn',str(patch_path)],cwd=root,check=True)
+
+          def hashes(data: bytes):
+              lf=data.replace(b'\r\n',b'\n').replace(b'\r',b'\n')
+              crlf=lf.replace(b'\n',b'\r\n')
+              return (
+                  hashlib.sha256(data).hexdigest(),
+                  hashlib.sha256(lf).hexdigest(),
+                  hashlib.sha256(crlf).hexdigest(),
+                  len(data), len(lf), len(crlf)
+              )
+
+          after = target.read_bytes()
+          print('TARGET_BEFORE raw lf crlf sizes=', hashes(before))
+          print('TARGET_AFTER  raw lf crlf sizes=', hashes(after))
+          print('TARGET_EXPECTED_RAW=d140d1836ee9070149afeafd6dd95c1e1f36deb2d3ab60033741f4b13c0d9a28')
+
+          print('=== PATCH SECTION FOR MainWindow.VisualCapture.cs ===')
+          text=patch.decode('utf-8',errors='replace')
+          marker='diff --git a/src/CloudScribe.App/MainWindow.VisualCapture.cs b/src/CloudScribe.App/MainWindow.VisualCapture.cs'
+          start=text.find(marker)
+          if start >= 0:
+              next_pos=text.find('\ndiff --git ', start+len(marker))
+              print(text[start:] if next_pos < 0 else text[start:next_pos])
+          else:
+              print('PATCH SECTION NOT FOUND')
+
+          print('=== NO-INDEX DIFF BEFORE/AFTER ===')
+          result=subprocess.run(['git','diff','--no-index','--no-ext-diff','--',str(before_copy),str(target)],cwd=root,text=True,capture_output=True,check=False)
+          diff=result.stdout
+          lines=diff.splitlines()
+          print('\n'.join(lines[:500]))
+          print(f'DIFF_EXIT={result.returncode} DIFF_LINES={len(lines)}')
+
+          print('=== ALL EXPECTED POSTIMAGES ===')
+          for rel, expected in helper.EXPECTED_FILES.items():
+              p=root/rel
+              if not p.is_file():
+                  print(rel, 'MISSING')
+                  continue
+              raw, lf, crlf, rawlen, lflen, crlflen=hashes(p.read_bytes())
+              print(f'{rel} expected={expected} raw={raw} lf={lf} crlf={crlf} sizes={rawlen}/{lflen}/{crlflen}')
+          '@ | python -
+          if($LASTEXITCODE-ne0){throw "Focus postimage diagnostic failed: $LASTEXITCODE"}
