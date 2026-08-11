@@ -1,13 +1,19 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions DisableDelayedExpansion
 
 rem CloudScribe Pro - beginner-friendly Windows build/publish launcher.
-rem This file intentionally uses a process-scoped PowerShell execution-policy override
-rem so a downloaded source ZIP can invoke the repository's reviewed publish script
+rem Delayed expansion stays disabled so literal ! characters in user paths are preserved.
+rem The control flow intentionally avoids parenthesized command blocks around paths
+rem derived from %~dp0; ordinary Downloads names such as "CloudScribe (7)" must work.
+rem PowerShell is invoked with a process-scoped execution-policy override so an
+rem Internet-downloaded source ZIP can run the repository's reviewed publish script
 rem without changing the user's persistent PowerShell policy.
 
 set "ROOT=%~dp0"
-for %%I in ("%ROOT%..") do set "PARENT=%%~fI"
+pushd "%ROOT%.." >nul 2>nul
+if errorlevel 1 goto :invalid_root
+set "PARENT=%CD%"
+popd
 set "OUT=%PARENT%\CloudScribe-Windows"
 set "APP=%ROOT%src\CloudScribe.App\CloudScribe.App.csproj"
 set "NUGET=%ROOT%NuGet.config"
@@ -25,12 +31,12 @@ for /f "usebackq delims=" %%V in (`dotnet --version`) do set "DOTNET_VERSION=%%V
 popd
 if not "%DOTNET_VERSION%"=="10.0.302" goto :wrong_dotnet
 
-if exist "%OUT%" (
-  echo Removing previous runnable output:
-  echo   %OUT%
-  rmdir /s /q "%OUT%"
-  if exist "%OUT%" goto :remove_failed
-)
+if not exist "%OUT%" goto :after_remove_output
+echo Removing previous runnable output:
+echo   %OUT%
+rmdir /s /q "%OUT%"
+if exist "%OUT%" goto :remove_failed
+:after_remove_output
 
 echo.
 echo [1/3] Restoring CloudScribe.App with the locked dependency graph...
@@ -49,12 +55,18 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File "%PUBLISH_SCRIPT%" -OutputDirector
 if errorlevel 1 goto :publish_failed_pop
 popd
 
-for %%F in (CloudScribe.exe CloudScribe.dll CloudScribe.deps.json CloudScribe.runtimeconfig.json appsettings.json RUN-CLOUDSCRIBE.cmd) do (
-  if not exist "%OUT%\%%F" (
-    echo ERROR: Publish reported success but %%F is missing.
-    goto :failed
-  )
-)
+call :require_output_file CloudScribe.exe
+if errorlevel 1 goto :failed
+call :require_output_file CloudScribe.dll
+if errorlevel 1 goto :failed
+call :require_output_file CloudScribe.deps.json
+if errorlevel 1 goto :failed
+call :require_output_file CloudScribe.runtimeconfig.json
+if errorlevel 1 goto :failed
+call :require_output_file appsettings.json
+if errorlevel 1 goto :failed
+call :require_output_file RUN-CLOUDSCRIBE.cmd
+if errorlevel 1 goto :failed
 
 echo.
 echo ============================================================
@@ -70,6 +82,11 @@ if /I "%CLOUDSCRIBE_NO_OPEN%"=="1" exit /b 0
 echo Opening the runnable output folder...
 start "" explorer.exe "%OUT%"
 exit /b 0
+
+:require_output_file
+if exist "%OUT%\%~1" exit /b 0
+echo ERROR: Publish reported success but %~1 is missing.
+exit /b 1
 
 :publish_failed_pop
 set "PUBLISH_EXIT=%ERRORLEVEL%"
@@ -107,6 +124,11 @@ exit /b 2
 :wrong_dotnet
 echo ERROR: CloudScribe requires .NET SDK 10.0.302 for this checkpoint.
 echo Found: %DOTNET_VERSION%
+exit /b 2
+
+:invalid_root
+echo ERROR: Could not resolve the source folder parent:
+echo   %ROOT%..
 exit /b 2
 
 :remove_failed
