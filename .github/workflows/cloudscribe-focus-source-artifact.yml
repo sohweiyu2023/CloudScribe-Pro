@@ -1,0 +1,45 @@
+name: CloudScribe Focus Source Artifact Diagnostic
+
+on:
+  push:
+    branches: [ cloudscribe-0.3.48-focus-postimage-diagnostic ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  source-artifact:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download exact certified 0.3.48 source
+        uses: actions/download-artifact@v5
+        with:
+          name: cloudscribe-0.3.48-final-source-and-material-evidence
+          path: ${{ runner.temp }}/certified-artifact
+          run-id: 31446294763
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply current focus repair
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=Get-ChildItem -LiteralPath (Join-Path $env:RUNNER_TEMP 'certified-artifact') -Filter 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress.zip' -File -Recurse | Select-Object -First 1
+          if($null-eq$zip){throw 'source ZIP missing'}
+          $extract=Join-Path $env:RUNNER_TEMP 'focus-source'
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $extract
+          $root=Join-Path $extract 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
+          & pwsh -NoProfile -ExecutionPolicy Bypass -File .cloudscribe-ci/apply-stage2-focus-acceptance-overlay.ps1 -SourceRoot $root
+          if($LASTEXITCODE-ne0){throw "focus overlay failed: $LASTEXITCODE"}
+          "FOCUS_SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Upload focus-repaired source snapshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: cloudscribe-focus-repaired-source-diagnostic
+          path: ${{ env.FOCUS_SOURCE_ROOT }}
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 6
