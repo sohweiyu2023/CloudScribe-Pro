@@ -1,0 +1,91 @@
+name: CloudScribe Stage 2 Exact Promotion From Run 267
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote-exact-source:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    env:
+      EXPECTED_ZIP_SHA256: d9f395df66498323f025556e954a4631eff9748cb9c91483c92568f969c4f64a
+      CERTIFICATION_RUN_ID: '31491660175'
+      ACCEPTANCE_RUN_ID: '31493459404'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Download and verify exact certified source ZIP
+        uses: actions/download-artifact@v5
+        with:
+          name: cloudscribe-0.3.48-final-source-and-material-evidence
+          path: ${{ runner.temp }}/certified-artifact
+          run-id: 31491660175
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create clean promoted and Stage 3 branches from exact certified bytes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Set-StrictMode -Version Latest
+          $artifactRoot=Join-Path $env:RUNNER_TEMP 'certified-artifact'
+          $zip=Get-ChildItem -LiteralPath $artifactRoot -Filter 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress.zip' -File -Recurse | Select-Object -First 1
+          if($null -eq $zip){throw 'Certified run-267 source ZIP was not found.'}
+          $actual=(Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($actual -ne $env:EXPECTED_ZIP_SHA256){throw "Certified ZIP SHA mismatch: expected=$env:EXPECTED_ZIP_SHA256 actual=$actual"}
+          $sidecar=Get-Item -LiteralPath ($zip.FullName + '.sha256') -ErrorAction Stop
+          $sidecarHash=((Get-Content -LiteralPath $sidecar.FullName -Raw).Trim().Split(' ')[0]).ToLowerInvariant()
+          if($sidecarHash -ne $actual){throw "Certified ZIP sidecar mismatch: actual=$actual sidecar=$sidecarHash"}
+
+          $clean=Join-Path $env:RUNNER_TEMP 'exact-stage2-promotion-source'
+          Remove-Item -LiteralPath $clean -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $clean
+          $sourceRoot=Join-Path $clean 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
+          if(-not(Test-Path -LiteralPath (Join-Path $sourceRoot 'CloudScribe.sln') -PathType Leaf)){throw 'Exact source extraction is missing CloudScribe.sln.'}
+          Push-Location -LiteralPath $sourceRoot
+          try{
+            & python tools/update_sha256_manifest.py --check
+            if($LASTEXITCODE -ne 0){throw 'Exact source manifest failed before promotion.'}
+          }finally{Pop-Location}
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config core.autocrlf false
+          git config core.safecrlf true
+          git switch --orphan __cloudscribe_exact_stage2_promotion
+          if($LASTEXITCODE -ne 0){throw 'Could not create orphan exact-source promotion branch.'}
+          git rm -rf --ignore-unmatch .
+          Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Force | Where-Object { $_.Name -ne '.git' } | Remove-Item -Recurse -Force
+          Copy-Item -Path (Join-Path $sourceRoot '*') -Destination $env:GITHUB_WORKSPACE -Recurse -Force
+          Get-ChildItem -LiteralPath $sourceRoot -Force | Where-Object { $_.Name.StartsWith('.') } | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $env:GITHUB_WORKSPACE -Recurse -Force
+          }
+
+          Push-Location -LiteralPath $env:GITHUB_WORKSPACE
+          try{
+            & python tools/update_sha256_manifest.py --check
+            if($LASTEXITCODE -ne 0){throw 'Promotion workspace differs from exact source before commit.'}
+            git add -A
+            git commit -m 'Promote CloudScribe 0.3.48 Stage 2 exact certified bytes'
+            if($LASTEXITCODE -ne 0){throw 'Exact Stage 2 promotion commit failed.'}
+            $commit=(git rev-parse HEAD).Trim()
+            git push --force origin HEAD:refs/heads/cloudscribe-0.3.48-stage2-promoted
+            if($LASTEXITCODE -ne 0){throw 'Failed to publish promoted Stage 2 branch.'}
+            git push --force origin HEAD:refs/heads/cloudscribe-0.4.0-stage3
+            if($LASTEXITCODE -ne 0){throw 'Failed to publish clean Stage 3 starting branch.'}
+            & python tools/update_sha256_manifest.py --check
+            if($LASTEXITCODE -ne 0){throw 'Exact source manifest changed during promotion commit.'}
+            Write-Host "STAGE2_EXACT_PROMOTION=PASS commit=$commit zip_sha256=$actual certification_run=$env:CERTIFICATION_RUN_ID acceptance_run=$env:ACCEPTANCE_RUN_ID"
+            Write-Host "STAGE3_START_BRANCH=cloudscribe-0.4.0-stage3 commit=$commit"
+          }finally{Pop-Location}
