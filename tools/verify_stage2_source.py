@@ -91,6 +91,22 @@ def main() -> int:
     paper_text_box = (root / "src/CloudScribe.App/Controls/PaperTextBox.cs").read_text(encoding="utf-8-sig")
     if 'PseudoClasses.Set(":pointerover", value)' not in paper_text_box:
         return fail("PaperTextBox capture seam does not toggle Avalonia's inherited :pointerover pseudoclass")
+    paper_runtime_contracts = (
+        ('OnApplyTemplate(TemplateAppliedEventArgs e)', "paper editor template-application hardening"),
+        ('e.NameScope.Find<Border>("PART_PaperSurface")', "paper editor template-surface lookup"),
+        ('TryFindResource("Brush.Paper"', "paper editor semantic paper resource pin"),
+        ('_paperSurface.Background = paper;', "paper editor local template-surface background pin"),
+        ('Foreground = ink;', "paper editor local ink pin"),
+        ('CaretBrush = ink;', "paper editor local caret pin"),
+        ('SelectionForegroundBrush = ink;', "paper editor local selection-foreground pin"),
+        ('SelectionBrush = selection;', "paper editor local selection-background pin"),
+        ('PlaceholderForeground = muted;', "paper editor local placeholder pin"),
+        ('ResourcesChanged +=', "paper editor live resource refresh"),
+        ('ActualThemeVariantChanged +=', "paper editor theme-variant refresh"),
+    )
+    for marker, label in paper_runtime_contracts:
+        if marker not in paper_text_box:
+            return fail(f"{label} missing required marker {marker!r}")
 
     focus_line = re.search(r'^\s*"06-full-focus-reading"\s*:\s*\((.*)\),\s*$', validator, flags=re.MULTILINE)
     if not focus_line or "True, False, True, False, None, False, 1.0" not in focus_line.group(1):
