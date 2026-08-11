@@ -1,0 +1,3 @@
+Trigger fresh launcher-hotfix exact-ZIP acceptance after product branch line-ending policy reached its current head.
+Expected product checkout: cloudscribe-0.3.48-stage2-launcher-hotfix
+Special-path acceptance must include (7) and literal !.
