@@ -20,7 +20,9 @@ if errorlevel 1 goto :missing_pwsh
 where python >nul 2>nul
 if errorlevel 1 goto :missing_python
 
+pushd "%ROOT%"
 for /f "usebackq delims=" %%V in (`dotnet --version`) do set "DOTNET_VERSION=%%V"
+popd
 if not "%DOTNET_VERSION%"=="10.0.302" goto :wrong_dotnet
 
 if exist "%OUT%" (
