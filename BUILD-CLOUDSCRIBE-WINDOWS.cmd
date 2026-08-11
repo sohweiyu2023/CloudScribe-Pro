@@ -33,7 +33,7 @@ if not "%DOTNET_VERSION%"=="10.0.302" goto :wrong_dotnet
 
 if not exist "%OUT%" goto :after_remove_output
 echo Removing previous runnable output:
-echo   %OUT%
+echo   "%OUT%"
 rmdir /s /q "%OUT%"
 if exist "%OUT%" goto :remove_failed
 :after_remove_output
@@ -73,9 +73,9 @@ echo ============================================================
 echo BUILD AND PUBLISH SUCCEEDED
 echo ============================================================
 echo Executable:
-echo   %OUT%\CloudScribe.exe
+echo   "%OUT%\CloudScribe.exe"
 echo Launcher:
-echo   %OUT%\RUN-CLOUDSCRIBE.cmd
+echo   "%OUT%\RUN-CLOUDSCRIBE.cmd"
 echo.
 if /I "%CLOUDSCRIBE_NO_OPEN%"=="1" exit /b 0
 
@@ -128,12 +128,12 @@ exit /b 2
 
 :invalid_root
 echo ERROR: Could not resolve the source folder parent:
-echo   %ROOT%..
+echo   "%ROOT%.."
 exit /b 2
 
 :remove_failed
 echo ERROR: Could not remove previous output folder:
-echo   %OUT%
+echo   "%OUT%"
 exit /b 2
 
 :failed
