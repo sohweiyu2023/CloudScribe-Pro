@@ -15,7 +15,7 @@ permissions:
 jobs:
   launcher-acceptance:
     runs-on: windows-2025
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
@@ -29,29 +29,39 @@ jobs:
         with:
           dotnet-version: '10.0.302'
 
-      - name: Download exact run-228 certified source artifact
+      - name: Download exact run-250 audit-hardened certified source artifact
         uses: actions/download-artifact@v5
         with:
           name: cloudscribe-0.3.48-final-source-and-material-evidence
           path: ${{ runner.temp }}/certified-artifact
-          run-id: 31453378400
+          run-id: 31460018476
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify, extract and execute exact certified root Windows build launcher
+      - name: Verify exact source release, extract and execute certified root Windows build launcher
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
           Set-StrictMode -Version Latest
           $artifactRoot=Join-Path $env:RUNNER_TEMP 'certified-artifact'
           $zip=Get-ChildItem -LiteralPath $artifactRoot -Filter 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress.zip' -File -Recurse | Select-Object -First 1
-          if($null -eq $zip){throw 'Certified source ZIP was not found in the downloaded run-228 artifact.'}
+          if($null -eq $zip){throw 'Certified source ZIP was not found in the downloaded run-250 artifact.'}
           $shaFile=Get-Item -LiteralPath ($zip.FullName + '.sha256') -ErrorAction Stop
           $expected=((Get-Content -LiteralPath $shaFile.FullName -Raw).Trim().Split(' ')[0]).ToLowerInvariant()
           $actual=(Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           if($actual -ne $expected){throw "Certified source ZIP checksum mismatch: expected=$expected actual=$actual"}
-          if($actual -ne 'e88af038ee89f118f2c7bcb23b593fac11627272cedf658bfc4707403b1c76f9'){
-            throw "Unexpected final focus-repair ZIP hash: $actual"
+          if($actual -ne 'b069173998620dcdc582f721a8eaac44ebba6414482c51ba2cf5b5d5d4871590'){
+            throw "Unexpected final audit-hardened ZIP hash: $actual"
           }
+
+          # Exercise the exact shipped source-release verifier against the final ZIP and its
+          # sibling checksum before using any source bytes. On Windows this also executes the
+          # full 55-test auxiliary verifier suite, including process-tree cleanup defenses.
+          $verifyReleaseSource=Join-Path $env:RUNNER_TEMP 'release-verifier-source'
+          Remove-Item -LiteralPath $verifyReleaseSource -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $verifyReleaseSource
+          $verifyRoot=Join-Path $verifyReleaseSource 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
+          & python (Join-Path $verifyRoot 'tools/verify_source_release.py') $zip.FullName
+          if($LASTEXITCODE -ne 0){throw "Exact source-release verifier failed with exit code $LASTEXITCODE"}
 
           $extract=Join-Path $env:RUNNER_TEMP 'launcher-source'
           Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
@@ -82,4 +92,4 @@ jobs:
             python tools/update_sha256_manifest.py --check
             if($LASTEXITCODE -ne 0){throw 'Source manifest changed during launcher acceptance.'}
           } finally { Pop-Location }
-          Write-Host "WINDOWS_BUILD_LAUNCHER_ACCEPTANCE=PASS run=31453378400 zip_sha256=$actual"
+          Write-Host "WINDOWS_BUILD_LAUNCHER_ACCEPTANCE=PASS run=31460018476 zip_sha256=$actual"
