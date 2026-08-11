@@ -69,11 +69,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # The focus-fix carrier used by the certified core contains an older Stage 2 source verifier.
-# Re-apply the complete material-tool set after native certification, bind those bytes into
-# SHA256SUMS.txt, and run the fast source/material contracts before the outer workflow freezes
-# the ZIP. Compiled/runtime product bytes are untouched; the subsequent fresh-extracted gate
-# will rebuild/retest the exact final source tree.
+# Re-apply the complete material-tool set after native certification, then apply the Windows
+# source-handoff usability repair (root CMD launcher + guide + regression contracts). Bind all
+# final bytes into SHA256SUMS.txt and run the fast source/material contracts before the outer
+# workflow freezes the ZIP. The subsequent fresh-extracted gate rebuilds/retests these exact bytes.
 Install-MaterialTools -Phase 'post-certification final-source overlay'
+$buildLauncherOverlay = Join-Path $PSScriptRoot 'apply-build-launcher-overlay.ps1'
+if (-not (Test-Path -LiteralPath $buildLauncherOverlay -PathType Leaf)) {
+    throw "Windows build-launcher overlay is missing: $buildLauncherOverlay"
+}
+& pwsh -NoProfile -ExecutionPolicy Bypass -File $buildLauncherOverlay -SourceRoot $SourceRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Windows build-launcher overlay failed with exit code $LASTEXITCODE."
+}
+
 Push-Location -LiteralPath $SourceRoot
 try {
     & python tools/update_sha256_manifest.py
