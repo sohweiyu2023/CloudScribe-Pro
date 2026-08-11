@@ -111,6 +111,19 @@ if ($LASTEXITCODE -ne 0) {
     throw "Stage 2 focus compile-fix overlay failed with exit code $LASTEXITCODE."
 }
 
+# Finalize durable session state only after the substantive repair bytes and their source
+# contracts are fixed. The state deliberately keeps exact external run IDs/checksums out of
+# the source snapshot, while truthfully recording that automated Windows engineering work is
+# complete and that real-user/manual Stage 2 acceptance is still the promotion boundary.
+$sessionStateFinalization = Join-Path $PSScriptRoot 'apply-stage2-session-state-finalization.py'
+if (-not (Test-Path -LiteralPath $sessionStateFinalization -PathType Leaf)) {
+    throw "Stage 2 session-state finalization overlay is missing: $sessionStateFinalization"
+}
+& python $sessionStateFinalization --source-root $SourceRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Stage 2 session-state finalization failed with exit code $LASTEXITCODE."
+}
+
 Push-Location -LiteralPath $SourceRoot
 try {
     & python tools/update_sha256_manifest.py
