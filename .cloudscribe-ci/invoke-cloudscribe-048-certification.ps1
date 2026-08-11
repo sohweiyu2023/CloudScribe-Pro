@@ -97,6 +97,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "Stage 2 focus-acceptance overlay failed with exit code $LASTEXITCODE."
 }
 
+# The first pointer/focus capture implementation reached the fresh-extracted build and
+# correctly failed because it touched Avalonia's non-public IInputRoot.PointerOverElement.
+# Apply the compile repair after the focus postimage is verified: a PaperTextBox subclass
+# exposes a bounded test seam that toggles the inherited :pointerover pseudoclass through
+# the protected PseudoClasses API, and the capture method is shortened to remain analyzer-clean.
+$focusCompileFix = Join-Path $PSScriptRoot 'apply-stage2-focus-compile-fix.py'
+if (-not (Test-Path -LiteralPath $focusCompileFix -PathType Leaf)) {
+    throw "Stage 2 focus compile-fix overlay is missing: $focusCompileFix"
+}
+& python $focusCompileFix --source-root $SourceRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Stage 2 focus compile-fix overlay failed with exit code $LASTEXITCODE."
+}
+
 Push-Location -LiteralPath $SourceRoot
 try {
     & python tools/update_sha256_manifest.py
