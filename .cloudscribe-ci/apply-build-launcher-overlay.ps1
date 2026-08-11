@@ -37,16 +37,24 @@ if (-not $architecture.Contains('string windowsBuildLauncher = File.ReadAllText'
     $assertAnchor = '        Assert.Contains("CloudScribe.exe", windowsPublish, StringComparison.Ordinal);' + "`n" +
                     '        Assert.Contains("LATEST-CLOUDSCRIBE-EXE.txt", windows, StringComparison.Ordinal);'
     $assertReplacement = '        Assert.Contains("CloudScribe.exe", windowsPublish, StringComparison.Ordinal);' + "`n" +
-                    '        Assert.Contains("-ExecutionPolicy Bypass", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
-                    '        Assert.Contains("if errorlevel 1 goto :publish_failed_pop", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
-                    '        Assert.Contains("CloudScribe.exe", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
-                    '        Assert.Contains("RUN-CLOUDSCRIBE.cmd", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
-                    '        Assert.Contains("CLOUDSCRIBE_NO_OPEN", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
-                    '        Assert.Contains("src\\CloudScribe.App\\CloudScribe.App.csproj", windowsBuildGuide, StringComparison.Ordinal);' + "`n" +
-                    '        Assert.Contains("MachinePolicy or UserPolicy", windowsBuildGuide, StringComparison.Ordinal);' + "`n" +
+                    '        AssertWindowsBuildLauncherContract(windowsBuildLauncher, windowsBuildGuide);' + "`n" +
                     '        Assert.Contains("LATEST-CLOUDSCRIBE-EXE.txt", windows, StringComparison.Ordinal);'
     if (-not $architecture.Contains($assertAnchor)) { throw 'Build-launcher architecture assertion anchor was not found.' }
     $architecture = $architecture.Replace($assertAnchor,$assertReplacement)
+
+    $helperAnchor = '    private static void AssertNuGetAuditRetryBoundary(string auditWrapper)' + "`n"
+    $helper = '    private static void AssertWindowsBuildLauncherContract(string windowsBuildLauncher, string windowsBuildGuide)' + "`n" +
+              '    {' + "`n" +
+              '        Assert.Contains("-ExecutionPolicy Bypass", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
+              '        Assert.Contains("if errorlevel 1 goto :publish_failed_pop", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
+              '        Assert.Contains("CloudScribe.exe", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
+              '        Assert.Contains("RUN-CLOUDSCRIBE.cmd", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
+              '        Assert.Contains("CLOUDSCRIBE_NO_OPEN", windowsBuildLauncher, StringComparison.Ordinal);' + "`n" +
+              '        Assert.Contains("src\\CloudScribe.App\\CloudScribe.App.csproj", windowsBuildGuide, StringComparison.Ordinal);' + "`n" +
+              '        Assert.Contains("MachinePolicy or UserPolicy", windowsBuildGuide, StringComparison.Ordinal);' + "`n" +
+              '    }' + "`n`n"
+    if (-not $architecture.Contains($helperAnchor)) { throw 'Build-launcher architecture helper anchor was not found.' }
+    $architecture = $architecture.Replace($helperAnchor,$helper + $helperAnchor)
     [IO.File]::WriteAllText($architecturePath,$architecture,$utf8NoBom)
 }
 
@@ -73,7 +81,7 @@ $state = $state.Replace('complete 149-test suite','complete 151-test suite')
 $expected = @{
     'BUILD-CLOUDSCRIBE-WINDOWS.cmd' = '07805f5bf94f03f5130b5fd76f946d87994b68e34cbd56b629421575863888bb'
     'BUILDING-WINDOWS.txt' = '17ada2280a4ebba4b46f70462e54737ca1c09a162f75ceff7fad9ef33dd2175f'
-    'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs' = '1c61178c70ced56d1df665d4433c573e18fd24924a578deb325891831b0f882f'
+    'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs' = '3c6ff20532982f54dbb92ce97b8dddbbeefa9a1154643a4f6415c59c35aaee6b'
     'tools/run_python_regression_shards.py' = 'b667dd6896ca4f82e7b17e46a8af6d998e8699169368b92552354e57e8824925'
     'SESSION_STATE.json' = '6f72a29066b5901707dc1e0b829b98bcbf71829e7ea376635949e1c57e729b1e'
 }
