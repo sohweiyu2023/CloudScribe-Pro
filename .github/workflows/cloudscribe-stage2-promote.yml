@@ -1,0 +1,172 @@
+name: CloudScribe Stage 2 Exact-Byte Promotion
+
+on:
+  push:
+    branches:
+      - cloudscribe-stage2-promotion-carrier
+    paths:
+      - .cloudscribe-ci/PROMOTE_STAGE2.json
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote-exact-stage2:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      GH_TOKEN: ${{ github.token }}
+      CLOUDSCRIBE_NO_OPEN: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+
+      - name: Download and verify exact certified Stage 2 ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $promotion = Get-Content -LiteralPath '.cloudscribe-ci/PROMOTE_STAGE2.json' -Raw | ConvertFrom-Json
+          if ([long]$promotion.certification_run_id -le 0) { throw 'certification_run_id must be positive.' }
+          if ([string]$promotion.expected_zip_sha256 -notmatch '^[0-9a-f]{64}$') { throw 'expected_zip_sha256 must be lowercase SHA-256.' }
+          if ([string]$promotion.certification_head_sha -notmatch '^[0-9a-f]{40}$') { throw 'certification_head_sha must be a full lowercase commit SHA.' }
+
+          $artifactRoot = Join-Path $env:RUNNER_TEMP 'stage2-certified-artifact'
+          Remove-Item -LiteralPath $artifactRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
+          gh run download ([string]$promotion.certification_run_id) --repo $env:GITHUB_REPOSITORY --name 'cloudscribe-0.3.48-final-source-and-material-evidence' --dir $artifactRoot
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download certification artifact from run $($promotion.certification_run_id)." }
+
+          $sourceZip = @(Get-ChildItem -LiteralPath $artifactRoot -Recurse -File -Filter 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress.zip')
+          if ($sourceZip.Count -ne 1) { throw "Expected exactly one certified source ZIP, found $($sourceZip.Count)." }
+          $zip = $sourceZip[0].FullName
+          $actualSha = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha -ne [string]$promotion.expected_zip_sha256) {
+            throw "Certified ZIP SHA mismatch: expected=$($promotion.expected_zip_sha256) actual=$actualSha"
+          }
+          $sidecar = "$zip.sha256"
+          if (-not (Test-Path -LiteralPath $sidecar -PathType Leaf)) { throw 'Certified ZIP checksum sidecar is missing.' }
+          $sidecarText = [IO.File]::ReadAllText($sidecar).Trim()
+          if (-not $sidecarText.StartsWith($actualSha, [StringComparison]::Ordinal)) { throw 'Checksum sidecar does not bind the certified ZIP.' }
+
+          "STAGE2_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "STAGE2_ZIP_SHA=$actualSha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "STAGE2_CERT_RUN=$($promotion.certification_run_id)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "STAGE2_CERT_HEAD=$($promotion.certification_head_sha)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "CERTIFIED_STAGE2_ZIP=PASS run=$($promotion.certification_run_id) sha256=$actualSha"
+
+      - name: Verify source-release contract on exact ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $probe = Join-Path $env:RUNNER_TEMP 'stage2-release-probe'
+          Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $env:STAGE2_ZIP -DestinationPath $probe
+          $root = @(Get-ChildItem -LiteralPath $probe -Directory)
+          if ($root.Count -ne 1) { throw "Expected one source root in ZIP, found $($root.Count)." }
+          & python (Join-Path $root[0].FullName 'tools/verify_source_release.py') $env:STAGE2_ZIP
+          if ($LASTEXITCODE -ne 0) { throw "Exact source-release verifier failed: $LASTEXITCODE" }
+          Write-Host 'EXACT_STAGE2_SOURCE_RELEASE_VERIFY=PASS'
+
+      - name: Exact BUILD-CLOUDSCRIBE-WINDOWS.cmd acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $acceptParent = Join-Path $env:RUNNER_TEMP 'stage2-build-launcher-acceptance'
+          Remove-Item -LiteralPath $acceptParent -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $acceptParent -Force | Out-Null
+          Expand-Archive -LiteralPath $env:STAGE2_ZIP -DestinationPath $acceptParent
+          $root = @(Get-ChildItem -LiteralPath $acceptParent -Directory)
+          if ($root.Count -ne 1) { throw "Expected one source root for build acceptance, found $($root.Count)." }
+          $sourceRoot = $root[0].FullName
+          $manifest = Join-Path $sourceRoot 'SHA256SUMS.txt'
+          $manifestBefore = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
+          $publishScript = Join-Path $sourceRoot 'scripts/publish-stage2-windows.ps1'
+          try {
+            Set-Content -LiteralPath $publishScript -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3" -Encoding ascii
+          }
+          catch {
+            Write-Host "Zone.Identifier simulation unavailable on this filesystem; continuing with launcher policy verification: $($_.Exception.Message)"
+          }
+          Push-Location -LiteralPath $sourceRoot
+          try {
+            & cmd.exe /d /c 'BUILD-CLOUDSCRIBE-WINDOWS.cmd'
+            if ($LASTEXITCODE -ne 0) { throw "BUILD-CLOUDSCRIBE-WINDOWS.cmd failed: $LASTEXITCODE" }
+          }
+          finally { Pop-Location }
+          $out = Join-Path (Split-Path -Parent $sourceRoot) 'CloudScribe-Windows'
+          foreach ($name in @('CloudScribe.exe','CloudScribe.dll','CloudScribe.deps.json','CloudScribe.runtimeconfig.json','appsettings.json','RUN-CLOUDSCRIBE.cmd','BUILD-STATUS.txt')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $out $name) -PathType Leaf)) { throw "Build launcher output missing: $name" }
+          }
+          $manifestAfter = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($manifestAfter -ne $manifestBefore) { throw 'BUILD-CLOUDSCRIBE-WINDOWS.cmd altered source manifest bytes.' }
+          Push-Location -LiteralPath $sourceRoot
+          try {
+            & python tools/update_sha256_manifest.py --check
+            if ($LASTEXITCODE -ne 0) { throw 'Build launcher altered source-controlled bytes.' }
+          }
+          finally { Pop-Location }
+          Write-Host "WINDOWS_BUILD_LAUNCHER_ACCEPTANCE=PASS run=$env:STAGE2_CERT_RUN zip_sha256=$env:STAGE2_ZIP_SHA"
+
+      - name: Promote exact source tree and create Stage 3 starting branch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $cleanParent = Join-Path $env:RUNNER_TEMP 'stage2-promotion-clean'
+          Remove-Item -LiteralPath $cleanParent -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $cleanParent -Force | Out-Null
+          Expand-Archive -LiteralPath $env:STAGE2_ZIP -DestinationPath $cleanParent
+          $roots = @(Get-ChildItem -LiteralPath $cleanParent -Directory)
+          if ($roots.Count -ne 1) { throw "Expected one clean promotion root, found $($roots.Count)." }
+          $sourceRoot = $roots[0].FullName
+          Push-Location -LiteralPath $sourceRoot
+          try {
+            & python tools/update_sha256_manifest.py --check
+            if ($LASTEXITCODE -ne 0) { throw 'Clean promotion source manifest failed before commit.' }
+          }
+          finally { Pop-Location }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config core.autocrlf false
+          git config core.safecrlf true
+          git switch --orphan __cloudscribe_stage2_exact_promotion
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create orphan promotion branch.' }
+          git rm -rf --ignore-unmatch .
+          Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Force | Where-Object { $_.Name -ne '.git' } | Remove-Item -Recurse -Force
+          Copy-Item -Path (Join-Path $sourceRoot '*') -Destination $env:GITHUB_WORKSPACE -Recurse -Force
+          Get-ChildItem -LiteralPath $sourceRoot -Force | Where-Object { $_.Name.StartsWith('.') } | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $env:GITHUB_WORKSPACE -Recurse -Force
+          }
+          Push-Location -LiteralPath $env:GITHUB_WORKSPACE
+          try {
+            & python tools/update_sha256_manifest.py --check
+            if ($LASTEXITCODE -ne 0) { throw 'Promotion workspace differs from exact certified source before commit.' }
+            git add -A
+            git commit -m "Promote CloudScribe 0.3.48 Stage 2 exact certified bytes"
+            if ($LASTEXITCODE -ne 0) { throw 'Promotion commit failed.' }
+            $promotionCommit = (git rev-parse HEAD).Trim()
+            git push --force origin HEAD:refs/heads/cloudscribe-0.3.48-stage2-promoted
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to publish Stage 2 promoted branch.' }
+            git push --force origin HEAD:refs/heads/cloudscribe-0.4.0-stage3
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to publish Stage 3 starting branch.' }
+            & python tools/update_sha256_manifest.py --check
+            if ($LASTEXITCODE -ne 0) { throw 'Promotion commit checkout no longer matches certified source manifest.' }
+            Write-Host "STAGE2_EXACT_BYTE_PROMOTION=PASS commit=$promotionCommit source_run=$env:STAGE2_CERT_RUN source_sha=$env:STAGE2_ZIP_SHA"
+            Write-Host "STAGE3_START_BRANCH=cloudscribe-0.4.0-stage3 commit=$promotionCommit"
+          }
+          finally { Pop-Location }
