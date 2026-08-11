@@ -1,0 +1,47 @@
+name: CloudScribe Stage 2 Focus Carrier Diagnostic
+
+on:
+  push:
+    branches:
+      - cloudscribe-0.3.48-stage2-certification
+
+permissions:
+  contents: read
+
+jobs:
+  focus-carrier:
+    runs-on: windows-2025
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Verify focus repair carrier decoding and immutable patch hash
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          import base64
+          import gzip
+          import hashlib
+          import importlib.util
+          import pathlib
+
+          root = pathlib.Path('.cloudscribe-ci')
+          helper_path = root / 'apply-stage2-focus-acceptance-overlay.py'
+          carrier_path = root / 'apply-stage2-focus-acceptance-overlay.ps1'
+          spec = importlib.util.spec_from_file_location('focus_helper', helper_path)
+          module = importlib.util.module_from_spec(spec)
+          assert spec.loader is not None
+          spec.loader.exec_module(module)
+          text = carrier_path.read_text(encoding='utf-8-sig')
+          encoded = module.extract_payload(text)
+          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          actual = hashlib.sha256(patch).hexdigest()
+          expected = module.EXPECTED_PATCH_SHA256
+          if actual != expected:
+              raise SystemExit(f'patch hash mismatch expected={expected} actual={actual}')
+          print(f'CLOUDSCRIBE_FOCUS_CARRIER_DIAGNOSTIC=PASS chars={len(encoded)} patch_sha256={actual}')
+          '@ | python -
+          if($LASTEXITCODE-ne0){throw "Focus carrier diagnostic failed: $LASTEXITCODE"}
