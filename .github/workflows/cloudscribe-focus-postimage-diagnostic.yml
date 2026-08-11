@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - cloudscribe-0.3.48-focus-postimage-diagnostic
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -37,7 +40,7 @@ jobs:
           $root=Join-Path $extract 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
           $env:FOCUS_DIAG_ROOT=$root
           @'
-          import base64, gzip, hashlib, importlib.util, pathlib, subprocess, tempfile, os, shutil
+          import base64, gzip, hashlib, importlib.util, pathlib, subprocess, tempfile, os
 
           checkout = pathlib.Path.cwd()
           helper_path = checkout / '.cloudscribe-ci' / 'apply-stage2-focus-acceptance-overlay.py'
