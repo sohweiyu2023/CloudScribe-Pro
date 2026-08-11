@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $source = (Resolve-Path -LiteralPath $SourceRoot).Path
-$specialParent = Join-Path $ScratchRoot 'Repeated Download (7) ! literal'
+$specialParent = Join-Path $ScratchRoot 'Repeated Download (7) & ! literal'
 $specialSource = Join-Path $specialParent 'CloudScribe'
 $output = Join-Path $specialParent 'CloudScribe-Windows'
 
