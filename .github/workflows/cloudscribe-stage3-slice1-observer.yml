@@ -3,7 +3,7 @@ name: CloudScribe Stage 3 Slice 1 Carrier Observer
 on:
   pull_request:
     branches:
-      - main
+      - cloudscribe-0.3.48-stage2-promoted
 
 permissions:
   actions: read
