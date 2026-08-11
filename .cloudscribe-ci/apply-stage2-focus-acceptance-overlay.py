@@ -5,12 +5,20 @@ import base64
 import gzip
 import hashlib
 import pathlib
-import re
 import subprocess
 import sys
 import tempfile
 
 EXPECTED_PATCH_SHA256 = "1b7322cc773969e81f6519cbdc901ffd7daa9455928e68d336ceaef50035e4ac"
+EXPECTED_COMPRESSED_SHA256 = "792b2597d743f5e1ede4580c59f86db48ce4b3ec0fd52336bcb0ff7826eafa12"
+PAYLOAD_PARTS = (
+    ("00.txt", "132f109df8c2f714306ae204c4c64db701bf138e546f31ad0f3cf08527e2ee1a"),
+    ("01.txt", "7eebe27c9e4d275336a13e4eecdffed573392352346b640965e0246f8366c181"),
+    ("02.txt", "30d8057694d247ec3d285863b436f2fd7578ff0d42753d0356d0d32dd2eec688"),
+    ("03.txt", "cb96c9859fcf93bba0c331d15a481eeb913a9f4aefb46f56f90e5fbccacda379"),
+    ("04.txt", "b3c304a106e74e755b29fa8efb2480b2113a5babf057d1e498134df4729ec8c2"),
+    ("05.txt", "01934b810766638d5f9784685b02b43059e0a3ebc17a82340af091aefaf3e79d"),
+)
 EXPECTED_FILES = {
     "src/CloudScribe.App/MainWindow.axaml": "146e7395924c757721de6e7e89d0a6f833192c861fd794ed2e64909ec0a9c65d",
     "src/CloudScribe.App/MainWindow.VisualCapture.cs": "d140d1836ee9070149afeafd6dd95c1e1f36deb2d3ab60033741f4b13c0d9a28",
@@ -34,6 +42,27 @@ def sha256_file(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+def assemble_payload(carrier: pathlib.Path) -> str:
+    payload_root = carrier.parent / "stage2-focus-payload"
+    if not payload_root.is_dir():
+        raise RuntimeError(f"Stage 2 focus payload directory is missing: {payload_root}")
+
+    encoded_parts: list[str] = []
+    for name, expected_hash in PAYLOAD_PARTS:
+        part_path = payload_root / name
+        if not part_path.is_file():
+            raise RuntimeError(f"Missing Stage 2 focus repair payload part: {part_path}")
+        part = part_path.read_text(encoding="utf-8-sig").strip()
+        actual_hash = sha256_bytes(part.encode("utf-8"))
+        if actual_hash != expected_hash:
+            raise RuntimeError(
+                f"Stage 2 focus repair payload part hash mismatch for {name}: "
+                f"expected={expected_hash} actual={actual_hash}"
+            )
+        encoded_parts.append(part)
+    return "".join(encoded_parts)
+
+
 def run_git_apply(source_root: pathlib.Path, patch_path: pathlib.Path, *, check: bool) -> None:
     command = ["git", "apply"]
     if check:
@@ -43,29 +72,6 @@ def run_git_apply(source_root: pathlib.Path, patch_path: pathlib.Path, *, check:
     if result.returncode != 0:
         phase = "preflight" if check else "apply"
         raise RuntimeError(f"Stage 2 focus repair patch {phase} failed: {result.returncode}")
-
-
-def extract_payload(carrier_text: str) -> str:
-    # Prefer the explicit PowerShell here-string boundaries. Some checkout/line-ending
-    # combinations have made that boundary expression brittle, so retain a deliberately
-    # narrow fallback that accepts only the single long gzip/base64 token beginning H4sI.
-    match = re.search(
-        r"\$payloadBase64\s*=\s*@'\r?\n(.*?)\r?\n'@",
-        carrier_text,
-        flags=re.DOTALL,
-    )
-    if match is not None:
-        encoded = re.sub(r"\s+", "", match.group(1))
-        if encoded.startswith("H4sI"):
-            return encoded
-
-    candidates = re.findall(r"H4sI[A-Za-z0-9+/=]{1000,}", carrier_text)
-    if len(candidates) != 1:
-        raise RuntimeError(
-            "Stage 2 focus repair payload was not found uniquely in the carrier "
-            f"(candidate_count={len(candidates)} carrier_chars={len(carrier_text)})."
-        )
-    return candidates[0]
 
 
 def main() -> int:
@@ -82,9 +88,15 @@ def main() -> int:
     if not carrier.is_file():
         raise RuntimeError(f"Stage 2 focus repair carrier is missing: {carrier}")
 
-    carrier_text = carrier.read_text(encoding="utf-8-sig")
-    encoded = extract_payload(carrier_text)
+    encoded = assemble_payload(carrier)
     compressed = base64.b64decode(encoded, validate=True)
+    compressed_sha = sha256_bytes(compressed)
+    if compressed_sha != EXPECTED_COMPRESSED_SHA256:
+        raise RuntimeError(
+            "Stage 2 focus repair compressed payload hash mismatch: "
+            f"expected={EXPECTED_COMPRESSED_SHA256} actual={compressed_sha}"
+        )
+
     patch_bytes = gzip.decompress(compressed)
     patch_sha = sha256_bytes(patch_bytes)
     if patch_sha != EXPECTED_PATCH_SHA256:
@@ -116,7 +128,7 @@ def main() -> int:
 
     print(
         "CLOUDSCRIBE_STAGE2_FOCUS_ACCEPTANCE_REPAIR=PASS "
-        f"patch_sha256={patch_sha} transport=python-gzip"
+        f"compressed_sha256={compressed_sha} patch_sha256={patch_sha} transport=python-gzip-parts"
     )
     return 0
 
