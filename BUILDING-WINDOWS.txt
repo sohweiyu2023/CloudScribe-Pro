@@ -62,6 +62,19 @@ Inspect the effective scopes with:
 Do not weaken an organization-managed Group Policy. Use the administrator's
 approved/signed-script path instead.
 
+
+PATH NAMES WITH PARENTHESES / REPEATED DOWNLOADS
+-------------------------------------------------
+The launcher is designed to work when the extracted source is inside an ordinary
+Windows Downloads folder whose name contains parentheses, for example:
+
+    CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress(7)
+
+You should not need to rename the extracted folder just to build CloudScribe.
+The launcher deliberately avoids CMD parenthesized command blocks around paths
+derived from the source directory and keeps delayed expansion disabled so common
+path characters such as parentheses and literal exclamation marks are preserved.
+
 MANUAL COMMAND-LINE ALTERNATIVE
 -------------------------------
 From the extracted source root:
