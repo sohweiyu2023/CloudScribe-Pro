@@ -70,9 +70,10 @@ if ($LASTEXITCODE -ne 0) {
 
 # The focus-fix carrier used by the certified core contains an older Stage 2 source verifier.
 # Re-apply the complete material-tool set after native certification, then apply the Windows
-# source-handoff usability repair (root CMD launcher + guide + regression contracts). Bind all
-# final bytes into SHA256SUMS.txt and run the fast source/material contracts before the outer
-# workflow freezes the ZIP. The subsequent fresh-extracted gate rebuilds/retests these exact bytes.
+# source-handoff usability repair and the real-user pointer/focus editor contrast repair.
+# Bind all final bytes into SHA256SUMS.txt and run the fast source/material contracts before
+# the outer workflow freezes the ZIP. The subsequent fresh-extracted gate rebuilds/retests
+# these exact bytes.
 Install-MaterialTools -Phase 'post-certification final-source overlay'
 $buildLauncherOverlay = Join-Path $PSScriptRoot 'apply-build-launcher-overlay.ps1'
 if (-not (Test-Path -LiteralPath $buildLauncherOverlay -PathType Leaf)) {
@@ -81,6 +82,15 @@ if (-not (Test-Path -LiteralPath $buildLauncherOverlay -PathType Leaf)) {
 & pwsh -NoProfile -ExecutionPolicy Bypass -File $buildLauncherOverlay -SourceRoot $SourceRoot
 if ($LASTEXITCODE -ne 0) {
     throw "Windows build-launcher overlay failed with exit code $LASTEXITCODE."
+}
+
+$focusAcceptanceOverlay = Join-Path $PSScriptRoot 'apply-stage2-focus-acceptance-overlay.ps1'
+if (-not (Test-Path -LiteralPath $focusAcceptanceOverlay -PathType Leaf)) {
+    throw "Stage 2 focus-acceptance overlay is missing: $focusAcceptanceOverlay"
+}
+& pwsh -NoProfile -ExecutionPolicy Bypass -File $focusAcceptanceOverlay -SourceRoot $SourceRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Stage 2 focus-acceptance overlay failed with exit code $LASTEXITCODE."
 }
 
 Push-Location -LiteralPath $SourceRoot
