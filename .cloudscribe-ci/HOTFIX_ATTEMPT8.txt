@@ -1,0 +1,3 @@
+Trigger exact-ZIP Windows acceptance after correcting the special-path regression harness to invoke the .cmd path directly from PowerShell instead of nesting it inside cmd /c quote-stripping semantics.
+Product branch: cloudscribe-0.3.48-stage2-launcher-hotfix
+Do not merge this carrier branch.
