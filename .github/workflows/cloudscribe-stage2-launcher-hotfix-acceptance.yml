@@ -1,0 +1,128 @@
+name: CloudScribe Stage 2 Launcher Hotfix Exact ZIP Acceptance
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  exact-hotfix-acceptance:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      CLOUDSCRIBE_NO_OPEN: '1'
+    steps:
+      - name: Checkout hotfix source only
+        uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-0.3.48-stage2-launcher-hotfix
+          path: target
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+
+      - name: Freeze source manifest and run pre-archive contracts
+        shell: pwsh
+        working-directory: target
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/update_sha256_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw "Manifest update failed: $LASTEXITCODE" }
+          python tools/verify_repository.py
+          if ($LASTEXITCODE -ne 0) { throw "Repository verification failed: $LASTEXITCODE" }
+          python tools/verify_project_dependencies.py
+          if ($LASTEXITCODE -ne 0) { throw "Dependency verification failed: $LASTEXITCODE" }
+          python tools/verify_stage1_source.py
+          if ($LASTEXITCODE -ne 0) { throw "Stage 1 source verification failed: $LASTEXITCODE" }
+          python tools/verify_stage2_source.py
+          if ($LASTEXITCODE -ne 0) { throw "Stage 2 source verification failed: $LASTEXITCODE" }
+          python -B tools/run_verifier_self_tests.py
+          if ($LASTEXITCODE -ne 0) { throw "Verifier self-tests failed: $LASTEXITCODE" }
+          python tools/run_python_regression_shards.py --all
+          if ($LASTEXITCODE -ne 0) { throw "Material regression suite failed: $LASTEXITCODE" }
+
+      - name: Create exact deterministic hotfix ZIP
+        shell: pwsh
+        working-directory: target
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $env:RUNNER_TEMP 'cloudscribe-stage2-launcher-hotfix-release'
+          New-Item -ItemType Directory -Path $release -Force | Out-Null
+          python tools/create_source_archive.py --output-directory $release
+          if ($LASTEXITCODE -ne 0) { throw "Source archive creation failed: $LASTEXITCODE" }
+          $zip = Get-ChildItem -LiteralPath $release -Filter 'CloudScribe_Pro_Source_0.3.48-stage2-launcher-hotfix.zip' -File | Select-Object -First 1
+          if ($null -eq $zip) { throw 'Expected hotfix ZIP was not created.' }
+          $sidecar = Get-Item -LiteralPath ($zip.FullName + '.sha256')
+          $sha = (Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "HOTFIX_ZIP=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "HOTFIX_SIDECAR=$($sidecar.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "HOTFIX_SHA256=$sha" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "CLOUDSCRIBE_HOTFIX_ARCHIVE_CREATED sha256=$sha"
+
+      - name: Verify exact frozen ZIP from clean extraction
+        shell: pwsh
+        working-directory: target
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/verify_source_release.py $env:HOTFIX_ZIP
+          if ($LASTEXITCODE -ne 0) { throw "Exact source-release verifier failed: $LASTEXITCODE" }
+
+      - name: Extract exact ZIP for native Windows certification
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $probe = Join-Path $env:RUNNER_TEMP 'Exact Hotfix Probe'
+          Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $env:HOTFIX_ZIP -DestinationPath $probe
+          $root = Join-Path $probe 'CloudScribe_Pro_Source_0.3.48-stage2-launcher-hotfix'
+          if (-not (Test-Path -LiteralPath (Join-Path $root 'BUILD-CLOUDSCRIBE-WINDOWS.cmd') -PathType Leaf)) { throw 'Exact archive extraction is incomplete.' }
+          "HOTFIX_EXTRACTED_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Run full Stage 2 Windows certification on exact archive bytes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $evidence = Join-Path $env:RUNNER_TEMP 'CloudScribe Hotfix Evidence (7) ! literal'
+          $env:CLOUDSCRIBE_STAGE2_EVIDENCE_DIR = $evidence
+          & pwsh -NoProfile -File (Join-Path $env:HOTFIX_EXTRACTED_ROOT 'scripts/verify-stage2.ps1')
+          if ($LASTEXITCODE -ne 0) { throw "Full Stage 2 verification failed: $LASTEXITCODE" }
+          "HOTFIX_EVIDENCE=$evidence" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Reproduce user-style repeated-download path on exact archive bytes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scratch = Join-Path $env:RUNNER_TEMP 'CloudScribe User Download Regression'
+          & pwsh -NoProfile -File (Join-Path $env:HOTFIX_EXTRACTED_ROOT 'scripts/test-build-launcher-special-paths.ps1') -SourceRoot $env:HOTFIX_EXTRACTED_ROOT -ScratchRoot $scratch
+          if ($LASTEXITCODE -ne 0) { throw "Special-path launcher regression failed: $LASTEXITCODE" }
+          Write-Host "CLOUDSCRIBE_HOTFIX_EXACT_WINDOWS=PASS sha256=$env:HOTFIX_SHA256"
+
+      - name: Recheck exact archive checksum after all gates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $after = (Get-FileHash -LiteralPath $env:HOTFIX_ZIP -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($after -ne $env:HOTFIX_SHA256) { throw "ZIP bytes changed during verification: before=$env:HOTFIX_SHA256 after=$after" }
+          Write-Host "CLOUDSCRIBE_HOTFIX_EXACT_BYTES_FINAL=PASS sha256=$after"
+
+      - name: Upload certified hotfix ZIP and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudscribe-0.3.48-stage2-launcher-hotfix-certified
+          path: |
+            ${{ env.HOTFIX_ZIP }}
+            ${{ env.HOTFIX_SIDECAR }}
+            ${{ env.HOTFIX_EVIDENCE }}
+          if-no-files-found: error
