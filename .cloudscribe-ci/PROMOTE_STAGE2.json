@@ -1,0 +1,7 @@
+{
+  "certification_run_id": 31491660175,
+  "certification_run_number": 267,
+  "certification_head_sha": "befa9d04013cba072e12d23818a6a38c722101b7",
+  "expected_zip_sha256": "d9f395df66498323f025556e954a4631eff9748cb9c91483c92568f969c4f64a",
+  "authorization": "User explicitly requested Stage 2 promotion and asked to proceed without further serial manual-gate blocking; unexecuted OS-level accessibility checks remain transparent deferred hardening items and are not fabricated as PASS."
+}
