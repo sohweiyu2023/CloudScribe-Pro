@@ -1,3 +1,5 @@
-# Keep source-inspection architecture assertions deterministic across Windows and Unix checkouts.
-tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs text eol=lf
-src/CloudScribe.App/ViewModels/ShellViewModel.cs text eol=lf
+# Keep release-source bytes and formatter results deterministic across Windows and Unix checkouts.
+* text=auto eol=lf
+
+# Windows Command Prompt accepts LF, but keep batch launchers in the conventional CRLF form.
+*.cmd text eol=crlf
