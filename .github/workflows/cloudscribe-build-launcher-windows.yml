@@ -1,0 +1,80 @@
+name: CloudScribe 0.3.48 Windows Build Launcher Acceptance
+
+on:
+  workflow_run:
+    workflows: ["CloudScribe 0.3.48 Stage 2 Windows Certification"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  launcher-acceptance:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'cloudscribe-0.3.48-stage2-certification'
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      CLOUDSCRIBE_NO_OPEN: '1'
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+
+      - name: Download exact certified source artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: cloudscribe-0.3.48-final-source-and-material-evidence
+          path: ${{ runner.temp }}/certified-artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify, extract and execute root Windows build launcher
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Set-StrictMode -Version Latest
+          $artifactRoot=Join-Path $env:RUNNER_TEMP 'certified-artifact'
+          $zip=Get-ChildItem -LiteralPath $artifactRoot -Filter 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress.zip' -File -Recurse | Select-Object -First 1
+          if($null -eq $zip){throw 'Certified source ZIP was not found in the downloaded artifact.'}
+          $shaFile=Get-Item -LiteralPath ($zip.FullName + '.sha256') -ErrorAction Stop
+          $expected=((Get-Content -LiteralPath $shaFile.FullName -Raw).Trim().Split(' ')[0]).ToLowerInvariant()
+          $actual=(Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($actual -ne $expected){throw "Certified source ZIP checksum mismatch: expected=$expected actual=$actual"}
+
+          $extract=Join-Path $env:RUNNER_TEMP 'launcher-source'
+          Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $extract
+          $root=Join-Path $extract 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
+          $launcher=Join-Path $root 'BUILD-CLOUDSCRIBE-WINDOWS.cmd'
+          $guide=Join-Path $root 'BUILDING-WINDOWS.txt'
+          $publish=Join-Path $root 'scripts/publish-stage2-windows.ps1'
+          foreach($required in @($launcher,$guide,$publish)){
+            if(-not (Test-Path -LiteralPath $required -PathType Leaf)){throw "Missing build-handoff file: $required"}
+          }
+
+          # Emulate the Internet-zone marker that browser-downloaded ZIP contents can carry.
+          Set-Content -LiteralPath $publish -Stream Zone.Identifier -Value '[ZoneTransfer]','ZoneId=3' -Encoding ascii
+
+          & cmd.exe /d /c "`"$launcher`""
+          if($LASTEXITCODE -ne 0){throw "BUILD-CLOUDSCRIBE-WINDOWS.cmd failed with exit code $LASTEXITCODE"}
+
+          $output=Join-Path (Split-Path -Parent $root) 'CloudScribe-Windows'
+          foreach($name in @('CloudScribe.exe','CloudScribe.dll','CloudScribe.deps.json','CloudScribe.runtimeconfig.json','appsettings.json','RUN-CLOUDSCRIBE.cmd','BUILD-STATUS.txt')){
+            if(-not (Test-Path -LiteralPath (Join-Path $output $name) -PathType Leaf)){throw "Launcher output is missing $name"}
+          }
+
+          Push-Location -LiteralPath $root
+          try{
+            python tools/update_sha256_manifest.py --check
+            if($LASTEXITCODE -ne 0){throw 'Source manifest changed during launcher acceptance.'}
+          } finally { Pop-Location }
+          Write-Host "WINDOWS_BUILD_LAUNCHER_ACCEPTANCE=PASS zip_sha256=$actual"
