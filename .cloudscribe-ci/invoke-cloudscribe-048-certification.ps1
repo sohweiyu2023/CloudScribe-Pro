@@ -152,6 +152,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "Stage 2 bounded-process race-fix overlay failed with exit code $LASTEXITCODE."
 }
 
+# The user's real Windows click test on the audit-final ZIP still exposed Fluent's focused
+# TextBox template background. Replace the paper editor's actual template surface with a
+# dedicated PART_PaperSurface so Fluent's PART_BorderElement focus selector cannot recolor
+# the document surface. This overlay also strengthens architecture/source/material contracts
+# and visual capture so the regression follows the real rendered surface.
+$realClickFocusTemplateFix = Join-Path $PSScriptRoot 'apply-stage2-real-click-focus-template-fix.py'
+if (-not (Test-Path -LiteralPath $realClickFocusTemplateFix -PathType Leaf)) {
+    throw "Stage 2 real-click focus template fix overlay is missing: $realClickFocusTemplateFix"
+}
+& python $realClickFocusTemplateFix --source-root $SourceRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Stage 2 real-click focus template fix overlay failed with exit code $LASTEXITCODE."
+}
+
 Push-Location -LiteralPath $SourceRoot
 try {
     & python tools/update_sha256_manifest.py
