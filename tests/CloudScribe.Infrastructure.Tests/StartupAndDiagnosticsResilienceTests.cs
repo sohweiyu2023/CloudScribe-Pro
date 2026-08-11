@@ -199,15 +199,19 @@ public sealed class StartupAndDiagnosticsResilienceTests
                 TestContext.Current.CancellationToken);
             Directory.CreateDirectory(Path.Combine(paths.DiagnosticsDirectory, "build"));
 
-            using BoundedJsonFileLoggerProvider provider = new(paths, Options.Create(options), TimeProvider.System);
-            WriteTestInformation(provider.CreateLogger("test"), "metadata entries remain outside the JSONL cap", null);
-            for (int attempt = 0; attempt < 100 && !File.Exists(provider.CurrentLogPath); attempt++)
+            string currentLogPath;
+            bool providerWasAvailable;
+            using (BoundedJsonFileLoggerProvider provider = new(paths, Options.Create(options), TimeProvider.System))
             {
-                await Task.Delay(10, TestContext.Current.CancellationToken);
+                WriteTestInformation(provider.CreateLogger("test"), "metadata entries remain outside the JSONL cap", null);
+                currentLogPath = provider.CurrentLogPath;
+                providerWasAvailable = provider.IsAvailable;
             }
 
-            Assert.True(provider.IsAvailable);
-            Assert.True(File.Exists(provider.CurrentLogPath));
+            // Disposal is the provider's committed-record boundary. Inspecting the asynchronous
+            // writer before disposal made this retention-policy test depend on runner scheduling.
+            Assert.True(providerWasAvailable);
+            Assert.True(File.Exists(currentLogPath));
             Assert.Single(new DirectoryInfo(paths.DiagnosticsDirectory).GetFiles("cloudscribe-*.jsonl"));
         }
         finally
