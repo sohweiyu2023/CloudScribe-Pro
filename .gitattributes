@@ -1,2 +1,3 @@
-# Keep the source-inspection architecture test deterministic across Windows and Unix checkouts.
+# Keep source-inspection architecture assertions deterministic across Windows and Unix checkouts.
 tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs text eol=lf
+src/CloudScribe.App/ViewModels/ShellViewModel.cs text eol=lf
