@@ -138,6 +138,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "Stage 2 adversarial-audit hardening overlay failed with exit code $LASTEXITCODE."
 }
 
+# The exact-ZIP acceptance audit then exposed a real Windows timing defect in the bounded
+# verifier runner: a tiny successful child could exit after CreateProcess but before
+# AssignProcessToJobObject, which Windows reports as ERROR_ACCESS_DENIED. That terminal child
+# is already bounded; accept only that completed-process case while continuing to fail closed
+# for a still-running child that cannot be assigned. Stress the fast-success path repeatedly.
+$boundedProcessRaceFix = Join-Path $PSScriptRoot 'apply-stage2-bounded-process-race-fix.py'
+if (-not (Test-Path -LiteralPath $boundedProcessRaceFix -PathType Leaf)) {
+    throw "Stage 2 bounded-process race-fix overlay is missing: $boundedProcessRaceFix"
+}
+& python $boundedProcessRaceFix --source-root $SourceRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Stage 2 bounded-process race-fix overlay failed with exit code $LASTEXITCODE."
+}
+
 Push-Location -LiteralPath $SourceRoot
 try {
     & python tools/update_sha256_manifest.py
