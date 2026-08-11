@@ -45,6 +45,29 @@ def run_git_apply(source_root: pathlib.Path, patch_path: pathlib.Path, *, check:
         raise RuntimeError(f"Stage 2 focus repair patch {phase} failed: {result.returncode}")
 
 
+def extract_payload(carrier_text: str) -> str:
+    # Prefer the explicit PowerShell here-string boundaries. Some checkout/line-ending
+    # combinations have made that boundary expression brittle, so retain a deliberately
+    # narrow fallback that accepts only the single long gzip/base64 token beginning H4sI.
+    match = re.search(
+        r"\$payloadBase64\s*=\s*@'\r?\n(.*?)\r?\n'@",
+        carrier_text,
+        flags=re.DOTALL,
+    )
+    if match is not None:
+        encoded = re.sub(r"\s+", "", match.group(1))
+        if encoded.startswith("H4sI"):
+            return encoded
+
+    candidates = re.findall(r"H4sI[A-Za-z0-9+/=]{1000,}", carrier_text)
+    if len(candidates) != 1:
+        raise RuntimeError(
+            "Stage 2 focus repair payload was not found uniquely in the carrier "
+            f"(candidate_count={len(candidates)} carrier_chars={len(carrier_text)})."
+        )
+    return candidates[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", required=True)
@@ -60,15 +83,7 @@ def main() -> int:
         raise RuntimeError(f"Stage 2 focus repair carrier is missing: {carrier}")
 
     carrier_text = carrier.read_text(encoding="utf-8-sig")
-    match = re.search(
-        r"\$payloadBase64\s*=\s*@'\s*(.*?)\s*'@",
-        carrier_text,
-        flags=re.DOTALL,
-    )
-    if match is None:
-        raise RuntimeError("Stage 2 focus repair payload was not found in the carrier.")
-
-    encoded = re.sub(r"\s+", "", match.group(1))
+    encoded = extract_payload(carrier_text)
     compressed = base64.b64decode(encoded, validate=True)
     patch_bytes = gzip.decompress(compressed)
     patch_sha = sha256_bytes(patch_bytes)
