@@ -1,10 +1,10 @@
 {
   "project": "CloudScribe Pro",
-  "repository_version": "0.3.48-stage2-repair-in-progress",
-  "generated_at_utc": "2026-08-11T04:20:00Z",
+  "repository_version": "0.3.48-stage2-launcher-hotfix",
+  "generated_at_utc": "2026-08-11T13:56:00Z",
   "current_stage": 2,
   "stage_title": "Cosmic Studio Design System and Adaptive Application Shell",
-  "status": "Stage 2 focus/readability repair and automated/native Windows engineering verification are complete for the repaired product state. The 2026-08-11 adversarial re-audit also repaired the auxiliary Python verifier test suite, exact SDK policy and controlling-context metadata. Promotion remains blocked only on real-user/manual visual acceptance and OS-level accessibility acceptance; a fresh exact-byte Windows recertification is required after these source-only audit hardening changes.",
+  "status": "Stage 2 product checkpoint was promoted externally; this source handoff is a packaging-only Windows build-launcher compatibility hotfix that removes CMD parenthesized-block path parsing hazards for ordinary Downloads names such as (7). Product/editor bytes are unchanged from the promoted Stage 2 checkpoint; certification evidence remains external to the source snapshot.",
   "controlling_package_version": "2.22",
   "blueprint_version": "2.22",
   "pricing_schema_version": "1.1.5",
@@ -53,7 +53,7 @@
   "controlling_context_self_contained": false,
   "controlling_context_manifest": null,
   "immutable_master_package_present": false,
-  "previous_artifact_sha256": "314a7d1f693068b790053c68437922bef25850ca55bb05bc74021fecf24b6e04",
+  "previous_artifact_sha256": "d9f395df66498323f025556e954a4631eff9748cb9c91483c92568f969c4f64a",
   "legacy_source_sha256": "4d16a1a33eaba6ab4da88edb9ecbb307a8e0a5943a339ae6db2cab7fe71daa4a",
   "legacy_git_head": "75ec46f5f817588ca16cff08279f6d233223646e",
   "legacy_reuse_decision": "clean rebuild reaffirmed; selective porting test-gated",
@@ -73,5 +73,6 @@
   "stage2_manual_visual_acceptance": false,
   "stage2_manual_accessibility_acceptance": false,
   "stage2_user_clicked_editor_retest": false,
-  "stage2_python_verifier_self_tests": "maintained auxiliary Python verifier suite is part of the certification wrapper and source-release verification; it exercises package-scan validation, manifests, PNG evidence parsing, physical-path and bounded-process defenses, exact SDK/MSBuild policy, repository/session truthfulness, Stage 2 source mutations, evidence inventory and deterministic archive publication"
+  "stage2_python_verifier_self_tests": "maintained auxiliary Python verifier suite is part of the certification wrapper and source-release verification; it exercises package-scan validation, manifests, PNG evidence parsing, physical-path and bounded-process defenses, exact SDK/MSBuild policy, repository/session truthfulness, Stage 2 source mutations, evidence inventory and deterministic archive publication",
+  "stage2_launcher_hotfix": "BUILD-CLOUDSCRIBE-WINDOWS.cmd avoids parenthesized command blocks around source-derived paths, keeps delayed expansion disabled, and has a dedicated Windows regression that executes from a repeated-download path containing parentheses and a literal exclamation mark."
 }
