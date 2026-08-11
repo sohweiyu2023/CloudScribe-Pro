@@ -1,0 +1,1040 @@
+<Window
+    x:Class="CloudScribe.App.MainWindow"
+    x:DataType="vm:ShellViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:design="using:CloudScribe.App.Design"
+    xmlns:input="using:CloudScribe.App.Input"
+    xmlns:controls="using:CloudScribe.App.Controls"
+    xmlns:nav="using:CloudScribe.App.Navigation"
+    xmlns:vm="using:CloudScribe.App.ViewModels"
+    Title="CloudScribe Pro"
+    Width="1360"
+    Height="820"
+    MinWidth="480"
+    MinHeight="520"
+    Background="{DynamicResource Brush.ShellGradient}"
+    Classes.reduced-motion="{Binding ReducedMotionEnabled}"
+    Classes.high-contrast="{Binding IsHighContrastTheme}"
+    ExtendClientAreaToDecorationsHint="True"
+    ExtendClientAreaTitleBarHeightHint="-1"
+    WindowStartupLocation="CenterScreen"
+    WindowDecorations="None">
+
+  <Window.Resources>
+    <design:GeometryPathConverter x:Key="GeometryPathConverter" />
+
+    <!-- Fluent TextBox recolors its private PART_BorderElement when focused.
+         The paper editor therefore owns its actual template surface instead of
+         competing with Fluent state selectors. The renamed PART_PaperSurface
+         cannot be recolored by Fluent's PART_BorderElement focus rule. -->
+    <ControlTheme
+        x:Key="PaperTextBoxTheme"
+        TargetType="controls:PaperTextBox"
+        BasedOn="{StaticResource {x:Type TextBox}}">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+      <Setter Property="CaretBrush" Value="{DynamicResource Brush.Ink}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Selection}" />
+      <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Brush.Ink}" />
+      <Setter Property="PlaceholderForeground" Value="{DynamicResource Brush.InkMuted}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+      <Setter Property="Template">
+        <ControlTemplate TargetType="controls:PaperTextBox">
+          <Border
+              Name="PART_PaperSurface"
+              Background="{TemplateBinding Background}"
+              BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="{TemplateBinding BorderThickness}"
+              CornerRadius="{TemplateBinding CornerRadius}"
+              MinWidth="{TemplateBinding MinWidth}"
+              MinHeight="{TemplateBinding MinHeight}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+              <ContentPresenter
+                  Grid.Column="0"
+                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                  Content="{TemplateBinding InnerLeftContent}" />
+              <DockPanel
+                  x:Name="PART_InnerDockPanel"
+                  Grid.Column="1"
+                  Margin="{TemplateBinding Padding}">
+                <TextBlock
+                    Name="PART_FloatingPlaceholder"
+                    Foreground="{TemplateBinding PlaceholderForeground}"
+                    IsVisible="False"
+                    Text="{TemplateBinding PlaceholderText}"
+                    DockPanel.Dock="Top" />
+                <ScrollViewer
+                    Name="PART_ScrollViewer"
+                    HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                    VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}"
+                    IsScrollChainingEnabled="{TemplateBinding (ScrollViewer.IsScrollChainingEnabled)}"
+                    AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
+                    BringIntoViewOnFocusChange="{TemplateBinding (ScrollViewer.BringIntoViewOnFocusChange)}">
+                  <Panel>
+                    <TextBlock
+                        Name="PART_Placeholder"
+                        Foreground="{TemplateBinding PlaceholderForeground}"
+                        Text="{TemplateBinding PlaceholderText}"
+                        TextAlignment="{TemplateBinding TextAlignment}"
+                        TextWrapping="{TemplateBinding TextWrapping}"
+                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                      <TextBlock.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                          <Binding ElementName="PART_TextPresenter" Path="PreeditText" Converter="{x:Static StringConverters.IsNullOrEmpty}" />
+                          <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="Text" Converter="{x:Static StringConverters.IsNullOrEmpty}" />
+                        </MultiBinding>
+                      </TextBlock.IsVisible>
+                    </TextBlock>
+                    <TextPresenter
+                        Name="PART_TextPresenter"
+                        Text="{TemplateBinding Text, Mode=TwoWay}"
+                        CaretBlinkInterval="{TemplateBinding CaretBlinkInterval}"
+                        CaretIndex="{TemplateBinding CaretIndex}"
+                        SelectionStart="{TemplateBinding SelectionStart}"
+                        SelectionEnd="{TemplateBinding SelectionEnd}"
+                        TextAlignment="{TemplateBinding TextAlignment}"
+                        TextWrapping="{TemplateBinding TextWrapping}"
+                        LineHeight="{TemplateBinding LineHeight}"
+                        LetterSpacing="{TemplateBinding LetterSpacing}"
+                        PasswordChar="{TemplateBinding PasswordChar}"
+                        RevealPassword="{TemplateBinding RevealPassword}"
+                        SelectionBrush="{TemplateBinding SelectionBrush}"
+                        SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                        CaretBrush="{TemplateBinding CaretBrush}"
+                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                  </Panel>
+                  <ScrollViewer.Styles>
+                    <Style Selector="ScrollContentPresenter#PART_ContentPresenter">
+                      <Setter Property="Cursor" Value="IBeam" />
+                    </Style>
+                  </ScrollViewer.Styles>
+                </ScrollViewer>
+              </DockPanel>
+              <ContentPresenter
+                  Grid.Column="2"
+                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                  Content="{TemplateBinding InnerRightContent}" />
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+
+      <Style Selector="^ /template/ Border#PART_PaperSurface">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+      </Style>
+      <Style Selector="^:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+        <Style Selector="^ /template/ Border#PART_PaperSurface">
+          <Setter Property="Background" Value="Transparent" />
+          <Setter Property="BorderBrush" Value="{DynamicResource Brush.PaperBorder}" />
+          <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+      </Style>
+      <Style Selector="^:focus">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Brush.Ink}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Selection}" />
+        <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Brush.Ink}" />
+        <Setter Property="PlaceholderForeground" Value="{DynamicResource Brush.InkMuted}" />
+        <Style Selector="^ /template/ Border#PART_PaperSurface">
+          <Setter Property="Background" Value="Transparent" />
+          <Setter Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
+          <Setter Property="BorderThickness" Value="0,0,0,3" />
+        </Style>
+      </Style>
+      <Style Selector="^:disabled">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.InkMuted}" />
+        <Style Selector="^ /template/ Border#PART_PaperSurface">
+          <Setter Property="Background" Value="Transparent" />
+          <Setter Property="BorderBrush" Value="Transparent" />
+          <Setter Property="BorderThickness" Value="0" />
+        </Style>
+      </Style>
+      <Style Selector="^[IsReadOnly=True]">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.InkMuted}" />
+        <Style Selector="^ /template/ Border#PART_PaperSurface">
+          <Setter Property="Background" Value="Transparent" />
+          <Setter Property="BorderBrush" Value="Transparent" />
+          <Setter Property="BorderThickness" Value="0" />
+        </Style>
+      </Style>
+    </ControlTheme>
+  </Window.Resources>
+
+  <Grid Background="{DynamicResource Brush.ShellGradient}">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="{Binding CommandBarRowHeight}" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="{Binding PlayerRowHeight}" />
+      <RowDefinition Height="{Binding StatusRowHeight}" />
+    </Grid.RowDefinitions>
+
+    <!-- Atmospheric depth is semantic, non-interactive and absent in high contrast. -->
+    <Ellipse
+        Grid.RowSpan="5"
+        Width="760"
+        Height="760"
+        Margin="-280,-360,0,0"
+        HorizontalAlignment="Left"
+        VerticalAlignment="Top"
+        Fill="{DynamicResource Brush.AmbientViolet}"
+        IsVisible="{Binding DecorativeEffectsEnabled}"
+        IsHitTestVisible="False">
+      <Ellipse.Effect>
+        <BlurEffect Radius="120" />
+      </Ellipse.Effect>
+    </Ellipse>
+    <Ellipse
+        Grid.RowSpan="5"
+        Width="620"
+        Height="620"
+        Margin="0,160,-260,0"
+        HorizontalAlignment="Right"
+        VerticalAlignment="Center"
+        Fill="{DynamicResource Brush.AmbientBlue}"
+        IsVisible="{Binding DecorativeEffectsEnabled}"
+        IsHitTestVisible="False">
+      <Ellipse.Effect>
+        <BlurEffect Radius="110" />
+      </Ellipse.Effect>
+    </Ellipse>
+
+    <!-- Correct custom title bar. -->
+    <Border
+        x:Name="TitleBarDragRegion"
+        Grid.Row="0"
+        Background="Transparent"
+        BorderBrush="{DynamicResource Brush.BorderSubtle}"
+        BorderThickness="0,0,0,1"
+        MinHeight="58"
+        WindowDecorationProperties.ElementRole="TitleBar">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" Margin="20,0" VerticalAlignment="Center">
+          <Border Width="36" Height="36" CornerRadius="12" Background="{DynamicResource Brush.PrimaryGradient}" BoxShadow="{DynamicResource Elevation.Control}">
+            <PathIcon Data="M12,1 L14.2,9.8 L23,12 L14.2,14.2 L12,23 L9.8,14.2 L1,12 L9.8,9.8 Z" Foreground="{DynamicResource Brush.PrimaryText}" Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <StackPanel Spacing="0" VerticalAlignment="Center" IsVisible="{Binding ShowChromeSurfaces}">
+            <TextBlock Text="CloudScribe Pro" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Navigation}" />
+            <TextBlock Text="COSMIC STUDIO" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+          </StackPanel>
+          <Border Background="{DynamicResource Brush.SurfaceInset}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="10" Padding="10,5" IsVisible="{Binding IsFullLayout}">
+            <TextBlock Text="{Binding BuildLabel}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" VerticalAlignment="Center" />
+          </Border>
+        </StackPanel>
+
+        <StackPanel
+            Grid.Column="1"
+            Orientation="Horizontal"
+            Spacing="10"
+            IsVisible="{Binding IsFocusReading}"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+          <TextBlock
+              Text="FOCUS READING"
+              Foreground="{DynamicResource Brush.PrimaryBright}"
+              FontWeight="Bold"
+              FontSize="{DynamicResource Typography.Meta}"
+              VerticalAlignment="Center"
+              IsVisible="{Binding IsFullLayout}" />
+          <Button
+              Classes="ghost compact"
+              Content="Exit"
+              Command="{Binding ToggleFocusReadingCommand}"
+              AutomationProperties.Name="Exit Focus Reading"
+              WindowDecorationProperties.ElementRole="User" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal">
+          <Button Classes="window-command" Click="OnMinimizeClick" AutomationProperties.Name="Minimize window" ToolTip.Tip="Minimize" WindowDecorationProperties.ElementRole="MinimizeButton">
+            <PathIcon Data="M4,11 L20,11 L20,13 L4,13 Z" Width="12" Height="12" />
+          </Button>
+          <Button Classes="window-command" Click="OnMaximizeRestoreClick" AutomationProperties.Name="Maximize or restore window" ToolTip.Tip="Maximize or restore" WindowDecorationProperties.ElementRole="MaximizeButton">
+            <PathIcon Data="M4,4 L20,4 L20,7 L7,7 L7,20 L4,20 Z M17,7 L20,7 L20,20 L7,20 L7,17 L17,17 Z" Width="12" Height="12" />
+          </Button>
+          <Button Classes="window-command close" Click="OnCloseClick" AutomationProperties.Name="Close window" ToolTip.Tip="Close" WindowDecorationProperties.ElementRole="CloseButton">
+            <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="12" Height="12" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Command surface. -->
+    <Border
+        x:Name="CommandSurface"
+        Grid.Row="1"
+        IsVisible="{Binding ShowChromeSurfaces}"
+        IsEnabled="{Binding IsPrimaryContentInteractionEnabled}"
+        MinHeight="68"
+        Margin="20,10,20,12"
+        Background="{DynamicResource Brush.CommandGradient}"
+        BorderBrush="{DynamicResource Brush.BorderSubtle}"
+        BorderThickness="1"
+        CornerRadius="{DynamicResource Radius.Panel}"
+        Padding="16,10"
+        BoxShadow="{DynamicResource Elevation.Panel}">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+          <Button
+              x:Name="NavigationDrawerButton"
+              Classes="ghost icon-button"
+              Command="{Binding ToggleNavigationDrawerCommand}"
+              IsVisible="{Binding ShowMobileNavigationButton}"
+              ToolTip.Tip="Navigation"
+              AutomationProperties.Name="Open navigation">
+            <PathIcon Data="M3,5 L21,5 L21,8 L3,8 Z M3,10.5 L21,10.5 L21,13.5 L3,13.5 Z M3,16 L21,16 L21,19 L3,19 Z" Width="18" Height="18" />
+          </Button>
+          <Button
+              x:Name="OutlineDrawerButton"
+              Classes="ghost icon-button"
+              Command="{Binding ToggleOutlineDrawerCommand}"
+              IsVisible="{Binding ShowOutlineButton}"
+              ToolTip.Tip="Document outline"
+              AutomationProperties.Name="Open document outline">
+            <PathIcon Data="M3,4 L6,4 L6,7 L3,7 Z M8,4 L21,4 L21,7 L8,7 Z M3,10.5 L6,10.5 L6,13.5 L3,13.5 Z M8,10.5 L21,10.5 L21,13.5 L8,13.5 Z M3,17 L6,17 L6,20 L3,20 Z M8,17 L21,17 L21,20 L8,20 Z" Width="18" Height="18" />
+          </Button>
+          <Button
+              x:Name="InspectorDrawerButton"
+              Classes="ghost"
+              Command="{Binding ToggleInspectorDrawerCommand}"
+              IsVisible="{Binding ShowInspectorButton}"
+              ToolTip.Tip="Workspace inspector"
+              AutomationProperties.Name="Open workspace inspector">
+            <PathIcon Data="M3,3 L21,3 L21,21 L3,21 Z M6,6 L11,6 L11,18 L6,18 Z M14,6 L18,6 L18,9 L14,9 Z M14,12 L18,12 L18,15 L14,15 Z" Width="18" Height="18" />
+          </Button>
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center" MinWidth="0">
+          <TextBlock Text="{Binding CurrentPage.Eyebrow}" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+          <TextBlock Text="{Binding CommandContextTitle}" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Large}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+          <ComboBox
+              Width="154"
+              ItemsSource="{Binding ThemeOptions}"
+              SelectedItem="{Binding SelectedThemeOption, Mode=TwoWay}"
+              IsVisible="{Binding IsFullLayout}"
+              AutomationProperties.Name="Theme">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="design:ThemeOption">
+                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <Button Classes="secondary" Content="Focus" Command="{Binding ToggleFocusReadingCommand}" IsVisible="{Binding CanUseFocusReading}" Margin="0,0,2,0" AutomationProperties.Name="Toggle Focus Reading" />
+          <StackPanel
+              x:Name="GenerationCommandPreview"
+              Orientation="Horizontal"
+              Spacing="8"
+              IsVisible="{Binding FeatureAvailability.ShowGenerationCommands}">
+            <Button
+                Classes="secondary"
+                IsEnabled="False"
+                ToolTip.Tip="Estimate becomes available after the trusted pricing and capability foundation is implemented in Stage 4."
+                ToolTip.ShowOnDisabled="True"
+                AutomationProperties.Name="Estimate unavailable until Stage 4">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <PathIcon Data="M12,2 L22,12 L12,22 L2,12 Z M10.5,8 L13.5,8 L13.5,16 L10.5,16 Z" Width="16" Height="16" />
+                <TextBlock Text="Estimate" IsVisible="{Binding IsFullLayout}" />
+              </StackPanel>
+            </Button>
+            <Button
+                Classes="primary"
+                IsEnabled="False"
+                ToolTip.Tip="Generate becomes available after pricing approval and the durable generation engine are implemented."
+                ToolTip.ShowOnDisabled="True"
+                AutomationProperties.Name="Generate unavailable until Stage 5">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <PathIcon Data="M6,3 L21,12 L6,21 Z" Width="16" Height="16" />
+                <TextBlock Text="Generate" IsVisible="{Binding IsFullLayout}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Adaptive production workspace. The editor instance never changes. -->
+    <Border
+        x:Name="PrimaryWorkspace"
+        Grid.Row="2"
+        Margin="20,0,20,12"
+        Background="{DynamicResource Brush.SurfaceInset}"
+        BorderBrush="{DynamicResource Brush.BorderSubtle}"
+        BorderThickness="1"
+        CornerRadius="{DynamicResource Radius.Workspace}"
+        BoxShadow="{DynamicResource Elevation.Panel}"
+        ClipToBounds="True"
+        IsEnabled="{Binding IsPrimaryContentInteractionEnabled}">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+      <Border
+          Grid.Column="0"
+          Width="92"
+          IsVisible="{Binding ShowNavigationRail}"
+          Background="{DynamicResource Brush.PanelGradient}"
+          BorderBrush="{DynamicResource Brush.BorderSubtle}"
+          BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="Auto,*,Auto" Margin="8,16">
+          <Border Width="36" Height="4" CornerRadius="2" Background="{DynamicResource Brush.PrimaryGradient}" HorizontalAlignment="Center" Margin="0,0,0,10" />
+          <ListBox
+              x:Name="NavigationRailList"
+              Grid.Row="1"
+              Classes="navigation-rail"
+              ItemsSource="{Binding NavigationItems}"
+              SelectedItem="{Binding SelectedNavigationItem, Mode=TwoWay}"
+              Background="Transparent"
+              BorderThickness="0"
+              AutomationProperties.Name="CloudScribe navigation rail">
+            <ListBox.Styles>
+              <Style Selector="ListBoxItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+              </Style>
+            </ListBox.Styles>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="nav:NavigationItem">
+                <Grid RowDefinitions="Auto,Auto" Margin="2,5" ToolTip.Tip="{Binding AccessibleName}">
+                  <PathIcon Classes="nav-icon" Data="{Binding IconPath, Converter={StaticResource GeometryPathConverter}}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" Width="19" Height="19" HorizontalAlignment="Center" />
+                  <TextBlock Classes="nav-label" Grid.Row="1" Text="{Binding Label}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Caption}" HorizontalAlignment="Stretch" TextAlignment="Center" TextWrapping="Wrap" MaxLines="2" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <Button Grid.Row="2" Classes="ghost icon-button" Command="{Binding ToggleShortcutGuideCommand}" ToolTip.Tip="Keyboard shortcuts" AutomationProperties.Name="Open keyboard shortcuts">
+            <PathIcon Data="M10.5,4 L13.5,4 L13.5,7 L10.5,7 Z M10.5,9 L13.5,9 L13.5,20 L10.5,20 Z" Width="17" Height="17" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <Border
+          Grid.Column="1"
+          Width="260"
+          IsVisible="{Binding ShowOutlinePanel}"
+          Background="{DynamicResource Brush.PanelGradient}"
+          BorderBrush="{DynamicResource Brush.BorderSubtle}"
+          BorderThickness="0,0,1,0"
+          Padding="20">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel MinWidth="0">
+              <TextBlock Text="DOCUMENT MAP" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+              <TextBlock Text="Outline" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.SectionTitle}" FontWeight="SemiBold" />
+            </StackPanel>
+            <Border Grid.Column="1" Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1" CornerRadius="9" Padding="8,4" VerticalAlignment="Center">
+              <TextBlock Text="5 SECTIONS" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+            </Border>
+          </Grid>
+          <ListBox
+              x:Name="OutlinePanelList"
+              Grid.Row="1"
+              Classes="outline-list"
+              ItemsSource="{Binding OutlineEntries}"
+              SelectedIndex="{Binding SelectedOutlineIndex, Mode=TwoWay}"
+              Background="Transparent"
+              BorderThickness="0"
+              AutomationProperties.Name="Document outline">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:OutlineEntryViewModel">
+                <Grid ColumnDefinitions="*,Auto" Margin="3,7">
+                  <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Brush.TextOnDark}" TextWrapping="Wrap" MaxLines="3" MinWidth="0" />
+                  <Border Grid.Column="1" Margin="8,0,0,0" Background="{DynamicResource Brush.SurfaceInset}" CornerRadius="7" Padding="6,3" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding RangeLabel}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
+                  </Border>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <Border Grid.Row="2" Background="{DynamicResource Brush.PaperWarm}" BorderBrush="{DynamicResource Brush.PaperBorder}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+            <StackPanel Spacing="4">
+              <TextBlock Text="STAGE 2 PREVIEW" Foreground="{DynamicResource Brush.WarningOnPaper}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+              <TextBlock Text="Edits are temporary until Stage 3 durable documents and autosave are implemented." Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Meta}" />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Column="2" Background="{DynamicResource Brush.SurfaceInset}">
+        <Ellipse
+            Width="520"
+            Height="280"
+            Margin="0,-170,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            Fill="{DynamicResource Brush.AmbientBlue}"
+            IsVisible="{Binding DecorativeEffectsEnabled}"
+            IsHitTestVisible="False">
+          <Ellipse.Effect>
+            <BlurEffect Radius="90" />
+          </Ellipse.Effect>
+        </Ellipse>
+        <!-- Studio workspace. -->
+        <ScrollViewer
+            x:Name="WorkspaceScrollViewer"
+            IsVisible="{Binding IsStudioSelected}"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto"
+            Padding="28,26,28,34">
+          <Grid
+              MaxWidth="{Binding EditorMaximumWidth}"
+              MinWidth="0"
+              HorizontalAlignment="Center">
+            <Border
+                x:Name="DocumentWorkspace"
+                IsVisible="{Binding IsDocumentWorkspaceVisible}"
+                Background="{DynamicResource Brush.DocumentGradient}"
+                BorderBrush="{DynamicResource Brush.PaperBorder}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Workspace}"
+                Padding="{DynamicResource Spacing.Workspace}"
+                BoxShadow="{DynamicResource Elevation.Workspace}">
+              <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="18">
+                <Border
+                    Grid.Row="0"
+                    Width="76"
+                    Height="4"
+                    Background="{DynamicResource Brush.PrimaryGradient}"
+                    CornerRadius="2"
+                    HorizontalAlignment="Left"
+                    Margin="0,0,0,2" />
+                <Border
+                    Grid.Row="1"
+                    IsVisible="{Binding IsLifecycleBannerVisible}"
+                    Background="{DynamicResource Brush.PaperWarm}"
+                    BorderBrush="{DynamicResource Brush.Warning}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="14">
+                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <Border Width="38" Height="38" CornerRadius="13" Background="{DynamicResource Brush.PrimaryGradient}">
+                      <TextBlock Text="!" Foreground="{DynamicResource Brush.PrimaryText}" FontWeight="Bold" FontSize="{DynamicResource Typography.Large}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="2" MinWidth="0">
+                      <TextBlock Text="{Binding LifecycleLabel}" Foreground="{DynamicResource Brush.WarningOnPaper}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                      <TextBlock Text="{Binding LifecycleTitle}" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding LifecycleDescription}" Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+
+                <StackPanel Grid.Row="2" Spacing="9">
+                  <TextBlock Text="CLOUDSCRIBE · LOCAL WORKING DOCUMENT" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                  <controls:PaperTextBox
+                      Classes="document-title"
+                      Theme="{StaticResource PaperTextBoxTheme}"
+                      Text="{Binding DocumentTitle, Mode=TwoWay}"
+                      AutomationProperties.Name="Document title" />
+                  <Border Height="1" Background="{DynamicResource Brush.PaperBorder}" />
+                </StackPanel>
+
+                <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <TextBlock Text="{Binding DocumentMetricLabel}" Foreground="{DynamicResource Brush.InkMuted}" FontSize="{DynamicResource Typography.Small}" TextWrapping="Wrap" />
+                  <Border Grid.Column="1" Background="{DynamicResource Brush.PaperInset}" BorderBrush="{DynamicResource Brush.PaperBorder}" BorderThickness="1" CornerRadius="8" Padding="8,4" VerticalAlignment="Top">
+                    <TextBlock Text="UNSAVED PREVIEW" Foreground="{DynamicResource Brush.WarningOnPaper}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                  </Border>
+                </Grid>
+
+                <controls:PaperTextBox
+                    x:Name="DocumentEditor"
+                    Grid.Row="4"
+                    Classes="editor"
+                    Theme="{StaticResource PaperTextBoxTheme}"
+                    Text="{Binding DocumentText, Mode=TwoWay}"
+                    AcceptsReturn="True"
+                    MinHeight="650"
+                    VerticalContentAlignment="Top"
+                    AutomationProperties.Name="Document editor" />
+              </Grid>
+            </Border>
+
+            <Border
+                x:Name="EmptyWorkspace"
+                IsVisible="{Binding IsEmptyWorkspaceVisible}"
+                MinHeight="520"
+                Background="{DynamicResource Brush.DocumentGradient}"
+                BorderBrush="{DynamicResource Brush.PaperBorder}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Workspace}"
+                Padding="{DynamicResource Spacing.Workspace}"
+                BoxShadow="{DynamicResource Elevation.Workspace}"
+                AutomationProperties.Name="Empty document workspace">
+              <StackPanel MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+                <Border Width="72" Height="72" CornerRadius="24" Background="{DynamicResource Brush.PaperWarm}" BorderBrush="{DynamicResource Brush.PaperBorder}" BorderThickness="1" HorizontalAlignment="Center" BoxShadow="{DynamicResource Elevation.Control}">
+                  <PathIcon Data="M5,3 L17,3 L21,7 L21,21 L5,21 Z M16,3 L16,8 L21,8 M9,12 L17,12 M9,16 L17,16" Width="30" Height="30" Foreground="{DynamicResource Brush.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="EMPTY WORKSPACE" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" HorizontalAlignment="Center" />
+                <TextBlock Text="Start with a new local document" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Title}" TextAlignment="Center" TextWrapping="Wrap" />
+                <TextBlock Text="No document is selected. Durable creation and import arrive in Stage 3; this Stage 2 state intentionally contains no editable sample text or inactive creation control." Foreground="{DynamicResource Brush.InkMuted}" TextAlignment="Center" TextWrapping="Wrap" FontSize="{DynamicResource Typography.BodyLarge}" />
+              </StackPanel>
+            </Border>
+
+            <Border
+                x:Name="LoadingWorkspace"
+                IsVisible="{Binding IsLoadingWorkspaceVisible}"
+                MinHeight="520"
+                Background="{DynamicResource Brush.DocumentGradient}"
+                BorderBrush="{DynamicResource Brush.PaperBorder}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Workspace}"
+                Padding="{DynamicResource Spacing.Workspace}"
+                BoxShadow="{DynamicResource Elevation.Workspace}"
+                AutomationProperties.Name="Loading document workspace">
+              <StackPanel MaxWidth="560" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+                <TextBlock Text="LOADING LOCAL WORKSPACE" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                <TextBlock Text="Preparing the workspace" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Title}" />
+                <TextBlock Text="Local state is being prepared. Provider access is not required, and the editor remains unavailable until the local preview is ready." Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.BodyLarge}" />
+                <StackPanel Spacing="10" Margin="0,10,0,0" AutomationProperties.Name="Loading placeholder">
+                  <Border Height="14" MaxWidth="510" HorizontalAlignment="Stretch" Background="{DynamicResource Brush.PaperBorder}" CornerRadius="7" />
+                  <Border Height="14" MaxWidth="430" HorizontalAlignment="Stretch" Background="{DynamicResource Brush.PaperBorder}" CornerRadius="7" />
+                  <Border Height="14" MaxWidth="470" HorizontalAlignment="Stretch" Background="{DynamicResource Brush.PaperBorder}" CornerRadius="7" />
+                </StackPanel>
+                <TextBlock Text="Static placeholder · no motion" Foreground="{DynamicResource Brush.InkMuted}" FontSize="{DynamicResource Typography.Meta}" />
+              </StackPanel>
+            </Border>
+          </Grid>
+        </ScrollViewer>
+
+        <!-- Truthful route states for non-Studio routes. -->
+        <ScrollViewer IsVisible="{Binding IsRouteStateSelected}" Padding="28">
+          <Border
+              MaxWidth="820"
+              HorizontalAlignment="Center"
+              Background="{DynamicResource Brush.DocumentGradient}"
+              BorderBrush="{DynamicResource Brush.PaperBorder}"
+              BorderThickness="1"
+              CornerRadius="{DynamicResource Radius.Workspace}"
+              Padding="36">
+            <StackPanel Spacing="15">
+              <TextBlock Text="{Binding CurrentPage.Eyebrow}" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+              <TextBlock Text="{Binding CurrentPage.Title}" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Display}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding CurrentPage.Description}" Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.BodyLarge}" />
+              <Border Margin="0,12,0,0" Background="{DynamicResource Brush.PaperWarm}" BorderBrush="{DynamicResource Brush.PaperBorder}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="22">
+                <StackPanel Spacing="10">
+                  <TextBlock Text="{Binding CurrentPage.StateKind}" Foreground="{DynamicResource Brush.WarningOnPaper}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                  <TextBlock Text="{Binding CurrentPage.StateTitle}" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Title}" />
+                  <TextBlock Text="{Binding CurrentPage.StateDescription}" Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding CurrentPage.Detail}" Foreground="{DynamicResource Brush.Secondary}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
+                  <Button Classes="primary" Content="{Binding CurrentPage.PrimaryActionLabel}" Command="{Binding CurrentPage.PrimaryActionCommand}" IsVisible="{Binding CurrentPage.HasPrimaryAction}" HorizontalAlignment="Left" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+        </ScrollViewer>
+      </Grid>
+
+      <Border
+          Grid.Column="3"
+          Width="320"
+          IsVisible="{Binding ShowInspectorPanel}"
+          Background="{DynamicResource Brush.PanelGradient}"
+          BorderBrush="{DynamicResource Brush.BorderSubtle}"
+          BorderThickness="1,0,0,0"
+          Padding="20">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="16">
+          <StackPanel>
+            <TextBlock Text="LOCAL CONTEXT" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+            <TextBlock Text="Workspace inspector" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.SectionTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="14">
+              <Border Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
+                  <Border Width="34" Height="34" CornerRadius="11" Background="{DynamicResource Brush.Cyan}">
+                    <PathIcon Data="M3,12 L8,17 L21,4 L23,6 L8,21 L1,14 Z" Foreground="{DynamicResource Brush.Perimeter}" Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <StackPanel Grid.Column="1" Spacing="3" MinWidth="0">
+                    <TextBlock Text="LOCAL SESSION" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                    <TextBlock Text="Offline editing ready" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" />
+                    <TextBlock Text="No provider credentials loaded" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Grid>
+              </Border>
+
+              <Border Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="DOCUMENT" Foreground="{DynamicResource Brush.SecondaryBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                  <TextBlock Text="{Binding DocumentTitle}" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding DocumentMetricLabel}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <StackPanel
+                  x:Name="ProviderControlPreview"
+                  Spacing="14"
+                  IsVisible="{Binding FeatureAvailability.ShowProviderControls}">
+                <StackPanel Spacing="5">
+                  <TextBlock Text="Provider account" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
+                  <ComboBox IsEnabled="False" PlaceholderText="No account configured" ToolTip.Tip="Provider accounts arrive in Stage 4." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable until Stage 4" />
+                </StackPanel>
+                <StackPanel Spacing="5">
+                  <TextBlock Text="Voice" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
+                  <ComboBox IsEnabled="False" PlaceholderText="No voice selected" ToolTip.Tip="Live voice discovery arrives with provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice unavailable until provider integration" />
+                </StackPanel>
+              </StackPanel>
+
+              <Border Background="{DynamicResource Brush.WarningSoft}" BorderBrush="{DynamicResource Brush.Warning}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="PROVIDER FOUNDATION" Foreground="{DynamicResource Brush.Warning}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                  <TextBlock Text="Provider and voice controls stay hidden until a trusted account, capability snapshot and pricing source exist. CloudScribe will not present unsupported or inert choices." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Meta}" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+
+          <Button x:Name="InspectorShortcutButton" Grid.Row="2" Classes="secondary" Content="Keyboard shortcuts" Command="{Binding ToggleShortcutGuideCommand}" AutomationProperties.Name="Open keyboard shortcuts from workspace inspector" />
+        </Grid>
+      </Border>
+      </Grid>
+    </Border>
+
+    <!-- Persistent player and queue strip. -->
+    <Border
+        x:Name="PlayerSurface"
+        Grid.Row="3"
+        IsVisible="{Binding ShowChromeSurfaces}"
+        IsEnabled="{Binding IsPrimaryContentInteractionEnabled}"
+        MinHeight="82"
+        Margin="20,0,20,10"
+        Background="{DynamicResource Brush.CommandGradient}"
+        BorderBrush="{DynamicResource Brush.BorderSubtle}"
+        BorderThickness="1"
+        CornerRadius="{DynamicResource Radius.Panel}"
+        Padding="16,10"
+        BoxShadow="{DynamicResource Elevation.Panel}">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="14">
+        <Border Grid.Column="0" Width="48" Height="48" CornerRadius="16" Background="{DynamicResource Brush.SurfaceInset}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1" VerticalAlignment="Center">
+          <PathIcon Data="M3,13 L6,13 L6,8 L9,8 L9,17 L12,17 L12,4 L15,4 L15,20 L18,20 L18,10 L21,10 L21,15" Foreground="{DynamicResource Brush.CyanBright}" Width="25" Height="25" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <StackPanel
+            x:Name="PlayerControlPreview"
+            Grid.Column="1"
+            Orientation="Horizontal"
+            Spacing="5"
+            VerticalAlignment="Center"
+            IsVisible="{Binding FeatureAvailability.ShowPlayerControls}">
+          <Button Classes="ghost" IsEnabled="False" ToolTip.Tip="Configurable skip arrives with the Stage 5 player." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Skip back unavailable until Stage 5">
+            <PathIcon Data="M4,4 L7,4 L7,20 L4,20 Z M19,5 L19,19 L8,12 Z" Width="17" Height="17" />
+          </Button>
+          <Button Classes="primary" IsEnabled="False" ToolTip.Tip="Playback becomes available after verified local audio exists." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Play unavailable until audio exists">
+            <PathIcon Data="M6,3 L21,12 L6,21 Z" Width="17" Height="17" />
+          </Button>
+          <Button Classes="ghost" IsEnabled="False" ToolTip.Tip="Configurable skip arrives with the Stage 5 player." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Skip forward unavailable until Stage 5">
+            <PathIcon Data="M17,4 L20,4 L20,20 L17,20 Z M5,5 L16,12 L5,19 Z" Width="17" Height="17" />
+          </Button>
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center" MinWidth="0">
+          <TextBlock Text="PLAYER &amp; QUEUE" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+          <TextBlock Text="No local audio yet · playback controls remain hidden until verified output exists." Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" TextTrimming="WordEllipsis" MaxLines="2" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="7" Margin="0,0,2,0" VerticalAlignment="Center">
+          <Button x:Name="QueueDrawerButton" Classes="secondary" Content="Queue" Command="{Binding ToggleQueueDrawerCommand}" AutomationProperties.Name="Open queue strip" />
+          <Button x:Name="ShortcutGuideButton" Classes="ghost" Command="{Binding ToggleShortcutGuideCommand}" ToolTip.Tip="Keyboard shortcuts" AutomationProperties.Name="Open keyboard shortcuts">
+            <PathIcon Data="M3,5 L21,5 L21,19 L3,19 Z M5,8 L8,8 L8,10 L5,10 Z M10,8 L13,8 L13,10 L10,10 Z M15,8 L18,8 L18,10 L15,10 Z M5,12 L8,12 L8,14 L5,14 Z M10,12 L18,12 L18,15 L10,15 Z" Width="18" Height="18" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="4" MinHeight="32" Background="Transparent" Padding="20,0,20,5">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MinWidth="0" />
+        <Border Grid.Column="1" Background="{DynamicResource Brush.SuccessSoft}" BorderBrush="{DynamicResource Brush.Success}" BorderThickness="1" CornerRadius="9" Padding="9,4" VerticalAlignment="Center" IsVisible="{Binding IsFullLayout}">
+          <TextBlock Text="LOCAL-FIRST · OFFLINE READY" Foreground="{DynamicResource Brush.Success}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+        </Border>
+      </Grid>
+    </Border>
+
+    <!-- Navigation drawer. -->
+    <Grid Grid.Row="1" Grid.RowSpan="4" IsVisible="{Binding IsNavigationDrawerOpen}" Panel.ZIndex="50">
+      <Button Classes="scrim" Background="{DynamicResource Brush.Scrim}" BorderThickness="0" IsTabStop="False" Command="{Binding CloseTransientSurfacesCommand}" AutomationProperties.Name="Close navigation drawer" />
+      <Border
+          Width="310"
+          HorizontalAlignment="Left"
+          Margin="0,0,0,8"
+          Background="{DynamicResource Brush.PanelGradient}"
+          BorderBrush="{DynamicResource Brush.Cyan}"
+          BorderThickness="0,0,1,0"
+          CornerRadius="0,18,18,0"
+          Padding="22"
+          BoxShadow="{DynamicResource Elevation.Floating}"
+          KeyboardNavigation.TabNavigation="Cycle">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel>
+              <TextBlock Text="COSMIC STUDIO" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+              <TextBlock Text="Navigate" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.DialogTitle}" FontWeight="SemiBold" />
+            </StackPanel>
+            <Button x:Name="NavigationDrawerCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close navigation drawer">
+              <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
+            </Button>
+          </Grid>
+          <ListBox Grid.Row="1" Classes="drawer-navigation" ItemsSource="{Binding NavigationItems}" SelectedItem="{Binding SelectedNavigationItem, Mode=TwoWay}" Background="Transparent" BorderThickness="0">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="nav:NavigationItem">
+                <Grid ColumnDefinitions="34,*" Margin="5,9">
+                  <PathIcon Classes="nav-icon" Data="{Binding IconPath, Converter={StaticResource GeometryPathConverter}}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" Width="18" Height="18" />
+                  <TextBlock Classes="nav-label" Grid.Column="1" Text="{Binding Label}" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Navigation}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <ComboBox Grid.Row="2" ItemsSource="{Binding ThemeOptions}" SelectedItem="{Binding SelectedThemeOption, Mode=TwoWay}" AutomationProperties.Name="Theme">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="design:ThemeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- Outline drawer. -->
+    <Grid Grid.Row="1" Grid.RowSpan="4" IsVisible="{Binding IsOutlineDrawerOpen}" Panel.ZIndex="51">
+      <Button Classes="scrim" Background="{DynamicResource Brush.Scrim}" BorderThickness="0" IsTabStop="False" Command="{Binding CloseTransientSurfacesCommand}" AutomationProperties.Name="Close outline drawer" />
+      <Border Width="344" HorizontalAlignment="Left" Margin="0,0,0,8" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="0,0,1,0" CornerRadius="0,18,18,0" Padding="22" BoxShadow="{DynamicResource Elevation.Floating}" KeyboardNavigation.TabNavigation="Cycle">
+        <Grid RowDefinitions="Auto,*" RowSpacing="14">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel>
+              <TextBlock Text="DOCUMENT MAP" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+              <TextBlock Text="Document outline" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Title}" FontWeight="SemiBold" />
+            </StackPanel>
+            <Button x:Name="OutlineDrawerCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close outline drawer">
+              <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
+            </Button>
+          </Grid>
+          <ListBox Grid.Row="1" Classes="outline-list" ItemsSource="{Binding OutlineEntries}" SelectedIndex="{Binding SelectedOutlineIndex, Mode=TwoWay}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Document outline drawer list">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:OutlineEntryViewModel">
+                <Grid ColumnDefinitions="*,Auto" Margin="4,8">
+                  <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Brush.TextOnDark}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Column="1" Text="{Binding RangeLabel}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- Inspector drawer. -->
+    <Grid Grid.Row="1" Grid.RowSpan="4" IsVisible="{Binding IsInspectorDrawerOpen}" Panel.ZIndex="52">
+      <Button Classes="scrim" Background="{DynamicResource Brush.Scrim}" BorderThickness="0" IsTabStop="False" Command="{Binding CloseTransientSurfacesCommand}" AutomationProperties.Name="Close inspector drawer" />
+      <Border Width="366" HorizontalAlignment="Right" Margin="0,0,0,8" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1,0,0,0" CornerRadius="18,0,0,18" Padding="22" BoxShadow="{DynamicResource Elevation.Floating}" KeyboardNavigation.TabNavigation="Cycle">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="16">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel>
+              <TextBlock Text="LOCAL CONTEXT" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+              <TextBlock Text="Workspace inspector" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Title}" FontWeight="SemiBold" />
+            </StackPanel>
+            <Button x:Name="InspectorDrawerCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close inspector drawer">
+              <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
+            </Button>
+          </Grid>
+          <StackPanel Grid.Row="1" Spacing="14">
+            <TextBlock Text="Provider and voice controls stay hidden until Stage 4 establishes trusted accounts, capabilities and pricing." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
+            <StackPanel
+                x:Name="InspectorDrawerProviderControlPreview"
+                Spacing="14"
+                IsVisible="{Binding FeatureAvailability.ShowProviderControls}">
+              <ComboBox IsEnabled="False" PlaceholderText="No provider account" ToolTip.Tip="Provider accounts arrive in Stage 4." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable until Stage 4" />
+              <ComboBox IsEnabled="False" PlaceholderText="No voice" ToolTip.Tip="Live voice discovery arrives with provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice unavailable until provider integration" />
+              <Button Classes="secondary" IsEnabled="False" Content="Voice sample unavailable" ToolTip.Tip="Voice preview arrives with live provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice sample unavailable until provider integration" />
+            </StackPanel>
+          </StackPanel>
+          <Button Grid.Row="2" Classes="secondary" Content="Close inspector" Command="{Binding CloseTransientSurfacesCommand}" />
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- Queue drawer. -->
+    <Grid Grid.Row="1" Grid.RowSpan="4" IsVisible="{Binding IsQueueDrawerOpen}" Panel.ZIndex="53">
+      <Button Classes="scrim" Background="{DynamicResource Brush.Scrim}" BorderThickness="0" IsTabStop="False" Command="{Binding CloseTransientSurfacesCommand}" AutomationProperties.Name="Close queue drawer" />
+      <Border MinHeight="250" VerticalAlignment="Bottom" Margin="12,0,12,8" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1" CornerRadius="18,18,0,0" Padding="22" BoxShadow="{DynamicResource Elevation.Floating}" KeyboardNavigation.TabNavigation="Cycle">
+        <Grid RowDefinitions="Auto,*" RowSpacing="12">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel>
+              <TextBlock Text="Generation queue" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Title}" FontWeight="SemiBold" />
+              <TextBlock Text="No jobs · generation is not enabled" Foreground="{DynamicResource Brush.TextOnDarkMuted}" />
+            </StackPanel>
+            <Button x:Name="QueueDrawerCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close queue drawer">
+              <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
+            </Button>
+          </Grid>
+          <Border Grid.Row="1" Background="{DynamicResource Brush.SurfaceInset}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}" Padding="{DynamicResource Spacing.Panel}">
+            <TextBlock Text="Durable collections, estimates, approval and restart recovery arrive with the provider-neutral generation engine in Stage 5." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- Keyboard shortcut guide. -->
+    <Grid Grid.RowSpan="5" IsVisible="{Binding IsShortcutGuideOpen}" Panel.ZIndex="60">
+      <Button Classes="scrim" Background="{DynamicResource Brush.Scrim}" BorderThickness="0" IsTabStop="False" Command="{Binding CloseTransientSurfacesCommand}" AutomationProperties.Name="Close keyboard shortcut guide" />
+      <Border MaxWidth="500" HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="24" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Workspace}" Padding="28" BoxShadow="{DynamicResource Elevation.Floating}" KeyboardNavigation.TabNavigation="Cycle">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="18">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel>
+              <TextBlock Text="Keyboard shortcuts" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.DialogTitle}" FontWeight="SemiBold" />
+              <TextBlock Text="Every visible Stage 2 interaction has a keyboard path." Foreground="{DynamicResource Brush.TextOnDarkMuted}" />
+            </StackPanel>
+            <Button x:Name="ShortcutGuideCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close keyboard shortcut guide">
+              <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
+            </Button>
+          </Grid>
+          <StackPanel Grid.Row="1" Spacing="10">
+            <ScrollViewer MaxHeight="330" VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding ShortcutMap.Bindings}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="input:KeyboardShortcutBinding">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" Margin="0,0,0,10">
+                      <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Brush.TextOnDark}" TextWrapping="Wrap" />
+                      <TextBlock Grid.Column="1" Text="{Binding GestureText}" Foreground="{DynamicResource Brush.PrimaryBright}" FontWeight="Bold" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <TextBlock
+                Text="Shortcut definitions are collision-checked and ready for persistent overrides in the Settings stage."
+                Foreground="{DynamicResource Brush.TextOnDarkMuted}"
+                FontSize="{DynamicResource Typography.Meta}"
+                TextWrapping="Wrap" />
+          </StackPanel>
+          <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <CheckBox Content="Reduce motion" IsChecked="{Binding ReducedMotionEnabled, Mode=TwoWay}" Foreground="{DynamicResource Brush.TextOnDark}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="primary" Content="Done" Command="{Binding CloseTransientSurfacesCommand}" HorizontalAlignment="Right" />
+          </Grid>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- Completed run dialog. The real generation/transcription engine supplies the exact output directory. -->
+    <Grid
+        Grid.RowSpan="5"
+        IsVisible="{Binding IsCompletionDialogOpen}"
+        Panel.ZIndex="70">
+      <Button
+          Classes="scrim"
+          Background="{DynamicResource Brush.Scrim}"
+          BorderThickness="0"
+          IsTabStop="False"
+          Command="{Binding CloseTransientSurfacesCommand}"
+          AutomationProperties.Name="Dismiss completed run dialog" />
+      <ScrollViewer
+          Margin="24"
+          HorizontalContentAlignment="Stretch"
+          HorizontalScrollBarVisibility="Disabled"
+          VerticalScrollBarVisibility="Auto">
+      <Border
+          MaxWidth="620"
+          HorizontalAlignment="Stretch"
+          VerticalAlignment="Center"
+          Background="{DynamicResource Brush.PanelGradient}"
+          BorderBrush="{DynamicResource Brush.Border}"
+          BorderThickness="1"
+          CornerRadius="{DynamicResource Radius.Workspace}"
+          Padding="30"
+          BoxShadow="{DynamicResource Elevation.Floating}"
+          KeyboardNavigation.TabNavigation="Cycle">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="18">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="18">
+            <Border
+                Width="54"
+                Height="54"
+                CornerRadius="18"
+                Background="{DynamicResource Brush.PrimaryGradient}">
+              <PathIcon
+                  Data="M4,12 L9.5,17.5 L20,6 L22,8 L9.5,21 L2,14 Z"
+                  Width="27"
+                  Height="27"
+                  Foreground="{DynamicResource Brush.PrimaryText}"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Grid.Column="1" Spacing="5" VerticalAlignment="Center">
+              <TextBlock
+                  Text="{Binding CompletionTitle}"
+                  Foreground="{DynamicResource Brush.TextOnDark}"
+                  FontSize="{DynamicResource Typography.DialogTitle}"
+                  FontWeight="SemiBold"
+                  TextWrapping="Wrap" />
+              <TextBlock
+                  Text="{Binding CompletionMessage}"
+                  Foreground="{DynamicResource Brush.TextOnDarkMuted}"
+                  FontSize="{DynamicResource Typography.BodyLarge}"
+                  TextWrapping="Wrap" />
+            </StackPanel>
+          </Grid>
+
+          <Border
+              Grid.Row="1"
+              Background="{DynamicResource Brush.PaperWarm}"
+              BorderBrush="{DynamicResource Brush.PaperBorder}"
+              BorderThickness="1"
+              CornerRadius="14"
+              Padding="16">
+            <StackPanel Spacing="6">
+              <TextBlock
+                  Text="OUTPUT FOLDER"
+                  Foreground="{DynamicResource Brush.WarningOnPaper}"
+                  FontSize="{DynamicResource Typography.Meta}"
+                  FontWeight="Bold" />
+              <TextBlock
+                  Text="{Binding CompletionOutputDirectory}"
+                  Foreground="{DynamicResource Brush.Ink}"
+                  FontFamily="Cascadia Mono, Consolas"
+                  FontSize="{DynamicResource Typography.Small}"
+                  TextWrapping="Wrap"
+                  AutomationProperties.Name="Completed run output folder" />
+            </StackPanel>
+          </Border>
+
+          <TextBlock
+              Grid.Row="2"
+              Text="The folder button always uses the exact directory reported by this completed run, not a remembered folder from an older run."
+              Foreground="{DynamicResource Brush.TextOnDarkMuted}"
+              FontSize="{DynamicResource Typography.Small}"
+              TextWrapping="Wrap" />
+
+          <Grid Grid.Row="3" RowDefinitions="Auto,Auto" RowSpacing="12">
+            <TextBlock
+                VerticalAlignment="Center"
+                Text="Output remains on this device."
+                Foreground="{DynamicResource Brush.Success}"
+                FontSize="{DynamicResource Typography.Small}" />
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+              <Button
+                  x:Name="CompletionDoneButton"
+                  Classes="secondary"
+                  Content="Done"
+                  Command="{Binding CloseTransientSurfacesCommand}"
+                  AutomationProperties.Name="Close completed run dialog" />
+              <Button
+                  x:Name="CompletionOpenFolderButton"
+                  Classes="primary"
+                  Content="Open output folder"
+                  Command="{Binding OpenCompletionOutputFolderCommand}"
+                  IsEnabled="{Binding CanOpenCompletionOutputFolder}"
+                  ToolTip.Tip="Open the exact output folder for this run"
+                  ToolTip.ShowOnDisabled="True"
+                  AutomationProperties.Name="Open completed run output folder" />
+            </StackPanel>
+          </Grid>
+        </Grid>
+      </Border>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</Window>

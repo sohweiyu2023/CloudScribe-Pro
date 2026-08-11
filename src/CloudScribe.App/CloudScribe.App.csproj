@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>CloudScribe.App</RootNamespace>
+    <AssemblyName>CloudScribe</AssemblyName>
+    <ApplicationTitle>CloudScribe Pro</ApplicationTitle>
+    <Product>CloudScribe Pro</Product>
+    <Description>Local-first long-form text-to-speech production studio.</Description>
+    <Version>0.3.48</Version>
+    <InformationalVersion>0.3.48-stage2-repair-in-progress</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <FileVersion>0.3.48.0</FileVersion>
+    <AssemblyVersion>0.3.48.0</AssemblyVersion>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../CloudScribe.Application/CloudScribe.Application.csproj" />
+    <ProjectReference Include="../CloudScribe.Infrastructure/CloudScribe.Infrastructure.csproj" />
+    <ProjectReference Include="../CloudScribe.Providers.Abstractions/CloudScribe.Providers.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
