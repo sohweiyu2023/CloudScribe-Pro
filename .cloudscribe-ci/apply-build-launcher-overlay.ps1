@@ -71,7 +71,7 @@ $state = $state.Replace('complete 149-test suite','complete 151-test suite')
 [IO.File]::WriteAllText($statePath,$state,$utf8NoBom)
 
 $expected = @{
-    'BUILD-CLOUDSCRIBE-WINDOWS.cmd' = 'd63e194f989b555591f113925c094212cac1a5f1032132527bf63e6151e33e7a'
+    'BUILD-CLOUDSCRIBE-WINDOWS.cmd' = '07805f5bf94f03f5130b5fd76f946d87994b68e34cbd56b629421575863888bb'
     'BUILDING-WINDOWS.txt' = '17ada2280a4ebba4b46f70462e54737ca1c09a162f75ceff7fad9ef33dd2175f'
     'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs' = 'a39341c5c411b1557a5c2383963cebda3583efa336823195df8d45a01bb79630'
     'tools/run_python_regression_shards.py' = 'b667dd6896ca4f82e7b17e46a8af6d998e8699169368b92552354e57e8824925'
