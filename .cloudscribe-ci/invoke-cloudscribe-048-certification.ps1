@@ -166,6 +166,18 @@ if ($LASTEXITCODE -ne 0) {
     throw "Stage 2 real-click focus template fix overlay failed with exit code $LASTEXITCODE."
 }
 
+# The clean-extraction material run catches tests against the final post-overlay tree. Keep
+# its architecture contract aligned with the new dedicated template surface: the old literal
+# PART_BorderElement expectation is intentionally obsolete once PART_PaperSurface is installed.
+$realClickFocusArchitectureFinalization = Join-Path $PSScriptRoot 'apply-stage2-real-click-focus-architecture-finalization.py'
+if (-not (Test-Path -LiteralPath $realClickFocusArchitectureFinalization -PathType Leaf)) {
+    throw "Stage 2 real-click focus architecture finalization is missing: $realClickFocusArchitectureFinalization"
+}
+& python $realClickFocusArchitectureFinalization --source-root $SourceRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Stage 2 real-click focus architecture finalization failed with exit code $LASTEXITCODE."
+}
+
 Push-Location -LiteralPath $SourceRoot
 try {
     & python tools/update_sha256_manifest.py
