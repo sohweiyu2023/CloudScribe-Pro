@@ -1,0 +1,2 @@
+# Keep the source-inspection architecture test deterministic across Windows and Unix checkouts.
+tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs text eol=lf
