@@ -57,6 +57,27 @@ try {
 }
 finally { Pop-Location }
 
+# Git's working-tree line-ending conversion differs between the Linux authoring environment
+# and Windows certification runners. Canonicalize the repaired text postimages to UTF-8
+# without BOM and LF before byte-hash validation, so the frozen source archive is identical
+# regardless of checkout platform instead of accepting platform-specific CRLF hashes.
+$utf8NoBom = [Text.UTF8Encoding]::new($false)
+$normalizedFiles = @(
+    'src/CloudScribe.App/MainWindow.axaml',
+    'src/CloudScribe.App/MainWindow.VisualCapture.cs',
+    'tools/verify_stage2_visual_evidence.py',
+    'tools/verify_stage2_source.py',
+    'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs',
+    'tools/run_python_regression_shards.py',
+    'SESSION_STATE.json'
+)
+foreach ($relative in $normalizedFiles) {
+    $target = Join-Path $SourceRoot $relative
+    if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Stage 2 focus repair output is missing: $relative" }
+    $text = [IO.File]::ReadAllText($target).Replace("`r`n","`n").Replace("`r","`n")
+    [IO.File]::WriteAllText($target,$text,$utf8NoBom)
+}
+
 $expected = @{
     'src/CloudScribe.App/MainWindow.axaml' = '146e7395924c757721de6e7e89d0a6f833192c861fd794ed2e64909ec0a9c65d'
     'src/CloudScribe.App/MainWindow.VisualCapture.cs' = 'd140d1836ee9070149afeafd6dd95c1e1f36deb2d3ab60033741f4b13c0d9a28'
