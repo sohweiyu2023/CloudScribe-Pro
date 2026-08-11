@@ -84,18 +84,15 @@ if ($LASTEXITCODE -ne 0) {
     throw "Windows build-launcher overlay failed with exit code $LASTEXITCODE."
 }
 
-# The original PowerShell carrier remains the immutable payload container, but Python owns
-# base64/gzip decoding so the repair does not depend on Windows PowerShell/.NET GZipStream
-# behavior. The helper verifies the decompressed patch hash before git apply and verifies
-# every expected postimage afterward.
-$focusAcceptanceCarrier = Join-Path $PSScriptRoot 'apply-stage2-focus-acceptance-overlay.ps1'
-$focusAcceptanceHelper = Join-Path $PSScriptRoot 'apply-stage2-focus-acceptance-overlay.py'
-foreach ($required in @($focusAcceptanceCarrier, $focusAcceptanceHelper)) {
-    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-        throw "Stage 2 focus-acceptance repair input is missing: $required"
-    }
+# Reconstruct and apply the exact focus repair from small individually SHA-bound payload
+# chunks. This avoids the prior oversized here-string transport corruption while retaining
+# an exact compressed payload hash, exact decompressed patch hash, git-apply preflight, and
+# postimage hashes for every repaired source file.
+$focusAcceptanceOverlay = Join-Path $PSScriptRoot 'apply-stage2-focus-acceptance-overlay.ps1'
+if (-not (Test-Path -LiteralPath $focusAcceptanceOverlay -PathType Leaf)) {
+    throw "Stage 2 focus-acceptance overlay is missing: $focusAcceptanceOverlay"
 }
-& python $focusAcceptanceHelper --source-root $SourceRoot --carrier $focusAcceptanceCarrier
+& pwsh -NoProfile -ExecutionPolicy Bypass -File $focusAcceptanceOverlay -SourceRoot $SourceRoot
 if ($LASTEXITCODE -ne 0) {
     throw "Stage 2 focus-acceptance overlay failed with exit code $LASTEXITCODE."
 }
