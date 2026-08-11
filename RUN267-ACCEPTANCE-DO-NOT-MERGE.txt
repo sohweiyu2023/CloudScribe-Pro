@@ -1,0 +1,1 @@
+Temporary acceptance carrier for the exact CloudScribe 0.3.48 Stage 2 run-267 ZIP. This branch and its PR must never be merged.
