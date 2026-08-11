@@ -1,0 +1,90 @@
+name: CloudScribe Stage 2 Run 267 Exact ZIP Acceptance
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  exact-zip-acceptance:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      CLOUDSCRIBE_NO_OPEN: '1'
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+
+      - name: Download exact run-267 certified source artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: cloudscribe-0.3.48-final-source-and-material-evidence
+          path: ${{ runner.temp }}/certified-artifact
+          run-id: 31491660175
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify exact ZIP and source-release contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Set-StrictMode -Version Latest
+          $expected='d9f395df66498323f025556e954a4631eff9748cb9c91483c92568f969c4f64a'
+          $artifactRoot=Join-Path $env:RUNNER_TEMP 'certified-artifact'
+          $zip=Get-ChildItem -LiteralPath $artifactRoot -Filter 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress.zip' -File -Recurse | Select-Object -First 1
+          if($null -eq $zip){throw 'Run-267 source ZIP was not found.'}
+          $actual=(Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($actual -ne $expected){throw "Run-267 ZIP SHA mismatch: expected=$expected actual=$actual"}
+          $sidecar=Get-Item -LiteralPath ($zip.FullName + '.sha256') -ErrorAction Stop
+          $sidecarHash=((Get-Content -LiteralPath $sidecar.FullName -Raw).Trim().Split(' ')[0]).ToLowerInvariant()
+          if($sidecarHash -ne $actual){throw "Run-267 sidecar mismatch: expected=$actual sidecar=$sidecarHash"}
+          $probe=Join-Path $env:RUNNER_TEMP 'source-release-probe'
+          Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $probe
+          $root=Join-Path $probe 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
+          & python (Join-Path $root 'tools/verify_source_release.py') $zip.FullName
+          if($LASTEXITCODE -ne 0){throw "verify_source_release.py failed with exit code $LASTEXITCODE"}
+          "RUN267_ZIP=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "RUN267_EXACT_SOURCE_RELEASE=PASS sha256=$actual"
+
+      - name: Simulate Internet zone and execute exact BUILD-CLOUDSCRIBE-WINDOWS.cmd
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Set-StrictMode -Version Latest
+          $extract=Join-Path $env:RUNNER_TEMP 'run267-build-launcher'
+          Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $env:RUN267_ZIP -DestinationPath $extract
+          $root=Join-Path $extract 'CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress'
+          $launcher=Join-Path $root 'BUILD-CLOUDSCRIBE-WINDOWS.cmd'
+          $publish=Join-Path $root 'scripts/publish-stage2-windows.ps1'
+          foreach($required in @($launcher,$publish,(Join-Path $root 'BUILDING-WINDOWS.txt'))){
+            if(-not(Test-Path -LiteralPath $required -PathType Leaf)){throw "Missing build-handoff file: $required"}
+          }
+          $manifest=Join-Path $root 'SHA256SUMS.txt'
+          $before=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath $publish -Stream Zone.Identifier -Value '[ZoneTransfer]','ZoneId=3' -Encoding ascii
+          & cmd.exe /d /c "`"$launcher`""
+          if($LASTEXITCODE -ne 0){throw "BUILD-CLOUDSCRIBE-WINDOWS.cmd failed: $LASTEXITCODE"}
+          $output=Join-Path (Split-Path -Parent $root) 'CloudScribe-Windows'
+          foreach($name in @('CloudScribe.exe','CloudScribe.dll','CloudScribe.deps.json','CloudScribe.runtimeconfig.json','appsettings.json','RUN-CLOUDSCRIBE.cmd','BUILD-STATUS.txt')){
+            if(-not(Test-Path -LiteralPath (Join-Path $output $name) -PathType Leaf)){throw "Launcher output missing: $name"}
+          }
+          $after=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($after -ne $before){throw 'Launcher changed source manifest bytes.'}
+          Push-Location -LiteralPath $root
+          try{
+            & python tools/update_sha256_manifest.py --check
+            if($LASTEXITCODE -ne 0){throw 'Launcher changed source-controlled bytes.'}
+          }finally{Pop-Location}
+          Write-Host 'RUN267_WINDOWS_BUILD_LAUNCHER_ACCEPTANCE=PASS sha256=d9f395df66498323f025556e954a4631eff9748cb9c91483c92568f969c4f64a'
