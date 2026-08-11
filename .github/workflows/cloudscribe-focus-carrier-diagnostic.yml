@@ -35,13 +35,21 @@ jobs:
           module = importlib.util.module_from_spec(spec)
           assert spec.loader is not None
           spec.loader.exec_module(module)
-          text = carrier_path.read_text(encoding='utf-8-sig')
-          encoded = module.extract_payload(text)
-          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          encoded = module.assemble_payload(carrier_path)
+          compressed = base64.b64decode(encoded, validate=True)
+          compressed_sha = hashlib.sha256(compressed).hexdigest()
+          if compressed_sha != module.EXPECTED_COMPRESSED_SHA256:
+              raise SystemExit(
+                  f'compressed hash mismatch expected={module.EXPECTED_COMPRESSED_SHA256} actual={compressed_sha}'
+              )
+          patch = gzip.decompress(compressed)
           actual = hashlib.sha256(patch).hexdigest()
           expected = module.EXPECTED_PATCH_SHA256
           if actual != expected:
               raise SystemExit(f'patch hash mismatch expected={expected} actual={actual}')
-          print(f'CLOUDSCRIBE_FOCUS_CARRIER_DIAGNOSTIC=PASS chars={len(encoded)} patch_sha256={actual}')
+          print(
+              'CLOUDSCRIBE_FOCUS_CARRIER_DIAGNOSTIC=PASS '
+              f'chars={len(encoded)} compressed_sha256={compressed_sha} patch_sha256={actual}'
+          )
           '@ | python -
           if($LASTEXITCODE-ne0){throw "Focus carrier diagnostic failed: $LASTEXITCODE"}
