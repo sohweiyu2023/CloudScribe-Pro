@@ -1,0 +1,1 @@
+Attempt 3: rerun exact-ZIP launcher hotfix acceptance after pinning both the architecture test and inspected ShellViewModel source to LF for deterministic Windows source-inspection assertions.
