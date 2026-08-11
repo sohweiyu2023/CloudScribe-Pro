@@ -26,7 +26,10 @@ if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
 $previousNoOpen = $env:CLOUDSCRIBE_NO_OPEN
 try {
     $env:CLOUDSCRIBE_NO_OPEN = '1'
-    & cmd.exe /d /c "`"$launcher`""
+    # Invoke the .cmd path directly. PowerShell delegates batch scripts to cmd.exe while
+    # preserving the path as a command path; manually nesting it inside `cmd /c "..."`
+    # triggers cmd.exe's special quote-stripping rules for paths containing &, ( or ).
+    & $launcher
     if ($LASTEXITCODE -ne 0) {
         throw "Launcher failed from special-character path with exit code $LASTEXITCODE"
     }
