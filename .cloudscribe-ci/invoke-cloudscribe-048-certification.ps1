@@ -124,12 +124,32 @@ if ($LASTEXITCODE -ne 0) {
     throw "Stage 2 session-state finalization failed with exit code $LASTEXITCODE."
 }
 
+# The fresh adversarial audit found three non-UI release-quality defects that were not
+# exercised by the historical certified core: the shipped auxiliary Python verifier tests
+# had drifted, the exact-SDK policy still allowed roll-forward/prerelease ambiguity, and
+# SESSION_STATE overstated embedded controlling-context artifacts. Apply the SHA-bound audit
+# overlay only after all earlier source overlays so its preimages and postimages are exact.
+$auditHardening = Join-Path $PSScriptRoot 'apply-stage2-audit-hardening.py'
+if (-not (Test-Path -LiteralPath $auditHardening -PathType Leaf)) {
+    throw "Stage 2 adversarial-audit hardening overlay is missing: $auditHardening"
+}
+& python $auditHardening --source-root $SourceRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Stage 2 adversarial-audit hardening overlay failed with exit code $LASTEXITCODE."
+}
+
 Push-Location -LiteralPath $SourceRoot
 try {
     & python tools/update_sha256_manifest.py
     if ($LASTEXITCODE -ne 0) { throw "Final material-tool manifest generation failed: $LASTEXITCODE" }
     & python tools/update_sha256_manifest.py --check
     if ($LASTEXITCODE -ne 0) { throw "Final material-tool manifest verification failed: $LASTEXITCODE" }
+
+    # Run the maintained verifier suite in isolated interpreter processes before freezing
+    # source bytes. Windows executes all 55 tests, including process-tree teardown defenses;
+    # non-Windows release verification executes the 45 portable tests.
+    & python -B tools/run_verifier_self_tests.py
+    if ($LASTEXITCODE -ne 0) { throw "Stage 2 verifier self-tests failed: $LASTEXITCODE" }
 
     foreach ($command in @(
         @('tools/verify_project_dependencies.py'),
