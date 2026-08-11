@@ -96,9 +96,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $evidence = Join-Path $env:RUNNER_TEMP 'CloudScribe Hotfix Evidence (7) ! literal'
           $env:CLOUDSCRIBE_STAGE2_EVIDENCE_DIR = $evidence
+          "HOTFIX_EVIDENCE=$evidence" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           & pwsh -NoProfile -File (Join-Path $env:HOTFIX_EXTRACTED_ROOT 'scripts/verify-stage2.ps1')
           if ($LASTEXITCODE -ne 0) { throw "Full Stage 2 verification failed: $LASTEXITCODE" }
-          "HOTFIX_EVIDENCE=$evidence" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Reproduce user-style repeated-download path on exact archive bytes
         shell: pwsh
@@ -116,6 +116,15 @@ jobs:
           $after = (Get-FileHash -LiteralPath $env:HOTFIX_ZIP -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($after -ne $env:HOTFIX_SHA256) { throw "ZIP bytes changed during verification: before=$env:HOTFIX_SHA256 after=$after" }
           Write-Host "CLOUDSCRIBE_HOTFIX_EXACT_BYTES_FINAL=PASS sha256=$after"
+
+      - name: Upload failed Stage 2 diagnostic evidence only
+        if: failure() && env.HOTFIX_EVIDENCE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudscribe-0.3.48-stage2-launcher-hotfix-failure-diagnostic
+          path: ${{ env.HOTFIX_EVIDENCE }}
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload certified hotfix ZIP and evidence
         uses: actions/upload-artifact@v4
