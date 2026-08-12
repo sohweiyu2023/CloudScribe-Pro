@@ -5,8 +5,8 @@ root = Path('source').resolve()
 payload = Path(os.environ['RUNNER_TEMP']) / 'stage3-base.tar.gz'
 with tarfile.open(payload, 'r:gz') as archive:
     members = archive.getmembers()
-    if len(members) != 34:
-        raise SystemExit(f'expected 34 payload files, found {len(members)}')
+    if len(members) != 33:
+        raise SystemExit(f'expected 33 payload files, found {len(members)}')
     for member in members:
         rel = Path(member.name)
         if rel.is_absolute() or '..' in rel.parts or not member.isfile():
@@ -21,4 +21,4 @@ legacy = root / 'src/CloudScribe.Infrastructure/Persistence/ObservabilityDbConte
 if not legacy.is_file():
     raise SystemExit('Stage 2 ObservabilityDbContext preimage missing')
 legacy.unlink()
-print('CLOUDSCRIBE_STAGE3_BASE_APPLY=PASS files=34')
+print('CLOUDSCRIBE_STAGE3_BASE_APPLY=PASS files=33')
