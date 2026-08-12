@@ -1,0 +1,166 @@
+name: CloudScribe Stage 3 Slice 1 Windows admission v4
+
+on:
+  push:
+    branches: [cloudscribe-stage3-slice1-10.0.400-carrier]
+    paths: ['.github/workflows/cloudscribe-stage3-slice1-10.0.400-v4.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  certify-and-push:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      EXPECTED_BASE: c1980b862cc078637b6d3692c90bd264d445579d
+      EXPECTED_PAYLOAD_SHA256: 37c49c8f589da32a33f61d5ae8253bf99fb993969807f0cf8fe1285e9964054b
+      TARGET_BRANCH: cloudscribe-0.4.0-stage3-slice1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-stage3-slice1-10.0.400-carrier
+          path: carrier
+          fetch-depth: 1
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-0.4.0-stage3-slice1
+          path: source
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+
+      - name: Verify base and reconstruct exact payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if ((git -C source rev-parse HEAD).Trim() -ne $env:EXPECTED_BASE) { throw 'Stage 3 target moved.' }
+          $parts=@(Get-ChildItem carrier/.cloudscribe-ci/stage3-slice1-10.0.400-payload -Filter '*.txt' -File | Sort-Object Name)
+          if ($parts.Count -ne 11) { throw "Expected 11 payload chunks, found $($parts.Count)" }
+          $encoded=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $payload=Join-Path $env:RUNNER_TEMP 'stage3-base.tar.gz'
+          [IO.File]::WriteAllBytes($payload,[Convert]::FromBase64String($encoded))
+          $hash=(Get-FileHash $payload -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:EXPECTED_PAYLOAD_SHA256) { throw "Payload hash mismatch: $hash" }
+          Write-Host "CLOUDSCRIBE_STAGE3_PAYLOAD=PASS $hash"
+
+      - name: Apply hash-bound base and readable analyzer repairs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python carrier/.cloudscribe-ci/stage3-v4/apply_base.py
+          if ($LASTEXITCODE -ne 0) { throw 'Base application failed.' }
+          python carrier/.cloudscribe-ci/stage3-v4/repair_simple.py
+          if ($LASTEXITCODE -ne 0) { throw 'Simple analyzer repair failed.' }
+          python carrier/.cloudscribe-ci/stage3-v4/repair_migrations.py
+          if ($LASTEXITCODE -ne 0) { throw 'Migration analyzer repair failed.' }
+
+      - name: Freeze manifest and portable gates
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          python tools/update_sha256_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw 'Manifest refresh failed.' }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Git whitespace validation failed.' }
+          $commands=@(
+            'python tools/update_sha256_manifest.py --check',
+            'python tools/verify_repository.py',
+            'python tools/verify_project_dependencies.py',
+            'python tools/verify_stage1_source.py',
+            'python tools/verify_stage2_source.py',
+            'python tools/verify_stage3_source.py',
+            'python -B tools/run_verifier_self_tests.py',
+            'python -B tools/run_python_regression_shards.py --all')
+          foreach($c in $commands){ Write-Host "> $c"; Invoke-Expression $c; if($LASTEXITCODE -ne 0){throw "Gate failed: $c"} }
+          if ((dotnet --version).Trim() -ne '10.0.400') { throw 'Wrong .NET SDK.' }
+          $status=@(git status --porcelain=v1 -uall)
+          if ($status.Count -lt 30 -or $status.Count -gt 40) { throw "Unexpected Stage 3 change count: $($status.Count)" }
+          if ($status -match '^.. \.cloudscribe-ci/' -or $status -match '^.. \.github/') { throw 'Carrier files leaked into product source.' }
+          Write-Host "CLOUDSCRIBE_STAGE3_SOURCE_ADMISSION=PASS changed_paths=$($status.Count)"
+
+      - name: Locked restore
+        shell: pwsh
+        working-directory: source
+        run: |
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+
+      - name: Build Debug and Release
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($cfg in @('Debug','Release')){
+            dotnet build CloudScribe.sln -c $cfg --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+            if($LASTEXITCODE -ne 0){throw "$cfg build failed."}
+          }
+
+      - name: Run all compiled tests
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $results=Join-Path $env:RUNNER_TEMP 'stage3-trx'; New-Item -ItemType Directory -Force $results | Out-Null
+          $projects=@(
+            'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+            'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+            'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+            'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj')
+          foreach($p in $projects){
+            $n=[IO.Path]::GetFileNameWithoutExtension($p)
+            dotnet test $p -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --logger "trx;LogFileName=$n.trx" --results-directory $results
+            if($LASTEXITCODE -ne 0){throw "Tests failed: $p"}
+          }
+          $trx=@(Get-ChildItem $results -Filter '*.trx' -File)
+          if($trx.Count -ne 4){throw "Expected 4 TRX files, found $($trx.Count)"}
+          $total=0;$passed=0;$failed=0
+          foreach($f in $trx){[xml]$x=Get-Content $f.FullName -Raw;$c=$x.TestRun.ResultSummary.Counters;$total+=[int]$c.total;$passed+=[int]$c.passed;$failed+=[int]$c.failed}
+          Write-Host "CLOUDSCRIBE_STAGE3_DOTNET_TESTS total=$total passed=$passed failed=$failed"
+          if($total -le 147 -or $passed -ne $total -or $failed -ne 0){throw 'Stage 3 compiled test gate failed.'}
+
+      - name: Formatting and post-test immutability
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet format CloudScribe.sln --verify-no-changes --no-restore
+          if($LASTEXITCODE -ne 0){throw 'dotnet format failed.'}
+          python tools/update_sha256_manifest.py --check
+          if($LASTEXITCODE -ne 0){throw 'Manifest changed during native tests.'}
+          python tools/verify_stage3_source.py
+          if($LASTEXITCODE -ne 0){throw 'Stage 3 verifier failed after tests.'}
+
+      - name: Commit only after every gate passes
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          if((git rev-parse HEAD).Trim() -ne $env:EXPECTED_BASE){throw 'Target base moved during admission.'}
+          git config user.name cloudscribe-ci
+          git config user.email actions@github.com
+          git add -A
+          git commit -m 'feat: implement Stage 3 Slice 1 durable persistence foundation'
+          if($LASTEXITCODE -ne 0){throw 'Admission commit failed.'}
+          $head=(git rev-parse HEAD).Trim()
+          git push origin "HEAD:$env:TARGET_BRANCH"
+          if($LASTEXITCODE -ne 0){throw 'Product branch push failed.'}
+          Write-Host "CLOUDSCRIBE_STAGE3_SLICE1_ADMITTED_HEAD=$head"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage3-slice1-v4-evidence
+          if-no-files-found: warn
+          retention-days: 14
+          path: ${{ runner.temp }}/stage3-trx/*.trx
