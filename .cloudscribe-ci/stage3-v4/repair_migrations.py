@@ -1,4 +1,5 @@
 from pathlib import Path
+import runpy
 root=Path('source/src/CloudScribe.Infrastructure/Persistence/Migrations')
 p=root/'20260812122000_Stage2Baseline.cs'; q=root/'Stage2Baseline.cs'; t=p.read_text(encoding='utf-8')
 a='    public const string MigrationId = "20260812122000_Stage2Baseline";\n'
@@ -38,3 +39,4 @@ helpers=''.join(f'    private static void {n}(MigrationBuilder migrationBuilder)
 helpers+=f'    private static void CreateIndexes(MigrationBuilder migrationBuilder)\n    {{\n{indexes.rstrip()}\n    }}\n'
 q.write_text(header+up+down_body+'\n\n'+helpers+'}\n',encoding='utf-8'); p.unlink()
 print('CLOUDSCRIBE_STAGE3_MIGRATION_REPAIR=PASS')
+runpy.run_path(str(Path(__file__).with_name('repair_bridge_analyzers.py')), run_name='__main__')
