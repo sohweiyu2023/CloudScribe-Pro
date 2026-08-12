@@ -24,6 +24,6 @@ for old,new in (
     if t.count(old)!=1: raise SystemExit(f'verifier preimage mismatch: {old}')
     t=t.replace(old,new)
 needle='        "src/CloudScribe.Infrastructure/Files/DocumentContentStore.cs",\n'
-if t.count(needle)!=1: raise SystemExit('verifier store preimage mismatch')
-v.write_text(t.replace(needle, needle+'        "src/CloudScribe.Infrastructure/Files/DocumentContentCommit.cs",\n'),encoding='utf-8')
+if t.count(needle)<1: raise SystemExit('verifier store preimage mismatch')
+v.write_text(t.replace(needle, needle+'        "src/CloudScribe.Infrastructure/Files/DocumentContentCommit.cs",\n', 1),encoding='utf-8')
 print('CLOUDSCRIBE_STAGE3_SIMPLE_REPAIR=PASS')
