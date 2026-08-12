@@ -1,0 +1,307 @@
+name: CloudScribe Stage 3 Slice 1 .NET 10.0.400 Windows admission v2
+
+on:
+  push:
+    branches:
+      - cloudscribe-stage3-slice1-10.0.400-carrier
+    paths:
+      - '.github/workflows/cloudscribe-stage3-slice1-10.0.400-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  certify-and-push:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      EXPECTED_STAGE3_BASE: c1980b862cc078637b6d3692c90bd264d445579d
+      EXPECTED_PAYLOAD_SHA256: 37c49c8f589da32a33f61d5ae8253bf99fb993969807f0cf8fe1285e9964054b
+      TARGET_BRANCH: cloudscribe-0.4.0-stage3-slice1
+
+    steps:
+      - name: Checkout carrier
+        uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-stage3-slice1-10.0.400-carrier
+          path: carrier
+          fetch-depth: 1
+
+      - name: Checkout exact Stage 3 target
+        uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-0.4.0-stage3-slice1
+          path: source
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Set up exact .NET SDK 10.0.400
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+
+      - name: Verify base and reconstruct hash-bound payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actualBase = (git -C source rev-parse HEAD).Trim()
+          if ($actualBase -ne $env:EXPECTED_STAGE3_BASE) {
+            throw "Stage 3 target moved before admission: expected=$env:EXPECTED_STAGE3_BASE actual=$actualBase"
+          }
+          $payloadDir = Join-Path (Resolve-Path carrier) '.cloudscribe-ci/stage3-slice1-10.0.400-payload'
+          $parts = @(Get-ChildItem -LiteralPath $payloadDir -File -Filter '*.txt' | Sort-Object Name)
+          $expectedNames = 0..10 | ForEach-Object { '{0:D2}.txt' -f $_ }
+          $actualNames = @($parts | ForEach-Object Name)
+          if (($actualNames -join ',') -ne ($expectedNames -join ',')) {
+            throw "Payload chunk inventory mismatch: $($actualNames -join ', ')"
+          }
+          $encoded = ($parts | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join ''
+          $payloadPath = Join-Path $env:RUNNER_TEMP 'cloudscribe-stage3-slice1-payload.tar.gz'
+          [IO.File]::WriteAllBytes($payloadPath, [Convert]::FromBase64String($encoded))
+          $actualHash = (Get-FileHash -LiteralPath $payloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:EXPECTED_PAYLOAD_SHA256) {
+            throw "Stage 3 payload SHA mismatch: expected=$env:EXPECTED_PAYLOAD_SHA256 actual=$actualHash"
+          }
+          Write-Host "CLOUDSCRIBE_STAGE3_PAYLOAD_SHA256=$actualHash"
+
+      - name: Safely apply exact payload and record expected change inventory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from __future__ import annotations
+          import os, tarfile
+          from pathlib import Path
+
+          target = Path('source').resolve()
+          payload = Path(os.environ['RUNNER_TEMP']) / 'cloudscribe-stage3-slice1-payload.tar.gz'
+          expected_payload = {
+              'SESSION_STATE.json',
+              'SHA256SUMS.txt',
+              'src/CloudScribe.App/CloudScribe.App.csproj',
+              'src/CloudScribe.Infrastructure/Configuration/AppPaths.cs',
+              'src/CloudScribe.Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs',
+              'src/CloudScribe.Infrastructure/Files/DocumentContentStore.cs',
+              'src/CloudScribe.Infrastructure/Files/PhysicalDirectoryPolicy.cs',
+              'src/CloudScribe.Infrastructure/Persistence/CloudScribeDbContext.cs',
+              'src/CloudScribe.Infrastructure/Persistence/DatabaseInitializer.cs',
+              'src/CloudScribe.Infrastructure/Persistence/EfActivityTimelineStore.cs',
+              'src/CloudScribe.Infrastructure/Persistence/EfBillableOperationLedger.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Entities/BookmarkEntity.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Entities/DocumentEntity.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Entities/DocumentRevisionEntity.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Entities/DocumentSectionEntity.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Entities/DocumentTagEntity.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Entities/ReadingPositionEntity.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Entities/TagEntity.cs',
+              'src/CloudScribe.Infrastructure/Persistence/LegacyDatabaseMigrationBridge.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Migrations/20260812122000_Stage2Baseline.cs',
+              'src/CloudScribe.Infrastructure/Persistence/Migrations/20260812123000_Stage3Documents.cs',
+              'tests/CloudScribe.Architecture.Tests/Stage3PersistenceArchitectureTests.cs',
+              'tests/CloudScribe.Infrastructure.Tests/AppPathsTests.cs',
+              'tests/CloudScribe.Infrastructure.Tests/DocumentContentStoreTests.cs',
+              'tests/CloudScribe.Infrastructure.Tests/ObservabilityPersistenceTests.cs',
+              'tests/CloudScribe.Infrastructure.Tests/Stage3MigrationTests.cs',
+              'tests/test_verification_tools.py',
+              'tools/create_source_archive.py',
+              'tools/run_python_regression_shards.py',
+              'tools/verify_repository.py',
+              'tools/verify_source_release.py',
+              'tools/verify_stage2_source.py',
+              'tools/verify_stage3_source.py',
+          }
+          with tarfile.open(payload, 'r:gz') as archive:
+              members = archive.getmembers()
+              names = {m.name for m in members}
+              if names != expected_payload:
+                  raise SystemExit(f'payload inventory mismatch: missing={sorted(expected_payload-names)} extra={sorted(names-expected_payload)}')
+              for member in members:
+                  rel = Path(member.name)
+                  if rel.is_absolute() or '..' in rel.parts or not member.isfile():
+                      raise SystemExit(f'unsafe payload member: {member.name}')
+                  src = archive.extractfile(member)
+                  if src is None:
+                      raise SystemExit(f'unreadable payload member: {member.name}')
+                  dest = target.joinpath(*rel.parts)
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  dest.write_bytes(src.read())
+          legacy_rel = 'src/CloudScribe.Infrastructure/Persistence/ObservabilityDbContext.cs'
+          legacy = target / legacy_rel
+          if not legacy.is_file():
+              raise SystemExit('expected Stage 2 ObservabilityDbContext preimage is missing')
+          legacy.unlink()
+          expected_changes = sorted(expected_payload | {legacy_rel})
+          (Path(os.environ['RUNNER_TEMP']) / 'expected-stage3-changes.txt').write_text('\n'.join(expected_changes) + '\n', encoding='utf-8')
+          print(f'CLOUDSCRIBE_STAGE3_SLICE1_PAYLOAD=PASS members={len(expected_payload)} changed_paths={len(expected_changes)}')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "Safe payload application failed: $LASTEXITCODE" }
+
+      - name: Verify exact changed-file inventory including untracked files
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          import os, subprocess
+          from pathlib import Path
+
+          expected = set((Path(os.environ['RUNNER_TEMP']) / 'expected-stage3-changes.txt').read_text(encoding='utf-8').splitlines())
+          proc = subprocess.run(['git', 'status', '--porcelain=v1', '-uall'], check=True, text=True, capture_output=True)
+          actual = set()
+          for line in proc.stdout.splitlines():
+              if not line:
+                  continue
+              path = line[3:]
+              if ' -> ' in path:
+                  path = path.split(' -> ', 1)[1]
+              if path.startswith('"') and path.endswith('"'):
+                  raise SystemExit(f'unexpected quoted git path: {path}')
+              actual.add(path.replace('\\', '/'))
+          if actual != expected:
+              raise SystemExit(f'changed-file inventory mismatch: missing={sorted(expected-actual)} extra={sorted(actual-expected)}')
+          print(f'CLOUDSCRIBE_STAGE3_CHANGED_FILE_INVENTORY=PASS paths={len(actual)}')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "Changed-file inventory failed: $LASTEXITCODE" }
+
+      - name: Verify exact SDK and portable gates
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = (dotnet --version).Trim()
+          if ($sdk -ne '10.0.400') { throw "Expected .NET SDK 10.0.400, found $sdk" }
+          $commands = @(
+            'python tools/update_sha256_manifest.py --check',
+            'python tools/verify_repository.py',
+            'python tools/verify_project_dependencies.py',
+            'python tools/verify_stage1_source.py',
+            'python tools/verify_stage2_source.py',
+            'python tools/verify_stage3_source.py',
+            'python -B tools/run_verifier_self_tests.py',
+            'python -B tools/run_python_regression_shards.py --all'
+          )
+          foreach ($command in $commands) {
+            Write-Host "> $command"
+            Invoke-Expression $command
+            if ($LASTEXITCODE -ne 0) { throw "Gate failed ($LASTEXITCODE): $command" }
+          }
+
+      - name: Locked restore
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw "Locked restore failed: $LASTEXITCODE" }
+
+      - name: Build Debug and Release
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($configuration in @('Debug','Release')) {
+            dotnet build CloudScribe.sln -c $configuration --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+            if ($LASTEXITCODE -ne 0) { throw "$configuration build failed: $LASTEXITCODE" }
+          }
+
+      - name: Run every compiled test project
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $results = Join-Path $env:RUNNER_TEMP 'stage3-trx'
+          New-Item -ItemType Directory -Force -Path $results | Out-Null
+          $projects = @(
+            'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+            'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+            'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+            'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj'
+          )
+          foreach ($project in $projects) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($project)
+            dotnet test $project -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --logger "trx;LogFileName=$name.trx" --results-directory $results
+            if ($LASTEXITCODE -ne 0) { throw "Tests failed: $project ($LASTEXITCODE)" }
+          }
+          @'
+          import os, xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'stage3-trx'
+          files = sorted(root.glob('*.trx'))
+          if len(files) != 4:
+              raise SystemExit(f'expected 4 TRX files, found {len(files)}')
+          total = passed = failed = 0
+          for path in files:
+              tree = ET.parse(path)
+              counters = next(e for e in tree.iter() if e.tag.endswith('Counters'))
+              total += int(counters.attrib.get('total', 0))
+              passed += int(counters.attrib.get('passed', 0))
+              failed += int(counters.attrib.get('failed', 0))
+          print(f'CLOUDSCRIBE_STAGE3_DOTNET_TESTS total={total} passed={passed} failed={failed}')
+          if total <= 147 or passed != total or failed != 0:
+              raise SystemExit('Stage 3 must increase the 147-test baseline and pass every compiled test')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "TRX evidence verification failed: $LASTEXITCODE" }
+
+      - name: Verify formatting and post-test source immutability
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet format CloudScribe.sln --verify-no-changes --no-restore
+          if ($LASTEXITCODE -ne 0) { throw "dotnet format verification failed: $LASTEXITCODE" }
+          python tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Source manifest changed during native admission.' }
+          python tools/verify_stage3_source.py
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 3 source verifier failed after native tests.' }
+
+      - name: Reverify changed-file inventory before commit
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          import os, subprocess
+          from pathlib import Path
+          expected = set((Path(os.environ['RUNNER_TEMP']) / 'expected-stage3-changes.txt').read_text(encoding='utf-8').splitlines())
+          out = subprocess.run(['git','status','--porcelain=v1','-uall'], check=True, text=True, capture_output=True).stdout
+          actual = set(line[3:].replace('\\','/') for line in out.splitlines() if line)
+          if actual != expected:
+              raise SystemExit(f'post-test change inventory mismatch: missing={sorted(expected-actual)} extra={sorted(actual-expected)}')
+          print(f'CLOUDSCRIBE_STAGE3_POSTTEST_INVENTORY=PASS paths={len(actual)}')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "Post-test inventory failed: $LASTEXITCODE" }
+
+      - name: Commit admitted Slice 1 to product branch
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:EXPECTED_STAGE3_BASE) { throw "Target base moved during admission: $head" }
+          git config user.name 'cloudscribe-ci'
+          git config user.email 'actions@github.com'
+          git add -A
+          git commit -m 'feat: implement Stage 3 Slice 1 durable persistence foundation'
+          if ($LASTEXITCODE -ne 0) { throw "Stage 3 admission commit failed: $LASTEXITCODE" }
+          $newHead = (git rev-parse HEAD).Trim()
+          git push origin "HEAD:$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw "Stage 3 target push failed: $LASTEXITCODE" }
+          Write-Host "CLOUDSCRIBE_STAGE3_SLICE1_ADMITTED_HEAD=$newHead"
+
+      - name: Upload Stage 3 admission evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage3-slice1-admission-v2-evidence
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/stage3-trx/*.trx
