@@ -15,9 +15,12 @@ arrays=('\n    private static readonly string[] BookmarkDocumentOffsetColumns = 
 '    private static readonly string[] DocumentStatusUpdatedColumns = ["Status", "UpdatedAtUnixMilliseconds"];\n')
 if src.count(a)!=1: raise SystemExit('Stage3 anchor mismatch')
 header=src[:src.index('    protected override void Up')].replace(a,a+arrays)
-down=src[src.index('    protected override void Down'):]; down_body,_=down.rsplit('\n}',1)
+down_start=src.index('    protected override void Down')
+down=src[down_start:]; down_body,_=down.rsplit('\n}',1)
 start=src.index('        migrationBuilder.CreateTable(',src.index('    protected override void Up'))
-idx=src.index('        migrationBuilder.CreateIndex(',start); region=src[start:idx]; indexes=src[idx:src.index('    protected override void Down')]
+idx=src.index('        migrationBuilder.CreateIndex(',start)
+up_close=src.index('\n    }\n\n    protected override void Down',idx)
+region=src[start:idx]; indexes=src[idx:up_close]
 tables=['documents','tags','bookmarks','document_revisions','document_sections','reading_positions','document_tags']; blocks=[]
 for i,name in enumerate(tables):
     marker=f'        migrationBuilder.CreateTable(\n            name: "{name}",'; s=region.index(marker)
