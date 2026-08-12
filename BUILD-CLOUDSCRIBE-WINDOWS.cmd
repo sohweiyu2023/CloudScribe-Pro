@@ -9,6 +9,7 @@ rem PowerShell is invoked with a process-scoped execution-policy override so an
 rem Internet-downloaded source ZIP can run the repository's reviewed publish script
 rem without changing the user's persistent PowerShell policy.
 
+set "REQUIRED_DOTNET=10.0.400"
 set "ROOT=%~dp0"
 pushd "%ROOT%.." >nul 2>nul
 if errorlevel 1 goto :invalid_root
@@ -26,10 +27,14 @@ if errorlevel 1 goto :missing_pwsh
 where python >nul 2>nul
 if errorlevel 1 goto :missing_python
 
+set "DOTNET_VERSION="
+for /f "tokens=1" %%V in ('dotnet --list-sdks 2^>nul ^| findstr /b /c:"%REQUIRED_DOTNET% "') do set "DOTNET_VERSION=%%V"
+if not "%DOTNET_VERSION%"=="%REQUIRED_DOTNET%" goto :wrong_dotnet
+
 pushd "%ROOT%"
-for /f "usebackq delims=" %%V in (`dotnet --version`) do set "DOTNET_VERSION=%%V"
+for /f "usebackq delims=" %%V in (`dotnet --version 2^>nul`) do set "DOTNET_VERSION=%%V"
 popd
-if not "%DOTNET_VERSION%"=="10.0.302" goto :wrong_dotnet
+if not "%DOTNET_VERSION%"=="%REQUIRED_DOTNET%" goto :wrong_dotnet
 
 if not exist "%OUT%" goto :after_remove_output
 echo Removing previous runnable output:
@@ -122,8 +127,9 @@ echo ERROR: python was not found. Python is required by the safe publish-path va
 exit /b 2
 
 :wrong_dotnet
-echo ERROR: CloudScribe requires .NET SDK 10.0.302 for this checkpoint.
-echo Found: %DOTNET_VERSION%
+echo ERROR: CloudScribe requires .NET SDK %REQUIRED_DOTNET% for this checkpoint.
+echo Installed SDKs:
+dotnet --list-sdks
 exit /b 2
 
 :invalid_root
