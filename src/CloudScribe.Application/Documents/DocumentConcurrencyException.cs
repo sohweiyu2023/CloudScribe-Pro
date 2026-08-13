@@ -3,7 +3,12 @@ namespace CloudScribe.Application.Documents;
 public sealed class DocumentConcurrencyException : InvalidOperationException
 {
     public DocumentConcurrencyException(Guid documentId, long expectedVersion)
-        : base($"Document {documentId:N} changed after version {expectedVersion}; reload before saving again.")
+        : this(documentId, expectedVersion, innerException: null)
+    {
+    }
+
+    public DocumentConcurrencyException(Guid documentId, long expectedVersion, Exception? innerException)
+        : base($"Document {documentId:N} changed after version {expectedVersion}; reload before saving again.", innerException)
     {
         DocumentId = documentId;
         ExpectedVersion = expectedVersion;
