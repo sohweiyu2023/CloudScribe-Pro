@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: cloudscribe-stage3-slice1-v4
+  cancel-in-progress: true
+
 jobs:
   certify-and-push:
     runs-on: windows-2025
@@ -136,20 +140,15 @@ jobs:
         working-directory: source
         run: |
           $ErrorActionPreference='Stop'
-          $trackedCs=@(git diff --name-only --diff-filter=ACMRTUXB -- '*.cs')
-          if($LASTEXITCODE -ne 0){throw 'Unable to enumerate changed tracked C# files.'}
-          $untrackedCs=@(git ls-files --others --exclude-standard -- '*.cs')
-          if($LASTEXITCODE -ne 0){throw 'Unable to enumerate changed untracked C# files.'}
-          $changedCs=@($trackedCs + $untrackedCs | Where-Object { $_ -and $_.Trim() -and (Test-Path $_ -PathType Leaf) } | Sort-Object -Unique)
-          if($changedCs.Count -eq 0){throw 'No changed C# files found for Stage 3 formatting gate.'}
-          Write-Host "CLOUDSCRIBE_STAGE3_FORMAT_VERIFY_SCOPE changed_cs=$($changedCs.Count)"
-          $formatArgs=@('format','CloudScribe.sln','--verify-no-changes','--no-restore','--include') + $changedCs
-          & dotnet @formatArgs
-          if($LASTEXITCODE -ne 0){throw 'Stage 3 changed-file dotnet format verification failed.'}
+          python ../carrier/.cloudscribe-ci/stage3-v4/repair_migrations.py --format-only --source . --verify-unchanged
+          if($LASTEXITCODE -ne 0){throw 'Stage 3 admitted-file formatting stability gate failed.'}
+          git diff --check
+          if($LASTEXITCODE -ne 0){throw 'Post-test whitespace validation failed.'}
           python tools/update_sha256_manifest.py --check
           if($LASTEXITCODE -ne 0){throw 'Manifest changed during native tests.'}
           python tools/verify_stage3_source.py
           if($LASTEXITCODE -ne 0){throw 'Stage 3 verifier failed after tests.'}
+          Write-Host 'CLOUDSCRIBE_STAGE3_POST_TEST_IMMUTABILITY=PASS'
 
       - name: Commit only after every gate passes
         shell: pwsh
