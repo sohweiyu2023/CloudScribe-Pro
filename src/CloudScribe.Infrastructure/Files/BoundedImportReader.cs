@@ -2,6 +2,8 @@ namespace CloudScribe.Infrastructure.Files;
 
 internal sealed class BoundedImportReader
 {
+    private readonly int _maxBytes = BoundedImportRequestValidator.MaxSourceBytes;
+
     public async Task<byte[]> ReadAsync(Stream source, CancellationToken cancellationToken)
     {
         using MemoryStream buffer = new(64 * 1024);
@@ -16,7 +18,7 @@ internal sealed class BoundedImportReader
             }
 
             total = checked(total + read);
-            if (total > BoundedImportRequestValidator.MaxSourceBytes)
+            if (total > _maxBytes)
             {
                 throw new InvalidDataException("Content exceeds the configured size limit.");
             }
