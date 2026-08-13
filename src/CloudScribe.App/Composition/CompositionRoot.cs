@@ -33,6 +33,9 @@ public static class CompositionRoot
             viewModel.ConfigureStage3DocumentWorkflow(
                 serviceProvider.GetRequiredService<IDocumentLibrary>(),
                 serviceProvider.GetRequiredService<DocumentAutosaveCoordinator>());
+            viewModel.ConfigureStage3ImportWorkflow(
+                serviceProvider.GetRequiredService<ILocalDocumentImporter>(),
+                serviceProvider.GetRequiredService<DocumentPreprocessor>());
             viewModel.ScheduleDocumentWorkspaceStart();
             return viewModel;
         });
