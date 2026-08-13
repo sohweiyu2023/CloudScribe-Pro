@@ -43,10 +43,8 @@ q.write_text(header+up+down_body+'\n\n'+helpers+'}\n',encoding='utf-8'); p.unlin
 print('CLOUDSCRIBE_STAGE3_MIGRATION_REPAIR=PASS')
 runpy.run_path(str(Path(__file__).with_name('repair_bridge_analyzers.py')), run_name='__main__')
 
-# The source payload is generated and then analyzer-repaired above. Normalize that
-# final candidate before the SHA-256 manifest is frozen and before builds/tests run,
-# so the later --verify-no-changes gate genuinely tests post-test immutability rather
-# than discovering formatting debt after certification has already completed.
+# Normalize only C# files admitted by this Stage 3 slice. Formatting the whole
+# solution would rewrite pre-existing baseline files and violate the slice scope.
 source_root = Path('source')
 restore = subprocess.run(
     [
@@ -64,6 +62,32 @@ restore = subprocess.run(
 if restore.returncode != 0:
     raise SystemExit('Pre-freeze locked restore failed')
 
+
+def git_paths(*args: str) -> list[str]:
+    result = subprocess.run(
+        ['git', '-C', str(source_root), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"Unable to enumerate Stage 3 C# files: {' '.join(args)}")
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+tracked_cs = git_paths('diff', '--name-only', '--diff-filter=ACMRTUXB', '--', '*.cs')
+untracked_cs = git_paths('ls-files', '--others', '--exclude-standard', '--', '*.cs')
+changed_cs = sorted(
+    {
+        path
+        for path in [*tracked_cs, *untracked_cs]
+        if (source_root / path).is_file()
+    }
+)
+if not changed_cs:
+    raise SystemExit('No changed C# files found for Stage 3 formatting')
+
+print(f'CLOUDSCRIBE_STAGE3_FORMAT_SCOPE changed_cs={len(changed_cs)}')
 format_result = subprocess.run(
     [
         'dotnet',
@@ -72,10 +96,12 @@ format_result = subprocess.run(
         '--no-restore',
         '--verbosity',
         'minimal',
+        '--include',
+        *changed_cs,
     ],
     cwd=source_root,
     check=False,
 )
 if format_result.returncode != 0:
-    raise SystemExit('Pre-freeze dotnet format failed')
+    raise SystemExit('Pre-freeze targeted dotnet format failed')
 print('CLOUDSCRIBE_STAGE3_CANDIDATE_FORMAT_NORMALIZED=PASS')
