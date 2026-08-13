@@ -98,6 +98,14 @@ jobs:
             if($LASTEXITCODE -ne 0){throw "Gate failed: $command"}
           }
 
+      - name: Rehydrate locked assets after cleanup
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if($LASTEXITCODE -ne 0){throw 'Post-format locked restore failed.'}
+
       - name: Build Debug and Release
         shell: pwsh
         working-directory: source
