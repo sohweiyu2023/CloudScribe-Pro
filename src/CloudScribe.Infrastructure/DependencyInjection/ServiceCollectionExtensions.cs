@@ -1,5 +1,6 @@
 using CloudScribe.Application.Activation;
 using CloudScribe.Application.Diagnostics;
+using CloudScribe.Application.Documents;
 using CloudScribe.Application.Observability;
 using CloudScribe.Application.Startup;
 using CloudScribe.Infrastructure.Activation;
@@ -57,6 +58,8 @@ public static class ServiceCollectionExtensions
         });
         services.AddSingleton<LegacyDatabaseMigrationBridge>();
         services.AddSingleton<DocumentContentStore>();
+        services.AddSingleton<IDocumentLibrary, EfDocumentLibrary>();
+        services.AddTransient<DocumentAutosaveCoordinator>();
         services.AddSingleton<IActivityTimelineStore, EfActivityTimelineStore>();
         services.AddSingleton<IBillableOperationLedger, EfBillableOperationLedger>();
         services.AddSingleton<IApplicationInitializer, DatabaseInitializer>();
