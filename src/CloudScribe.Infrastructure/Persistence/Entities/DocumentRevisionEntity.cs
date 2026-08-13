@@ -16,5 +16,9 @@ public sealed class DocumentRevisionEntity
 
     public required string ContentSha256 { get; set; }
 
+    public string? ContentRelativePath { get; set; }
+
+    public long? ContentByteLength { get; set; }
+
     public string? ImportProvenance { get; set; }
 }
