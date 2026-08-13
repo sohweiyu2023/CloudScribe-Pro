@@ -116,21 +116,32 @@ def main() -> int:
         state = json.loads((root / "SESSION_STATE.json").read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as exc:
         return fail(f"SESSION_STATE.json invalid: {exc}")
-    if state.get("current_stage") != 2 or state.get("stage2_source_implemented") is not True:
-        return fail("SESSION_STATE.json does not identify implemented Stage 2 source")
-    if str(state.get("repository_version", "")).split("-", 1)[0] != "0.3.48":
-        return fail(f"Stage 2 source version is not 0.3.48: {state.get('repository_version')!r}")
+    stage = state.get("current_stage")
+    if stage not in (2, 3) or state.get("stage2_source_implemented") is not True:
+        return fail("SESSION_STATE.json does not identify a checkpoint that preserves implemented Stage 2 source")
+    version = str(state.get("repository_version", ""))
+    if stage == 2 and not version.startswith("0.3.48-"):
+        return fail(f"Stage 2 source version is not 0.3.48: {version!r}")
+    if stage == 3 and not version.startswith("0.4.0-stage3"):
+        return fail(f"Stage 3 source version does not preserve the expected checkpoint lineage: {version!r}")
 
     if state.get("stage2_runtime_tested") is not True or state.get("stage2_windows_ui_tested") is not True:
         return fail("SESSION_STATE.json does not record completed automated/native Windows Stage 2 engineering verification")
-    if state.get("stage2_manual_visual_acceptance") is not False or state.get("stage2_user_clicked_editor_retest") is not False:
-        return fail("SESSION_STATE.json must keep real-user Stage 2 acceptance pending until the user verifies the repaired editor")
+    if stage == 2:
+        if state.get("stage2_manual_visual_acceptance") is not False or state.get("stage2_user_clicked_editor_retest") is not False:
+            return fail("SESSION_STATE.json must keep real-user Stage 2 acceptance pending until the user verifies the repaired editor")
+    elif (
+        state.get("stage2_promoted") is not True
+        or state.get("stage2_manual_visual_acceptance") is not True
+        or state.get("stage2_user_clicked_editor_retest") is not True
+    ):
+        return fail("Stage 3 must preserve the promoted, real-user-accepted Stage 2 checkpoint")
     state_text = json.dumps(state, ensure_ascii=False)
     for stale in ("Exact 0.3.47", "Exact 0.3.48 bytes have not executed", "Exact 0.3.48 runtime remains pending", "Apply the Stage 2 user-acceptance focus repair"):
         if stale in state_text:
             return fail(f"SESSION_STATE.json retains stale pre-focus-repair state: {stale}")
 
-    print("PASS: Stage 2 adaptive shell, 17-case visual matrix, Follow System pointer/focus paper-theme regression, editor rendered/brush contrast and Focus Reading contracts verified.")
+    print("PASS: Stage 2 adaptive shell, 17-case visual matrix, Follow System pointer/focus paper-theme regression, editor rendered/brush contrast and Focus Reading contracts verified/preserved.")
     return 0
 
 

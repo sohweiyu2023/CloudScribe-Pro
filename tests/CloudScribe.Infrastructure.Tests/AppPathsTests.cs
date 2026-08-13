@@ -21,6 +21,8 @@ public sealed class AppPathsTests
 
             Assert.True(Path.IsPathFullyQualified(paths.RootDirectory));
             Assert.Equal(Path.GetFullPath(root), paths.RootDirectory);
+            Assert.Equal(Path.Combine(Path.GetFullPath(root), "documents"), paths.DocumentsDirectory);
+            Assert.Equal(Path.Combine(Path.GetFullPath(root), "backups"), paths.BackupsDirectory);
             Assert.Equal(Path.Combine(Path.GetFullPath(root), "logs"), paths.DiagnosticsDirectory);
         }
         finally

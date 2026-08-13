@@ -675,7 +675,7 @@ class RepositoryVerifierTests(unittest.TestCase):
 
 
 class Stage2SourceContractTests(unittest.TestCase):
-    def test_current_stage2_source_contract_passes(self):
+    def test_current_checkpoint_preserves_stage2_source_contract(self):
         result = _run_tool("verify_stage2_source.py")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -696,6 +696,11 @@ class Stage2SourceContractTests(unittest.TestCase):
             root = _copy_source(Path(temporary))
             path = root / "SESSION_STATE.json"
             payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["current_stage"] = 2
+            payload["repository_version"] = "0.3.48-stage2-repair-in-progress"
+            payload["stage2_promoted"] = False
+            payload["stage2_promotion_blocked"] = True
+            payload["stage2_manual_visual_acceptance"] = False
             payload["stage2_user_clicked_editor_retest"] = True
             path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
             result = _run_tool("verify_stage2_source.py", cwd=root)

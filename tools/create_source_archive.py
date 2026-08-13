@@ -43,7 +43,7 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         return fail(f"cannot read SESSION_STATE.json: {exc}")
     version = str(state.get("repository_version", "")).strip()
-    if not version.startswith("0.3.48-"):
+    if not (version.startswith("0.3.48-") or version.startswith("0.4.0-stage3")):
         return fail(f"refusing archive for unexpected repository version: {version!r}")
     expected_name = f"CloudScribe_Pro_Source_{version}"
     name = args.name or expected_name

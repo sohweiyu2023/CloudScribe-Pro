@@ -5,6 +5,7 @@ using CloudScribe.Application.Startup;
 using CloudScribe.Infrastructure.Activation;
 using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.Diagnostics;
+using CloudScribe.Infrastructure.Files;
 using CloudScribe.Infrastructure.Persistence;
 using CloudScribe.Infrastructure.Providers;
 using CloudScribe.Providers.Abstractions;
@@ -40,7 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IActivationRouter, ActivationRouter>();
         services.AddSingleton<ISingleInstanceCoordinator, SingleInstanceCoordinator>();
 
-        services.AddPooledDbContextFactory<ObservabilityDbContext>((serviceProvider, builder) =>
+        services.AddPooledDbContextFactory<CloudScribeDbContext>((serviceProvider, builder) =>
         {
             AppPaths paths = serviceProvider.GetRequiredService<AppPaths>();
             paths.EnsureDatabaseDirectory();
@@ -49,9 +50,13 @@ public static class ServiceCollectionExtensions
                 DataSource = paths.DatabasePath,
                 Cache = SqliteCacheMode.Shared,
                 Pooling = true,
+                ForeignKeys = true,
+                DefaultTimeout = 5,
             };
             builder.UseSqlite(connection.ConnectionString);
         });
+        services.AddSingleton<LegacyDatabaseMigrationBridge>();
+        services.AddSingleton<DocumentContentStore>();
         services.AddSingleton<IActivityTimelineStore, EfActivityTimelineStore>();
         services.AddSingleton<IBillableOperationLedger, EfBillableOperationLedger>();
         services.AddSingleton<IApplicationInitializer, DatabaseInitializer>();

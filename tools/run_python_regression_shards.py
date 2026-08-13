@@ -154,16 +154,34 @@ def build_checks(root: Path) -> list[Check]:
 
     state = json.loads((root / "SESSION_STATE.json").read_text(encoding="utf-8-sig"))
     global_json = json.loads((root / "global.json").read_text(encoding="utf-8-sig"))
+    current_stage = state.get("current_stage")
+    version = str(state.get("repository_version", ""))
+    stage_lineage_ok = (
+        (current_stage == 2 and version.startswith("0.3.48-"))
+        or (current_stage == 3 and version.startswith("0.4.0-stage3"))
+    )
+    promotion_state_ok = (
+        current_stage == 2
+        and state.get("stage2_promotion_blocked") is True
+        and state.get("stage2_manual_visual_acceptance") is False
+        and state.get("stage2_user_clicked_editor_retest") is False
+    ) or (
+        current_stage == 3
+        and state.get("stage2_promotion_blocked") is False
+        and state.get("stage2_promoted") is True
+        and state.get("stage2_manual_visual_acceptance") is True
+        and state.get("stage2_user_clicked_editor_retest") is True
+    )
     session_specs = (
         (state.get("project") == "CloudScribe Pro", "project identity"),
-        (state.get("current_stage") == 2, "current stage"),
-        (str(state.get("repository_version", "")).startswith("0.3.48-"), "repository version"),
+        (current_stage in (2, 3), "current stage"),
+        (stage_lineage_ok, "repository version"),
         (state.get("required_dotnet_sdk") == "10.0.400", "required SDK"),
         (global_json.get("sdk", {}).get("version") == state.get("required_dotnet_sdk"), "global/session SDK consistency"),
         (state.get("stage1_checkpoint_promoted") is True, "Stage 1 checkpoint promoted"),
         (state.get("stage2_source_implemented") is True and state.get("stage2_runtime_tested") is True and state.get("stage2_windows_ui_tested") is True, "Stage 2 source and automated Windows engineering verification recorded"),
-        (state.get("stage2_promotion_blocked") is True and state.get("stage2_manual_visual_acceptance") is False and state.get("stage2_user_clicked_editor_retest") is False, "manual promotion remains blocked pending real-user editor acceptance"),
-        (state.get("stage_gate_passed") is False, "stage gate not falsely claimed"),
+        (promotion_state_ok, "Stage 2 promotion/acceptance state matches the current checkpoint"),
+        (state.get("stage_gate_passed") is False, "current stage gate not falsely claimed"),
         (state.get("whole_application_final_claimed") is False, "whole application not falsely final"),
     )
     for condition, label in session_specs:

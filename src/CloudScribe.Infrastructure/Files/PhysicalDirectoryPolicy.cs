@@ -7,6 +7,22 @@ namespace CloudScribe.Infrastructure.Files;
 /// </summary>
 public static class PhysicalDirectoryPolicy
 {
+    public static string ValidateExistsWithoutLinks(string path, string rejectionMessage)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(rejectionMessage);
+
+        string fullPath = Path.GetFullPath(path);
+        DirectoryInfo directory = new(fullPath);
+        if (!directory.Exists)
+        {
+            throw new DirectoryNotFoundException($"Directory '{fullPath}' does not exist.");
+        }
+
+        ValidateExistingAncestors(directory, rejectionMessage);
+        return fullPath;
+    }
+
     public static string EnsureExistsWithoutLinks(string path, string rejectionMessage)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

@@ -12,11 +12,11 @@ public sealed class ObservabilityPersistenceTests
         string root = Path.Combine(Path.GetTempPath(), "cloudscribe-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         string databasePath = Path.Combine(root, "observability.db");
-        DbContextOptions<ObservabilityDbContext> options = new DbContextOptionsBuilder<ObservabilityDbContext>()
+        DbContextOptions<CloudScribeDbContext> options = new DbContextOptionsBuilder<CloudScribeDbContext>()
             .UseSqlite($"Data Source={databasePath}")
             .Options;
         TestContextFactory factory = new(options);
-        await using (ObservabilityDbContext setup = factory.CreateDbContext())
+        await using (CloudScribeDbContext setup = factory.CreateDbContext())
         {
             await setup.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
         }
@@ -84,12 +84,12 @@ public sealed class ObservabilityPersistenceTests
         Assert.Throws<ArgumentException>(() => default(ExactMoney).ToDecimal());
     }
 
-    private sealed class TestContextFactory(DbContextOptions<ObservabilityDbContext> options)
-        : IDbContextFactory<ObservabilityDbContext>
+    private sealed class TestContextFactory(DbContextOptions<CloudScribeDbContext> options)
+        : IDbContextFactory<CloudScribeDbContext>
     {
-        public ObservabilityDbContext CreateDbContext() => new(options);
+        public CloudScribeDbContext CreateDbContext() => new(options);
 
-        public Task<ObservabilityDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+        public Task<CloudScribeDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(CreateDbContext());
     }
 

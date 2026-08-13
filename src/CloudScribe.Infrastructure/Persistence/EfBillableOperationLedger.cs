@@ -5,12 +5,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CloudScribe.Infrastructure.Persistence;
 
-public sealed class EfBillableOperationLedger(IDbContextFactory<ObservabilityDbContext> contextFactory) : IBillableOperationLedger
+public sealed class EfBillableOperationLedger(IDbContextFactory<CloudScribeDbContext> contextFactory) : IBillableOperationLedger
 {
     public async Task AppendRequiredAsync(BillableOperationLedgerEntry entry, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        using ObservabilityDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        using CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         context.BillableLedger.Add(new BillableLedgerEntity
         {
             Id = entry.Id,
@@ -35,7 +35,7 @@ public sealed class EfBillableOperationLedger(IDbContextFactory<ObservabilityDbC
             throw new ArgumentOutOfRangeException(nameof(maximumCount));
         }
 
-        using ObservabilityDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        using CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         return await context.BillableLedger
             .AsNoTracking()
             .OrderByDescending(item => item.OccurredAtUnixMilliseconds)

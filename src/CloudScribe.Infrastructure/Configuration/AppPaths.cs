@@ -32,6 +32,8 @@ public sealed class AppPaths
         RootDirectory = root;
         ExecutableDirectory = Path.GetFullPath(AppContext.BaseDirectory);
         DatabasePath = Path.Combine(root, "data", "cloudscribe.db");
+        DocumentsDirectory = Path.Combine(root, "documents");
+        BackupsDirectory = Path.Combine(root, "backups");
         _diagnosticsPreferredIsExecutable = !hasConfiguredRoot;
         PreferredDiagnosticsDirectory = hasConfiguredRoot
             ? Path.Combine(root, "logs")
@@ -46,6 +48,10 @@ public sealed class AppPaths
     public string ExecutableDirectory { get; }
 
     public string DatabasePath { get; }
+
+    public string DocumentsDirectory { get; }
+
+    public string BackupsDirectory { get; }
 
     public string PreferredDiagnosticsDirectory { get; }
 
@@ -79,6 +85,10 @@ public sealed class AppPaths
 
     public void EnsureDatabaseDirectory() => EnsureOwnedDirectory(Path.GetDirectoryName(DatabasePath)!);
 
+    public void EnsureDocumentsDirectory() => EnsureOwnedDirectory(DocumentsDirectory);
+
+    public void EnsureBackupsDirectory() => EnsureOwnedDirectory(BackupsDirectory);
+
     public void EnsureDiagnosticsDirectory() => _ = ResolveDiagnosticsDirectory();
 
     public void EnsureSupportBundleStagingDirectory() => EnsureOwnedDirectory(SupportBundleStagingDirectory);
@@ -87,6 +97,8 @@ public sealed class AppPaths
     {
         EnsureRootDirectory();
         EnsureDatabaseDirectory();
+        EnsureDocumentsDirectory();
+        EnsureBackupsDirectory();
         EnsureDiagnosticsDirectory();
         EnsureSupportBundleStagingDirectory();
     }

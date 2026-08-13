@@ -5,12 +5,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CloudScribe.Infrastructure.Persistence;
 
-public sealed class EfActivityTimelineStore(IDbContextFactory<ObservabilityDbContext> contextFactory) : IActivityTimelineStore
+public sealed class EfActivityTimelineStore(IDbContextFactory<CloudScribeDbContext> contextFactory) : IActivityTimelineStore
 {
     public async Task AppendAsync(ActivityTimelineEntry entry, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        using ObservabilityDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        using CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         context.ActivityTimeline.Add(new ActivityTimelineEntity
         {
             Id = entry.Id,
@@ -30,7 +30,7 @@ public sealed class EfActivityTimelineStore(IDbContextFactory<ObservabilityDbCon
             throw new ArgumentOutOfRangeException(nameof(maximumCount));
         }
 
-        using ObservabilityDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        using CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         return await context.ActivityTimeline
             .AsNoTracking()
             .OrderByDescending(item => item.OccurredAtUnixMilliseconds)

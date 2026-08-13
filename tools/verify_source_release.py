@@ -73,15 +73,27 @@ def main() -> int:
 
             root = temp_root / release_root_name
             manifest_before = hashlib.sha256((root / "SHA256SUMS.txt").read_bytes()).hexdigest()
+            try:
+                state = __import__("json").loads((root / "SESSION_STATE.json").read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError) as exc:
+                return fail(f"fresh-extracted SESSION_STATE.json is invalid: {exc}")
+            stage = state.get("current_stage")
             checks = [
                 [sys.executable, "-B", "tools/run_verifier_self_tests.py"],
                 [sys.executable, "tools/update_sha256_manifest.py", "--check"],
                 [sys.executable, "tools/verify_repository.py"],
                 [sys.executable, "tools/verify_project_dependencies.py"],
                 [sys.executable, "tools/verify_stage1_source.py"],
-                [sys.executable, "tools/verify_stage2_source.py"],
-                [sys.executable, "tools/run_python_regression_shards.py", "--all"],
             ]
+            if stage == 2:
+                checks.extend([
+                    [sys.executable, "tools/verify_stage2_source.py"],
+                    [sys.executable, "tools/run_python_regression_shards.py", "--all"],
+                ])
+            elif stage == 3:
+                checks.append([sys.executable, "tools/verify_stage3_source.py"])
+            else:
+                return fail(f"unsupported fresh-extracted stage for source release verification: {stage!r}")
             for command in checks:
                 result = subprocess.run(command, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=900, check=False)
                 if result.returncode != 0:
