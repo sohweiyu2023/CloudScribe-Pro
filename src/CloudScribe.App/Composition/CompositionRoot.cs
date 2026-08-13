@@ -1,4 +1,5 @@
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Documents;
 using CloudScribe.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,7 +27,15 @@ public static class CompositionRoot
         builder.Logging.SetMinimumLevel(LogLevel.Information);
 
         builder.Services.AddCloudScribeInfrastructure(builder.Configuration);
-        builder.Services.AddSingleton<ShellViewModel>();
+        builder.Services.AddSingleton(serviceProvider =>
+        {
+            ShellViewModel viewModel = ActivatorUtilities.CreateInstance<ShellViewModel>(serviceProvider);
+            viewModel.ConfigureStage3DocumentWorkflow(
+                serviceProvider.GetRequiredService<IDocumentLibrary>(),
+                serviceProvider.GetRequiredService<DocumentAutosaveCoordinator>());
+            viewModel.ScheduleDocumentWorkspaceStart();
+            return viewModel;
+        });
         builder.Services.AddSingleton<MainWindow>();
 
         return builder.Build();
