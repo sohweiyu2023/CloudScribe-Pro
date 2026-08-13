@@ -4,19 +4,19 @@ namespace CloudScribe.Application.Documents;
 
 internal sealed class DocumentPreprocessorEngine
 {
-    private const int MaxCharacters = 16 * 1024 * 1024;
+    private readonly int _maxCharacters = 16 * 1024 * 1024;
 
     public DocumentPreprocessingPreview Preview(
         string sourceText,
         DocumentPreprocessingOptions? options)
     {
         ArgumentNullException.ThrowIfNull(sourceText);
-        if (sourceText.Length > MaxCharacters)
+        if (sourceText.Length > _maxCharacters)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(sourceText),
                 sourceText.Length,
-                $"Preprocessing preview is limited to {MaxCharacters:N0} UTF-16 code units.");
+                $"Preprocessing preview is limited to {_maxCharacters:N0} UTF-16 code units.");
         }
 
         DocumentPreprocessingOptions effective = options ?? new();
@@ -170,7 +170,8 @@ internal sealed class DocumentPreprocessorEngine
 
         string candidate = source[start..end].TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}');
         if (!Uri.TryCreate(candidate, UriKind.Absolute, out Uri? uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
+                && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
             || string.IsNullOrWhiteSpace(uri.Host))
         {
             return false;
