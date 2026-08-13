@@ -27,7 +27,7 @@ public sealed class DatabaseRecoveryTests
                 IMigrator migrator = seed.GetService<IMigrator>();
                 await migrator
                     .MigrateAsync(Stage3Documents.MigrationId, TestContext.Current.CancellationToken)
-                    .ConfigureAwait(false);
+                    .ConfigureAwait(true);
                 seed.ActivityTimeline.Add(new ActivityTimelineEntity
                 {
                     Id = activityId,
@@ -37,29 +37,29 @@ public sealed class DatabaseRecoveryTests
                     Summary = "Preserve before migration",
                     CorrelationId = "stage3-recovery-test",
                 });
-                await seed.SaveChangesAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+                await seed.SaveChangesAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             }
 
             DatabaseInitializer initializer = CreateInitializer(paths);
-            await initializer.InitializeAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+            await initializer.InitializeAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             string backupPath = Assert.Single(Directory.EnumerateFiles(paths.BackupsDirectory, "pre-migration-*.db"));
             using CloudScribeDbContext backup = CreateContext(backupPath);
             string[] backupMigrations = (await backup.Database
                 .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)
-                .ConfigureAwait(false))
+                .ConfigureAwait(true))
                 .ToArray();
             Assert.Equal([Stage2Baseline.MigrationId, Stage3Documents.MigrationId], backupMigrations);
             ActivityTimelineEntity preserved = await backup.ActivityTimeline
                 .SingleAsync(TestContext.Current.CancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
             Assert.Equal(activityId, preserved.Id);
             Assert.Equal("Preserve before migration", preserved.Summary);
 
             using CloudScribeDbContext current = CreateContext(paths.DatabasePath);
             Assert.Equal(3, (await current.Database
                 .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)
-                .ConfigureAwait(false)).Count());
+                .ConfigureAwait(true)).Count());
         }
         finally
         {
@@ -74,14 +74,14 @@ public sealed class DatabaseRecoveryTests
         try
         {
             AppPaths paths = CreatePaths(root);
-            Guid documentId = await SeedMigrationFailureDatabaseAsync(paths).ConfigureAwait(false);
+            Guid documentId = await SeedMigrationFailureDatabaseAsync(paths).ConfigureAwait(true);
 
             DatabaseInitializer initializer = CreateInitializer(paths);
             await Assert.ThrowsAsync<SqliteException>(() =>
-                initializer.InitializeAsync(TestContext.Current.CancellationToken)).ConfigureAwait(false);
+                initializer.InitializeAsync(TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
             Assert.Single(Directory.EnumerateFiles(paths.BackupsDirectory, "pre-migration-*.db"));
-            await AssertRestoredMigrationFailureDatabaseAsync(paths, documentId).ConfigureAwait(false);
+            await AssertRestoredMigrationFailureDatabaseAsync(paths, documentId).ConfigureAwait(true);
         }
         finally
         {
@@ -100,15 +100,15 @@ public sealed class DatabaseRecoveryTests
             byte[] corrupt = [0x43, 0x6C, 0x6F, 0x75, 0x64, 0x53, 0x63, 0x72, 0x69, 0x62, 0x65];
             await File
                 .WriteAllBytesAsync(paths.DatabasePath, corrupt, TestContext.Current.CancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
 
             DatabaseInitializer initializer = CreateInitializer(paths);
             await Assert.ThrowsAsync<SqliteException>(() =>
-                initializer.InitializeAsync(TestContext.Current.CancellationToken)).ConfigureAwait(false);
+                initializer.InitializeAsync(TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
             byte[] afterFailure = await File
                 .ReadAllBytesAsync(paths.DatabasePath, TestContext.Current.CancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
             Assert.Equal(corrupt, afterFailure);
             Assert.Empty(Directory.EnumerateFiles(paths.BackupsDirectory, "pre-migration-*.db"));
         }
@@ -127,12 +127,12 @@ public sealed class DatabaseRecoveryTests
         IMigrator migrator = seed.GetService<IMigrator>();
         await migrator
             .MigrateAsync(Stage3Documents.MigrationId, TestContext.Current.CancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
         await seed.Database
             .ExecuteSqlRawAsync(
                 "ALTER TABLE document_revisions ADD COLUMN ContentRelativePath TEXT NULL;",
                 TestContext.Current.CancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
         seed.Documents.Add(new DocumentEntity
         {
             Id = documentId,
@@ -154,7 +154,7 @@ public sealed class DatabaseRecoveryTests
             ContentText = "must survive",
             ContentSha256 = new string('c', 64),
         });
-        await seed.SaveChangesAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+        await seed.SaveChangesAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         return documentId;
     }
 
@@ -163,24 +163,24 @@ public sealed class DatabaseRecoveryTests
         using CloudScribeDbContext restored = CreateContext(paths.DatabasePath);
         string[] migrations = (await restored.Database
             .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(false))
+            .ConfigureAwait(true))
             .ToArray();
         Assert.Equal([Stage2Baseline.MigrationId, Stage3Documents.MigrationId], migrations);
         DocumentEntity document = await restored.Documents
             .SingleAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
         Assert.Equal(documentId, document.Id);
         Assert.Equal("must survive", document.DraftText);
 
         using SqliteConnection connection = new($"Data Source={paths.DatabasePath}");
-        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         using SqliteCommand columns = connection.CreateCommand();
         columns.CommandText = "PRAGMA table_info(document_revisions);";
         using SqliteDataReader reader = await columns
             .ExecuteReaderAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
         List<string> names = [];
-        while (await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(false))
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
         {
             names.Add(reader.GetString(1));
         }
