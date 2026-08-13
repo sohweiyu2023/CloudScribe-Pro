@@ -136,8 +136,16 @@ jobs:
         working-directory: source
         run: |
           $ErrorActionPreference='Stop'
-          dotnet format CloudScribe.sln --verify-no-changes --no-restore
-          if($LASTEXITCODE -ne 0){throw 'dotnet format failed.'}
+          $trackedCs=@(git diff --name-only --diff-filter=ACMRTUXB -- '*.cs')
+          if($LASTEXITCODE -ne 0){throw 'Unable to enumerate changed tracked C# files.'}
+          $untrackedCs=@(git ls-files --others --exclude-standard -- '*.cs')
+          if($LASTEXITCODE -ne 0){throw 'Unable to enumerate changed untracked C# files.'}
+          $changedCs=@($trackedCs + $untrackedCs | Where-Object { $_ -and $_.Trim() -and (Test-Path $_ -PathType Leaf) } | Sort-Object -Unique)
+          if($changedCs.Count -eq 0){throw 'No changed C# files found for Stage 3 formatting gate.'}
+          Write-Host "CLOUDSCRIBE_STAGE3_FORMAT_VERIFY_SCOPE changed_cs=$($changedCs.Count)"
+          $formatArgs=@('format','CloudScribe.sln','--verify-no-changes','--no-restore','--include') + $changedCs
+          & dotnet @formatArgs
+          if($LASTEXITCODE -ne 0){throw 'Stage 3 changed-file dotnet format verification failed.'}
           python tools/update_sha256_manifest.py --check
           if($LASTEXITCODE -ne 0){throw 'Manifest changed during native tests.'}
           python tools/verify_stage3_source.py
