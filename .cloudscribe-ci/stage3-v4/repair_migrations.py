@@ -53,12 +53,28 @@ def remove_untracked_collateral(source_root: Path, paths: set[str]) -> None:
         if full.is_file() or full.is_symlink():
             full.unlink()
         elif full.exists():
-            raise SystemExit(f'Unexpected untracked directory from formatter: {path}')
+            raise SystemExit(f'Unexpected untracked directory outside Stage 3 scope: {path}')
 
 
-def format_stage3_scope(source_root: Path, *, verify_unchanged: bool) -> None:
+def format_stage3_scope(
+    source_root: Path,
+    *,
+    verify_unchanged: bool,
+    allowed_paths: set[str] | None = None,
+) -> None:
     tracked_before, untracked_before = current_change_sets(source_root)
-    allowed = tracked_before | untracked_before
+    if allowed_paths is None:
+        allowed = tracked_before | untracked_before
+    else:
+        allowed = set(allowed_paths)
+
+    unexpected_tracked_before = tracked_before - allowed
+    if unexpected_tracked_before:
+        raise SystemExit(
+            'Tracked files changed outside frozen Stage 3 scope before formatting: '
+            + ', '.join(sorted(unexpected_tracked_before))
+        )
+
     changed_cs = {
         path
         for path in allowed
@@ -71,12 +87,13 @@ def format_stage3_scope(source_root: Path, *, verify_unchanged: bool) -> None:
     print(
         'CLOUDSCRIBE_STAGE3_FORMAT_SCOPE '
         f'allowed_paths={len(allowed)} changed_cs={len(changed_cs)} '
+        f'preexisting_untracked_collateral={len(untracked_before - allowed)} '
         f'verify_unchanged={str(verify_unchanged).lower()}'
     )
 
     # dotnet format on this Windows runner can rewrite pre-existing baseline files
-    # even when --include is supplied. Run it normally, then discard every formatter
-    # side effect outside the exact Stage 3 change set captured above.
+    # even when --include is supplied. Let it inspect the solution, then discard all
+    # effects outside the exact Stage 3 scope frozen before restore/build collateral.
     format_result = subprocess.run(
         [
             'dotnet',
@@ -106,11 +123,13 @@ def format_stage3_scope(source_root: Path, *, verify_unchanged: bool) -> None:
     missing_scope = allowed - final_paths
     if outside_scope:
         raise SystemExit(
-            'Formatter left changes outside Stage 3 scope: ' + ', '.join(sorted(outside_scope))
+            'Formatting cleanup left changes outside Stage 3 scope: '
+            + ', '.join(sorted(outside_scope))
         )
     if missing_scope:
         raise SystemExit(
-            'Formatter unexpectedly removed Stage 3 changes: ' + ', '.join(sorted(missing_scope))
+            'Formatting cleanup unexpectedly removed Stage 3 changes: '
+            + ', '.join(sorted(missing_scope))
         )
 
     if verify_unchanged:
@@ -128,7 +147,8 @@ def format_stage3_scope(source_root: Path, *, verify_unchanged: bool) -> None:
     print(
         'CLOUDSCRIBE_STAGE3_FORMAT_SCOPE=PASS '
         f'restored_tracked={len(tracked_collateral)} '
-        f'removed_untracked={len(untracked_collateral)}'
+        f'removed_untracked={len(untracked_collateral)} '
+        f'final_paths={len(final_paths)}'
     )
 
 
@@ -233,6 +253,10 @@ def repair_candidate() -> None:
     )
 
     source_root = Path('source')
+    tracked_scope, untracked_scope = current_change_sets(source_root)
+    admitted_scope = tracked_scope | untracked_scope
+    print(f'CLOUDSCRIBE_STAGE3_PREFORMAT_SCOPE_FROZEN paths={len(admitted_scope)}')
+
     restore = subprocess.run(
         [
             'dotnet',
@@ -249,8 +273,25 @@ def repair_candidate() -> None:
     if restore.returncode != 0:
         raise SystemExit('Pre-freeze locked restore failed')
 
-    format_stage3_scope(source_root, verify_unchanged=False)
+    format_stage3_scope(
+        source_root,
+        verify_unchanged=False,
+        allowed_paths=admitted_scope,
+    )
     print('CLOUDSCRIBE_STAGE3_CANDIDATE_FORMAT_NORMALIZED=PASS')
+
+
+def load_allowed_file(path: Path) -> set[str]:
+    if not path.is_file():
+        raise SystemExit(f'Frozen Stage 3 scope file not found: {path}')
+    paths = {
+        line.strip().lstrip('\ufeff')
+        for line in path.read_text(encoding='utf-8-sig').splitlines()
+        if line.strip().lstrip('\ufeff')
+    }
+    if not paths:
+        raise SystemExit('Frozen Stage 3 scope file is empty')
+    return paths
 
 
 def main() -> None:
@@ -258,10 +299,16 @@ def main() -> None:
     parser.add_argument('--format-only', action='store_true')
     parser.add_argument('--source', default='source')
     parser.add_argument('--verify-unchanged', action='store_true')
+    parser.add_argument('--allowed-file')
     args = parser.parse_args()
 
     if args.format_only:
-        format_stage3_scope(Path(args.source), verify_unchanged=args.verify_unchanged)
+        allowed = load_allowed_file(Path(args.allowed_file)) if args.allowed_file else None
+        format_stage3_scope(
+            Path(args.source),
+            verify_unchanged=args.verify_unchanged,
+            allowed_paths=allowed,
+        )
         return
 
     repair_candidate()
