@@ -19,7 +19,6 @@ jobs:
       DOTNET_NOLOGO: '1'
       NUGET_XMLDOC_MODE: skip
       SLICE1_HEAD: 60192e2c6fd2fd13885ec4f70cd6f65e69ab1def
-      EXPECTED_HEAD: e49dcb47a9370faa9e4323ed9429cbbed77894d8
       TARGET_BRANCH: cloudscribe-0.4.0-stage3-slice2
     steps:
       - uses: actions/checkout@v6
@@ -36,12 +35,16 @@ jobs:
         with:
           dotnet-version: '10.0.400'
 
-      - name: Verify exact development head and locked restore
+      - name: Bind exact development head and locked restore
         shell: pwsh
         working-directory: source
         run: |
           $ErrorActionPreference='Stop'
-          if((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD){throw 'Stage 3 Slice 2 development head moved.'}
+          $head=(git rev-parse HEAD).Trim()
+          git merge-base --is-ancestor $env:SLICE1_HEAD $head
+          if($LASTEXITCODE -ne 0){throw 'Stage 3 Slice 2 is not descended from the certified Slice 1 checkpoint.'}
+          "ADMITTED_HEAD=$head" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "CLOUDSCRIBE_STAGE3_SLICE2_BOUND_HEAD=$head"
           if((dotnet --version).Trim() -ne '10.0.400'){throw 'Wrong .NET SDK.'}
           dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
           if($LASTEXITCODE -ne 0){throw 'Locked restore failed.'}
@@ -51,7 +54,7 @@ jobs:
         working-directory: source
         run: |
           $ErrorActionPreference='Stop'
-          $allowed=@(git diff --name-only $env:SLICE1_HEAD HEAD --)
+          $allowed=@(git diff --name-only $env:SLICE1_HEAD $env:ADMITTED_HEAD --)
           if($LASTEXITCODE -ne 0){throw 'Unable to enumerate Slice 2 scope.'}
           $allowed=@($allowed | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
           $changedCs=@($allowed | Where-Object { $_.EndsWith('.cs',[StringComparison]::OrdinalIgnoreCase) })
@@ -62,7 +65,7 @@ jobs:
           dotnet format CloudScribe.sln --no-restore --verbosity minimal
           if($LASTEXITCODE -ne 0){throw 'dotnet format normalization failed.'}
 
-          $postFormat=@(git diff --name-only HEAD --)
+          $postFormat=@(git diff --name-only $env:ADMITTED_HEAD --)
           foreach($path in $postFormat){
             if($allowed -notcontains $path){
               git restore --worktree -- $path
@@ -164,7 +167,7 @@ jobs:
             $after=(Get-FileHash $path -Algorithm SHA256).Hash
             if($before[$path] -ne $after){throw "Slice 2 C# formatting drift after tests: $path"}
           }
-          $postFormat=@(git diff --name-only HEAD --)
+          $postFormat=@(git diff --name-only $env:ADMITTED_HEAD --)
           foreach($path in $postFormat){
             if($allowed -notcontains $path -and $path -ne 'SHA256SUMS.txt'){
               git restore --worktree -- $path
@@ -184,7 +187,12 @@ jobs:
         working-directory: source
         run: |
           $ErrorActionPreference='Stop'
-          if((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD){throw 'Development head moved during certification.'}
+          if((git rev-parse HEAD).Trim() -ne $env:ADMITTED_HEAD){throw 'Checked-out development head moved during certification.'}
+          git fetch origin $env:TARGET_BRANCH
+          if($LASTEXITCODE -ne 0){throw 'Unable to refresh target branch before certification commit.'}
+          $remote=(git rev-parse "origin/$env:TARGET_BRANCH").Trim()
+          if($remote -ne $env:ADMITTED_HEAD){throw "Target branch moved during certification: $remote"}
+
           $state=Get-Content SESSION_STATE.json -Raw | ConvertFrom-Json
           $state.stage3_slice2_complete=$true
           $state | Add-Member -NotePropertyName stage3_slice2_certification_run -NotePropertyValue '${{ github.run_id }}' -Force
