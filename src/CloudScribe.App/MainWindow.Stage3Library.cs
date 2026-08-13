@@ -43,7 +43,14 @@ public sealed partial class MainWindow
     {
         try
         {
-            string? text = await window.Clipboard.TryGetTextAsync().ConfigureAwait(true);
+            IClipboard? clipboard = window.Clipboard;
+            if (clipboard is null)
+            {
+                viewModel.StatusMessage = "Clipboard service is unavailable on this platform";
+                return;
+            }
+
+            string? text = await clipboard.TryGetTextAsync().ConfigureAwait(true);
             if (string.IsNullOrEmpty(text))
             {
                 viewModel.StatusMessage = "Clipboard does not contain text";
