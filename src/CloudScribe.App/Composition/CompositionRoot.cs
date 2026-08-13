@@ -36,7 +36,12 @@ public static class CompositionRoot
             viewModel.ScheduleDocumentWorkspaceStart();
             return viewModel;
         });
-        builder.Services.AddSingleton<MainWindow>();
+        builder.Services.AddSingleton(serviceProvider =>
+        {
+            MainWindow window = ActivatorUtilities.CreateInstance<MainWindow>(serviceProvider);
+            DocumentWindowBehavior.Attach(window);
+            return window;
+        });
 
         return builder.Build();
     }
