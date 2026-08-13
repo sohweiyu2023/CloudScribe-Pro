@@ -21,6 +21,11 @@ internal static class DocumentLibraryPanelMount
             throw new InvalidOperationException("Central workspace layout is unavailable for the local document library.");
         }
 
+        if (centralWorkspace.Children.OfType<DocumentLibraryPanel>().Any())
+        {
+            return;
+        }
+
         centralWorkspace.Children.Add(new DocumentLibraryPanel
         {
             DataContext = window.DataContext,
