@@ -94,15 +94,13 @@ replacement = '''    public async Task PrepareAsync(SqliteConnection connection,
         using SqliteCommand createHistory = connection.CreateCommand();
         createHistory.Transaction = transaction;
         createHistory.CommandText =
-            "CREATE TABLE IF NOT EXISTS \"__EFMigrationsHistory\" (" +
-            "\"MigrationId\" TEXT NOT NULL CONSTRAINT \"PK___EFMigrationsHistory\" PRIMARY KEY, " +
-            "\"ProductVersion\" TEXT NOT NULL);";
+            @"CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (""MigrationId"" TEXT NOT NULL CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY, ""ProductVersion"" TEXT NOT NULL);";
         await createHistory.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
         using SqliteCommand seedHistory = connection.CreateCommand();
         seedHistory.Transaction = transaction;
         seedHistory.CommandText =
-            "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ($migrationId, $productVersion);";
+            @"INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"") VALUES ($migrationId, $productVersion);";
         seedHistory.Parameters.AddWithValue("$migrationId", Stage2Baseline.MigrationId);
         seedHistory.Parameters.AddWithValue("$productVersion", EfProductVersion);
         await seedHistory.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -113,5 +111,11 @@ replacement = '''    public async Task PrepareAsync(SqliteConnection connection,
 t = t[:start] + replacement + t[recover:]
 t = t.replace('await using SqliteCommand ', 'using SqliteCommand ')
 t = t.replace('await using SqliteDataReader ', 'using SqliteDataReader ')
+if '"CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory"' in t or '"INSERT INTO "__EFMigrationsHistory"' in t:
+    raise SystemExit('Generated C# SQL quoting is malformed')
+if '@"CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory""' not in t:
+    raise SystemExit('Generated C# CREATE TABLE SQL quoting contract missing')
+if '@"INSERT INTO ""__EFMigrationsHistory""' not in t:
+    raise SystemExit('Generated C# INSERT SQL quoting contract missing')
 p.write_text(t, encoding='utf-8')
 print('CLOUDSCRIBE_STAGE3_BRIDGE_ANALYZER_REPAIR=PASS')
