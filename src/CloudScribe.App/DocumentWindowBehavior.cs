@@ -81,7 +81,7 @@ internal sealed class DocumentWindowBehavior
                     FileTypeFilter = [SupportedDocuments],
                 })
                 .ConfigureAwait(true);
-            IStorageFile? file = files.FirstOrDefault();
+            IStorageFile? file = files.Count == 0 ? null : files[0];
             if (file is null)
             {
                 return;
