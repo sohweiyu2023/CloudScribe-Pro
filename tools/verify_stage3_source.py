@@ -40,24 +40,34 @@ def main() -> int:
         return fail("Stage 3 source does not record the promoted Stage 2 checkpoint")
     if state.get("stage2_manual_visual_acceptance") is not True or state.get("stage2_user_clicked_editor_retest") is not True:
         return fail("Stage 3 source does not record the user's real-PC Stage 2 visual acceptance")
-    if state.get("stage3_slice1_started") is not True:
-        return fail("Stage 3 Slice 1 is not recorded as started")
+    if state.get("stage3_slice1_started") is not True or state.get("stage3_slice1_complete") is not True:
+        return fail("Stage 3 Slice 1 is not recorded as completed")
+    if state.get("stage3_slice2_started") is not True:
+        return fail("Stage 3 Slice 2 is not recorded as started")
     if state.get("whole_application_final_claimed") is not False:
         return fail("Stage 3 source incorrectly claims the whole application is final")
 
     required_files = (
+        "src/CloudScribe.Domain/Documents/DocumentStatus.cs",
+        "src/CloudScribe.Domain/Documents/DocumentRevisionKind.cs",
+        "src/CloudScribe.Application/Documents/IDocumentLibrary.cs",
+        "src/CloudScribe.Application/Documents/DocumentAutosaveCoordinator.cs",
         "src/CloudScribe.Infrastructure/Persistence/CloudScribeDbContext.cs",
         "src/CloudScribe.Infrastructure/Persistence/LegacyDatabaseMigrationBridge.cs",
         "src/CloudScribe.Infrastructure/Persistence/Migrations/Stage2Baseline.cs",
         "src/CloudScribe.Infrastructure/Persistence/Migrations/Stage3Documents.cs",
+        "src/CloudScribe.Infrastructure/Persistence/Migrations/Stage3DocumentWorkflow.cs",
+        "src/CloudScribe.Infrastructure/Persistence/EfDocumentLibrary.cs",
         "src/CloudScribe.Infrastructure/Files/DocumentContentStore.cs",
         "src/CloudScribe.Infrastructure/Files/DocumentContentCommit.cs",
+        "tests/CloudScribe.Application.Tests/DocumentAutosaveCoordinatorTests.cs",
         "tests/CloudScribe.Infrastructure.Tests/Stage3MigrationTests.cs",
         "tests/CloudScribe.Infrastructure.Tests/DocumentContentStoreTests.cs",
+        "tests/CloudScribe.Infrastructure.Tests/DocumentLibraryTests.cs",
     )
     for relative in required_files:
         if not (root / relative).is_file():
-            return fail(f"required Stage 3 Slice 1 file missing: {relative}")
+            return fail(f"required Stage 3 Slice 2 file missing: {relative}")
 
     if (root / "src/CloudScribe.Infrastructure/Persistence/ObservabilityDbContext.cs").exists():
         return fail("legacy ObservabilityDbContext remains after Stage 3 context consolidation")
@@ -89,6 +99,7 @@ def main() -> int:
             "DbSet<ReadingPositionEntity>",
             "DeleteBehavior.Cascade",
             "IsConcurrencyToken",
+            "ContentRelativePath",
         )
         require_text(
             root,
@@ -109,27 +120,58 @@ def main() -> int:
             "File.Move",
             "SHA256.HashData",
             "ValidateExistsWithoutLinks",
-            "documents directory",
+            "DeleteCommittedAsync",
         )
+        require_text(
+            root,
+            "src/CloudScribe.Application/Documents/DocumentAutosaveCoordinator.cs",
+            "TimeProvider",
+            "Task.Delay(debounce, _timeProvider",
+            "DocumentRevisionKind.Autosave",
+            "DocumentRevisionKind.Checkpoint",
+        )
+        library = require_text(
+            root,
+            "src/CloudScribe.Infrastructure/Persistence/EfDocumentLibrary.cs",
+            "IDocumentLibrary",
+            "BeginTransactionAsync",
+            "CommitAsync",
+            "DocumentConcurrencyException",
+            "ContentRelativePath",
+            "ReadVerifiedAsync",
+            "DocumentStatus.Archived",
+        )
+        if library.index("CommitAsync") > library.index("context.Documents.Add(document)"):
+            return fail("document create flow must durably commit immutable content before adding the database reference")
         require_text(
             root,
             "src/CloudScribe.Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs",
             "AddPooledDbContextFactory<CloudScribeDbContext>",
             "ForeignKeys = true",
             "DefaultTimeout = 5",
-            "DocumentContentStore",
+            "IDocumentLibrary, EfDocumentLibrary",
+            "DocumentAutosaveCoordinator",
         )
         require_text(
             root,
             "tests/CloudScribe.Infrastructure.Tests/Stage3MigrationTests.cs",
             "FreshDatabaseAppliesExecutableStage2AndStage3Migrations",
+            "Slice1DatabaseUpgradesWithoutLosingExistingDocumentRows",
             "Stage2EnsureCreatedShapeIsBridgedWithoutDroppingExistingRows",
             "PartialLegacySchemaFailsClosedInsteadOfGuessing",
+        )
+        require_text(
+            root,
+            "tests/CloudScribe.Infrastructure.Tests/DocumentLibraryTests.cs",
+            "CreateSaveReopenAndSearchUseDurableVerifiedRevisionFiles",
+            "StaleWriterFailsWithoutCreatingAnotherRevision",
+            "ArchiveDeleteAndUndoAreVersionedAndExcludedFromActiveLibrary",
+            "CorruptedRevisionFileFailsClosedOnReopen",
         )
     except (OSError, ValueError) as exc:
         return fail(str(exc))
 
-    print("PASS: Stage 3 Slice 1 source contracts are present and fail-closed migration/file-store safeguards are wired.")
+    print("PASS: Stage 3 Slice 2 durable document workflow, verified revision files, migration upgrade, concurrency and autosave contracts are present.")
     return 0
 
 
