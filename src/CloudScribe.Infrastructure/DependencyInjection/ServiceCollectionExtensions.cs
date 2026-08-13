@@ -60,6 +60,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DocumentContentStore>();
         services.AddSingleton<IDocumentLibrary, EfDocumentLibrary>();
         services.AddTransient<DocumentAutosaveCoordinator>();
+        services.AddSingleton<ILocalDocumentImporter, BoundedLocalDocumentImporter>();
         services.AddSingleton<IActivityTimelineStore, EfActivityTimelineStore>();
         services.AddSingleton<IBillableOperationLedger, EfBillableOperationLedger>();
         services.AddSingleton<IApplicationInitializer, DatabaseInitializer>();
