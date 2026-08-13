@@ -1,3 +1,3 @@
 Stage 3 completion fast-gate marker
-Batch: xUnit-safe recovery + truthful workspace + hostile import coverage
-Requested head lineage: 790d31713814f8d7817a2345727e87a8ee18eef9
+Batch: historical-schema recovery fixture + truthful workspace + hostile import coverage
+Requested head lineage: b41ad554a6ab801c711bc8fbf9e18d7a0a1475f3
