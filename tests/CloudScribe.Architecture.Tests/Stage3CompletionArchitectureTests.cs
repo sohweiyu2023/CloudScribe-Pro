@@ -20,7 +20,10 @@ public sealed class Stage3CompletionArchitectureTests
         Assert.Contains("Key.S", behavior, StringComparison.Ordinal);
         Assert.Contains("Key.N", behavior, StringComparison.Ordinal);
         Assert.Contains("Key.O", behavior, StringComparison.Ordinal);
-        Assert.Contains("TryCheckpointBeforeCloseAsync", behavior, StringComparison.Ordinal);
+        Assert.Contains("RequiresDocumentSaveBeforeClose: true", behavior, StringComparison.Ordinal);
+        Assert.Contains("PrepareDocumentCloseAsync", behavior, StringComparison.Ordinal);
+        Assert.Contains("eventArgs.Cancel = true", behavior, StringComparison.Ordinal);
+        Assert.Contains("if (!canClose)", behavior, StringComparison.Ordinal);
         Assert.Contains("DocumentSaveState", windowStage3, StringComparison.Ordinal);
         Assert.Contains("Edits are saved locally with debounced autosave", windowStage3, StringComparison.Ordinal);
     }
@@ -40,7 +43,9 @@ public sealed class Stage3CompletionArchitectureTests
         Assert.Contains("MaxCompressionRatio", docx, StringComparison.Ordinal);
         Assert.Contains("DtdProcessing.Prohibit", docx, StringComparison.Ordinal);
         Assert.Contains("XmlResolver = null", docx, StringComparison.Ordinal);
-        Assert.Contains("IsDiscardedHtmlContainer", html, StringComparison.Ordinal);
+        Assert.Contains("IsDiscardedContainer", html, StringComparison.Ordinal);
+        Assert.Contains("\"script\" or \"style\"", html, StringComparison.Ordinal);
+        Assert.Contains("SkipContainer", html, StringComparison.Ordinal);
         Assert.Contains("DocxRejectsParentTraversalEntry", tests, StringComparison.Ordinal);
         Assert.Contains("DocxRejectsDtdDeclarations", tests, StringComparison.Ordinal);
         Assert.Contains("DocxRejectsSuspiciousCompressionRatio", tests, StringComparison.Ordinal);
