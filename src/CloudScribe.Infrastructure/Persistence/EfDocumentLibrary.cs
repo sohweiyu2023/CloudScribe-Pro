@@ -143,9 +143,16 @@ public sealed class EfDocumentLibrary(
         ArgumentNullException.ThrowIfNull(request);
         ValidateDocumentId(request.DocumentId);
         string normalizedTitle = ValidateTitle(request.Title);
-        ArgumentNullException.ThrowIfNull(request.Text);
+        if (request.Text is null)
+        {
+            throw new ArgumentException("Document text is required.", nameof(request));
+        }
+
         ValidateRevisionMetadata(request.RevisionName, request.ImportProvenance);
-        ArgumentOutOfRangeException.ThrowIfLessThan(request.ExpectedConcurrencyVersion, 1);
+        if (request.ExpectedConcurrencyVersion < 1)
+        {
+            throw new ArgumentException("Expected concurrency version must be positive.", nameof(request));
+        }
 
         using CloudScribeDbContext context = await dbContextFactory
             .CreateDbContextAsync(cancellationToken)
