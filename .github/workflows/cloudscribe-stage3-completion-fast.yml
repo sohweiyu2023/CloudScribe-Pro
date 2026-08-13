@@ -1,0 +1,65 @@
+name: CloudScribe Stage 3 completion fast gate
+
+on:
+  push:
+    branches:
+      - cloudscribe-0.4.0-stage3-slice3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fast-gate:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Exact SDK and portable source gates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if((dotnet --version).Trim() -ne '10.0.400'){throw 'Wrong .NET SDK.'}
+          python tools/update_sha256_manifest.py
+          python tools/verify_repository.py
+          python tools/verify_project_dependencies.py
+          python tools/verify_stage1_source.py
+          python tools/verify_stage2_source.py
+          python tools/verify_stage3_source.py
+      - name: Locked restore
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if($LASTEXITCODE -ne 0){throw 'Locked restore failed.'}
+      - name: Release build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if($LASTEXITCODE -ne 0){throw 'Release build failed.'}
+      - name: Compiled tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $projects=@(
+            'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+            'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+            'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+            'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj')
+          foreach($project in $projects){
+            dotnet test $project -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false
+            if($LASTEXITCODE -ne 0){throw "Tests failed: $project"}
+          }
