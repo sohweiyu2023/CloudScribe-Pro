@@ -145,9 +145,9 @@ public sealed class BoundedLocalDocumentImporter : ILocalDocumentImporter
     private static void ValidateArchivePath(string fullName)
     {
         if (string.IsNullOrWhiteSpace(fullName)
-            || fullName.StartsWith('/', StringComparison.Ordinal)
+            || fullName.StartsWith("/", StringComparison.Ordinal)
             || fullName.StartsWith('\\')
-            || fullName.Contains(":", StringComparison.Ordinal))
+            || fullName.Contains(':'))
         {
             throw new InvalidDataException("DOCX archive contains an unsafe entry path.");
         }
