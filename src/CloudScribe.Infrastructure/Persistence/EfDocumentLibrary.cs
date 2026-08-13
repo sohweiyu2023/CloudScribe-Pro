@@ -33,25 +33,14 @@ public sealed class EfDocumentLibrary(
 
         try
         {
-            await using CloudScribeDbContext context = await dbContextFactory
+            using CloudScribeDbContext context = await dbContextFactory
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
-            await using var transaction = await context.Database
+            using var transaction = await context.Database
                 .BeginTransactionAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            DocumentEntity document = new()
-            {
-                Id = documentId,
-                Title = normalizedTitle,
-                DraftText = text,
-                CreatedAtUnixMilliseconds = now,
-                UpdatedAtUnixMilliseconds = now,
-                Status = (int)DocumentStatus.Active,
-                IsFavorite = false,
-                CurrentRevisionId = revisionId,
-                ConcurrencyVersion = 1,
-            };
+            DocumentEntity document = BuildNewDocument(documentId, revisionId, normalizedTitle, text, now);
             DocumentRevisionEntity revision = BuildRevision(
                 documentId,
                 revisionId,
@@ -80,7 +69,7 @@ public sealed class EfDocumentLibrary(
         CancellationToken cancellationToken = default)
     {
         ValidateDocumentId(documentId);
-        await using CloudScribeDbContext context = await dbContextFactory
+        using CloudScribeDbContext context = await dbContextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
         DocumentEntity? document = await context.Documents
@@ -92,25 +81,7 @@ public sealed class EfDocumentLibrary(
             return null;
         }
 
-        string text = document.DraftText;
-        if (document.CurrentRevisionId is Guid revisionId)
-        {
-            DocumentRevisionEntity? revision = await context.DocumentRevisions
-                .AsNoTracking()
-                .SingleOrDefaultAsync(item => item.Id == revisionId && item.DocumentId == documentId, cancellationToken)
-                .ConfigureAwait(false);
-            if (revision is null)
-            {
-                throw new InvalidDataException("The document references a revision that does not exist.");
-            }
-
-            text = await ReadRevisionTextAsync(revision, cancellationToken).ConfigureAwait(false);
-            if (!string.Equals(text, document.DraftText, StringComparison.Ordinal))
-            {
-                throw new InvalidDataException("The durable revision and current document draft disagree.");
-            }
-        }
-
+        string text = await ReadCurrentTextAsync(context, document, cancellationToken).ConfigureAwait(false);
         return ToSnapshot(document, text);
     }
 
@@ -121,7 +92,7 @@ public sealed class EfDocumentLibrary(
     {
         ValidateStatus(status);
         int boundedLimit = ValidateLimit(limit);
-        await using CloudScribeDbContext context = await dbContextFactory
+        using CloudScribeDbContext context = await dbContextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
         DocumentEntity[] documents = await context.Documents
@@ -150,7 +121,7 @@ public sealed class EfDocumentLibrary(
             return await ListAsync(status, boundedLimit, cancellationToken).ConfigureAwait(false);
         }
 
-        await using CloudScribeDbContext context = await dbContextFactory
+        using CloudScribeDbContext context = await dbContextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
         DocumentEntity[] documents = await context.Documents
@@ -174,67 +145,23 @@ public sealed class EfDocumentLibrary(
         string normalizedTitle = ValidateTitle(request.Title);
         ArgumentNullException.ThrowIfNull(request.Text);
         ValidateRevisionMetadata(request.RevisionName, request.ImportProvenance);
-        if (request.ExpectedConcurrencyVersion < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(request), "Expected concurrency version must be positive.");
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(request.ExpectedConcurrencyVersion, 1);
 
-        await using CloudScribeDbContext context = await dbContextFactory
+        using CloudScribeDbContext context = await dbContextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
-        DocumentEntity document = await context.Documents
-            .SingleOrDefaultAsync(item => item.Id == request.DocumentId, cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw new KeyNotFoundException($"Document {request.DocumentId:N} does not exist.");
-        if (document.ConcurrencyVersion != request.ExpectedConcurrencyVersion)
-        {
-            throw new DocumentConcurrencyException(request.DocumentId, request.ExpectedConcurrencyVersion);
-        }
+        DocumentEntity document = await GetDocumentForWriteAsync(
+            context,
+            request.DocumentId,
+            cancellationToken).ConfigureAwait(false);
+        EnsureExpectedVersion(document, request.ExpectedConcurrencyVersion);
 
-        Guid revisionId = Guid.NewGuid();
-        byte[] bytes = StrictUtf8.GetBytes(request.Text);
-        DocumentContentCommit commit = await contentStore
-            .CommitAsync(request.DocumentId, revisionId, bytes, cancellationToken)
-            .ConfigureAwait(false);
-        long now = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-
-        try
-        {
-            await using var transaction = await context.Database
-                .BeginTransactionAsync(cancellationToken)
-                .ConfigureAwait(false);
-            document.Title = normalizedTitle;
-            document.DraftText = request.Text;
-            document.UpdatedAtUnixMilliseconds = now;
-            document.CurrentRevisionId = revisionId;
-            document.ConcurrencyVersion++;
-            context.DocumentRevisions.Add(BuildRevision(
-                request.DocumentId,
-                revisionId,
-                now,
-                request.RevisionKind,
-                request.RevisionName,
-                request.Text,
-                commit,
-                request.ImportProvenance));
-
-            try
-            {
-                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (DbUpdateConcurrencyException exception)
-            {
-                throw new DocumentConcurrencyException(request.DocumentId, request.ExpectedConcurrencyVersion) { Source = exception.Source };
-            }
-
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return ToSnapshot(document, request.Text);
-        }
-        catch
-        {
-            await TryDeleteUnreferencedAsync(commit).ConfigureAwait(false);
-            throw;
-        }
+        return await SaveRevisionAsync(
+            context,
+            document,
+            request,
+            normalizedTitle,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<DocumentSummary> ChangeStatusAsync(
@@ -245,22 +172,16 @@ public sealed class EfDocumentLibrary(
     {
         ValidateDocumentId(documentId);
         ValidateStatus(status);
-        if (expectedConcurrencyVersion < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(expectedConcurrencyVersion));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(expectedConcurrencyVersion, 1);
 
-        await using CloudScribeDbContext context = await dbContextFactory
+        using CloudScribeDbContext context = await dbContextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
-        DocumentEntity document = await context.Documents
-            .SingleOrDefaultAsync(item => item.Id == documentId, cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw new KeyNotFoundException($"Document {documentId:N} does not exist.");
-        if (document.ConcurrencyVersion != expectedConcurrencyVersion)
-        {
-            throw new DocumentConcurrencyException(documentId, expectedConcurrencyVersion);
-        }
+        DocumentEntity document = await GetDocumentForWriteAsync(
+            context,
+            documentId,
+            cancellationToken).ConfigureAwait(false);
+        EnsureExpectedVersion(document, expectedConcurrencyVersion);
 
         document.Status = (int)status;
         document.UpdatedAtUnixMilliseconds = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
@@ -269,12 +190,86 @@ public sealed class EfDocumentLibrary(
         {
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (DbUpdateConcurrencyException exception)
         {
-            throw new DocumentConcurrencyException(documentId, expectedConcurrencyVersion);
+            throw new DocumentConcurrencyException(documentId, expectedConcurrencyVersion, exception);
         }
 
         return ToSummary(document);
+    }
+
+    private async Task<DocumentSnapshot> SaveRevisionAsync(
+        CloudScribeDbContext context,
+        DocumentEntity document,
+        DocumentSaveRequest request,
+        string normalizedTitle,
+        CancellationToken cancellationToken)
+    {
+        Guid revisionId = Guid.NewGuid();
+        byte[] bytes = StrictUtf8.GetBytes(request.Text);
+        DocumentContentCommit commit = await contentStore
+            .CommitAsync(request.DocumentId, revisionId, bytes, cancellationToken)
+            .ConfigureAwait(false);
+        long now = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+
+        try
+        {
+            using var transaction = await context.Database
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(false);
+            ApplyDocumentSave(document, request, normalizedTitle, revisionId, now);
+            context.DocumentRevisions.Add(BuildRevision(
+                request.DocumentId,
+                revisionId,
+                now,
+                request.RevisionKind,
+                request.RevisionName,
+                request.Text,
+                commit,
+                request.ImportProvenance));
+            await SaveChangesWithConcurrencyTranslationAsync(
+                context,
+                request.DocumentId,
+                request.ExpectedConcurrencyVersion,
+                cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return ToSnapshot(document, request.Text);
+        }
+        catch
+        {
+            await TryDeleteUnreferencedAsync(commit).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task<string> ReadCurrentTextAsync(
+        CloudScribeDbContext context,
+        DocumentEntity document,
+        CancellationToken cancellationToken)
+    {
+        if (document.CurrentRevisionId is not Guid revisionId)
+        {
+            return document.DraftText;
+        }
+
+        DocumentRevisionEntity? revision = await context.DocumentRevisions
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.Id == revisionId && item.DocumentId == document.Id,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (revision is null)
+        {
+            throw new InvalidDataException("The document references a revision that does not exist.");
+        }
+
+        string text = await ReadRevisionTextAsync(revision, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(text, document.DraftText, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("The durable revision and current document draft disagree.");
+        }
+
+        return text;
     }
 
     private async Task<string> ReadRevisionTextAsync(
@@ -307,6 +302,31 @@ public sealed class EfDocumentLibrary(
         return fileText;
     }
 
+    private static async Task<DocumentEntity> GetDocumentForWriteAsync(
+        CloudScribeDbContext context,
+        Guid documentId,
+        CancellationToken cancellationToken) =>
+        await context.Documents
+            .SingleOrDefaultAsync(item => item.Id == documentId, cancellationToken)
+            .ConfigureAwait(false)
+        ?? throw new KeyNotFoundException($"Document {documentId:N} does not exist.");
+
+    private static async Task SaveChangesWithConcurrencyTranslationAsync(
+        CloudScribeDbContext context,
+        Guid documentId,
+        long expectedVersion,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new DocumentConcurrencyException(documentId, expectedVersion, exception);
+        }
+    }
+
     private async Task TryDeleteUnreferencedAsync(DocumentContentCommit commit)
     {
         try
@@ -320,6 +340,24 @@ public sealed class EfDocumentLibrary(
         {
         }
     }
+
+    private static DocumentEntity BuildNewDocument(
+        Guid documentId,
+        Guid revisionId,
+        string title,
+        string text,
+        long now) => new()
+        {
+            Id = documentId,
+            Title = title,
+            DraftText = text,
+            CreatedAtUnixMilliseconds = now,
+            UpdatedAtUnixMilliseconds = now,
+            Status = (int)DocumentStatus.Active,
+            IsFavorite = false,
+            CurrentRevisionId = revisionId,
+            ConcurrencyVersion = 1,
+        };
 
     private static DocumentRevisionEntity BuildRevision(
         Guid documentId,
@@ -342,6 +380,28 @@ public sealed class EfDocumentLibrary(
             ContentByteLength = commit.ByteLength,
             ImportProvenance = string.IsNullOrWhiteSpace(importProvenance) ? null : importProvenance.Trim(),
         };
+
+    private static void ApplyDocumentSave(
+        DocumentEntity document,
+        DocumentSaveRequest request,
+        string normalizedTitle,
+        Guid revisionId,
+        long now)
+    {
+        document.Title = normalizedTitle;
+        document.DraftText = request.Text;
+        document.UpdatedAtUnixMilliseconds = now;
+        document.CurrentRevisionId = revisionId;
+        document.ConcurrencyVersion++;
+    }
+
+    private static void EnsureExpectedVersion(DocumentEntity document, long expectedVersion)
+    {
+        if (document.ConcurrencyVersion != expectedVersion)
+        {
+            throw new DocumentConcurrencyException(document.Id, expectedVersion);
+        }
+    }
 
     private static DocumentSummary ToSummary(DocumentEntity document) => new(
         document.Id,
@@ -370,7 +430,7 @@ public sealed class EfDocumentLibrary(
         string normalized = title.Trim();
         if (normalized.Length is < 1 or > 240)
         {
-            throw new ArgumentOutOfRangeException(nameof(title), "Document title must contain 1 to 240 characters.");
+            throw new ArgumentException("Document title must contain 1 to 240 characters.", nameof(title));
         }
 
         return normalized;
@@ -380,12 +440,12 @@ public sealed class EfDocumentLibrary(
     {
         if (name?.Trim().Length > 240)
         {
-            throw new ArgumentOutOfRangeException(nameof(name));
+            throw new ArgumentException("Revision name cannot exceed 240 characters.", nameof(name));
         }
 
         if (importProvenance?.Trim().Length > 2048)
         {
-            throw new ArgumentOutOfRangeException(nameof(importProvenance));
+            throw new ArgumentException("Import provenance cannot exceed 2048 characters.", nameof(importProvenance));
         }
     }
 
@@ -407,11 +467,8 @@ public sealed class EfDocumentLibrary(
 
     private static int ValidateLimit(int limit)
     {
-        if (limit is < 1 or > 200)
-        {
-            throw new ArgumentOutOfRangeException(nameof(limit), "Document query limit must be between 1 and 200.");
-        }
-
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 200);
         return limit;
     }
 }
