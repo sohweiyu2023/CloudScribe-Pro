@@ -23,7 +23,7 @@
       <TextBox
           Grid.Row="1"
           Text="{Binding LibrarySearchQuery, Mode=TwoWay}"
-          Watermark="Search local documents"
+          PlaceholderText="Search local documents"
           AutomationProperties.Name="Search local document library" />
 
       <Border Grid.Row="2" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}" Padding="10">

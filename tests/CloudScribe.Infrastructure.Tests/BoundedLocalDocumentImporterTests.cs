@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using System.Xml;
 using CloudScribe.Application.Documents;
 using CloudScribe.Infrastructure.Files;
 
@@ -57,6 +58,44 @@ public sealed class BoundedLocalDocumentImporterTests
     }
 
     [Fact]
+    public async Task DocxRejectsParentTraversalEntry()
+    {
+        BoundedLocalDocumentImporter importer = new();
+        using MemoryStream stream = CreateDocx(
+            "<w:p><w:r><w:t>Safe</w:t></w:r></w:p>",
+            archive => WriteEntry(archive, "../escape.xml", "blocked"));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => importer.ImportAsync(
+            new(LocalDocumentImportKind.Docx, "unsafe.docx", stream),
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task DocxRejectsDtdDeclarations()
+    {
+        BoundedLocalDocumentImporter importer = new();
+        const string xml = "<!DOCTYPE w:document [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]><w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>&xxe;</w:t></w:r></w:p></w:body></w:document>";
+        using MemoryStream stream = CreateRawDocx(xml);
+
+        await Assert.ThrowsAsync<XmlException>(() => importer.ImportAsync(
+            new(LocalDocumentImportKind.Docx, "dtd.docx", stream),
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task DocxRejectsSuspiciousCompressionRatio()
+    {
+        BoundedLocalDocumentImporter importer = new();
+        using MemoryStream stream = CreateDocx(
+            "<w:p><w:r><w:t>Safe</w:t></w:r></w:p>",
+            archive => WriteEntry(archive, "word/filler.bin", new string('A', 512 * 1024)));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => importer.ImportAsync(
+            new(LocalDocumentImportKind.Docx, "compressed.docx", stream),
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task DeclaredOversizeSourceFailsBeforeReading()
     {
         BoundedLocalDocumentImporter importer = new();
@@ -67,17 +106,27 @@ public sealed class BoundedLocalDocumentImporterTests
             TestContext.Current.CancellationToken));
     }
 
-    private static MemoryStream CreateDocx(string body)
+    private static MemoryStream CreateDocx(string body, Action<ZipArchive>? addEntries = null) =>
+        CreateRawDocx(WrapWordDocument(body), addEntries);
+
+    private static MemoryStream CreateRawDocx(string documentXml, Action<ZipArchive>? addEntries = null)
     {
         MemoryStream stream = new();
         using (ZipArchive archive = new(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            ZipArchiveEntry entry = archive.CreateEntry("word/document.xml", CompressionLevel.Fastest);
-            using StreamWriter writer = new(entry.Open(), new UTF8Encoding(false));
-            writer.Write(WrapWordDocument(body));
+            WriteEntry(archive, "word/document.xml", documentXml);
+            addEntries?.Invoke(archive);
         }
+
         stream.Position = 0;
         return stream;
+    }
+
+    private static void WriteEntry(ZipArchive archive, string path, string content)
+    {
+        ZipArchiveEntry entry = archive.CreateEntry(path, CompressionLevel.Optimal);
+        using StreamWriter writer = new(entry.Open(), new UTF8Encoding(false));
+        writer.Write(content);
     }
 
     private static string WrapWordDocument(string body) =>
