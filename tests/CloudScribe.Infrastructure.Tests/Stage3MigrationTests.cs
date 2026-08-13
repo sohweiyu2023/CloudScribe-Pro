@@ -23,7 +23,9 @@ public sealed class Stage3MigrationTests
             string[] migrations = (await context.Database
                 .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken))
                 .ToArray();
-            Assert.Equal([Stage2Baseline.MigrationId, Stage3Documents.MigrationId], migrations);
+            Assert.Equal(
+                [Stage2Baseline.MigrationId, Stage3Documents.MigrationId, Stage3DocumentWorkflow.MigrationId],
+                migrations);
 
             Guid documentId = Guid.NewGuid();
             Guid revisionId = Guid.NewGuid();
@@ -47,10 +49,57 @@ public sealed class Stage3MigrationTests
                 Name = "checkpoint",
                 ContentText = "durable draft",
                 ContentSha256 = new string('a', 64),
+                ContentRelativePath = "documents/example/content/revision.utf8",
+                ContentByteLength = 13,
             });
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal("durable draft", (await context.Documents.SingleAsync(TestContext.Current.CancellationToken)).DraftText);
+            DocumentRevisionEntity revision = await context.DocumentRevisions.SingleAsync(TestContext.Current.CancellationToken);
+            Assert.Equal("documents/example/content/revision.utf8", revision.ContentRelativePath);
+            Assert.Equal(13, revision.ContentByteLength);
+        }
+        finally
+        {
+            DeleteTemporaryRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task Slice1DatabaseUpgradesWithoutLosingExistingDocumentRows()
+    {
+        string root = CreateTemporaryRoot();
+        string databasePath = Path.Combine(root, "slice1-upgrade.db");
+        Guid documentId = Guid.NewGuid();
+        Guid revisionId = Guid.NewGuid();
+        try
+        {
+            await using (CloudScribeDbContext slice1 = CreateContext(databasePath))
+            {
+                IMigrator migrator = slice1.GetService<IMigrator>();
+                await migrator.MigrateAsync(Stage3Documents.MigrationId, TestContext.Current.CancellationToken);
+                await slice1.Database.ExecuteSqlRawAsync(
+                    "INSERT INTO documents (Id, Title, DraftText, CreatedAtUnixMilliseconds, UpdatedAtUnixMilliseconds, Status, IsFavorite, CurrentRevisionId, VoiceReference, PresetReference, ConcurrencyVersion) " +
+                    "VALUES ({0}, {1}, {2}, 1, 1, 0, 0, {3}, NULL, NULL, 1);",
+                    [documentId, "Preserve", "slice one text", revisionId],
+                    TestContext.Current.CancellationToken);
+                await slice1.Database.ExecuteSqlRawAsync(
+                    "INSERT INTO document_revisions (Id, DocumentId, CreatedAtUnixMilliseconds, RevisionKind, Name, ContentText, ContentSha256, ImportProvenance) " +
+                    "VALUES ({0}, {1}, 1, 0, NULL, {2}, {3}, NULL);",
+                    [revisionId, documentId, "slice one text", new string('b', 64)],
+                    TestContext.Current.CancellationToken);
+            }
+
+            await using CloudScribeDbContext upgraded = CreateContext(databasePath);
+            await upgraded.Database.MigrateAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(3, (await upgraded.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)).Count());
+            DocumentEntity document = await upgraded.Documents.SingleAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(documentId, document.Id);
+            Assert.Equal("slice one text", document.DraftText);
+            DocumentRevisionEntity revision = await upgraded.DocumentRevisions.SingleAsync(TestContext.Current.CancellationToken);
+            Assert.Null(revision.ContentRelativePath);
+            Assert.Null(revision.ContentByteLength);
         }
         finally
         {
@@ -92,7 +141,7 @@ public sealed class Stage3MigrationTests
             await bridge.PrepareAsync(connection, TestContext.Current.CancellationToken);
             await upgrade.Database.MigrateAsync(TestContext.Current.CancellationToken);
 
-            Assert.Equal(2, (await upgrade.Database
+            Assert.Equal(3, (await upgrade.Database
                 .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)).Count());
             ActivityTimelineEntity preserved = await upgrade.ActivityTimeline.SingleAsync(TestContext.Current.CancellationToken);
             Assert.Equal(activityId, preserved.Id);
@@ -129,7 +178,6 @@ public sealed class Stage3MigrationTests
             DeleteTemporaryRoot(root);
         }
     }
-
 
     [Fact]
     public async Task AbandonedEfMigrationLockIsClearedOnlyAfterObtainingAWriteLock()
