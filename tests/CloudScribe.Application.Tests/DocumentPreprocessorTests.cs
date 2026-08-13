@@ -34,9 +34,9 @@ public sealed class DocumentPreprocessorTests
                 SimplifyUrls: true));
 
         Assert.Equal("Visit example.com\n\nNext", preview.OutputText);
-        Assert.Contains(preview.SourceMap, segment => segment.Transform == "url-simplified");
-        Assert.Contains(preview.SourceMap, segment => segment.Transform == "horizontal-whitespace");
-        Assert.Contains(preview.SourceMap, segment => segment.Transform == "line-ending");
+        Assert.Contains(preview.SourceMap, segment => string.Equals(segment.Transform, "url-simplified", StringComparison.Ordinal));
+        Assert.Contains(preview.SourceMap, segment => string.Equals(segment.Transform, "horizontal-whitespace", StringComparison.Ordinal));
+        Assert.Contains(preview.SourceMap, segment => string.Equals(segment.Transform, "line-ending", StringComparison.Ordinal));
         Assert.Single(preview.Warnings);
         Assert.All(preview.SourceMap, segment =>
         {
