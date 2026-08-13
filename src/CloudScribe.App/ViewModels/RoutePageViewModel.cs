@@ -50,4 +50,7 @@ public partial class RoutePageViewModel(
 
     [ObservableProperty]
     private ICommand? _primaryActionCommand;
+
+    [ObservableProperty]
+    private bool _isDocumentLibrary;
 }
