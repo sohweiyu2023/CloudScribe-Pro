@@ -3,7 +3,10 @@ name: CloudScribe Stage 3 Slice 1 Windows admission v4
 on:
   push:
     branches: [cloudscribe-stage3-slice1-10.0.400-carrier]
-    paths: ['.github/workflows/cloudscribe-stage3-slice1-10.0.400-v4.yml']
+    paths:
+      - '.github/workflows/cloudscribe-stage3-slice1-10.0.400-v4.yml'
+      - '.cloudscribe-ci/stage3-v4/**'
+      - '.cloudscribe-ci/stage3-slice1-10.0.400-payload/**'
   workflow_dispatch:
 
 permissions:
@@ -61,7 +64,7 @@ jobs:
           python carrier/.cloudscribe-ci/stage3-v4/repair_simple.py
           if ($LASTEXITCODE -ne 0) { throw 'Simple analyzer repair failed.' }
           python carrier/.cloudscribe-ci/stage3-v4/repair_migrations.py
-          if ($LASTEXITCODE -ne 0) { throw 'Migration analyzer repair failed.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Migration/analyzer repair failed.' }
 
       - name: Freeze manifest and portable gates
         shell: pwsh
@@ -156,11 +159,17 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Product branch push failed.'}
           Write-Host "CLOUDSCRIBE_STAGE3_SLICE1_ADMITTED_HEAD=$head"
 
-      - name: Upload evidence
+      - name: Upload evidence and repaired-source diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: cloudscribe-stage3-slice1-v4-evidence
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
-          path: ${{ runner.temp }}/stage3-trx/*.trx
+          path: |
+            ${{ runner.temp }}/stage3-trx/*.trx
+            source/src/CloudScribe.Infrastructure/Files/DocumentContentStore.cs
+            source/src/CloudScribe.Infrastructure/Persistence/LegacyDatabaseMigrationBridge.cs
+            source/src/CloudScribe.Infrastructure/Persistence/DatabaseInitializer.cs
+            source/src/CloudScribe.Infrastructure/Persistence/CloudScribeDbContext.cs
+            source/src/CloudScribe.Infrastructure/Persistence/Migrations/*.cs
