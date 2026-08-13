@@ -128,33 +128,34 @@ public sealed class DatabaseRecoveryTests
         await migrator
             .MigrateAsync(Stage3Documents.MigrationId, TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
+
+        await seed.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO documents
+                (Id, Title, DraftText, CreatedAtUnixMilliseconds, UpdatedAtUnixMilliseconds,
+                 Status, IsFavorite, CurrentRevisionId, VoiceReference, PresetReference, ConcurrencyVersion)
+            VALUES
+                ({documentId}, {"Recovery sentinel"}, {"must survive"}, {1L}, {1L},
+                 {0}, {false}, {null}, {null}, {null}, {1L});
+            """, TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        await seed.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO document_revisions
+                (Id, DocumentId, CreatedAtUnixMilliseconds, RevisionKind, Name,
+                 ContentText, ContentSha256, ImportProvenance)
+            VALUES
+                ({revisionId}, {documentId}, {1L}, {0}, {"before failure"},
+                 {"must survive"}, {new string('c', 64)}, {null});
+            """, TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        await seed.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE documents SET CurrentRevisionId = {revisionId} WHERE Id = {documentId};
+            """, TestContext.Current.CancellationToken).ConfigureAwait(true);
+
         await seed.Database
             .ExecuteSqlRawAsync(
                 "ALTER TABLE document_revisions ADD COLUMN ContentRelativePath TEXT NULL;",
                 TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
-        seed.Documents.Add(new DocumentEntity
-        {
-            Id = documentId,
-            Title = "Recovery sentinel",
-            DraftText = "must survive",
-            CreatedAtUnixMilliseconds = 1,
-            UpdatedAtUnixMilliseconds = 1,
-            Status = 0,
-            CurrentRevisionId = revisionId,
-            ConcurrencyVersion = 1,
-        });
-        seed.DocumentRevisions.Add(new DocumentRevisionEntity
-        {
-            Id = revisionId,
-            DocumentId = documentId,
-            CreatedAtUnixMilliseconds = 1,
-            RevisionKind = 0,
-            Name = "before failure",
-            ContentText = "must survive",
-            ContentSha256 = new string('c', 64),
-        });
-        await seed.SaveChangesAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         return documentId;
     }
 
