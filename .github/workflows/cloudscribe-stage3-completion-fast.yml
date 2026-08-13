@@ -3,7 +3,9 @@ name: CloudScribe Stage 3 completion fast gate
 on:
   push:
     branches:
-      - cloudscribe-0.4.0-stage3-slice3
+      - cloudscribe-0.4.0-stage3-completion-dev
+    paths:
+      - '.cloudscribe-ci/stage3-completion-fast-trigger.txt'
   workflow_dispatch:
 
 permissions:
