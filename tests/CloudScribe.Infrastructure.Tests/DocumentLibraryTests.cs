@@ -197,9 +197,10 @@ public sealed class DocumentLibraryTests
                 }.ConnectionString)
                 .Options;
             TestDbContextFactory factory = new(options);
-            await using (CloudScribeDbContext context = factory.CreateDbContext())
+            CloudScribeDbContext context = factory.CreateDbContext();
+            await using (context.ConfigureAwait(false))
             {
-                await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
+                await context.Database.MigrateAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
             }
 
             DocumentContentStore contentStore = new(paths);

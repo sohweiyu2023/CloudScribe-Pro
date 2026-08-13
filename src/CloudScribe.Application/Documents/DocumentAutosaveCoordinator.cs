@@ -8,7 +8,7 @@ namespace CloudScribe.Application.Documents;
 /// </summary>
 public sealed class DocumentAutosaveCoordinator : IAsyncDisposable
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly IDocumentLibrary _documentLibrary;
     private readonly TimeProvider _timeProvider;
     private CancellationTokenSource? _pendingCancellation;

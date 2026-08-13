@@ -4,7 +4,7 @@
   "generated_at_utc": "2026-08-13T07:47:00Z",
   "current_stage": 3,
   "stage_title": "Local Document Library, Editor, Import, Preprocessing, and Recovery",
-  "status": "Stage 2 is promoted and real-user clicked-editor visual acceptance is recorded. Stage 3 Slice 1 durable persistence foundation was admitted by Windows certification run 31678005403 at commit 60192e2c6fd2fd13885ec4f70cd6f65e69ab1def. Stage 3 Slice 2 is in progress: durable local document create/open/save/search/lifecycle workflows, immutable revision-file verification, optimistic concurrency, and TimeProvider-backed debounced autosave/checkpoints are being implemented and certified. Stage 3 is not yet accepted or promoted.",
+  "status": "Stage 2 is promoted. Stage 3 Slice 1 is admitted. Stage 3 Slice 2 durable document workflow passed Windows certification, including locked restore, Debug/Release builds, all compiled tests, formatting stability, migration upgrade, integrity/concurrency tests, verifier self-tests, and deterministic regression gates. Stage 3 remains in progress; UI/library integration, safe imports, preprocessing, recovery and text-integrity acceptance remain.",
   "controlling_package_version": "2.22",
   "blueprint_version": "2.22",
   "pricing_schema_version": "1.1.5",
@@ -46,9 +46,9 @@
   "open_P1": 0,
   "open_P2": 1,
   "next_stage": 3,
-  "next_exact_action": "Complete and certify Stage 3 Slice 2 on cloudscribe-0.4.0-stage3-slice2: durable local document create/open/save/search/archive/delete/undo semantics, immutable revision-file verification, optimistic concurrency, TimeProvider-backed debounced autosave/checkpoints, forward migration from Slice 1, and fault/integrity tests. Then continue Stage 3 UI/library integration, safe bounded imports, preprocessing preview/source maps, backup/recovery, Unicode/IME/RTL integrity, and crash/fault acceptance before any Stage 3 promotion claim.",
+  "next_exact_action": "Continue Stage 3 with local library/editor integration over the certified IDocumentLibrary boundary, recovery-aware close and explicit save UX; then implement safe bounded TXT/Markdown/HTML/DOCX/clipboard imports and preprocessing preview/source maps before Stage 3 acceptance.",
   "bytes_changed_after_latest_reaudit": true,
-  "latest_reaudit_completed_at_utc": "2026-08-13T07:47:00Z",
+  "latest_reaudit_completed_at_utc": "2026-08-13T08:30:25Z",
   "artifact_sha256": "external exact-archive checksum required beside every handoff ZIP; intentionally not self-referential inside source",
   "controlling_context_self_contained": false,
   "controlling_context_manifest": null,
@@ -84,5 +84,6 @@
   "stage3_slice1_commit": "60192e2c6fd2fd13885ec4f70cd6f65e69ab1def",
   "stage3_slice1_certification_run": "31678005403",
   "stage3_slice2_started": true,
-  "stage3_slice2_complete": false
+  "stage3_slice2_complete": true,
+  "stage3_slice2_certification_run": "31682041838"
 }
