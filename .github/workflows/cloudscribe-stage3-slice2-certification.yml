@@ -19,7 +19,7 @@ jobs:
       DOTNET_NOLOGO: '1'
       NUGET_XMLDOC_MODE: skip
       SLICE1_HEAD: 60192e2c6fd2fd13885ec4f70cd6f65e69ab1def
-      EXPECTED_HEAD: 1aa9b53d30960dd1a25ac329cf44b0c487820a47
+      EXPECTED_HEAD: e49dcb47a9370faa9e4323ed9429cbbed77894d8
       TARGET_BRANCH: cloudscribe-0.4.0-stage3-slice2
     steps:
       - uses: actions/checkout@v6
