@@ -1,9 +1,115 @@
 from pathlib import Path
 p = Path('source/src/CloudScribe.Infrastructure/Persistence/LegacyDatabaseMigrationBridge.cs')
 t = p.read_text(encoding='utf-8')
+
+field_old = '    private static readonly IReadOnlyDictionary<string, string[]> Stage2Columns ='
+if t.count(field_old) != 1:
+    raise SystemExit('Stage2Columns field preimage mismatch')
+t = t.replace(
+    field_old,
+    '    private readonly IReadOnlyDictionary<string, string[]> _stage2Columns =',
+    1,
+)
+
 start = t.index('    public async Task PrepareAsync')
 recover = t.index('    public static async Task RecoverAbandonedEfMigrationLockAsync')
-replacement = '''    public async Task PrepareAsync(SqliteConnection connection, CancellationToken cancellationToken = default)\n    {\n        ArgumentNullException.ThrowIfNull(connection);\n        RequireOpen(connection);\n\n        HashSet<string> tables = await ReadUserTablesAsync(connection, cancellationToken).ConfigureAwait(false);\n        if (tables.Contains("__EFMigrationsHistory"))\n        {\n            return;\n        }\n\n        if (!Stage2Columns.Keys.Any(tables.Contains))\n        {\n            ValidateEmptyOrMigrationLockOnly(tables);\n            return;\n        }\n\n        ValidateStage2TableInventory(tables);\n        await ValidateStage2ColumnsAsync(connection, tables, cancellationToken).ConfigureAwait(false);\n        await SeedStage2MigrationHistoryAsync(connection, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static void ValidateEmptyOrMigrationLockOnly(HashSet<string> tables)\n    {\n        if (tables.Count != 0 && !tables.SetEquals(["__EFMigrationsLock"]))\n        {\n            throw new InvalidDataException(\n                $"The existing database contains unknown tables without EF migration history: {string.Join(", ", tables.Order(StringComparer.Ordinal))}.");\n        }\n    }\n\n    private static void ValidateStage2TableInventory(HashSet<string> tables)\n    {\n        HashSet<string> allowedTables = new(Stage2Columns.Keys, StringComparer.Ordinal)\n        {\n            "__EFMigrationsLock",\n        };\n        string[] unexpectedTables = tables\n            .Where(table => !allowedTables.Contains(table))\n            .Order(StringComparer.Ordinal)\n            .ToArray();\n        if (unexpectedTables.Length != 0)\n        {\n            throw new InvalidDataException(\n                $"The existing Stage 2 database contains unexpected tables: {string.Join(", ", unexpectedTables)}. " +\n                "Automatic migration was stopped instead of guessing ownership.");\n        }\n    }\n\n    private static async Task ValidateStage2ColumnsAsync(\n        SqliteConnection connection,\n        HashSet<string> tables,\n        CancellationToken cancellationToken)\n    {\n        foreach ((string table, string[] expectedColumns) in Stage2Columns)\n        {\n            if (!tables.Contains(table))\n            {\n                throw new InvalidDataException(\n                    $"The existing database contains only part of the Stage 2 schema; missing table '{table}'. " +\n                    "Automatic migration was stopped to avoid misclassifying an unknown database.");\n            }\n\n            HashSet<string> actualColumns = await ReadColumnsAsync(connection, table, cancellationToken).ConfigureAwait(false);\n            string[] missingColumns = expectedColumns.Where(column => !actualColumns.Contains(column)).ToArray();\n            if (missingColumns.Length != 0)\n            {\n                throw new InvalidDataException(\n                    $"The existing Stage 2 table '{table}' is missing expected columns: {string.Join(", ", missingColumns)}.");\n            }\n        }\n    }\n\n    private static async Task SeedStage2MigrationHistoryAsync(\n        SqliteConnection connection,\n        CancellationToken cancellationToken)\n    {\n        using SqliteTransaction transaction = connection.BeginTransaction();\n        using SqliteCommand createHistory = connection.CreateCommand();\n        createHistory.Transaction = transaction;\n        createHistory.CommandText =\n            "CREATE TABLE IF NOT EXISTS \\\"__EFMigrationsHistory\\\" (" +\n            "\\\"MigrationId\\\" TEXT NOT NULL CONSTRAINT \\\"PK___EFMigrationsHistory\\\" PRIMARY KEY, " +\n            "\\\"ProductVersion\\\" TEXT NOT NULL);";\n        await createHistory.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);\n\n        using SqliteCommand seedHistory = connection.CreateCommand();\n        seedHistory.Transaction = transaction;\n        seedHistory.CommandText =\n            "INSERT INTO \\\"__EFMigrationsHistory\\\" (\\\"MigrationId\\\", \\\"ProductVersion\\\") VALUES ($migrationId, $productVersion);";\n        seedHistory.Parameters.AddWithValue("$migrationId", Stage2Baseline.MigrationId);\n        seedHistory.Parameters.AddWithValue("$productVersion", EfProductVersion);\n        await seedHistory.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);\n        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);\n    }\n\n'''
+replacement = '''    public async Task PrepareAsync(SqliteConnection connection, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        RequireOpen(connection);
+
+        HashSet<string> tables = await ReadUserTablesAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (tables.Contains("__EFMigrationsHistory"))
+        {
+            return;
+        }
+
+        if (!_stage2Columns.Keys.Any(tables.Contains))
+        {
+            ValidateEmptyOrMigrationLockOnly(tables);
+            return;
+        }
+
+        ValidateStage2TableInventory(tables);
+        await ValidateStage2ColumnsAsync(connection, tables, cancellationToken).ConfigureAwait(false);
+        await SeedStage2MigrationHistoryAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ValidateEmptyOrMigrationLockOnly(HashSet<string> tables)
+    {
+        if (tables.Count != 0 && !tables.SetEquals(["__EFMigrationsLock"]))
+        {
+            throw new InvalidDataException(
+                $"The existing database contains unknown tables without EF migration history: {string.Join(", ", tables.Order(StringComparer.Ordinal))}.");
+        }
+    }
+
+    private void ValidateStage2TableInventory(HashSet<string> tables)
+    {
+        HashSet<string> allowedTables = new(_stage2Columns.Keys, StringComparer.Ordinal)
+        {
+            "__EFMigrationsLock",
+        };
+        string[] unexpectedTables = tables
+            .Where(table => !allowedTables.Contains(table))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (unexpectedTables.Length != 0)
+        {
+            throw new InvalidDataException(
+                $"The existing Stage 2 database contains unexpected tables: {string.Join(", ", unexpectedTables)}. " +
+                "Automatic migration was stopped instead of guessing ownership.");
+        }
+    }
+
+    private async Task ValidateStage2ColumnsAsync(
+        SqliteConnection connection,
+        HashSet<string> tables,
+        CancellationToken cancellationToken)
+    {
+        foreach ((string table, string[] expectedColumns) in _stage2Columns)
+        {
+            if (!tables.Contains(table))
+            {
+                throw new InvalidDataException(
+                    $"The existing database contains only part of the Stage 2 schema; missing table '{table}'. " +
+                    "Automatic migration was stopped to avoid misclassifying an unknown database.");
+            }
+
+            HashSet<string> actualColumns = await ReadColumnsAsync(connection, table, cancellationToken).ConfigureAwait(false);
+            string[] missingColumns = expectedColumns.Where(column => !actualColumns.Contains(column)).ToArray();
+            if (missingColumns.Length != 0)
+            {
+                throw new InvalidDataException(
+                    $"The existing Stage 2 table '{table}' is missing expected columns: {string.Join(", ", missingColumns)}.");
+            }
+        }
+    }
+
+    private static async Task SeedStage2MigrationHistoryAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        using SqliteTransaction transaction = connection.BeginTransaction();
+        using SqliteCommand createHistory = connection.CreateCommand();
+        createHistory.Transaction = transaction;
+        createHistory.CommandText =
+            "CREATE TABLE IF NOT EXISTS \"__EFMigrationsHistory\" (" +
+            "\"MigrationId\" TEXT NOT NULL CONSTRAINT \"PK___EFMigrationsHistory\" PRIMARY KEY, " +
+            "\"ProductVersion\" TEXT NOT NULL);";
+        await createHistory.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        using SqliteCommand seedHistory = connection.CreateCommand();
+        seedHistory.Transaction = transaction;
+        seedHistory.CommandText =
+            "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ($migrationId, $productVersion);";
+        seedHistory.Parameters.AddWithValue("$migrationId", Stage2Baseline.MigrationId);
+        seedHistory.Parameters.AddWithValue("$productVersion", EfProductVersion);
+        await seedHistory.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+'''
 t = t[:start] + replacement + t[recover:]
 t = t.replace('await using SqliteCommand ', 'using SqliteCommand ')
 t = t.replace('await using SqliteDataReader ', 'using SqliteDataReader ')
