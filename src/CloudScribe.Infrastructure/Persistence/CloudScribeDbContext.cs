@@ -89,6 +89,7 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
             entity.Property(item => item.Name).HasMaxLength(240);
             entity.Property(item => item.ContentText).IsRequired();
             entity.Property(item => item.ContentSha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(item => item.ContentRelativePath).HasMaxLength(768);
             entity.Property(item => item.ImportProvenance).HasMaxLength(2048);
             entity.HasIndex(item => new { item.DocumentId, item.CreatedAtUnixMilliseconds });
             entity.HasOne<DocumentEntity>()
@@ -163,5 +164,4 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
-
 }
