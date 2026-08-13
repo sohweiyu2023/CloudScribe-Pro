@@ -28,10 +28,7 @@ public sealed class DocumentAutosaveCoordinator : IAsyncDisposable
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(request);
-        if (debounce < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(debounce));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(debounce, TimeSpan.Zero);
 
         CancellationTokenSource next = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         CancellationTokenSource? previous;
