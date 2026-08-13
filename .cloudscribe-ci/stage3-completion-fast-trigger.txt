@@ -1,3 +1,3 @@
 Stage 3 completion fast-gate marker
-Batch: recovery + truthful workspace status + hostile import coverage
-Requested head lineage: e8eeb660dd9d213ff4814a6985f9ba9564ceda1f
+Batch: analyzer-clean recovery + truthful workspace + hostile import coverage
+Requested head lineage: 7a8b1f5e6ebffc6b6b84a981d88bfc1f00917e0d
