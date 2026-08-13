@@ -22,8 +22,16 @@ public sealed class BoundedLocalDocumentImporter : ILocalDocumentImporter
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.DisplayName);
-        ArgumentNullException.ThrowIfNull(request.Content);
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            throw new ArgumentException("The import display name is required.", nameof(request));
+        }
+
+        if (request.Content is null)
+        {
+            throw new ArgumentException("The import content stream is required.", nameof(request));
+        }
+
         if (!request.Content.CanRead)
         {
             throw new ArgumentException("The import source must be readable.", nameof(request));
@@ -139,7 +147,7 @@ public sealed class BoundedLocalDocumentImporter : ILocalDocumentImporter
         if (string.IsNullOrWhiteSpace(fullName)
             || fullName.StartsWith('/', StringComparison.Ordinal)
             || fullName.StartsWith('\\')
-            || fullName.Contains(':', StringComparison.Ordinal))
+            || fullName.Contains(":", StringComparison.Ordinal))
         {
             throw new InvalidDataException("DOCX archive contains an unsafe entry path.");
         }
