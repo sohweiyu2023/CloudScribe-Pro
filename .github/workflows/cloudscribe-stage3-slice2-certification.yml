@@ -1,0 +1,218 @@
+name: CloudScribe Stage 3 Slice 2 Windows certification
+
+on:
+  push:
+    branches: [cloudscribe-stage3-slice2-certification]
+    paths:
+      - '.github/workflows/cloudscribe-stage3-slice2-certification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  certify:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      SLICE1_HEAD: 60192e2c6fd2fd13885ec4f70cd6f65e69ab1def
+      EXPECTED_HEAD: b4b5f5fe13aae8a144364c58c9645142b8533650
+      TARGET_BRANCH: cloudscribe-0.4.0-stage3-slice2
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-0.4.0-stage3-slice2
+          path: source
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+
+      - name: Verify exact development head and locked restore
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          if((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD){throw 'Stage 3 Slice 2 development head moved.'}
+          if((dotnet --version).Trim() -ne '10.0.400'){throw 'Wrong .NET SDK.'}
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if($LASTEXITCODE -ne 0){throw 'Locked restore failed.'}
+
+      - name: Normalize only Slice 2 CSharp scope and refresh manifest
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $allowed=@(git diff --name-only $env:SLICE1_HEAD HEAD --)
+          if($LASTEXITCODE -ne 0){throw 'Unable to enumerate Slice 2 scope.'}
+          $allowed=@($allowed | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
+          $changedCs=@($allowed | Where-Object { $_.EndsWith('.cs',[StringComparison]::OrdinalIgnoreCase) })
+          if($changedCs.Count -lt 10){throw "Unexpectedly small Slice 2 C# scope: $($changedCs.Count)"}
+          [IO.File]::WriteAllLines((Join-Path $env:RUNNER_TEMP 'slice2-allowed.txt'),$allowed,[Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllLines((Join-Path $env:RUNNER_TEMP 'slice2-csharp.txt'),$changedCs,[Text.UTF8Encoding]::new($false))
+
+          dotnet format CloudScribe.sln --no-restore --verbosity minimal
+          if($LASTEXITCODE -ne 0){throw 'dotnet format normalization failed.'}
+
+          $postFormat=@(git diff --name-only HEAD --)
+          foreach($path in $postFormat){
+            if($allowed -notcontains $path){
+              git restore --worktree -- $path
+              if($LASTEXITCODE -ne 0){throw "Unable to discard formatter collateral: $path"}
+            }
+          }
+          git clean -fd
+          if($LASTEXITCODE -ne 0){throw 'Unable to purge untracked formatter/restore collateral.'}
+
+          python tools/update_sha256_manifest.py
+          if($LASTEXITCODE -ne 0){throw 'Manifest refresh failed.'}
+          git diff --check
+          if($LASTEXITCODE -ne 0){throw 'Whitespace validation failed.'}
+          Write-Host "CLOUDSCRIBE_STAGE3_SLICE2_FORMAT_SCOPE=PASS changed_cs=$($changedCs.Count)"
+
+      - name: Portable source and governance gates
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $commands=@(
+            'python tools/update_sha256_manifest.py --check',
+            'python tools/verify_repository.py',
+            'python tools/verify_project_dependencies.py',
+            'python tools/verify_stage1_source.py',
+            'python tools/verify_stage2_source.py',
+            'python tools/verify_stage3_source.py',
+            'python -B tools/run_verifier_self_tests.py',
+            'python -B tools/run_python_regression_shards.py --all')
+          foreach($command in $commands){
+            Write-Host "> $command"
+            Invoke-Expression $command
+            if($LASTEXITCODE -ne 0){throw "Gate failed: $command"}
+          }
+
+      - name: Build Debug and Release
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($configuration in @('Debug','Release')){
+            dotnet build CloudScribe.sln -c $configuration --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+            if($LASTEXITCODE -ne 0){throw "$configuration build failed."}
+          }
+
+      - name: Run all compiled tests
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $results=Join-Path $env:RUNNER_TEMP 'stage3-slice2-trx'
+          New-Item -ItemType Directory -Force $results | Out-Null
+          $projects=@(
+            'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+            'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+            'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+            'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj')
+          foreach($project in $projects){
+            $name=[IO.Path]::GetFileNameWithoutExtension($project)
+            dotnet test $project -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --logger "trx;LogFileName=$name.trx" --results-directory $results
+            if($LASTEXITCODE -ne 0){throw "Tests failed: $project"}
+          }
+          $trx=@(Get-ChildItem $results -Filter '*.trx' -File)
+          if($trx.Count -ne 4){throw "Expected 4 TRX files, found $($trx.Count)"}
+          $total=0;$passed=0;$failed=0
+          foreach($file in $trx){
+            [xml]$xml=Get-Content $file.FullName -Raw
+            $counters=$xml.TestRun.ResultSummary.Counters
+            $total+=[int]$counters.total
+            $passed+=[int]$counters.passed
+            $failed+=[int]$counters.failed
+          }
+          Write-Host "CLOUDSCRIBE_STAGE3_SLICE2_DOTNET_TESTS total=$total passed=$passed failed=$failed"
+          if($total -lt 164 -or $passed -ne $total -or $failed -ne 0){throw 'Stage 3 Slice 2 compiled test gate failed.'}
+
+      - name: Post-test formatting and immutability
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $allowed=@(Get-Content (Join-Path $env:RUNNER_TEMP 'slice2-allowed.txt'))
+          $changedCs=@(Get-Content (Join-Path $env:RUNNER_TEMP 'slice2-csharp.txt'))
+          $before=@{}
+          foreach($path in $changedCs){
+            if(Test-Path $path -PathType Leaf){$before[$path]=(Get-FileHash $path -Algorithm SHA256).Hash}
+          }
+          dotnet format CloudScribe.sln --no-restore --verbosity minimal
+          if($LASTEXITCODE -ne 0){throw 'Post-test dotnet format failed.'}
+          foreach($path in $changedCs){
+            if(-not (Test-Path $path -PathType Leaf)){throw "Changed C# file disappeared: $path"}
+            $after=(Get-FileHash $path -Algorithm SHA256).Hash
+            if($before[$path] -ne $after){throw "Slice 2 C# formatting drift after tests: $path"}
+          }
+          $postFormat=@(git diff --name-only HEAD --)
+          foreach($path in $postFormat){
+            if($allowed -notcontains $path -and $path -ne 'SHA256SUMS.txt'){
+              git restore --worktree -- $path
+              if($LASTEXITCODE -ne 0){throw "Unable to discard post-test collateral: $path"}
+            }
+          }
+          git clean -fd
+          if($LASTEXITCODE -ne 0){throw 'Unable to purge post-test collateral.'}
+          python tools/update_sha256_manifest.py --check
+          if($LASTEXITCODE -ne 0){throw 'Manifest changed during native gates.'}
+          python tools/verify_stage3_source.py
+          if($LASTEXITCODE -ne 0){throw 'Stage 3 verifier failed after native gates.'}
+          Write-Host 'CLOUDSCRIBE_STAGE3_SLICE2_POST_TEST_IMMUTABILITY=PASS'
+
+      - name: Mark Slice 2 certified and push exact tested bytes
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          if((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD){throw 'Development head moved during certification.'}
+          $state=Get-Content SESSION_STATE.json -Raw | ConvertFrom-Json
+          $state.stage3_slice2_complete=$true
+          $state | Add-Member -NotePropertyName stage3_slice2_certification_run -NotePropertyValue '${{ github.run_id }}' -Force
+          $state.status='Stage 2 is promoted. Stage 3 Slice 1 is admitted. Stage 3 Slice 2 durable document workflow passed Windows certification, including locked restore, Debug/Release builds, all compiled tests, formatting stability, migration upgrade, integrity/concurrency tests, verifier self-tests, and deterministic regression gates. Stage 3 remains in progress; UI/library integration, safe imports, preprocessing, recovery and text-integrity acceptance remain.'
+          $state.next_exact_action='Continue Stage 3 with local library/editor integration over the certified IDocumentLibrary boundary, recovery-aware close and explicit save UX; then implement safe bounded TXT/Markdown/HTML/DOCX/clipboard imports and preprocessing preview/source maps before Stage 3 acceptance.'
+          $state.latest_reaudit_completed_at_utc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+          $json=$state | ConvertTo-Json -Depth 20
+          [IO.File]::WriteAllText((Join-Path (Get-Location) 'SESSION_STATE.json'),$json + "`n",[Text.UTF8Encoding]::new($false))
+          python tools/update_sha256_manifest.py
+          if($LASTEXITCODE -ne 0){throw 'Final manifest refresh failed.'}
+          python tools/verify_repository.py
+          if($LASTEXITCODE -ne 0){throw 'Final repository verifier failed.'}
+          python tools/verify_stage3_source.py
+          if($LASTEXITCODE -ne 0){throw 'Final Stage 3 verifier failed.'}
+          python -B tools/run_python_regression_shards.py --all
+          if($LASTEXITCODE -ne 0){throw 'Final deterministic regression gate failed.'}
+          git diff --check
+          if($LASTEXITCODE -ne 0){throw 'Final whitespace validation failed.'}
+          git config user.name cloudscribe-ci
+          git config user.email actions@github.com
+          git add -A
+          git commit -m 'chore: certify Stage 3 Slice 2 durable document workflow'
+          if($LASTEXITCODE -ne 0){throw 'Certification commit failed.'}
+          $head=(git rev-parse HEAD).Trim()
+          git push origin "HEAD:$env:TARGET_BRANCH"
+          if($LASTEXITCODE -ne 0){throw 'Certified Slice 2 push failed.'}
+          Write-Host "CLOUDSCRIBE_STAGE3_SLICE2_CERTIFIED_HEAD=$head"
+
+      - name: Upload Slice 2 evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage3-slice2-evidence
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/stage3-slice2-trx/*.trx
+            ${{ runner.temp }}/slice2-allowed.txt
+            ${{ runner.temp }}/slice2-csharp.txt
