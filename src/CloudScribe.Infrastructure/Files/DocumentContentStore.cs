@@ -89,6 +89,17 @@ public sealed class DocumentContentStore(AppPaths appPaths)
         return content;
     }
 
+    public Task DeleteCommittedAsync(
+        DocumentContentCommit commit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        cancellationToken.ThrowIfCancellationRequested();
+        string fullPath = ResolveRelativePath(commit.RelativePath);
+        TryDelete(fullPath);
+        return Task.CompletedTask;
+    }
+
     private async Task<DocumentContentCommit> VerifyExistingAsync(
         string finalPath,
         string expectedHash,
