@@ -4,6 +4,9 @@
     <AssemblyName>CloudScribe.Infrastructure</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Files/BoundedLocalDocumentImporter.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../CloudScribe.Application/CloudScribe.Application.csproj" />
     <ProjectReference Include="../CloudScribe.Domain/CloudScribe.Domain.csproj" />
     <ProjectReference Include="../CloudScribe.Providers.Abstractions/CloudScribe.Providers.Abstractions.csproj" />
