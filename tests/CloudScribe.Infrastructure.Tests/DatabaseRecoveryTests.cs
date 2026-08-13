@@ -68,67 +68,14 @@ public sealed class DatabaseRecoveryTests
         try
         {
             AppPaths paths = CreatePaths(root);
-            paths.EnsureDatabaseDirectory();
-            Guid documentId = Guid.NewGuid();
-            Guid revisionId = Guid.NewGuid();
-            await using (CloudScribeDbContext seed = CreateContext(paths.DatabasePath))
-            {
-                IMigrator migrator = seed.GetService<IMigrator>();
-                await migrator.MigrateAsync(Stage3Documents.MigrationId, TestContext.Current.CancellationToken);
-                await seed.Database.ExecuteSqlRawAsync(
-                    "ALTER TABLE document_revisions ADD COLUMN ContentRelativePath TEXT NULL;",
-                    TestContext.Current.CancellationToken);
-                seed.Documents.Add(new DocumentEntity
-                {
-                    Id = documentId,
-                    Title = "Recovery sentinel",
-                    DraftText = "must survive",
-                    CreatedAtUnixMilliseconds = 1,
-                    UpdatedAtUnixMilliseconds = 1,
-                    Status = 0,
-                    CurrentRevisionId = revisionId,
-                    ConcurrencyVersion = 1,
-                });
-                seed.DocumentRevisions.Add(new DocumentRevisionEntity
-                {
-                    Id = revisionId,
-                    DocumentId = documentId,
-                    CreatedAtUnixMilliseconds = 1,
-                    RevisionKind = 0,
-                    Name = "before failure",
-                    ContentText = "must survive",
-                    ContentSha256 = new string('c', 64),
-                });
-                await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
-            }
+            Guid documentId = await SeedMigrationFailureDatabaseAsync(paths);
 
             DatabaseInitializer initializer = CreateInitializer(paths);
             await Assert.ThrowsAsync<SqliteException>(() =>
                 initializer.InitializeAsync(TestContext.Current.CancellationToken));
 
             Assert.Single(Directory.EnumerateFiles(paths.BackupsDirectory, "pre-migration-*.db"));
-            await using CloudScribeDbContext restored = CreateContext(paths.DatabasePath);
-            string[] migrations = (await restored.Database
-                .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken))
-                .ToArray();
-            Assert.Equal([Stage2Baseline.MigrationId, Stage3Documents.MigrationId], migrations);
-            DocumentEntity document = await restored.Documents.SingleAsync(TestContext.Current.CancellationToken);
-            Assert.Equal(documentId, document.Id);
-            Assert.Equal("must survive", document.DraftText);
-
-            await using SqliteConnection connection = new($"Data Source={paths.DatabasePath}");
-            await connection.OpenAsync(TestContext.Current.CancellationToken);
-            await using SqliteCommand columns = connection.CreateCommand();
-            columns.CommandText = "PRAGMA table_info(document_revisions);";
-            await using SqliteDataReader reader = await columns.ExecuteReaderAsync(TestContext.Current.CancellationToken);
-            List<string> names = [];
-            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
-            {
-                names.Add(reader.GetString(1));
-            }
-
-            Assert.Contains("ContentRelativePath", names, StringComparer.Ordinal);
-            Assert.DoesNotContain("ContentByteLength", names, StringComparer.Ordinal);
+            await AssertRestoredMigrationFailureDatabaseAsync(paths, documentId);
         }
         finally
         {
@@ -158,6 +105,68 @@ public sealed class DatabaseRecoveryTests
         {
             DeleteTemporaryRoot(root);
         }
+    }
+
+    private static async Task<Guid> SeedMigrationFailureDatabaseAsync(AppPaths paths)
+    {
+        paths.EnsureDatabaseDirectory();
+        Guid documentId = Guid.NewGuid();
+        Guid revisionId = Guid.NewGuid();
+        await using CloudScribeDbContext seed = CreateContext(paths.DatabasePath);
+        IMigrator migrator = seed.GetService<IMigrator>();
+        await migrator.MigrateAsync(Stage3Documents.MigrationId, TestContext.Current.CancellationToken);
+        await seed.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE document_revisions ADD COLUMN ContentRelativePath TEXT NULL;",
+            TestContext.Current.CancellationToken);
+        seed.Documents.Add(new DocumentEntity
+        {
+            Id = documentId,
+            Title = "Recovery sentinel",
+            DraftText = "must survive",
+            CreatedAtUnixMilliseconds = 1,
+            UpdatedAtUnixMilliseconds = 1,
+            Status = 0,
+            CurrentRevisionId = revisionId,
+            ConcurrencyVersion = 1,
+        });
+        seed.DocumentRevisions.Add(new DocumentRevisionEntity
+        {
+            Id = revisionId,
+            DocumentId = documentId,
+            CreatedAtUnixMilliseconds = 1,
+            RevisionKind = 0,
+            Name = "before failure",
+            ContentText = "must survive",
+            ContentSha256 = new string('c', 64),
+        });
+        await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return documentId;
+    }
+
+    private static async Task AssertRestoredMigrationFailureDatabaseAsync(AppPaths paths, Guid documentId)
+    {
+        await using CloudScribeDbContext restored = CreateContext(paths.DatabasePath);
+        string[] migrations = (await restored.Database
+            .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken))
+            .ToArray();
+        Assert.Equal([Stage2Baseline.MigrationId, Stage3Documents.MigrationId], migrations);
+        DocumentEntity document = await restored.Documents.SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(documentId, document.Id);
+        Assert.Equal("must survive", document.DraftText);
+
+        await using SqliteConnection connection = new($"Data Source={paths.DatabasePath}");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using SqliteCommand columns = connection.CreateCommand();
+        columns.CommandText = "PRAGMA table_info(document_revisions);";
+        await using SqliteDataReader reader = await columns.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        List<string> names = [];
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            names.Add(reader.GetString(1));
+        }
+
+        Assert.Contains("ContentRelativePath", names, StringComparer.Ordinal);
+        Assert.DoesNotContain("ContentByteLength", names, StringComparer.Ordinal);
     }
 
     private static DatabaseInitializer CreateInitializer(AppPaths paths) => new(
