@@ -90,6 +90,13 @@ def main() -> int:
 
         require_text(
             root,
+            "src/CloudScribe.Domain/Documents/DocumentStatus.cs",
+            "Active = 0",
+            "Archived = 1",
+            "Deleted = 2",
+        )
+        require_text(
+            root,
             "src/CloudScribe.Infrastructure/Persistence/CloudScribeDbContext.cs",
             "DbSet<DocumentEntity>",
             "DbSet<DocumentRevisionEntity>",
@@ -139,7 +146,7 @@ def main() -> int:
             "DocumentConcurrencyException",
             "ContentRelativePath",
             "ReadVerifiedAsync",
-            "DocumentStatus.Archived",
+            "ValidateStatus(status)",
         )
         if library.index("CommitAsync") > library.index("context.Documents.Add(document)"):
             return fail("document create flow must durably commit immutable content before adding the database reference")
