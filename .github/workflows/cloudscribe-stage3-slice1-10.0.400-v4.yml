@@ -93,7 +93,15 @@ jobs:
           $status=@(git status --porcelain=v1 -uall)
           if ($status.Count -lt 30 -or $status.Count -gt 40) { throw "Unexpected Stage 3 change count: $($status.Count)" }
           if ($status -match '^.. \.cloudscribe-ci/' -or $status -match '^.. \.github/') { throw 'Carrier files leaked into product source.' }
-          Write-Host "CLOUDSCRIBE_STAGE3_SOURCE_ADMISSION=PASS changed_paths=$($status.Count)"
+          $trackedScope=@(git diff --name-only --no-renames --)
+          if($LASTEXITCODE -ne 0){throw 'Unable to enumerate tracked Stage 3 scope.'}
+          $untrackedScope=@(git ls-files --others --exclude-standard)
+          if($LASTEXITCODE -ne 0){throw 'Unable to enumerate untracked Stage 3 scope.'}
+          $scope=@($trackedScope + $untrackedScope | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
+          if($scope.Count -lt 30 -or $scope.Count -gt 45){throw "Unexpected frozen Stage 3 scope size: $($scope.Count)"}
+          $scopeFile=Join-Path $env:RUNNER_TEMP 'stage3-admitted-paths.txt'
+          [IO.File]::WriteAllLines($scopeFile,$scope,[Text.UTF8Encoding]::new($false))
+          Write-Host "CLOUDSCRIBE_STAGE3_SOURCE_ADMISSION=PASS changed_paths=$($status.Count) frozen_scope=$($scope.Count)"
 
       - name: Locked restore
         shell: pwsh
@@ -140,7 +148,9 @@ jobs:
         working-directory: source
         run: |
           $ErrorActionPreference='Stop'
-          python ../carrier/.cloudscribe-ci/stage3-v4/repair_migrations.py --format-only --source . --verify-unchanged
+          $scopeFile=Join-Path $env:RUNNER_TEMP 'stage3-admitted-paths.txt'
+          if(-not (Test-Path $scopeFile -PathType Leaf)){throw 'Frozen Stage 3 scope file is missing.'}
+          python ../carrier/.cloudscribe-ci/stage3-v4/repair_migrations.py --format-only --source . --verify-unchanged --allowed-file $scopeFile
           if($LASTEXITCODE -ne 0){throw 'Stage 3 admitted-file formatting stability gate failed.'}
           git diff --check
           if($LASTEXITCODE -ne 0){throw 'Post-test whitespace validation failed.'}
@@ -175,6 +185,7 @@ jobs:
           retention-days: 14
           path: |
             ${{ runner.temp }}/stage3-trx/*.trx
+            ${{ runner.temp }}/stage3-admitted-paths.txt
             source/src/CloudScribe.Infrastructure/Files/DocumentContentStore.cs
             source/src/CloudScribe.Infrastructure/Persistence/LegacyDatabaseMigrationBridge.cs
             source/src/CloudScribe.Infrastructure/Persistence/DatabaseInitializer.cs
