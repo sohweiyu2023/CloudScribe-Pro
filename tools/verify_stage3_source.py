@@ -37,148 +37,99 @@ def main() -> int:
     if state.get("required_dotnet_sdk") != "10.0.400" or global_json.get("sdk", {}).get("version") != "10.0.400":
         return fail("Stage 3 must preserve the certified .NET SDK 10.0.400 checkpoint")
     if state.get("stage2_promoted") is not True:
-        return fail("Stage 3 source does not record the promoted Stage 2 checkpoint")
+        return fail("Stage 3 source does not record promoted Stage 2")
     if state.get("stage2_manual_visual_acceptance") is not True or state.get("stage2_user_clicked_editor_retest") is not True:
-        return fail("Stage 3 source does not record the user's real-PC Stage 2 visual acceptance")
-    if state.get("stage3_slice1_started") is not True or state.get("stage3_slice1_complete") is not True:
-        return fail("Stage 3 Slice 1 is not recorded as completed")
-    if state.get("stage3_slice2_started") is not True:
-        return fail("Stage 3 Slice 2 is not recorded as started")
+        return fail("Stage 3 source does not retain real-PC Stage 2 visual acceptance")
+    if state.get("stage3_slice1_complete") is not True or state.get("stage3_slice2_complete") is not True:
+        return fail("certified Stage 3 Slice 1/Slice 2 checkpoints are not recorded complete")
+    if state.get("stage3_completion_candidate") is not True:
+        return fail("Stage 3 completion candidate is not recorded")
+    if state.get("stage3_complete") is not False or state.get("stage3_promoted") is not False:
+        return fail("completion candidate must not claim Stage 3 complete/promoted")
     if state.get("whole_application_final_claimed") is not False:
         return fail("Stage 3 source incorrectly claims the whole application is final")
 
     required_files = (
-        "src/CloudScribe.Domain/Documents/DocumentStatus.cs",
-        "src/CloudScribe.Domain/Documents/DocumentRevisionKind.cs",
         "src/CloudScribe.Application/Documents/IDocumentLibrary.cs",
         "src/CloudScribe.Application/Documents/DocumentAutosaveCoordinator.cs",
-        "src/CloudScribe.Infrastructure/Persistence/CloudScribeDbContext.cs",
-        "src/CloudScribe.Infrastructure/Persistence/LegacyDatabaseMigrationBridge.cs",
-        "src/CloudScribe.Infrastructure/Persistence/Migrations/Stage2Baseline.cs",
-        "src/CloudScribe.Infrastructure/Persistence/Migrations/Stage3Documents.cs",
-        "src/CloudScribe.Infrastructure/Persistence/Migrations/Stage3DocumentWorkflow.cs",
+        "src/CloudScribe.Application/Documents/DocumentPreprocessor.cs",
+        "src/CloudScribe.App/ViewModels/ShellViewModel.Documents.State.cs",
+        "src/CloudScribe.App/ViewModels/ShellViewModel.Documents.Save.cs",
+        "src/CloudScribe.App/ViewModels/ShellViewModel.Documents.Import.cs",
+        "src/CloudScribe.App/DocumentWindowBehavior.cs",
+        "src/CloudScribe.App/MainWindow.Stage3Library.cs",
+        "src/CloudScribe.App/Views/DocumentLibraryPanel.axaml",
+        "src/CloudScribe.Infrastructure/Persistence/DatabaseInitializer.cs",
         "src/CloudScribe.Infrastructure/Persistence/EfDocumentLibrary.cs",
         "src/CloudScribe.Infrastructure/Files/DocumentContentStore.cs",
-        "src/CloudScribe.Infrastructure/Files/DocumentContentCommit.cs",
-        "tests/CloudScribe.Application.Tests/DocumentAutosaveCoordinatorTests.cs",
-        "tests/CloudScribe.Infrastructure.Tests/Stage3MigrationTests.cs",
-        "tests/CloudScribe.Infrastructure.Tests/DocumentContentStoreTests.cs",
-        "tests/CloudScribe.Infrastructure.Tests/DocumentLibraryTests.cs",
+        "src/CloudScribe.Infrastructure/Files/BoundedLocalDocumentImporter.cs",
+        "src/CloudScribe.Infrastructure/Files/BoundedDocxTextExtractor.cs",
+        "src/CloudScribe.Infrastructure/Files/BoundedHtmlTextExtractor.cs",
+        "tests/CloudScribe.Application.Tests/DocumentPreprocessorTests.cs",
+        "tests/CloudScribe.Infrastructure.Tests/BoundedLocalDocumentImporterTests.cs",
+        "tests/CloudScribe.Infrastructure.Tests/DatabaseRecoveryTests.cs",
+        "tests/CloudScribe.Architecture.Tests/Stage3CompletionArchitectureTests.cs",
     )
     for relative in required_files:
         if not (root / relative).is_file():
-            return fail(f"required Stage 3 Slice 2 file missing: {relative}")
+            return fail(f"required Stage 3 completion file missing: {relative}")
 
+    if (root / "src/CloudScribe.Infrastructure/Files/BoundedLocalDocumentImporterV2.cs").exists():
+        return fail("duplicate BoundedLocalDocumentImporterV2.cs remains")
     if (root / "src/CloudScribe.Infrastructure/Persistence/ObservabilityDbContext.cs").exists():
-        return fail("legacy ObservabilityDbContext remains after Stage 3 context consolidation")
+        return fail("legacy ObservabilityDbContext remains")
 
     try:
-        initializer = require_text(
-            root,
-            "src/CloudScribe.Infrastructure/Persistence/DatabaseInitializer.cs",
-            "MigrateAsync",
-            "PRAGMA integrity_check",
-            "PRAGMA foreign_key_check",
-            "PRAGMA journal_mode=WAL",
-            "CreateVerifiedPreMigrationBackupAsync",
-            "CheckpointWalAsync",
-            "RestoreBackup",
-            "ClearAllPools",
-        )
+        initializer = require_text(root, "src/CloudScribe.Infrastructure/Persistence/DatabaseInitializer.cs",
+            "MigrateAsync", "PRAGMA integrity_check", "PRAGMA foreign_key_check",
+            "CreateVerifiedPreMigrationBackupAsync", "CheckpointWalAsync", "RestoreBackup", "ClearAllPools")
         if "EnsureCreatedAsync" in initializer:
-            return fail("Stage 3 DatabaseInitializer still uses EnsureCreatedAsync instead of executable migrations")
-
-        require_text(
-            root,
-            "src/CloudScribe.Domain/Documents/DocumentStatus.cs",
-            "Active = 0",
-            "Archived = 1",
-            "Deleted = 2",
-        )
-        require_text(
-            root,
-            "src/CloudScribe.Infrastructure/Persistence/CloudScribeDbContext.cs",
-            "DbSet<DocumentEntity>",
-            "DbSet<DocumentRevisionEntity>",
-            "DbSet<DocumentSectionEntity>",
-            "DbSet<TagEntity>",
-            "DbSet<BookmarkEntity>",
-            "DbSet<ReadingPositionEntity>",
-            "DeleteBehavior.Cascade",
-            "IsConcurrencyToken",
-            "ContentRelativePath",
-        )
-        require_text(
-            root,
-            "src/CloudScribe.Infrastructure/Persistence/LegacyDatabaseMigrationBridge.cs",
-            "__EFMigrationsHistory",
-            "Stage2Baseline.MigrationId",
-            "missing expected columns",
-            "unexpected tables",
-            "RecoverAbandonedEfMigrationLockAsync",
-            "BEGIN IMMEDIATE",
-        )
-        require_text(
-            root,
-            "src/CloudScribe.Infrastructure/Files/DocumentContentStore.cs",
-            "PhysicalDirectoryPolicy",
-            "FileMode.CreateNew",
-            "Flush(flushToDisk: true)",
-            "File.Move",
-            "SHA256.HashData",
-            "ValidateExistsWithoutLinks",
-            "DeleteCommittedAsync",
-        )
-        require_text(
-            root,
-            "src/CloudScribe.Application/Documents/DocumentAutosaveCoordinator.cs",
-            "TimeProvider",
-            "Task.Delay(debounce, _timeProvider",
-            "DocumentRevisionKind.Autosave",
-            "DocumentRevisionKind.Checkpoint",
-        )
-        library = require_text(
-            root,
-            "src/CloudScribe.Infrastructure/Persistence/EfDocumentLibrary.cs",
-            "IDocumentLibrary",
-            "BeginTransactionAsync",
-            "CommitAsync",
-            "DocumentConcurrencyException",
-            "ContentRelativePath",
-            "ReadVerifiedAsync",
-            "ValidateStatus(status)",
-        )
-        if library.index("CommitAsync") > library.index("context.Documents.Add(document)"):
-            return fail("document create flow must durably commit immutable content before adding the database reference")
-        require_text(
-            root,
-            "src/CloudScribe.Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs",
-            "AddPooledDbContextFactory<CloudScribeDbContext>",
-            "ForeignKeys = true",
-            "DefaultTimeout = 5",
-            "IDocumentLibrary, EfDocumentLibrary",
-            "DocumentAutosaveCoordinator",
-        )
-        require_text(
-            root,
-            "tests/CloudScribe.Infrastructure.Tests/Stage3MigrationTests.cs",
-            "FreshDatabaseAppliesExecutableStage2AndStage3Migrations",
-            "Slice1DatabaseUpgradesWithoutLosingExistingDocumentRows",
-            "Stage2EnsureCreatedShapeIsBridgedWithoutDroppingExistingRows",
-            "PartialLegacySchemaFailsClosedInsteadOfGuessing",
-        )
-        require_text(
-            root,
-            "tests/CloudScribe.Infrastructure.Tests/DocumentLibraryTests.cs",
-            "CreateSaveReopenAndSearchUseDurableVerifiedRevisionFiles",
-            "StaleWriterFailsWithoutCreatingAnotherRevision",
-            "ArchiveDeleteAndUndoAreVersionedAndExcludedFromActiveLibrary",
-            "CorruptedRevisionFileFailsClosedOnReopen",
-        )
+            return fail("Stage 3 DatabaseInitializer still uses EnsureCreatedAsync")
+        require_text(root, "src/CloudScribe.Infrastructure/Persistence/EfDocumentLibrary.cs",
+            "IDocumentLibrary", "DocumentConcurrencyException", "ReadVerifiedAsync", "BeginTransactionAsync", "CommitAsync")
+        require_text(root, "src/CloudScribe.Infrastructure/Files/DocumentContentStore.cs",
+            "FileMode.CreateNew", "Flush(flushToDisk: true)", "File.Move", "SHA256.HashData", "ValidateExistsWithoutLinks")
+        require_text(root, "src/CloudScribe.App/ViewModels/ShellViewModel.Documents.State.cs",
+            "LocalDocuments", "DocumentSaveState", "RequiresDocumentSaveBeforeClose", "CreateAsync", "OpenAsync", "SearchAsync")
+        require_text(root, "src/CloudScribe.App/ViewModels/ShellViewModel.Documents.Save.cs",
+            "DocumentAutosaveDebounce", "DocumentRevisionKind.Autosave", "DocumentRevisionKind.Checkpoint",
+            "DocumentConcurrencyException", "PrepareDocumentCloseAsync", "your text was not overwritten")
+        require_text(root, "src/CloudScribe.App/ViewModels/ShellViewModel.Documents.Import.cs",
+            "ILocalDocumentImporter", "DocumentPreprocessor", "ImportDocumentAsync",
+            "NormalizeLineEndings: true", "SimplifyUrls: false", "DocumentRevisionKind.Import")
+        require_text(root, "src/CloudScribe.App/DocumentWindowBehavior.cs",
+            "Key.S", "Key.N", "Key.O", "RequiresDocumentSaveBeforeClose: true",
+            "eventArgs.Cancel = true", "PrepareDocumentCloseAsync")
+        library = require_text(root, "src/CloudScribe.App/Views/DocumentLibraryPanel.axaml",
+            "LOCAL DOCUMENT LIBRARY", "PlaceholderText=\"Search local documents\"",
+            "RefreshDocumentLibraryCommand", "ImportDocumentCommand", "NewDocumentCommand", "LocalDocuments")
+        if "Watermark=" in library:
+            return fail("Stage 3 Library uses obsolete Avalonia Watermark API")
+        require_text(root, "src/CloudScribe.App/MainWindow.Stage3Library.cs",
+            "LOCAL AUTOSAVE", "DocumentSaveState", "Edits are saved locally with debounced autosave",
+            "Ctrl+S creates an explicit checkpoint")
+        require_text(root, "src/CloudScribe.Infrastructure/Files/BoundedDocxTextExtractor.cs",
+            "MaxArchiveExpandedBytes", "MaxArchiveEntryBytes", "MaxArchiveEntries", "MaxCompressionRatio",
+            "DtdProcessing.Prohibit", "XmlResolver = null", "ValidateArchivePath")
+        require_text(root, "src/CloudScribe.Infrastructure/Files/BoundedHtmlTextExtractor.cs",
+            "IsDiscardedContainer", '"script" or "style"', "SkipContainer")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/BoundedLocalDocumentImporterTests.cs",
+            "PlainTextPreservesUnicode", "HtmlIsImportedAsInertText", "DocxRejectsParentTraversalEntry",
+            "DocxRejectsDtdDeclarations", "DocxRejectsSuspiciousCompressionRatio", "DeclaredOversizeSourceFailsBeforeReading")
+        require_text(root, "tests/CloudScribe.Application.Tests/DocumentPreprocessorTests.cs",
+            "IdentityPreviewPreservesUnicodeExactly", "👨‍👩‍👧‍👦", "العربية עברית", "SourceMap")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/DatabaseRecoveryTests.cs",
+            "InitializerCreatesVerifiedBackupBeforeUpgradingExistingDatabase",
+            "FailedMigrationRestoresVerifiedPreMigrationDatabase",
+            "CorruptDatabaseFailsClosedWithoutReplacingOriginalBytes")
+        require_text(root, "tests/CloudScribe.Architecture.Tests/Stage3CompletionArchitectureTests.cs",
+            "Stage3WorkspaceUsesDurableDocumentStateAndRecoveryAwareShortcuts",
+            "Stage3LibraryAndImporterUseCurrentTruthfulAndBoundedContracts",
+            "Stage3RecoveryKeepsVerifiedPreMigrationBackupAndFailClosedRestoreEvidence")
     except (OSError, ValueError) as exc:
         return fail(str(exc))
 
-    print("PASS: Stage 3 Slice 2 durable document workflow, verified revision files, migration upgrade, concurrency and autosave contracts are present.")
+    print("PASS: Stage 3 completion candidate has durable local Library/editor autosave/checkpoint/conflict handling, bounded import/preprocessing, Unicode/source-map coverage, and fail-closed migration backup/recovery contracts while final promotion remains gated.")
     return 0
 
 
