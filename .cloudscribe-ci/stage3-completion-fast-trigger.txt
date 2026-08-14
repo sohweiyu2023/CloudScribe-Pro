@@ -1,3 +1,3 @@
 Stage 3 completion fast-gate marker
-Batch: valid recovery fixture + semantic architecture checks + hostile import coverage
-Requested head lineage: 95e7f518303f24732674867f0037451a8f75d990
+Batch: final completion-candidate verifier/state + duplicate-source cleanup
+Requested head lineage: 13929c853b7883dbf970ed2ca78cfcd0d12b7db8
