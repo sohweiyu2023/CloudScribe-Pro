@@ -1,3 +1,3 @@
 Stage 3 completion fast-gate marker
-Batch: final completion-candidate verifier/state + duplicate-source cleanup
-Requested head lineage: 13929c853b7883dbf970ed2ca78cfcd0d12b7db8
+Batch: final completion-candidate verifier/state + duplicate cleanup + DOCX path guard naming
+Requested head lineage: 46f3691748df9907380258f6b32d57a48c0c7067
