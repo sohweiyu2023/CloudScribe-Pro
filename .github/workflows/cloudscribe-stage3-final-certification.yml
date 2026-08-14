@@ -1,0 +1,183 @@
+name: CloudScribe Stage 3 final Windows certification
+
+on:
+  push:
+    branches: [cloudscribe-stage3-final-certification]
+    paths:
+      - '.github/workflows/cloudscribe-stage3-final-certification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  certify:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      CANDIDATE_HEAD: 5aef7fb513a92820885c012972134cb660e5d3d9
+      STAGE3_SLICE2_HEAD: 08879ed631da483444a71ba2f6edc5d2e9dec057
+      CERTIFIED_BRANCH: cloudscribe-0.4.0-stage3-certified
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 5aef7fb513a92820885c012972134cb660e5d3d9
+          path: source
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: 'source/**/packages.lock.json'
+
+      - name: Bind exact completion candidate
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $head=(git rev-parse HEAD).Trim()
+          if($head -ne $env:CANDIDATE_HEAD){throw "Unexpected candidate head: $head"}
+          git merge-base --is-ancestor $env:STAGE3_SLICE2_HEAD $head
+          if($LASTEXITCODE -ne 0){throw 'Stage 3 completion candidate is not descended from certified Slice 2.'}
+          if((dotnet --version).Trim() -ne '10.0.400'){throw 'Wrong .NET SDK.'}
+          Write-Host "CLOUDSCRIBE_STAGE3_FINAL_BOUND_HEAD=$head"
+
+      - name: Normalize admitted Stage 3 scope and freeze manifest
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if($LASTEXITCODE -ne 0){throw 'Locked restore failed.'}
+          $allowed=@(git diff --name-only $env:STAGE3_SLICE2_HEAD $env:CANDIDATE_HEAD -- | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
+          $changedCs=@($allowed | Where-Object { $_.EndsWith('.cs',[StringComparison]::OrdinalIgnoreCase) })
+          if($changedCs.Count -lt 15){throw "Unexpectedly small Stage 3 completion C# scope: $($changedCs.Count)"}
+          [IO.File]::WriteAllLines((Join-Path $env:RUNNER_TEMP 'stage3-final-allowed.txt'),$allowed,[Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllLines((Join-Path $env:RUNNER_TEMP 'stage3-final-csharp.txt'),$changedCs,[Text.UTF8Encoding]::new($false))
+          dotnet format CloudScribe.sln --no-restore --verbosity minimal
+          if($LASTEXITCODE -ne 0){throw 'Stage 3 completion formatting failed.'}
+          $postFormat=@(git diff --name-only $env:CANDIDATE_HEAD --)
+          foreach($path in $postFormat){
+            if($allowed -notcontains $path){
+              git restore --worktree -- $path
+              if($LASTEXITCODE -ne 0){throw "Unable to discard formatter collateral: $path"}
+            }
+          }
+          git clean -fd
+          if($LASTEXITCODE -ne 0){throw 'Unable to purge non-product formatter collateral.'}
+          python tools/update_sha256_manifest.py
+          if($LASTEXITCODE -ne 0){throw 'Manifest freeze failed.'}
+          git diff --check
+          if($LASTEXITCODE -ne 0){throw 'Whitespace validation failed.'}
+
+      - name: Full portable governance and regression gates
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $commands=@(
+            'python tools/update_sha256_manifest.py --check',
+            'python tools/verify_repository.py',
+            'python tools/verify_project_dependencies.py',
+            'python tools/verify_stage1_source.py',
+            'python tools/verify_stage2_source.py',
+            'python tools/verify_stage3_source.py',
+            'python -B tools/run_verifier_self_tests.py',
+            'python -B tools/run_python_regression_shards.py --all')
+          foreach($command in $commands){
+            Write-Host "> $command"
+            Invoke-Expression $command
+            if($LASTEXITCODE -ne 0){throw "Gate failed: $command"}
+          }
+
+      - name: Full native Windows Stage 2 regression certification on Stage 3 bytes
+        shell: pwsh
+        working-directory: source
+        env:
+          CLOUDSCRIBE_STAGE2_EVIDENCE_DIR: ${{ runner.temp }}\stage3-final-evidence
+        run: |
+          $ErrorActionPreference='Stop'
+          pwsh -NoProfile -File scripts/verify-stage2.ps1
+          if($LASTEXITCODE -ne 0){throw 'Native Windows regression certification failed.'}
+
+      - name: Stage 3 compiled-test count and source stability
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $evidence=Join-Path $env:RUNNER_TEMP 'stage3-final-evidence'
+          $trx=@(Get-ChildItem $evidence -Filter '*.trx' -File -Recurse)
+          if($trx.Count -lt 4){throw "Expected at least four TRX files, found $($trx.Count)"}
+          $total=0;$passed=0;$failed=0
+          foreach($file in $trx){
+            [xml]$xml=Get-Content $file.FullName -Raw
+            $counters=$xml.TestRun.ResultSummary.Counters
+            $total+=[int]$counters.total
+            $passed+=[int]$counters.passed
+            $failed+=[int]$counters.failed
+          }
+          Write-Host "CLOUDSCRIBE_STAGE3_FINAL_DOTNET_TESTS total=$total passed=$passed failed=$failed"
+          if($total -lt 179 -or $passed -ne $total -or $failed -ne 0){throw 'Stage 3 final compiled-test gate failed.'}
+          python tools/verify_stage3_source.py
+          if($LASTEXITCODE -ne 0){throw 'Stage 3 source verifier failed after native certification.'}
+          python tools/update_sha256_manifest.py --check
+          if($LASTEXITCODE -ne 0){throw 'Source manifest drifted during native certification.'}
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity minimal
+          if($LASTEXITCODE -ne 0){throw 'Formatting drift detected after native certification.'}
+          git diff --check
+          if($LASTEXITCODE -ne 0){throw 'Whitespace drift detected after native certification.'}
+
+      - name: Special-character launcher regression
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          pwsh -NoProfile -File scripts/test-build-launcher-special-paths.ps1 -SourceRoot (Get-Location).Path -ScratchRoot (Join-Path $env:RUNNER_TEMP 'Stage3 Repeated Download (7) & ! literal')
+          if($LASTEXITCODE -ne 0){throw 'Special-character launcher regression failed.'}
+
+      - name: Commit exact tested source and create deterministic archive
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          python tools/update_sha256_manifest.py --check
+          if($LASTEXITCODE -ne 0){throw 'Manifest was not immutable at certification commit.'}
+          git config user.name cloudscribe-ci
+          git config user.email actions@github.com
+          git add -A
+          if(git diff --cached --quiet){
+            $certified=(git rev-parse HEAD).Trim()
+          } else {
+            git commit -m 'chore: freeze Stage 3 final certified source'
+            if($LASTEXITCODE -ne 0){throw 'Stage 3 certification commit failed.'}
+            $certified=(git rev-parse HEAD).Trim()
+          }
+          git push origin "HEAD:refs/heads/$env:CERTIFIED_BRANCH"
+          if($LASTEXITCODE -ne 0){throw 'Unable to publish certified Stage 3 branch.'}
+          "CERTIFIED_HEAD=$certified" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $package=Join-Path $env:RUNNER_TEMP 'stage3-final-package'
+          New-Item -ItemType Directory -Force $package | Out-Null
+          python tools/create_source_archive.py --output-directory $package
+          if($LASTEXITCODE -ne 0){throw 'Deterministic Stage 3 source archive creation failed.'}
+          Write-Host "CLOUDSCRIBE_STAGE3_FINAL_CERTIFIED_HEAD=$certified"
+
+      - name: Upload Stage 3 final certification evidence and source package
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage3-final-certification
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/stage3-final-evidence/**
+            ${{ runner.temp }}/stage3-final-package/**
+            ${{ runner.temp }}/stage3-final-allowed.txt
+            ${{ runner.temp }}/stage3-final-csharp.txt
