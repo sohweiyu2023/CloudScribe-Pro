@@ -18,13 +18,13 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
       NUGET_XMLDOC_MODE: skip
-      CANDIDATE_HEAD: 6287713c156477d30a1ddf0cf54eab79084a55bc
+      CANDIDATE_HEAD: 532f6e4dfeb1830262f4f98f5b0700ce5b6c732c
       STAGE3_SLICE2_HEAD: 08879ed631da483444a71ba2f6edc5d2e9dec057
       CERTIFIED_BRANCH: cloudscribe-0.4.0-stage3-certified
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: 6287713c156477d30a1ddf0cf54eab79084a55bc
+          ref: 532f6e4dfeb1830262f4f98f5b0700ce5b6c732c
           path: source
           fetch-depth: 0
 
@@ -103,6 +103,7 @@ jobs:
         working-directory: source
         env:
           CLOUDSCRIBE_STAGE2_EVIDENCE_DIR: ${{ runner.temp }}\stage3-final-evidence
+          CLOUDSCRIBE_EXPECTED_DOTNET_TEST_TOTAL: '179'
         run: |
           $ErrorActionPreference='Stop'
           pwsh -NoProfile -File scripts/verify-stage2.ps1
