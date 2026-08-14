@@ -49,7 +49,7 @@ internal static class BoundedDocxTextExtractor
 
     private static void ValidateEntry(ZipArchiveEntry entry)
     {
-        ValidateEntryPath(entry.FullName);
+        ValidateArchivePath(entry.FullName);
         if (entry.Length > MaxArchiveEntryBytes)
         {
             throw new InvalidDataException("DOCX archive entry exceeds the configured entry limit.");
@@ -67,7 +67,7 @@ internal static class BoundedDocxTextExtractor
         }
     }
 
-    private static void ValidateEntryPath(string fullName)
+    private static void ValidateArchivePath(string fullName)
     {
         if (string.IsNullOrWhiteSpace(fullName)
             || fullName.StartsWith('/')
