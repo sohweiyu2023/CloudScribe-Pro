@@ -141,8 +141,19 @@ jobs:
         working-directory: source
         run: |
           $ErrorActionPreference='Stop'
-          pwsh -NoProfile -File scripts/test-build-launcher-special-paths.ps1 -SourceRoot (Get-Location).Path -ScratchRoot (Join-Path $env:RUNNER_TEMP 'Stage3 Repeated Download (7) & ! literal')
-          if($LASTEXITCODE -ne 0){throw 'Special-character launcher regression failed.'}
+          dotnet build-server shutdown | Out-Null
+          git clean -fdx
+          if($LASTEXITCODE -ne 0){throw 'Unable to clear generated build state before launcher regression.'}
+          python tools/update_sha256_manifest.py --check
+          if($LASTEXITCODE -ne 0){throw 'Tracked source changed before launcher regression.'}
+          $scratch=Join-Path $env:RUNNER_TEMP 'stage3-launcher-regression'
+          try {
+            pwsh -NoProfile -File scripts/test-build-launcher-special-paths.ps1 -SourceRoot (Get-Location).Path -ScratchRoot $scratch
+            if($LASTEXITCODE -ne 0){throw 'Special-character launcher regression failed.'}
+          }
+          finally {
+            Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Commit exact tested source and create deterministic archive
         shell: pwsh
