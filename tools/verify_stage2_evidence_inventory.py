@@ -2,17 +2,33 @@
 from __future__ import annotations
 
 import json
+import os
 import struct
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+DEFAULT_EXPECTED_TEST_TOTAL = 147
+EXPECTED_TEST_TOTAL_ENV = "CLOUDSCRIBE_EXPECTED_DOTNET_TEST_TOTAL"
 
 
 def fail(message: str) -> int:
     print(f"FAIL: {message}", file=sys.stderr)
     return 1
+
+
+def expected_test_total() -> int:
+    raw = os.environ.get(EXPECTED_TEST_TOTAL_ENV)
+    if raw is None:
+        return DEFAULT_EXPECTED_TEST_TOTAL
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{EXPECTED_TEST_TOTAL_ENV} must be an integer") from exc
+    if value <= 0 or value > 10000:
+        raise ValueError(f"{EXPECTED_TEST_TOTAL_ENV} is outside the bounded range 1..10000")
+    return value
 
 
 def main() -> int:
@@ -85,8 +101,15 @@ def main() -> int:
         total += int(counters.attrib.get("total", "0"))
         failed += int(counters.attrib.get("failed", "0"))
         skipped += int(counters.attrib.get("skipped", "0") or "0")
-    if (total, failed, skipped) != (147, 0, 0):
-        return fail(f"unexpected .NET test evidence totals: total={total} failed={failed} skipped={skipped}")
+    try:
+        required_total = expected_test_total()
+    except ValueError as exc:
+        return fail(str(exc))
+    if (total, failed, skipped) != (required_total, 0, 0):
+        return fail(
+            f"unexpected .NET test evidence totals: total={total} failed={failed} skipped={skipped} "
+            f"expected_total={required_total}"
+        )
 
     ledger_path = root / "logs" / "command-ledger.jsonl"
     if not ledger_path.is_file():
@@ -109,7 +132,7 @@ def main() -> int:
 
     print(
         "PASS: exact Stage 2 evidence inventory verified: "
-        f"18 package scans, 17 PNG captures, 4 TRX files / 147 tests, {len(records)} completed ledger steps."
+        f"18 package scans, 17 PNG captures, 4 TRX files / {required_total} tests, {len(records)} completed ledger steps."
     )
     return 0
 
