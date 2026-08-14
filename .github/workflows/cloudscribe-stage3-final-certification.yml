@@ -18,13 +18,13 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
       NUGET_XMLDOC_MODE: skip
-      CANDIDATE_HEAD: 5aef7fb513a92820885c012972134cb660e5d3d9
+      CANDIDATE_HEAD: 6287713c156477d30a1ddf0cf54eab79084a55bc
       STAGE3_SLICE2_HEAD: 08879ed631da483444a71ba2f6edc5d2e9dec057
       CERTIFIED_BRANCH: cloudscribe-0.4.0-stage3-certified
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: 5aef7fb513a92820885c012972134cb660e5d3d9
+          ref: 6287713c156477d30a1ddf0cf54eab79084a55bc
           path: source
           fetch-depth: 0
 
