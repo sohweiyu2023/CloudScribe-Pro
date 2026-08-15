@@ -131,6 +131,8 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Stage 3 source verifier failed after native certification.'}
           python tools/update_sha256_manifest.py --check
           if($LASTEXITCODE -ne 0){throw 'Source manifest drifted during native certification.'}
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if($LASTEXITCODE -ne 0){throw 'Locked restore failed before post-native formatting verification.'}
           dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity minimal
           if($LASTEXITCODE -ne 0){throw 'Formatting drift detected after native certification.'}
           git diff --check
