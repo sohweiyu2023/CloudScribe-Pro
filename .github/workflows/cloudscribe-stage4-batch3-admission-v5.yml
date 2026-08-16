@@ -23,7 +23,8 @@ jobs:
       PRIMARY_SHA256: d9fa22279d7d2787ee8cb4d11a6517c60448a85e458329be35f4607b3488516d
       SECOND_SHA256: c6273bc12897ad92893cf15a88b4d77b416b64ed988697c48be385804eacd579
       REFACTOR_SHA256: 37215b5b111fb2292d766a517abb7ac1289e4a458081af86fe93698b53ff3305
-      FINAL_STORE_SHA256: bc344828d7cd9592478b4286a8a4fb2a4a8af01c66dc36b31d1a001c5e034e6f
+      FORMAT_SHA256: d040ca075a26fe24cff7c47ff9b8b6ac5969c2f9170d6d98f957d31d4423dd7c
+      FINAL_STORE_SHA256: a9a2ac0401bacab1ada8311b270df49b0da2f0ce558f8cef6b1828c8c5a5c38e
       EXPECTED_CHANGED_FILES: '25'
       EXPECTED_DOTNET_TESTS: '210'
     steps:
@@ -46,7 +47,7 @@ jobs:
           cache: true
           cache-dependency-path: 'source/**/packages.lock.json'
 
-      - name: Reconstruct and bind exact reviewed Batch 3 plus MA0051 repair
+      - name: Reconstruct and bind exact reviewed Batch 3 plus source-quality repairs
         shell: pwsh
         working-directory: source
         run: |
@@ -70,20 +71,25 @@ jobs:
           $p1=Join-Path $env:RUNNER_TEMP 'stage4-batch3-primary.patch'
           $p2=Join-Path $env:RUNNER_TEMP 'stage4-batch3-second.patch'
           $repair=Join-Path $root 'batch3-ma0051-refactor.patch'
+          $formatRepair=Join-Path $root 'batch3-format-repair.patch'
           Expand-Chunks $primary $p1
           Expand-Chunks $second $p2
           $h1=(Get-FileHash -LiteralPath $p1 -Algorithm SHA256).Hash.ToLowerInvariant()
           $h2=(Get-FileHash -LiteralPath $p2 -Algorithm SHA256).Hash.ToLowerInvariant()
           $h3=(Get-FileHash -LiteralPath $repair -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h4=(Get-FileHash -LiteralPath $formatRepair -Algorithm SHA256).Hash.ToLowerInvariant()
           Require ($h1 -eq $env:PRIMARY_SHA256) "Primary SHA mismatch: $h1"
           Require ($h2 -eq $env:SECOND_SHA256) "Second-layer SHA mismatch: $h2"
           Require ($h3 -eq $env:REFACTOR_SHA256) "MA0051 repair SHA mismatch: $h3"
+          Require ($h4 -eq $env:FORMAT_SHA256) "Format repair SHA mismatch: $h4"
           git apply --check -- $p1; Require ($LASTEXITCODE -eq 0) 'Primary Batch 3 layer does not apply.'
           git apply --whitespace=nowarn -- $p1; Require ($LASTEXITCODE -eq 0) 'Primary Batch 3 layer failed.'
           git apply --check -- $p2; Require ($LASTEXITCODE -eq 0) 'Second Batch 3 layer does not apply.'
           git apply --whitespace=nowarn -- $p2; Require ($LASTEXITCODE -eq 0) 'Second Batch 3 layer failed.'
           git apply --check -- $repair; Require ($LASTEXITCODE -eq 0) 'MA0051 source-quality repair does not apply.'
           git apply --whitespace=nowarn -- $repair; Require ($LASTEXITCODE -eq 0) 'MA0051 source-quality repair failed.'
+          git apply --check -- $formatRepair; Require ($LASTEXITCODE -eq 0) 'Format repair does not apply.'
+          git apply --whitespace=nowarn -- $formatRepair; Require ($LASTEXITCODE -eq 0) 'Format repair failed.'
           $storeHash=(Get-FileHash -LiteralPath 'src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs' -Algorithm SHA256).Hash.ToLowerInvariant()
           Require ($storeHash -eq $env:FINAL_STORE_SHA256) "Final EF history-store SHA mismatch: $storeHash"
           $tracked=@(git diff --name-only -- | Where-Object {$_ -and $_.Trim()})
@@ -97,7 +103,7 @@ jobs:
           $staged=@(git diff --cached --name-only | Where-Object {$_ -and $_.Trim()})
           Require ($staged.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected 25 staged paths, found $($staged.Count)."
           git diff --cached --check; Require ($LASTEXITCODE -eq 0) 'Batch 3 whitespace check failed.'
-          Write-Host "CLOUDSCRIBE_STAGE4_BATCH3 primary=$h1 second=$h2 repair=$h3 store=$storeHash files=$($changed.Count)"
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH3 primary=$h1 second=$h2 repair=$h3 format=$h4 store=$storeHash files=$($changed.Count)"
 
       - name: Portable governance and mutation gates
         shell: pwsh
@@ -194,3 +200,4 @@ jobs:
             ${{ runner.temp }}/stage4-batch3-primary.patch
             ${{ runner.temp }}/stage4-batch3-second.patch
             ${{ github.workspace }}/carrier/.cloudscribe-ci/stage4-batch3/batch3-ma0051-refactor.patch
+            ${{ github.workspace }}/carrier/.cloudscribe-ci/stage4-batch3/batch3-format-repair.patch
