@@ -1,0 +1,162 @@
+diff --git a/src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs b/src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
+--- a/src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
++++ b/src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
+@@ -137,51 +137,19 @@
+                 .ConfigureAwait(false);
+             await using (transaction.ConfigureAwait(false))
+             {
+-                PricingCatalogSnapshotEntity snapshot = await context.PricingCatalogSnapshots
+-                    .SingleOrDefaultAsync(item => item.Id == request.SnapshotId, cancellationToken)
+-                    .ConfigureAwait(false)
+-                    ?? throw new KeyNotFoundException("Pricing catalog snapshot was not found.");
+-                if (!string.Equals(snapshot.Sha256, request.ExpectedSha256, StringComparison.Ordinal))
+-                {
+-                    throw new InvalidOperationException("Catalog snapshot changed from the SHA-256 identity approved by the caller.");
+-                }
+-
+-                PricingCatalogActivationEntity? current = await context.PricingCatalogActivations
+-                    .OrderByDescending(item => item.Sequence)
+-                    .FirstOrDefaultAsync(cancellationToken)
+-                    .ConfigureAwait(false);
+-                long currentSequence = current?.Sequence ?? 0;
+-                if (currentSequence != request.ExpectedCurrentActivationSequence)
+-                {
+-                    throw new DBConcurrencyException("Active pricing catalog changed before this activation request could commit.");
+-                }
+-                if (current?.SnapshotId == snapshot.Id)
+-                {
+-                    throw new InvalidOperationException("Requested pricing catalog is already active.");
+-                }
+-
++                PricingCatalogSnapshotEntity snapshot = await LoadSnapshotForActivationAsync(
++                    context,
++                    request,
++                    cancellationToken).ConfigureAwait(false);
++                PricingCatalogActivationEntity? current = await LoadCurrentActivationAsync(
++                    context,
++                    cancellationToken).ConfigureAwait(false);
++
++                ValidateActivationState(snapshot, current, request);
+                 ValidateApproval(snapshot, request.ApprovalKind);
+-                if (request.Kind == PricingCatalogActivationKind.Rollback)
+-                {
+-                    bool wasPreviouslyActive = await context.PricingCatalogActivations
+-                        .AsNoTracking()
+-                        .AnyAsync(item => item.SnapshotId == snapshot.Id, cancellationToken)
+-                        .ConfigureAwait(false);
+-                    if (!wasPreviouslyActive)
+-                    {
+-                        throw new InvalidOperationException("Rollback can target only a pricing catalog snapshot that was active previously.");
+-                    }
+-                }
+-
+-                PricingCatalogActivationEntity activation = new()
+-                {
+-                    SnapshotId = snapshot.Id,
+-                    PreviousSnapshotId = current?.SnapshotId,
+-                    Kind = (int)request.Kind,
+-                    ApprovalKind = (int)request.ApprovalKind,
+-                    Reason = request.Reason,
+-                    OccurredAtUnixMilliseconds = timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
+-                };
++                await ValidateRollbackTargetAsync(context, snapshot, request.Kind, cancellationToken).ConfigureAwait(false);
++
++                PricingCatalogActivationEntity activation = CreateActivation(snapshot, current, request);
+                 context.PricingCatalogActivations.Add(activation);
+                 await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+@@ -189,6 +157,82 @@
+             }
+         }
+     }
++
++    private static async Task<PricingCatalogSnapshotEntity> LoadSnapshotForActivationAsync(
++        CloudScribeDbContext context,
++        PricingCatalogActivationRequest request,
++        CancellationToken cancellationToken)
++    {
++        PricingCatalogSnapshotEntity snapshot = await context.PricingCatalogSnapshots
++            .SingleOrDefaultAsync(item => item.Id == request.SnapshotId, cancellationToken)
++            .ConfigureAwait(false)
++            ?? throw new KeyNotFoundException("Pricing catalog snapshot was not found.");
++        if (!string.Equals(snapshot.Sha256, request.ExpectedSha256, StringComparison.Ordinal))
++        {
++            throw new InvalidOperationException("Catalog snapshot changed from the SHA-256 identity approved by the caller.");
++        }
++
++        return snapshot;
++    }
++
++    private static async Task<PricingCatalogActivationEntity?> LoadCurrentActivationAsync(
++        CloudScribeDbContext context,
++        CancellationToken cancellationToken) =>
++        await context.PricingCatalogActivations
++            .OrderByDescending(item => item.Sequence)
++            .FirstOrDefaultAsync(cancellationToken)
++            .ConfigureAwait(false);
++
++    private static void ValidateActivationState(
++        PricingCatalogSnapshotEntity snapshot,
++        PricingCatalogActivationEntity? current,
++        PricingCatalogActivationRequest request)
++    {
++        long currentSequence = current?.Sequence ?? 0;
++        if (currentSequence != request.ExpectedCurrentActivationSequence)
++        {
++            throw new DBConcurrencyException("Active pricing catalog changed before this activation request could commit.");
++        }
++
++        if (current?.SnapshotId == snapshot.Id)
++        {
++            throw new InvalidOperationException("Requested pricing catalog is already active.");
++        }
++    }
++
++    private static async Task ValidateRollbackTargetAsync(
++        CloudScribeDbContext context,
++        PricingCatalogSnapshotEntity snapshot,
++        PricingCatalogActivationKind kind,
++        CancellationToken cancellationToken)
++    {
++        if (kind != PricingCatalogActivationKind.Rollback)
++        {
++            return;
++        }
++
++        bool wasPreviouslyActive = await context.PricingCatalogActivations
++            .AsNoTracking()
++            .AnyAsync(item => item.SnapshotId == snapshot.Id, cancellationToken)
++            .ConfigureAwait(false);
++        if (!wasPreviouslyActive)
++        {
++            throw new InvalidOperationException("Rollback can target only a pricing catalog snapshot that was active previously.");
++        }
++    }
++
++    private PricingCatalogActivationEntity CreateActivation(
++        PricingCatalogSnapshotEntity snapshot,
++        PricingCatalogActivationEntity? current,
++        PricingCatalogActivationRequest request) => new()
++    {
++        SnapshotId = snapshot.Id,
++        PreviousSnapshotId = current?.SnapshotId,
++        Kind = (int)request.Kind,
++        ApprovalKind = (int)request.ApprovalKind,
++        Reason = request.Reason,
++        OccurredAtUnixMilliseconds = timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
++    };
+ 
+     private static void ValidateApproval(PricingCatalogSnapshotEntity snapshot, PricingCatalogApprovalKind approvalKind)
+     {
+diff --git a/SHA256SUMS.txt b/SHA256SUMS.txt
+--- a/SHA256SUMS.txt
++++ b/SHA256SUMS.txt
+@@ -175,7 +175,7 @@
+ 9729d4444d02bf9d0844e28be5cbbba1e8098b09786ed510d5d68cc17443eaa9  src/CloudScribe.Infrastructure/Persistence/Migrations/Stage3DocumentWorkflow.cs
+ f0619a3b74ba08e1ea747d0f41a15dd8a06d06188027c9e0a7781a714c865cf0  src/CloudScribe.Infrastructure/Persistence/Migrations/Stage3Documents.cs
+ 14a5fad9c8306f352c080ca56fdfdb96e991786259c20dc385c9cfa4341a605f  src/CloudScribe.Infrastructure/Persistence/Migrations/Stage4PricingCatalogHistory.cs
+-9941dda73af27d5095fd2a10d6348ad51352ab5de11d51cc1121098d0b3e7cc8  src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
++bc344828d7cd9592478b4286a8a4fb2a4a8af01c66dc36b31d1a001c5e034e6f  src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
+ 7242b1174c4568606608e63a538768c27b8e68fbaecee3597e09d0a49cf30dfd  src/CloudScribe.Infrastructure/Pricing/PricingCatalogAdmissionService.cs
+ 838f8bbf42e60ae947ea93b8e4df7e85363840cd7b17698ab0bc7b9be7c08446  src/CloudScribe.Infrastructure/Pricing/PricingCatalogFormatError.cs
+ 38c5021810e4dbe2e594e5d3c97016d1ac99083c312904e3ddf7bcc10f2ab5ff  src/CloudScribe.Infrastructure/Pricing/PricingCatalogFormatException.cs
