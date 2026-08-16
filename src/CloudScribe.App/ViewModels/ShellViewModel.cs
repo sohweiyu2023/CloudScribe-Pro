@@ -100,7 +100,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public KeyboardShortcutMap ShortcutMap { get; private set; }
 
-    public StageFeatureAvailability FeatureAvailability { get; } = StageFeatureAvailability.Stage2;
+    public StageFeatureAvailability FeatureAvailability { get; } = StageFeatureAvailability.Stage4;
 
     public string BuildLabel { get; } = ResolveBuildLabel();
 
@@ -736,7 +736,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         "LOCAL-FIRST WORKSPACE",
         "Read, edit and prepare long-form work without a network connection or provider account.",
         "Cosmic Studio shell active",
-        "The adaptive editor and production surfaces are available. Generation remains gated until its pricing and provider foundations exist.",
+        "The adaptive editor and Stage 4 provider/pricing foundations are available. Generation remains gated until the durable Stage 5 engine exists.",
         "READY")
     {
         Detail = "Provider factories registered at startup: " + _providerRegistry.AvailableProviders.Count,
@@ -770,16 +770,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         "Pricing",
         "CATALOG TRUST",
         "Inspect provider pricing and its source, age and uncertainty before spending.",
-        "Catalog engine not enabled",
-        "The signed, schema-driven pricing workflow arrives in Stage 4. Hard-coded prices are not used here.",
-        "LOCKED");
+        "Exact catalog contract not admitted",
+        "Strict parsing, cost states, account/capability contracts and catalog dry-run orchestration are active. Approval remains blocked until the exact v2.22 schema/seed bytes are admitted.",
+        "BLOCKED")
+    {
+        Detail = "No hard-coded provider prices · Exact schema 1.1.5/seed bytes required · Signature metadata alone is never trusted",
+    };
 
     private static RoutePageViewModel CreateSettingsPage() => new(
         "Settings",
         "LOCAL CONFIGURATION",
         "Configure CloudScribe without placing secrets in source or ordinary settings files.",
         "Safe defaults active",
-        "Provider credentials will be stored through an operating-system vault abstraction in Stage 4.",
+        "Provider credentials use the operating-system vault boundary; ordinary settings never contain secret values.",
         "READY")
     {
         Detail = "Local application storage uses the configured per-user application-data location and relies on operating-system account and volume protection.",

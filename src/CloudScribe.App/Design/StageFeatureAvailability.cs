@@ -14,4 +14,9 @@ public sealed record StageFeatureAvailability(
         ShowGenerationCommands: false,
         ShowProviderControls: false,
         ShowPlayerControls: false);
+
+    public static StageFeatureAvailability Stage4 { get; } = new(
+        ShowGenerationCommands: false,
+        ShowProviderControls: true,
+        ShowPlayerControls: false);
 }

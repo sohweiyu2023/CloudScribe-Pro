@@ -1,10 +1,10 @@
 {
   "project": "CloudScribe Pro",
-  "repository_version": "0.5.0-stage4-foundation-batch1",
-  "generated_at_utc": "2026-08-16T03:30:00Z",
+  "repository_version": "0.5.0-stage4-foundation-batch2",
+  "generated_at_utc": "2026-08-16T16:05:00Z",
   "current_stage": 4,
   "stage_title": "Pricing Catalog, Cost Engine, Provider Accounts, and Capability Foundation",
-  "status": "Stage 3 is final-Windows-certified and promoted on exact certified bytes. Stage 4 foundation batch 1 is in development with strict pricing JSON admission, truthful exact-money cost states, provider account/capability contracts, lazy fake-provider coverage, and Windows Credential Manager vault support. Exact v2.22 pricing schema/seed bytes are not available in the active session and therefore are not claimed admitted.",
+  "status": "Stage 3 is final-Windows-certified and promoted on exact certified bytes. Stage 4 foundation batches 1-2 provide strict pricing JSON parsing, truthful exact-money cost states, provider account/capability contracts, lazy provider factories, Windows Credential Manager storage, fail-closed catalog dry-run/trust orchestration, and truthful disabled provider/pricing UI. Exact v2.22 pricing schema/seed bytes remain unavailable and are not claimed admitted.",
   "controlling_package_version": "2.22",
   "blueprint_version": "2.22",
   "pricing_schema_version": "1.1.5",
@@ -35,7 +35,7 @@
   "stage_gate_passed": false,
   "package_tests": "234/234 retained from controlling-package regression; current product source is separate",
   "application_runtime_tested": true,
-  "application_runtime_evidence_scope": "promoted Stage 2 checkpoint plus Stage 3 Slice 1/2 Windows admission; the Stage 3 Completion Batch still requires final native Windows certification before promotion",
+  "application_runtime_evidence_scope": "Promoted Stage 2 checkpoint, final-certified/promoted Stage 3, and Windows-admitted Stage 4 foundation Batch 1; Batch 2 requires fresh Windows admission before it becomes authoritative.",
   "application_runtime_platform": "Windows Server 2025 automated/native certification plus separate real-user Windows Stage 2 visual acceptance",
   "windows_ui_tested": true,
   "live_provider_tested": false,
@@ -46,7 +46,7 @@
   "open_P1": 0,
   "open_P2": 1,
   "next_stage": 4,
-  "next_exact_action": "Run the Stage 4 fast exact-SDK build/test gate for foundation batch 1; then admit and validate the exact v2.22 pricing schema/seed when those exact controlling bytes are available before implementing signed catalog trust/history and complete pricing/capability UI.",
+  "next_exact_action": "Admit Stage 4 foundation Batch 2 under exact SDK 10.0.400; then recover/import the exact v2.22 pricing schema/seed bytes and require validator agreement before catalog approval/history/signature trust can advance.",
   "bytes_changed_after_latest_reaudit": true,
   "latest_reaudit_completed_at_utc": "2026-08-16T03:30:00Z",
   "artifact_sha256": "external exact-archive checksum required beside every handoff ZIP; intentionally not self-referential inside source",
@@ -102,5 +102,7 @@
   "stage4_foundation_batch1": true,
   "stage4_complete": false,
   "stage4_exact_catalog_bytes_available": false,
-  "stage4_catalog_contract_admitted": false
+  "stage4_catalog_contract_admitted": false,
+  "stage4_foundation_batch2": true,
+  "stage4_foundation_batch2_admitted": false
 }

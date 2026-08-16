@@ -675,7 +675,7 @@
                   IsVisible="{Binding FeatureAvailability.ShowProviderControls}">
                 <StackPanel Spacing="5">
                   <TextBlock Text="Provider account" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
-                  <ComboBox IsEnabled="False" PlaceholderText="No account configured" ToolTip.Tip="Provider accounts arrive in Stage 4." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable until Stage 4" />
+                  <ComboBox IsEnabled="False" PlaceholderText="No admitted account" ToolTip.Tip="No provider account is usable until an admitted catalog, credential reference and capability snapshot agree." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable because no admitted Stage 4 account and capability snapshot exist" />
                 </StackPanel>
                 <StackPanel Spacing="5">
                   <TextBlock Text="Voice" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
@@ -686,7 +686,7 @@
               <Border Background="{DynamicResource Brush.WarningSoft}" BorderBrush="{DynamicResource Brush.Warning}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
                 <StackPanel Spacing="6">
                   <TextBlock Text="PROVIDER FOUNDATION" Foreground="{DynamicResource Brush.Warning}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
-                  <TextBlock Text="Provider and voice controls stay hidden until a trusted account, capability snapshot and pricing source exist. CloudScribe will not present unsupported or inert choices." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Meta}" />
+                  <TextBlock Text="Stage 4 exposes provider state without pretending a provider is usable. Account and voice choices remain disabled until an admitted pricing source, credential reference and capability snapshot agree." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Meta}" />
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -843,12 +843,12 @@
             </Button>
           </Grid>
           <StackPanel Grid.Row="1" Spacing="14">
-            <TextBlock Text="Provider and voice controls stay hidden until Stage 4 establishes trusted accounts, capabilities and pricing." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
+            <TextBlock Text="Provider controls are visible in Stage 4, but stay disabled with explicit reasons until trusted account, capability and pricing evidence agree." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
             <StackPanel
                 x:Name="InspectorDrawerProviderControlPreview"
                 Spacing="14"
                 IsVisible="{Binding FeatureAvailability.ShowProviderControls}">
-              <ComboBox IsEnabled="False" PlaceholderText="No provider account" ToolTip.Tip="Provider accounts arrive in Stage 4." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable until Stage 4" />
+              <ComboBox IsEnabled="False" PlaceholderText="No admitted account" ToolTip.Tip="No provider account is usable until admitted pricing and capability evidence agree." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable because Stage 4 trust requirements are not satisfied" />
               <ComboBox IsEnabled="False" PlaceholderText="No voice" ToolTip.Tip="Live voice discovery arrives with provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice unavailable until provider integration" />
               <Button Classes="secondary" IsEnabled="False" Content="Voice sample unavailable" ToolTip.Tip="Voice preview arrives with live provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice sample unavailable until provider integration" />
             </StackPanel>

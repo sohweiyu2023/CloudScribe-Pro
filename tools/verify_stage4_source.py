@@ -52,6 +52,11 @@ def main() -> int:
         require_text(root, "src/CloudScribe.Infrastructure/Pricing/StrictJsonObjectReader.cs",
             "Utf8JsonReader", "AllowTrailingCommas = false", "JsonCommentHandling.Disallow",
             "DuplicateProperty", "TopLevelNotObject", "DefaultMaximumDocumentBytes")
+        require_text(root, "src/CloudScribe.Infrastructure/Pricing/PricingCatalogAdmissionService.cs",
+            "PricingCatalogTrustState.ContractUnavailable", "PricingCatalogTrustState.ValidUnsigned",
+            "PricingCatalogTrustState.SignatureInvalid", "PricingCatalogTrustState.SignatureVerified")
+        require_text(root, "src/CloudScribe.Infrastructure/Pricing/UnavailablePricingCatalogSignatureVerifier.cs",
+            "Metadata or an embedded key is never accepted as catalog trust")
         require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderAccountReference.cs",
             "CredentialReference", "EndpointId", "RegionId")
         require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderCapabilitySnapshot.cs",
@@ -64,6 +69,14 @@ def main() -> int:
             "DuplicateProperty", "TopLevelNotObject", "InvalidUtf8", "NaN", "Infinity")
         require_text(root, "tests/CloudScribe.Infrastructure.Tests/Stage4ProviderFoundationTests.cs",
             "FakeProviderRemainsLazy", "ProviderCapabilityState.Unknown", "synthesize-speech")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/PricingCatalogAdmissionServiceTests.cs",
+            "ExactContractUnavailableBlocksApprovalAfterStrictParsing",
+            "ValidUnsignedCatalogRequiresExplicitManualApprovalState",
+            "SignatureMetadataCannotBecomeTrustWithoutExternalVerification")
+        require_text(root, "src/CloudScribe.App/Design/StageFeatureAvailability.cs",
+            "Stage4", "ShowProviderControls: true")
+        require_text(root, "src/CloudScribe.App/MainWindow.axaml",
+            "No admitted account", "stay disabled with explicit reasons")
         require_text(root, "tests/CloudScribe.Infrastructure.Tests/WindowsCredentialVaultTests.cs",
             "WindowsCredentialManagerRoundTripsAndDeletesEphemeralSecret", "Array.Clear")
     except (OSError, ValueError) as exc:
@@ -78,7 +91,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves the exact promoted Stage 3 lineage, adds strict bounded JSON, exact truthful cost states, explicit account/capability contracts, lazy fake-provider coverage, and Windows OS-vault credential storage without pretending the unavailable exact pricing schema/seed have been admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog dry-run trust states, lazy fake-provider coverage, Windows OS-vault storage, and truthful disabled UI without pretending unavailable exact pricing bytes or Ed25519 trust are admitted.")
     return 0
 
 if __name__ == "__main__":
