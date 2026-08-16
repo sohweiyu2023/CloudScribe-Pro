@@ -1,4 +1,4 @@
-name: CloudScribe Stage 4 foundation batch 1 admission v4
+name: CloudScribe Stage 4 foundation batch 1 admission v5
 
 on:
   push:
@@ -54,9 +54,9 @@ jobs:
           Require ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
 
           $chunkRoot=Join-Path $env:GITHUB_WORKSPACE 'carrier\.cloudscribe-ci\stage4-batch1'
-          $payload=Join-Path $chunkRoot 'patch-fixed.b64'
-          Require (Test-Path -LiteralPath $payload -PathType Leaf) 'Fixed reviewed Stage 4 batch payload is missing.'
-          $encoded=(Get-Content -LiteralPath $payload -Raw).Trim()
+          $chunks=@(Get-ChildItem -LiteralPath $chunkRoot -Filter 'fixed-*.b64' -File | Sort-Object Name)
+          Require ($chunks.Count -eq 8) "Expected eight fixed reviewed patch chunks, found $($chunks.Count)."
+          $encoded=($chunks | ForEach-Object {(Get-Content -LiteralPath $_.FullName -Raw).Trim()}) -join ''
           Require (-not [string]::IsNullOrWhiteSpace($encoded)) 'Fixed reviewed Stage 4 batch payload is empty.'
           $gzip=[Convert]::FromBase64String($encoded)
           $patch=Join-Path $env:RUNNER_TEMP 'stage4-batch1.patch'
@@ -201,7 +201,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch1-admission-v4
+          name: cloudscribe-stage4-foundation-batch1-admission-v5
           if-no-files-found: warn
           retention-days: 14
           path: |
