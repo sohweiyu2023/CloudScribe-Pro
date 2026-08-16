@@ -1,0 +1,147 @@
+name: CloudScribe Stage 4 foundation batch 1 admission v2
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch1-carrier]
+    paths:
+      - '.github/workflows/cloudscribe-stage4-batch1-admission-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  admit:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      BASE_HEAD: beb186bc57f30f3f308e398085bc3af3c94f4020
+      TARGET_BRANCH: cloudscribe-0.5.0-stage4
+      PATCH_SHA256: dbda64c7e9a598e93fd769da0934bc875f33ee6bcb3d0fc01241e493f3c1f5f9
+      EXPECTED_CHANGED_FILES: '35'
+      EXPECTED_DOTNET_TESTS: '195'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-stage4-batch1-carrier
+          path: carrier
+          fetch-depth: 1
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-0.5.0-stage4
+          path: source
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: 'source/**/packages.lock.json'
+
+      - name: Exact Stage 4 batch admission
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          function Require([bool]$condition,[string]$message){if(-not $condition){throw $message}}
+          $head=(git rev-parse HEAD).Trim()
+          Require ($head -eq $env:BASE_HEAD) "Stage 4 branch moved unexpectedly: $head"
+          Require ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
+
+          $chunkRoot=Join-Path $env:GITHUB_WORKSPACE 'carrier\.cloudscribe-ci\stage4-batch1'
+          $chunks=@(Get-ChildItem -LiteralPath $chunkRoot -Filter 'patch-*.b64' -File | Sort-Object Name)
+          Require ($chunks.Count -eq 7) "Expected 7 hash-verified patch chunks, found $($chunks.Count)."
+          $encoded=($chunks | ForEach-Object {(Get-Content -LiteralPath $_.FullName -Raw).Trim()}) -join ''
+          $gzip=[Convert]::FromBase64String($encoded)
+          $patch=Join-Path $env:RUNNER_TEMP 'stage4-batch1.patch'
+          $input=[IO.MemoryStream]::new($gzip,$false)
+          $stream=[IO.Compression.GZipStream]::new($input,[IO.Compression.CompressionMode]::Decompress)
+          $output=[IO.File]::Create($patch)
+          try {$stream.CopyTo($output)} finally {$output.Dispose();$stream.Dispose();$input.Dispose();[Array]::Clear($gzip)}
+          $actual=(Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
+          Require ($actual -eq $env:PATCH_SHA256) "Patch SHA-256 mismatch: $actual"
+          git apply --check -- $patch
+          Require ($LASTEXITCODE -eq 0) 'Reviewed patch does not apply cleanly to exact promoted seed.'
+          git apply --whitespace=nowarn -- $patch
+          Require ($LASTEXITCODE -eq 0) 'Unable to apply reviewed patch.'
+          $changed=@(git diff --name-only -- | Where-Object {$_ -and $_.Trim()})
+          Require ($changed.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected $env:EXPECTED_CHANGED_FILES changed files, found $($changed.Count)."
+          Require (@($changed | Where-Object {$_ -match 'packages\.lock\.json$'}).Count -eq 0) 'Batch unexpectedly changed a package lock file.'
+          foreach($required in @('SESSION_STATE.json','src/CloudScribe.Domain/Pricing/CostAssessment.cs','src/CloudScribe.Infrastructure/Pricing/StrictJsonObjectReader.cs','src/CloudScribe.Infrastructure/Security/WindowsCredentialVault.cs','tools/verify_stage4_source.py')){Require ($changed -contains $required) "Missing required path: $required"}
+          git diff --check
+          Require ($LASTEXITCODE -eq 0) 'Patch whitespace validation failed.'
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH1_PATCH_SHA256=$actual files=$($changed.Count)"
+
+          foreach($command in @(
+            'python tools/update_sha256_manifest.py --check',
+            'python tools/verify_repository.py',
+            'python tools/verify_project_dependencies.py',
+            'python tools/verify_stage1_source.py',
+            'python tools/verify_stage2_source.py',
+            'python tools/verify_stage3_source.py',
+            'python tools/verify_stage4_source.py',
+            'python -B tools/run_verifier_self_tests.py',
+            'python -B tools/run_python_regression_shards.py --all')){
+            Write-Host "> $command"; Invoke-Expression $command; Require ($LASTEXITCODE -eq 0) "Gate failed: $command"
+          }
+
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          Require ($LASTEXITCODE -eq 0) 'Locked restore failed.'
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity minimal
+          Require ($LASTEXITCODE -eq 0) 'Formatting gate failed.'
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          Require ($LASTEXITCODE -eq 0) 'Release compile/analyzer gate failed.'
+
+          $testRoot=Join-Path $env:RUNNER_TEMP 'stage4-batch1-tests'; New-Item -ItemType Directory -Force $testRoot | Out-Null
+          $projects=@('tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj','tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj','tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj','tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj')
+          for($i=0;$i -lt $projects.Count;$i++){
+            $dir=Join-Path $testRoot $i; New-Item -ItemType Directory -Force $dir | Out-Null
+            dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=stage4-batch1.trx'
+            Require ($LASTEXITCODE -eq 0) "Tests failed: $($projects[$i])"
+          }
+          $trx=@(Get-ChildItem -LiteralPath $testRoot -Filter '*.trx' -File -Recurse)
+          Require ($trx.Count -eq 4) "Expected exactly four TRX files, found $($trx.Count)."
+          $total=0;$passed=0;$failed=0;$skipped=0
+          foreach($file in $trx){[xml]$xml=Get-Content -LiteralPath $file.FullName -Raw;$c=$xml.TestRun.ResultSummary.Counters;$total+=[int]$c.total;$passed+=[int]$c.passed;$failed+=[int]$c.failed;$skipped+=[int]$c.notExecuted}
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH1_DOTNET_TESTS total=$total passed=$passed failed=$failed skipped=$skipped"
+          Require ($total -eq [int]$env:EXPECTED_DOTNET_TESTS -and $passed -eq $total -and $failed -eq 0 -and $skipped -eq 0) 'Exact compiled-test gate failed.'
+
+          python tools/update_sha256_manifest.py --check; Require ($LASTEXITCODE -eq 0) 'Manifest drifted during admission.'
+          python tools/verify_stage4_source.py; Require ($LASTEXITCODE -eq 0) 'Stage 4 source verifier failed after compiled tests.'
+          git diff --check; Require ($LASTEXITCODE -eq 0) 'Whitespace drift detected after tests.'
+          dotnet build-server shutdown | Out-Null
+          git clean -fdx; Require ($LASTEXITCODE -eq 0) 'Unable to clear generated state.'
+          python tools/update_sha256_manifest.py --check; Require ($LASTEXITCODE -eq 0) 'Tracked source changed while clearing generated state.'
+
+          $remote=(git ls-remote --heads origin "refs/heads/$env:TARGET_BRANCH" | Select-Object -First 1)
+          Require ([bool]$remote) 'Stage 4 target branch disappeared.'
+          $remoteHead=($remote -split '\s+')[0].Trim(); Require ($remoteHead -eq $env:BASE_HEAD) "Stage 4 target moved during admission: $remoteHead"
+          git config user.name cloudscribe-ci; git config user.email actions@github.com; git add -A
+          $staged=@(git diff --cached --name-only | Where-Object {$_ -and $_.Trim()})
+          Require ($staged.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected $env:EXPECTED_CHANGED_FILES staged files, found $($staged.Count)."
+          $forbidden=@($staged | Where-Object {$_ -match '(^|/)(bin|obj|TestResults)(/|$)' -or $_ -match 'packages\.lock\.json$'})
+          Require ($forbidden.Count -eq 0) "Forbidden staged files: $($forbidden -join ', ')"
+          git diff --cached --check; Require ($LASTEXITCODE -eq 0) 'Staged whitespace validation failed.'
+          git commit -m 'feat: Stage 4 pricing and provider foundation batch 1'; Require ($LASTEXITCODE -eq 0) 'Batch commit failed.'
+          $tested=(git rev-parse HEAD).Trim(); git push origin "${tested}:refs/heads/$env:TARGET_BRANCH"; Require ($LASTEXITCODE -eq 0) 'Unable to fast-forward exact tested Stage 4 branch.'
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH1_TESTED_HEAD=$tested"
+
+          $package=Join-Path $env:RUNNER_TEMP 'stage4-batch1-package'; New-Item -ItemType Directory -Force $package | Out-Null
+          python tools/create_source_archive.py --output-directory $package; Require ($LASTEXITCODE -eq 0) 'Deterministic admitted source archive failed.'
+
+      - name: Upload Stage 4 batch 1 admission evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage4-foundation-batch1-admission-v2
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/stage4-batch1-tests/**
+            ${{ runner.temp }}/stage4-batch1-package/**
+            ${{ runner.temp }}/stage4-batch1.patch
