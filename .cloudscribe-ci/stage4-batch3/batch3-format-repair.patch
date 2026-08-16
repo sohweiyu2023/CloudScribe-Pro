@@ -1,0 +1,38 @@
+diff --git a/src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs b/src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
+--- a/src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
++++ b/src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
+@@ -225,14 +225,14 @@
+         PricingCatalogSnapshotEntity snapshot,
+         PricingCatalogActivationEntity? current,
+         PricingCatalogActivationRequest request) => new()
+-    {
+-        SnapshotId = snapshot.Id,
+-        PreviousSnapshotId = current?.SnapshotId,
+-        Kind = (int)request.Kind,
+-        ApprovalKind = (int)request.ApprovalKind,
+-        Reason = request.Reason,
+-        OccurredAtUnixMilliseconds = timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
+-    };
++        {
++            SnapshotId = snapshot.Id,
++            PreviousSnapshotId = current?.SnapshotId,
++            Kind = (int)request.Kind,
++            ApprovalKind = (int)request.ApprovalKind,
++            Reason = request.Reason,
++            OccurredAtUnixMilliseconds = timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
++        };
+ 
+     private static void ValidateApproval(PricingCatalogSnapshotEntity snapshot, PricingCatalogApprovalKind approvalKind)
+     {
+diff --git a/SHA256SUMS.txt b/SHA256SUMS.txt
+--- a/SHA256SUMS.txt
++++ b/SHA256SUMS.txt
+@@ -175,7 +175,7 @@
+ 9729d4444d02bf9d0844e28be5cbbba1e8098b09786ed510d5d68cc17443eaa9  src/CloudScribe.Infrastructure/Persistence/Migrations/Stage3DocumentWorkflow.cs
+ f0619a3b74ba08e1ea747d0f41a15dd8a06d06188027c9e0a7781a714c865cf0  src/CloudScribe.Infrastructure/Persistence/Migrations/Stage3Documents.cs
+ 14a5fad9c8306f352c080ca56fdfdb96e991786259c20dc385c9cfa4341a605f  src/CloudScribe.Infrastructure/Persistence/Migrations/Stage4PricingCatalogHistory.cs
+-bc344828d7cd9592478b4286a8a4fb2a4a8af01c66dc36b31d1a001c5e034e6f  src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
++a9a2ac0401bacab1ada8311b270df49b0da2f0ce558f8cef6b1828c8c5a5c38e  src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs
+ 7242b1174c4568606608e63a538768c27b8e68fbaecee3597e09d0a49cf30dfd  src/CloudScribe.Infrastructure/Pricing/PricingCatalogAdmissionService.cs
+ 838f8bbf42e60ae947ea93b8e4df7e85363840cd7b17698ab0bc7b9be7c08446  src/CloudScribe.Infrastructure/Pricing/PricingCatalogFormatError.cs
+ 38c5021810e4dbe2e594e5d3c97016d1ac99083c312904e3ddf7bcc10f2ab5ff  src/CloudScribe.Infrastructure/Pricing/PricingCatalogFormatException.cs
