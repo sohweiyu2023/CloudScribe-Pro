@@ -1,4 +1,4 @@
-name: CloudScribe Stage 4 foundation batch 1 admission v6
+name: CloudScribe Stage 4 foundation batch 1 admission v7
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
       BASE_HEAD: beb186bc57f30f3f308e398085bc3af3c94f4020
       TARGET_BRANCH: cloudscribe-0.5.0-stage4
       PATCH_SHA256: 2fa75e6027d2199a6abf5fa5b6bc585c9b7dec961fc099d8e51880e23034923b
-      REPAIR_SHA256: 7a471dd79932af22615393f8834b00b24f3a0c8ab6608076e00692229f1e5ff6
+      REPAIR_SHA256: 51322b187d4f307058159bb033174079076e7d98220e9b7cbe50db8feea7aa26
       EXPECTED_CHANGED_FILES: '35'
       EXPECTED_DOTNET_TESTS: '195'
     steps:
@@ -44,7 +44,7 @@ jobs:
           cache: true
           cache-dependency-path: 'source/**/packages.lock.json'
 
-      - name: Reconstruct, bind and stage exact reviewed batch plus repair
+      - name: Reconstruct, bind and stage exact reviewed batch plus cumulative repair
         shell: pwsh
         working-directory: source
         run: |
@@ -57,47 +57,42 @@ jobs:
             $output=[IO.File]::Create($outputPath)
             try {$stream.CopyTo($output)} finally {$output.Dispose();$stream.Dispose();$input.Dispose();[Array]::Clear($gzip)}
           }
-          $head=(git rev-parse HEAD).Trim()
-          Require ($head -eq $env:BASE_HEAD) "Stage 4 branch moved unexpectedly: $head"
+          Require ((git rev-parse HEAD).Trim() -eq $env:BASE_HEAD) 'Stage 4 branch moved unexpectedly.'
           Require ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
-
           $chunkRoot=Join-Path $env:GITHUB_WORKSPACE 'carrier\.cloudscribe-ci\stage4-batch1'
           $chunks=@(Get-ChildItem -LiteralPath $chunkRoot -Filter 'fixed-*.b64' -File | Sort-Object Name)
-          Require ($chunks.Count -eq 8) "Expected eight fixed reviewed patch chunks, found $($chunks.Count)."
+          Require ($chunks.Count -eq 8) "Expected eight reviewed patch chunks, found $($chunks.Count)."
           $encoded=($chunks | ForEach-Object {(Get-Content -LiteralPath $_.FullName -Raw).Trim()}) -join ''
-          Require (-not [string]::IsNullOrWhiteSpace($encoded)) 'Fixed reviewed Stage 4 batch payload is empty.'
           $patch=Join-Path $env:RUNNER_TEMP 'stage4-batch1.patch'
           Expand-Base64Gzip $encoded $patch
           $actual=(Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
           Require ($actual -eq $env:PATCH_SHA256) "Patch SHA-256 mismatch: $actual"
           git apply --check -- $patch
-          Require ($LASTEXITCODE -eq 0) 'Reviewed patch does not apply cleanly to exact promoted Stage 3 seed.'
+          Require ($LASTEXITCODE -eq 0) 'Reviewed batch does not apply to the exact promoted Stage 3 seed.'
           git apply --whitespace=nowarn -- $patch
           Require ($LASTEXITCODE -eq 0) 'Unable to apply reviewed Stage 4 batch.'
 
-          $repairPayload=Join-Path $chunkRoot 'interop-repair.b64'
-          Require (Test-Path -LiteralPath $repairPayload -PathType Leaf) 'Credential Manager interop repair payload is missing.'
-          $repairEncoded=(Get-Content -LiteralPath $repairPayload -Raw).Trim()
-          $repairPatch=Join-Path $env:RUNNER_TEMP 'stage4-batch1-interop-repair.patch'
-          Expand-Base64Gzip $repairEncoded $repairPatch
+          $repairPayload=Join-Path $chunkRoot 'repair-v2.b64'
+          Require (Test-Path -LiteralPath $repairPayload -PathType Leaf) 'Cumulative compiler repair payload is missing.'
+          $repairPatch=Join-Path $env:RUNNER_TEMP 'stage4-batch1-compiler-repair.patch'
+          Expand-Base64Gzip ((Get-Content -LiteralPath $repairPayload -Raw).Trim()) $repairPatch
           $repairActual=(Get-FileHash -LiteralPath $repairPatch -Algorithm SHA256).Hash.ToLowerInvariant()
           Require ($repairActual -eq $env:REPAIR_SHA256) "Repair SHA-256 mismatch: $repairActual"
           git apply --check -- $repairPatch
-          Require ($LASTEXITCODE -eq 0) 'Interop repair does not apply cleanly after the reviewed batch.'
+          Require ($LASTEXITCODE -eq 0) 'Cumulative compiler repair does not apply after reviewed batch.'
           git apply --whitespace=nowarn -- $repairPatch
-          Require ($LASTEXITCODE -eq 0) 'Unable to apply the Credential Manager interop repair.'
+          Require ($LASTEXITCODE -eq 0) 'Unable to apply cumulative compiler repair.'
 
           $tracked=@(git diff --name-only -- | Where-Object {$_ -and $_.Trim()})
           $untracked=@(git ls-files --others --exclude-standard | Where-Object {$_ -and $_.Trim()})
           $changed=@($tracked + $untracked | Sort-Object -Unique)
           Require ($changed.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected $env:EXPECTED_CHANGED_FILES changed paths, found $($changed.Count)."
           Require (@($changed | Where-Object {$_ -match 'packages\.lock\.json$'}).Count -eq 0) 'Batch unexpectedly changed a package lock file.'
-          foreach($required in @('SESSION_STATE.json','src/CloudScribe.Domain/Pricing/CostAssessment.cs','src/CloudScribe.Infrastructure/Pricing/StrictJsonObjectReader.cs','src/CloudScribe.Infrastructure/Security/WindowsCredentialVault.cs','tools/verify_stage4_source.py')){Require ($changed -contains $required) "Missing required Stage 4 path: $required"}
+          foreach($required in @('SESSION_STATE.json','src/CloudScribe.Domain/Pricing/CostAssessment.cs','src/CloudScribe.Infrastructure/Pricing/StrictJsonObjectReader.cs','src/CloudScribe.Infrastructure/Security/WindowsCredentialVault.cs','tests/CloudScribe.Infrastructure.Tests/Stage4ProviderFoundationTests.cs','tools/verify_stage4_source.py')){Require ($changed -contains $required) "Missing required Stage 4 path: $required"}
           git add -A
           $staged=@(git diff --cached --name-only | Where-Object {$_ -and $_.Trim()})
           Require ($staged.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected $env:EXPECTED_CHANGED_FILES staged paths, found $($staged.Count)."
-          $forbidden=@($staged | Where-Object {$_ -match '(^|/)(bin|obj|TestResults)(/|$)' -or $_ -match 'packages\.lock\.json$'})
-          Require ($forbidden.Count -eq 0) "Forbidden staged paths: $($forbidden -join ', ')"
+          Require (@($staged | Where-Object {$_ -match '(^|/)(bin|obj|TestResults)(/|$)' -or $_ -match 'packages\.lock\.json$'}).Count -eq 0) 'Forbidden generated/package-lock path staged.'
           git diff --cached --check
           Require ($LASTEXITCODE -eq 0) 'Reviewed Stage 4 batch has whitespace errors.'
           Write-Host "CLOUDSCRIBE_STAGE4_BATCH1_PATCH_SHA256=$actual repair_sha256=$repairActual files=$($staged.Count)"
@@ -161,11 +156,7 @@ jobs:
           $trx=@(Get-ChildItem -LiteralPath $root -Filter '*.trx' -File -Recurse)
           if($trx.Count -ne 4){throw "Expected exactly four TRX files, found $($trx.Count)."}
           $total=0;$passed=0;$failed=0;$skipped=0
-          foreach($file in $trx){
-            [xml]$xml=Get-Content -LiteralPath $file.FullName -Raw
-            $c=$xml.TestRun.ResultSummary.Counters
-            $total+=[int]$c.total;$passed+=[int]$c.passed;$failed+=[int]$c.failed;$skipped+=[int]$c.notExecuted
-          }
+          foreach($file in $trx){[xml]$xml=Get-Content -LiteralPath $file.FullName -Raw;$c=$xml.TestRun.ResultSummary.Counters;$total+=[int]$c.total;$passed+=[int]$c.passed;$failed+=[int]$c.failed;$skipped+=[int]$c.notExecuted}
           Write-Host "CLOUDSCRIBE_STAGE4_BATCH1_DOTNET_TESTS total=$total passed=$passed failed=$failed skipped=$skipped"
           if($total -ne [int]$env:EXPECTED_DOTNET_TESTS -or $passed -ne $total -or $failed -ne 0 -or $skipped -ne 0){throw 'Stage 4 batch 1 exact compiled-test gate failed.'}
 
@@ -187,8 +178,6 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Tracked source changed while clearing generated state.'}
           $staged=@(git diff --cached --name-only | Where-Object {$_ -and $_.Trim()})
           if($staged.Count -ne [int]$env:EXPECTED_CHANGED_FILES){throw "Expected $env:EXPECTED_CHANGED_FILES staged paths after cleanup, found $($staged.Count)."}
-          $forbidden=@($staged | Where-Object {$_ -match '(^|/)(bin|obj|TestResults)(/|$)' -or $_ -match 'packages\.lock\.json$'})
-          if($forbidden.Count -gt 0){throw "Forbidden staged paths after cleanup: $($forbidden -join ', ')"}
           $remote=(git ls-remote --heads origin "refs/heads/$env:TARGET_BRANCH" | Select-Object -First 1)
           if(-not $remote){throw 'Stage 4 target branch disappeared.'}
           $remoteHead=($remote -split '\s+')[0].Trim()
@@ -217,11 +206,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch1-admission-v6
+          name: cloudscribe-stage4-foundation-batch1-admission-v7
           if-no-files-found: warn
           retention-days: 14
           path: |
             ${{ runner.temp }}/stage4-batch1-tests/**
             ${{ runner.temp }}/stage4-batch1-package/**
             ${{ runner.temp }}/stage4-batch1.patch
-            ${{ runner.temp }}/stage4-batch1-interop-repair.patch
+            ${{ runner.temp }}/stage4-batch1-compiler-repair.patch
