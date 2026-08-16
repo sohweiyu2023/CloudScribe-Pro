@@ -1,0 +1,191 @@
+name: CloudScribe Stage 4 foundation batch 3 admission v3
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch3-carrier]
+    paths:
+      - '.github/workflows/cloudscribe-stage4-batch3-admission-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  admit:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      BASE_HEAD: 4fbe6dc843c123ea2e769a6e6d0b4524cfb72e62
+      TARGET_BRANCH: cloudscribe-0.5.0-stage4
+      PATCH_SHA256: d9fa22279d7d2787ee8cb4d11a6517c60448a85e458329be35f4607b3488516d
+      SECOND_SHA256: c6273bc12897ad92893cf15a88b4d77b416b64ed988697c48be385804eacd579
+      EXPECTED_CHANGED_FILES: '25'
+      EXPECTED_DOTNET_TESTS: '210'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-stage4-batch3-carrier
+          path: carrier
+          fetch-depth: 1
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-0.5.0-stage4
+          path: source
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: 'source/**/packages.lock.json'
+
+      - name: Reconstruct and bind exact reviewed Batch 3 with source-quality repair
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          function Require([bool]$condition,[string]$message){if(-not $condition){throw $message}}
+          function Expand-Payload([IO.FileInfo[]]$chunks,[string]$outputPath){
+            $encoded=($chunks | Sort-Object Name | ForEach-Object {(Get-Content -LiteralPath $_.FullName -Raw).Trim()}) -join ''
+            $gzip=[Convert]::FromBase64String($encoded)
+            $input=[IO.MemoryStream]::new($gzip,$false)
+            $stream=[IO.Compression.GZipStream]::new($input,[IO.Compression.CompressionMode]::Decompress)
+            $output=[IO.File]::Create($outputPath)
+            try {$stream.CopyTo($output)} finally {$output.Dispose();$stream.Dispose();$input.Dispose();[Array]::Clear($gzip)}
+          }
+          Require ((git rev-parse HEAD).Trim() -eq $env:BASE_HEAD) 'Stage 4 target moved unexpectedly before Batch 3 admission.'
+          Require ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
+          $root=Join-Path $env:GITHUB_WORKSPACE 'carrier\.cloudscribe-ci\stage4-batch3'
+          $main=@(Get-ChildItem -LiteralPath $root -Filter 'batch3-*.b64' -File)
+          $second=@(Get-ChildItem -LiteralPath $root -Filter 'newfiles-*.b64' -File)
+          Require ($main.Count -eq 3) "Expected three primary chunks, found $($main.Count)."
+          Require ($second.Count -eq 2) "Expected two repaired second-layer chunks, found $($second.Count)."
+          $patch=Join-Path $env:RUNNER_TEMP 'stage4-batch3.patch'
+          $secondPatch=Join-Path $env:RUNNER_TEMP 'stage4-batch3-second-layer.patch'
+          Expand-Payload $main $patch
+          Expand-Payload $second $secondPatch
+          $actual=(Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
+          $secondActual=(Get-FileHash -LiteralPath $secondPatch -Algorithm SHA256).Hash.ToLowerInvariant()
+          Require ($actual -eq $env:PATCH_SHA256) "Primary patch SHA-256 mismatch: $actual"
+          Require ($secondActual -eq $env:SECOND_SHA256) "Second-layer SHA-256 mismatch: $secondActual"
+          git apply --check -- $patch
+          Require ($LASTEXITCODE -eq 0) 'Primary Batch 3 layer does not apply cleanly.'
+          git apply --whitespace=nowarn -- $patch
+          Require ($LASTEXITCODE -eq 0) 'Unable to apply primary Batch 3 layer.'
+          git apply --check -- $secondPatch
+          Require ($LASTEXITCODE -eq 0) 'Repaired Batch 3 second layer does not apply cleanly.'
+          git apply --whitespace=nowarn -- $secondPatch
+          Require ($LASTEXITCODE -eq 0) 'Unable to apply repaired Batch 3 second layer.'
+          $tracked=@(git diff --name-only -- | Where-Object {$_ -and $_.Trim()})
+          $untracked=@(git ls-files --others --exclude-standard | Where-Object {$_ -and $_.Trim()})
+          $changed=@($tracked + $untracked | Sort-Object -Unique)
+          Require ($changed.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected $env:EXPECTED_CHANGED_FILES changed paths, found $($changed.Count)."
+          foreach($required in @('SESSION_STATE.json','src/CloudScribe.Application/Pricing/IPricingCatalogHistoryStore.cs','src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs','src/CloudScribe.Infrastructure/Persistence/Migrations/Stage4PricingCatalogHistory.cs','src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs','tests/CloudScribe.Infrastructure.Tests/PricingCatalogHistoryStoreTests.cs','tools/verify_stage4_source.py')){Require ($changed -contains $required) "Missing required Batch 3 path: $required"}
+          $forbidden=@($changed | Where-Object {$_ -match '(^|/)(bin|obj|TestResults)(/|$)' -or $_ -match 'packages\.lock\.json$'})
+          Require ($forbidden.Count -eq 0) "Forbidden changed paths: $($forbidden -join ', ')"
+          git add -A
+          Require (@(git diff --cached --name-only | Where-Object {$_ -and $_.Trim()}).Count -eq [int]$env:EXPECTED_CHANGED_FILES) 'Staged Batch 3 path count changed.'
+          git diff --cached --check
+          Require ($LASTEXITCODE -eq 0) 'Batch 3 has whitespace errors.'
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH3 primary=$actual second=$secondActual files=$($changed.Count)"
+
+      - name: Portable governance and mutation gates
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($command in @('python tools/update_sha256_manifest.py --check','python tools/verify_repository.py','python tools/verify_project_dependencies.py','python tools/verify_stage1_source.py','python tools/verify_stage2_source.py','python tools/verify_stage3_source.py','python tools/verify_stage4_source.py','python -B tools/run_verifier_self_tests.py','python -B tools/run_python_regression_shards.py --all')){
+            Write-Host "> $command"; Invoke-Expression $command; if($LASTEXITCODE -ne 0){throw "Gate failed: $command"}
+          }
+
+      - name: Locked restore and format verification
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if($LASTEXITCODE -ne 0){throw 'Locked restore failed.'}
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity minimal
+          if($LASTEXITCODE -ne 0){throw 'Formatting gate failed.'}
+
+      - name: Release compile with analyzers
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if($LASTEXITCODE -ne 0){throw 'Release compile/analyzer gate failed.'}
+
+      - name: Exact compiled test gate
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=Join-Path $env:RUNNER_TEMP 'stage4-batch3-tests'; New-Item -ItemType Directory -Force $root | Out-Null
+          $projects=@('tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj','tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj','tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj','tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj')
+          for($i=0;$i -lt $projects.Count;$i++){
+            $results=Join-Path $root $i; New-Item -ItemType Directory -Force $results | Out-Null
+            dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $results --logger 'trx;LogFileName=stage4-batch3.trx'
+            if($LASTEXITCODE -ne 0){throw "Tests failed: $($projects[$i])"}
+          }
+          $trx=@(Get-ChildItem -LiteralPath $root -Filter '*.trx' -File -Recurse)
+          if($trx.Count -ne 4){throw "Expected exactly four TRX files, found $($trx.Count)."}
+          $total=0;$passed=0;$failed=0;$skipped=0
+          foreach($file in $trx){[xml]$xml=Get-Content -LiteralPath $file.FullName -Raw;$c=$xml.TestRun.ResultSummary.Counters;$total+=[int]$c.total;$passed+=[int]$c.passed;$failed+=[int]$c.failed;$skipped+=[int]$c.notExecuted}
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH3_DOTNET_TESTS total=$total passed=$passed failed=$failed skipped=$skipped"
+          if($total -ne [int]$env:EXPECTED_DOTNET_TESTS -or $passed -ne $total -or $failed -ne 0 -or $skipped -ne 0){throw 'Stage 4 Batch 3 exact compiled-test gate failed.'}
+
+      - name: Post-test stability, commit and publish exact tested Batch 3
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          python tools/update_sha256_manifest.py --check; if($LASTEXITCODE -ne 0){throw 'Source manifest drifted during Batch 3 admission.'}
+          python tools/verify_stage4_source.py; if($LASTEXITCODE -ne 0){throw 'Stage 4 verifier failed after tests.'}
+          git diff --cached --check; if($LASTEXITCODE -ne 0){throw 'Staged Batch 3 source drifted.'}
+          dotnet build-server shutdown | Out-Null
+          git clean -fdx; if($LASTEXITCODE -ne 0){throw 'Unable to clear generated state.'}
+          python tools/update_sha256_manifest.py --check; if($LASTEXITCODE -ne 0){throw 'Tracked source changed during cleanup.'}
+          $staged=@(git diff --cached --name-only | Where-Object {$_ -and $_.Trim()})
+          if($staged.Count -ne [int]$env:EXPECTED_CHANGED_FILES){throw "Expected $env:EXPECTED_CHANGED_FILES staged paths after cleanup, found $($staged.Count)."}
+          $forbidden=@($staged | Where-Object {$_ -match '(^|/)(bin|obj|TestResults)(/|$)' -or $_ -match 'packages\.lock\.json$'})
+          if($forbidden.Count -gt 0){throw "Forbidden staged paths after cleanup: $($forbidden -join ', ')"}
+          $remote=(git ls-remote --heads origin "refs/heads/$env:TARGET_BRANCH" | Select-Object -First 1)
+          if(-not $remote){throw 'Stage 4 target branch disappeared.'}
+          $remoteHead=($remote -split '\s+')[0].Trim()
+          if($remoteHead -ne $env:BASE_HEAD){throw "Stage 4 target branch moved during Batch 3 admission: $remoteHead"}
+          git config user.name cloudscribe-ci; git config user.email actions@github.com
+          git commit -m 'feat: Stage 4 persistent catalog history and rollback batch 3'
+          if($LASTEXITCODE -ne 0){throw 'Stage 4 Batch 3 commit failed.'}
+          $tested=(git rev-parse HEAD).Trim()
+          git push origin "${tested}:refs/heads/$env:TARGET_BRANCH"
+          if($LASTEXITCODE -ne 0){throw 'Unable to fast-forward exact tested Stage 4 Batch 3.'}
+          "TESTED_HEAD=$tested" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH3_TESTED_HEAD=$tested"
+
+      - name: Create deterministic admitted source archive
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          $package=Join-Path $env:RUNNER_TEMP 'stage4-batch3-package'; New-Item -ItemType Directory -Force $package | Out-Null
+          python tools/create_source_archive.py --output-directory $package
+          if($LASTEXITCODE -ne 0){throw 'Deterministic Stage 4 Batch 3 source archive creation failed.'}
+
+      - name: Upload Stage 4 Batch 3 admission evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage4-foundation-batch3-admission-v3
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/stage4-batch3-tests/**
+            ${{ runner.temp }}/stage4-batch3-package/**
+            ${{ runner.temp }}/stage4-batch3.patch
+            ${{ runner.temp }}/stage4-batch3-second-layer.patch
