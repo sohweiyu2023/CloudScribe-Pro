@@ -1,4 +1,4 @@
-name: CloudScribe Stage 4 foundation batch 3 admission v1
+name: CloudScribe Stage 4 foundation batch 3 admission v2
 
 on:
   push:
@@ -21,6 +21,7 @@ jobs:
       BASE_HEAD: 4fbe6dc843c123ea2e769a6e6d0b4524cfb72e62
       TARGET_BRANCH: cloudscribe-0.5.0-stage4
       PATCH_SHA256: d9fa22279d7d2787ee8cb4d11a6517c60448a85e458329be35f4607b3488516d
+      NEWFILES_SHA256: e7105d770c728234c27a5a26ef2138a58cff8d971a57ae0f6d7f906926385a2b
       EXPECTED_CHANGED_FILES: '25'
       EXPECTED_DOTNET_TESTS: '210'
     steps:
@@ -68,6 +69,23 @@ jobs:
           Require ($LASTEXITCODE -eq 0) 'Batch 3 patch does not apply cleanly to exact admitted Batch 2 head.'
           git apply --whitespace=nowarn -- $patch
           Require ($LASTEXITCODE -eq 0) 'Unable to apply reviewed Stage 4 Batch 3.'
+
+          $newChunks=@(Get-ChildItem -LiteralPath $chunkRoot -Filter 'newfiles-*.b64' -File | Sort-Object Name)
+          Require ($newChunks.Count -eq 2) "Expected two Batch 3 new-file repair chunks, found $($newChunks.Count)."
+          $newEncoded=($newChunks | ForEach-Object {(Get-Content -LiteralPath $_.FullName -Raw).Trim()}) -join ''
+          $newGzip=[Convert]::FromBase64String($newEncoded)
+          $newPatch=Join-Path $env:RUNNER_TEMP 'stage4-batch3-newfiles.patch'
+          $newInput=[IO.MemoryStream]::new($newGzip,$false)
+          $newStream=[IO.Compression.GZipStream]::new($newInput,[IO.Compression.CompressionMode]::Decompress)
+          $newOutput=[IO.File]::Create($newPatch)
+          try {$newStream.CopyTo($newOutput)} finally {$newOutput.Dispose();$newStream.Dispose();$newInput.Dispose();[Array]::Clear($newGzip)}
+          $newActual=(Get-FileHash -LiteralPath $newPatch -Algorithm SHA256).Hash.ToLowerInvariant()
+          Require ($newActual -eq $env:NEWFILES_SHA256) "Batch 3 new-file repair SHA-256 mismatch: $newActual"
+          git apply --check -- $newPatch
+          Require ($LASTEXITCODE -eq 0) 'Batch 3 new-file repair does not apply after the reviewed modified-file layer.'
+          git apply --whitespace=nowarn -- $newPatch
+          Require ($LASTEXITCODE -eq 0) 'Unable to apply Batch 3 new-file repair.'
+
           $tracked=@(git diff --name-only -- | Where-Object {$_ -and $_.Trim()})
           $untracked=@(git ls-files --others --exclude-standard | Where-Object {$_ -and $_.Trim()})
           $changed=@($tracked + $untracked | Sort-Object -Unique)
@@ -90,7 +108,7 @@ jobs:
           Require ($forbidden.Count -eq 0) "Forbidden staged paths: $($forbidden -join ', ')"
           git diff --cached --check
           Require ($LASTEXITCODE -eq 0) 'Reviewed Stage 4 Batch 3 has whitespace errors.'
-          Write-Host "CLOUDSCRIBE_STAGE4_BATCH3_PATCH_SHA256=$actual files=$($staged.Count)"
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH3_PATCH_SHA256=$actual newfiles_sha256=$newActual files=$($staged.Count)"
 
       - name: Portable governance and mutation gates
         shell: pwsh
@@ -205,10 +223,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch3-admission-v1
+          name: cloudscribe-stage4-foundation-batch3-admission-v2
           if-no-files-found: warn
           retention-days: 14
           path: |
             ${{ runner.temp }}/stage4-batch3-tests/**
             ${{ runner.temp }}/stage4-batch3-package/**
             ${{ runner.temp }}/stage4-batch3.patch
+            ${{ runner.temp }}/stage4-batch3-newfiles.patch
