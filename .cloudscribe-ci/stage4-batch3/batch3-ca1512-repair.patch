@@ -1,0 +1,15 @@
+diff --git a/src/CloudScribe.Application/Pricing/PricingCatalogActivationRequest.cs b/src/CloudScribe.Application/Pricing/PricingCatalogActivationRequest.cs
+--- a/src/CloudScribe.Application/Pricing/PricingCatalogActivationRequest.cs
++++ b/src/CloudScribe.Application/Pricing/PricingCatalogActivationRequest.cs
+@@ -21,10 +21,7 @@
+         {
+             throw new ArgumentException("Expected catalog SHA-256 must contain exactly 64 hexadecimal characters.", nameof(expectedSha256));
+         }
+-        if (expectedCurrentActivationSequence < 0)
+-        {
+-            throw new ArgumentOutOfRangeException(nameof(expectedCurrentActivationSequence));
+-        }
++        ArgumentOutOfRangeException.ThrowIfNegative(expectedCurrentActivationSequence);
+         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+         string normalizedReason = reason.Trim();
+         if (normalizedReason.Length > 240 || normalizedReason.Any(static character => char.IsControl(character)))
