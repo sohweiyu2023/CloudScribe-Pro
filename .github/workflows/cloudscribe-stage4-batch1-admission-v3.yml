@@ -1,4 +1,4 @@
-name: CloudScribe Stage 4 foundation batch 1 admission v3
+name: CloudScribe Stage 4 foundation batch 1 admission v4
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
       NUGET_XMLDOC_MODE: skip
       BASE_HEAD: beb186bc57f30f3f308e398085bc3af3c94f4020
       TARGET_BRANCH: cloudscribe-0.5.0-stage4
-      PATCH_SHA256: dbda64c7e9a598e93fd769da0934bc875f33ee6bcb3d0fc01241e493f3c1f5f9
+      PATCH_SHA256: 2fa75e6027d2199a6abf5fa5b6bc585c9b7dec961fc099d8e51880e23034923b
       EXPECTED_CHANGED_FILES: '35'
       EXPECTED_DOTNET_TESTS: '195'
     steps:
@@ -54,9 +54,10 @@ jobs:
           Require ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
 
           $chunkRoot=Join-Path $env:GITHUB_WORKSPACE 'carrier\.cloudscribe-ci\stage4-batch1'
-          $chunks=@(Get-ChildItem -LiteralPath $chunkRoot -Filter 'patch-*.b64' -File | Sort-Object Name)
-          Require ($chunks.Count -eq 7) "Expected seven reviewed patch chunks, found $($chunks.Count)."
-          $encoded=($chunks | ForEach-Object {(Get-Content -LiteralPath $_.FullName -Raw).Trim()}) -join ''
+          $payload=Join-Path $chunkRoot 'patch-fixed.b64'
+          Require (Test-Path -LiteralPath $payload -PathType Leaf) 'Fixed reviewed Stage 4 batch payload is missing.'
+          $encoded=(Get-Content -LiteralPath $payload -Raw).Trim()
+          Require (-not [string]::IsNullOrWhiteSpace($encoded)) 'Fixed reviewed Stage 4 batch payload is empty.'
           $gzip=[Convert]::FromBase64String($encoded)
           $patch=Join-Path $env:RUNNER_TEMP 'stage4-batch1.patch'
           $input=[IO.MemoryStream]::new($gzip,$false)
@@ -200,7 +201,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch1-admission-v3
+          name: cloudscribe-stage4-foundation-batch1-admission-v4
           if-no-files-found: warn
           retention-days: 14
           path: |
