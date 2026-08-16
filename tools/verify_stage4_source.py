@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+PROMOTED_STAGE3 = "beb186bc57f30f3f308e398085bc3af3c94f4020"
+FINAL_STAGE3_RUN = "31900688488"
+
+def fail(message: str) -> int:
+    print(f"FAIL: {message}", file=sys.stderr)
+    return 1
+
+def require_text(root: Path, relative: str, *needles: str) -> str:
+    path = root / relative
+    if not path.is_file():
+        raise ValueError(f"required Stage 4 source file missing: {relative}")
+    text = path.read_text(encoding="utf-8-sig")
+    for needle in needles:
+        if needle not in text:
+            raise ValueError(f"{relative} is missing required Stage 4 contract token: {needle!r}")
+    return text
+
+def main() -> int:
+    root = Path.cwd().resolve()
+    try:
+        state = json.loads((root / "SESSION_STATE.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return fail(f"invalid Stage 4 session state: {exc}")
+    if state.get("project") != "CloudScribe Pro" or state.get("current_stage") != 4:
+        return fail("SESSION_STATE.json does not identify CloudScribe Pro Stage 4")
+    if not str(state.get("repository_version", "")).startswith("0.5.0-stage4"):
+        return fail(f"unexpected Stage 4 repository version: {state.get('repository_version')!r}")
+    if state.get("required_dotnet_sdk") != "10.0.400":
+        return fail("Stage 4 must preserve exact SDK 10.0.400")
+    if state.get("stage3_complete") is not True or state.get("stage3_promoted") is not True:
+        return fail("Stage 4 requires a complete promoted Stage 3 checkpoint")
+    if state.get("stage3_promoted_commit") != PROMOTED_STAGE3 or str(state.get("stage3_final_certification_run")) != FINAL_STAGE3_RUN:
+        return fail("Stage 4 is not bound to the authoritative Stage 3 promoted evidence")
+    if state.get("stage4_started") is not True or state.get("stage4_complete") is not False or state.get("stage_gate_passed") is not False:
+        return fail("Stage 4 progress flags are inconsistent")
+    if state.get("stage4_exact_catalog_bytes_available") is not False or state.get("stage4_catalog_contract_admitted") is not False:
+        return fail("Stage 4 foundation must not pretend the unavailable exact v2.22 catalog bytes were admitted")
+    if state.get("whole_application_final_claimed") is not False:
+        return fail("Stage 4 source incorrectly claims whole-application final")
+
+    try:
+        require_text(root, "src/CloudScribe.Domain/Pricing/CostAssessment.cs",
+            "CostEvidenceKind.Unknown", "CostEvidenceKind.ProviderReported", "CostEvidenceKind.ReconciledInvoice",
+            "IsStale", "IsConflicting", "ExactMoney")
+        require_text(root, "src/CloudScribe.Infrastructure/Pricing/StrictJsonObjectReader.cs",
+            "Utf8JsonReader", "AllowTrailingCommas = false", "JsonCommentHandling.Disallow",
+            "DuplicateProperty", "TopLevelNotObject", "DefaultMaximumDocumentBytes")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderAccountReference.cs",
+            "CredentialReference", "EndpointId", "RegionId")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderCapabilitySnapshot.cs",
+            "StringComparer.Ordinal", "ProviderCapabilityState.Unknown", "ProvenanceId")
+        require_text(root, "src/CloudScribe.Application/Security/ICredentialVault.cs",
+            "CredentialReference", "StoreAsync", "ReadAsync", "DeleteAsync")
+        require_text(root, "src/CloudScribe.Infrastructure/Security/WindowsCredentialVault.cs",
+            "CredWriteW", "CredReadW", "CredDeleteW", "PersistLocalMachine", "Array.Clear")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/StrictJsonObjectReaderTests.cs",
+            "DuplicateProperty", "TopLevelNotObject", "InvalidUtf8", "NaN", "Infinity")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/Stage4ProviderFoundationTests.cs",
+            "FakeProviderRemainsLazy", "ProviderCapabilityState.Unknown", "synthesize-speech")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/WindowsCredentialVaultTests.cs",
+            "WindowsCredentialManagerRoundTripsAndDeletesEphemeralSecret", "Array.Clear")
+    except (OSError, ValueError) as exc:
+        return fail(str(exc))
+
+    forbidden_price_markers = ("pricePerMillion", "price_per_million", "0.000016", "15.00 / 1M")
+    source_roots = (root / "src/CloudScribe.App", root / "src/CloudScribe.Application", root / "src/CloudScribe.Domain", root / "src/CloudScribe.Infrastructure")
+    for source_root in source_roots:
+        for path in source_root.rglob("*.cs"):
+            text = path.read_text(encoding="utf-8-sig")
+            for marker in forbidden_price_markers:
+                if marker in text:
+                    return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
+
+    print("PASS: Stage 4 foundation preserves the exact promoted Stage 3 lineage, adds strict bounded JSON, exact truthful cost states, explicit account/capability contracts, lazy fake-provider coverage, and Windows OS-vault credential storage without pretending the unavailable exact pricing schema/seed have been admitted.")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())

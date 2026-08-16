@@ -117,13 +117,15 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         return fail(f"SESSION_STATE.json invalid: {exc}")
     stage = state.get("current_stage")
-    if stage not in (2, 3) or state.get("stage2_source_implemented") is not True:
+    if stage not in (2, 3, 4) or state.get("stage2_source_implemented") is not True:
         return fail("SESSION_STATE.json does not identify a checkpoint that preserves implemented Stage 2 source")
     version = str(state.get("repository_version", ""))
     if stage == 2 and not version.startswith("0.3.48-"):
         return fail(f"Stage 2 source version is not 0.3.48: {version!r}")
     if stage == 3 and not version.startswith("0.4.0-stage3"):
         return fail(f"Stage 3 source version does not preserve the expected checkpoint lineage: {version!r}")
+    if stage == 4 and not version.startswith("0.5.0-stage4"):
+        return fail(f"Stage 4 source version does not preserve the expected checkpoint lineage: {version!r}")
 
     if state.get("stage2_runtime_tested") is not True or state.get("stage2_windows_ui_tested") is not True:
         return fail("SESSION_STATE.json does not record completed automated/native Windows Stage 2 engineering verification")
@@ -135,7 +137,7 @@ def main() -> int:
         or state.get("stage2_manual_visual_acceptance") is not True
         or state.get("stage2_user_clicked_editor_retest") is not True
     ):
-        return fail("Stage 3 must preserve the promoted, real-user-accepted Stage 2 checkpoint")
+        return fail("Later stages must preserve the promoted, real-user-accepted Stage 2 checkpoint")
     state_text = json.dumps(state, ensure_ascii=False)
     for stale in ("Exact 0.3.47", "Exact 0.3.48 bytes have not executed", "Exact 0.3.48 runtime remains pending", "Apply the Stage 2 user-acceptance focus repair"):
         if stale in state_text:

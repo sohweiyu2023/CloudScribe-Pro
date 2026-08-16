@@ -2,6 +2,7 @@ using CloudScribe.Application.Activation;
 using CloudScribe.Application.Diagnostics;
 using CloudScribe.Application.Documents;
 using CloudScribe.Application.Observability;
+using CloudScribe.Application.Security;
 using CloudScribe.Application.Startup;
 using CloudScribe.Infrastructure.Activation;
 using CloudScribe.Infrastructure.Configuration;
@@ -9,6 +10,7 @@ using CloudScribe.Infrastructure.Diagnostics;
 using CloudScribe.Infrastructure.Files;
 using CloudScribe.Infrastructure.Persistence;
 using CloudScribe.Infrastructure.Providers;
+using CloudScribe.Infrastructure.Security;
 using CloudScribe.Providers.Abstractions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -67,6 +69,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IApplicationInitializer, DatabaseInitializer>();
 
         services.AddSingleton<IProviderFactoryRegistry, ProviderFactoryRegistry>();
+        services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
         return services;
     }
 }

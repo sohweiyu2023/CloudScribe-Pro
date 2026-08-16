@@ -30,10 +30,14 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         return fail(f"invalid Stage 3 JSON contract: {exc}")
 
-    if state.get("project") != "CloudScribe Pro" or state.get("current_stage") != 3:
-        return fail("SESSION_STATE.json does not identify CloudScribe Pro Stage 3")
-    if not str(state.get("repository_version", "")).startswith("0.4.0-stage3"):
-        return fail(f"unexpected Stage 3 repository version: {state.get('repository_version')!r}")
+    stage = state.get("current_stage")
+    version = str(state.get("repository_version", ""))
+    if state.get("project") != "CloudScribe Pro" or stage not in (3, 4):
+        return fail("SESSION_STATE.json does not identify a checkpoint that preserves CloudScribe Pro Stage 3")
+    if stage == 3 and not version.startswith("0.4.0-stage3"):
+        return fail(f"unexpected Stage 3 repository version: {version!r}")
+    if stage == 4 and not version.startswith("0.5.0-stage4"):
+        return fail(f"unexpected Stage 4 repository version while preserving Stage 3: {version!r}")
     if state.get("required_dotnet_sdk") != "10.0.400" or global_json.get("sdk", {}).get("version") != "10.0.400":
         return fail("Stage 3 must preserve the certified .NET SDK 10.0.400 checkpoint")
     if state.get("stage2_promoted") is not True:
@@ -43,9 +47,15 @@ def main() -> int:
     if state.get("stage3_slice1_complete") is not True or state.get("stage3_slice2_complete") is not True:
         return fail("certified Stage 3 Slice 1/Slice 2 checkpoints are not recorded complete")
     if state.get("stage3_completion_candidate") is not True:
-        return fail("Stage 3 completion candidate is not recorded")
-    if state.get("stage3_complete") is not False or state.get("stage3_promoted") is not False:
-        return fail("completion candidate must not claim Stage 3 complete/promoted")
+        return fail("Stage 3 completion-candidate history is not recorded")
+    if stage == 3:
+        if state.get("stage3_complete") is not False or state.get("stage3_promoted") is not False:
+            return fail("Stage 3 completion candidate must not claim Stage 3 complete/promoted")
+    else:
+        if state.get("stage3_complete") is not True or state.get("stage3_final_windows_certified") is not True or state.get("stage3_promoted") is not True:
+            return fail("Stage 4 must preserve complete, final-Windows-certified and promoted Stage 3 state")
+        if str(state.get("stage3_final_certification_run")) != "31900688488" or state.get("stage3_promoted_commit") != "beb186bc57f30f3f308e398085bc3af3c94f4020":
+            return fail("Stage 4 Stage 3 evidence binding does not match the authoritative promotion")
     if state.get("whole_application_final_claimed") is not False:
         return fail("Stage 3 source incorrectly claims the whole application is final")
 
@@ -129,7 +139,8 @@ def main() -> int:
     except (OSError, ValueError) as exc:
         return fail(str(exc))
 
-    print("PASS: Stage 3 completion candidate has durable local Library/editor autosave/checkpoint/conflict handling, bounded import/preprocessing, Unicode/source-map coverage, and fail-closed migration backup/recovery contracts while final promotion remains gated.")
+    suffix = "while final promotion remains gated" if stage == 3 else "and the exact promoted Stage 3 evidence is preserved into Stage 4"
+    print(f"PASS: Stage 3 has durable local Library/editor autosave/checkpoint/conflict handling, bounded import/preprocessing, Unicode/source-map coverage, and fail-closed migration backup/recovery contracts {suffix}.")
     return 0
 
 

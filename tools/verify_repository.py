@@ -28,6 +28,7 @@ REQUIRED_TOOLS = (
     "tools/verify_stage2_source.py",
     "tools/verify_stage2_evidence_inventory.py",
     "tools/verify_stage3_source.py",
+    "tools/verify_stage4_source.py",
     "tools/run_python_regression_shards.py",
     "tools/create_source_archive.py",
     "tools/verify_source_release.py",
@@ -54,13 +55,15 @@ def main() -> int:
         return fail(f"invalid repository JSON contract: {exc}")
 
     stage = session.get("current_stage")
-    if session.get("project") != "CloudScribe Pro" or stage not in (2, 3):
+    if session.get("project") != "CloudScribe Pro" or stage not in (2, 3, 4):
         return fail("SESSION_STATE.json does not identify a supported CloudScribe Pro staged checkpoint")
     version = str(session.get("repository_version", ""))
     if stage == 2 and not version.startswith("0.3.48-"):
         return fail(f"unexpected Stage 2 repository version: {version!r}")
     if stage == 3 and not version.startswith("0.4.0-stage3"):
         return fail(f"unexpected Stage 3 repository version: {version!r}")
+    if stage == 4 and not version.startswith("0.5.0-stage4"):
+        return fail(f"unexpected Stage 4 repository version: {version!r}")
 
     sdk_contract = global_json.get("sdk")
     if not isinstance(sdk_contract, dict):
@@ -76,13 +79,18 @@ def main() -> int:
 
     if session.get("stage1_checkpoint_promoted") is not True or session.get("stage2_source_implemented") is not True:
         return fail("stage checkpoint/source-state flags are inconsistent")
-    if stage == 3:
+    if stage in (3, 4):
         if session.get("stage2_promoted") is not True:
             return fail("Stage 3 requires a promoted Stage 2 checkpoint")
         if session.get("stage2_manual_visual_acceptance") is not True or session.get("stage2_user_clicked_editor_retest") is not True:
             return fail("Stage 3 requires truthful real-user Stage 2 visual acceptance")
         if session.get("stage3_slice1_started") is not True:
             return fail("Stage 3 Slice 1 is not marked as started")
+    if stage == 4:
+        if session.get("stage3_complete") is not True or session.get("stage3_promoted") is not True:
+            return fail("Stage 4 requires a complete promoted Stage 3 checkpoint")
+        if session.get("stage3_promoted_commit") != "beb186bc57f30f3f308e398085bc3af3c94f4020":
+            return fail("Stage 4 does not preserve the authoritative Stage 3 promoted commit")
     if session.get("whole_application_final_claimed") is not False:
         return fail("source incorrectly claims the whole application is final")
 

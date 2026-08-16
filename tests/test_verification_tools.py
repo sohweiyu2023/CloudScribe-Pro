@@ -710,7 +710,45 @@ class Stage2SourceContractTests(unittest.TestCase):
     def test_all_deterministic_material_regression_shards_pass(self):
         result = _run_tool("run_python_regression_shards.py", "--all", timeout=180)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("151/151 material regression checks", result.stdout)
+        self.assertIn("153/153 material regression checks", result.stdout)
+
+
+class Stage4SourceContractTests(unittest.TestCase):
+    def test_current_checkpoint_passes_stage4_foundation_contract(self):
+        result = _run_tool("verify_stage4_source.py")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_rejects_false_exact_catalog_admission_claim(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-catalog-claim-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_catalog_contract_admitted"] = True
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not pretend", result.stderr)
+
+    def test_rejects_wrong_stage3_promotion_binding(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-lineage-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage3_promoted_commit"] = "0" * 40
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative Stage 3 promoted evidence", result.stderr)
+
+    def test_rejects_relaxed_strict_json_contract(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-json-contract-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "src/CloudScribe.Infrastructure/Pricing/StrictJsonObjectReader.cs"
+            text = path.read_text(encoding="utf-8")
+            path.write_text(text.replace("AllowTrailingCommas = false", "AllowTrailingCommas = true"), encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("AllowTrailingCommas = false", result.stderr)
 
 
 class Stage2EvidenceInventoryCliTests(unittest.TestCase):
