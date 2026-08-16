@@ -1,4 +1,4 @@
-name: CloudScribe Stage 4 foundation batch 2 admission v1
+name: CloudScribe Stage 4 foundation batch 2 admission v2
 
 on:
   push:
@@ -21,6 +21,7 @@ jobs:
       BASE_HEAD: d4c8f44a472c0311dc08e3d9534bb163971697f9
       TARGET_BRANCH: cloudscribe-0.5.0-stage4
       PATCH_SHA256: 91797f20fb0f4f212b5da9deb307e6d0efcee1cf44c459664f549c21acb6624f
+      REPAIR_SHA256: e7330ce2769350424a622d578d5a9254c2a83661aaffe40501cb3055199fafb7
       EXPECTED_CHANGED_FILES: '22'
       EXPECTED_DOTNET_TESTS: '200'
     steps:
@@ -43,12 +44,19 @@ jobs:
           cache: true
           cache-dependency-path: 'source/**/packages.lock.json'
 
-      - name: Reconstruct and bind exact reviewed Batch 2
+      - name: Reconstruct and bind exact reviewed Batch 2 plus format repair
         shell: pwsh
         working-directory: source
         run: |
           $ErrorActionPreference='Stop'
           function Require([bool]$condition,[string]$message){if(-not $condition){throw $message}}
+          function Expand-Base64Gzip([string]$encoded,[string]$outputPath){
+            $gzip=[Convert]::FromBase64String($encoded)
+            $input=[IO.MemoryStream]::new($gzip,$false)
+            $stream=[IO.Compression.GZipStream]::new($input,[IO.Compression.CompressionMode]::Decompress)
+            $output=[IO.File]::Create($outputPath)
+            try {$stream.CopyTo($output)} finally {$output.Dispose();$stream.Dispose();$input.Dispose();[Array]::Clear($gzip)}
+          }
           $head=(git rev-parse HEAD).Trim()
           Require ($head -eq $env:BASE_HEAD) "Stage 4 target moved unexpectedly before admission: $head"
           Require ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
@@ -58,18 +66,26 @@ jobs:
           Require ($chunks.Count -eq 5) "Expected five Batch 2 patch chunks, found $($chunks.Count)."
           $encoded=($chunks | ForEach-Object {(Get-Content -LiteralPath $_.FullName -Raw).Trim()}) -join ''
           Require (-not [string]::IsNullOrWhiteSpace($encoded)) 'Batch 2 payload is empty.'
-          $gzip=[Convert]::FromBase64String($encoded)
           $patch=Join-Path $env:RUNNER_TEMP 'stage4-batch2.patch'
-          $input=[IO.MemoryStream]::new($gzip,$false)
-          $stream=[IO.Compression.GZipStream]::new($input,[IO.Compression.CompressionMode]::Decompress)
-          $output=[IO.File]::Create($patch)
-          try {$stream.CopyTo($output)} finally {$output.Dispose();$stream.Dispose();$input.Dispose();[Array]::Clear($gzip)}
+          Expand-Base64Gzip $encoded $patch
           $actual=(Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
           Require ($actual -eq $env:PATCH_SHA256) "Batch 2 patch SHA-256 mismatch: $actual"
           git apply --check -- $patch
           Require ($LASTEXITCODE -eq 0) 'Batch 2 patch does not apply cleanly to exact admitted Batch 1 head.'
           git apply --whitespace=nowarn -- $patch
           Require ($LASTEXITCODE -eq 0) 'Unable to apply reviewed Stage 4 Batch 2.'
+
+          $repairPayload=Join-Path $chunkRoot 'format-repair.b64'
+          Require (Test-Path -LiteralPath $repairPayload -PathType Leaf) 'Batch 2 format repair payload is missing.'
+          $repairEncoded=(Get-Content -LiteralPath $repairPayload -Raw).Trim()
+          $repairPatch=Join-Path $env:RUNNER_TEMP 'stage4-batch2-format-repair.patch'
+          Expand-Base64Gzip $repairEncoded $repairPatch
+          $repairActual=(Get-FileHash -LiteralPath $repairPatch -Algorithm SHA256).Hash.ToLowerInvariant()
+          Require ($repairActual -eq $env:REPAIR_SHA256) "Batch 2 repair SHA-256 mismatch: $repairActual"
+          git apply --check -- $repairPatch
+          Require ($LASTEXITCODE -eq 0) 'Batch 2 format repair does not apply cleanly after the reviewed batch.'
+          git apply --whitespace=nowarn -- $repairPatch
+          Require ($LASTEXITCODE -eq 0) 'Unable to apply the Stage 4 Batch 2 format repair.'
 
           $tracked=@(git diff --name-only -- | Where-Object {$_ -and $_.Trim()})
           $untracked=@(git ls-files --others --exclude-standard | Where-Object {$_ -and $_.Trim()})
@@ -93,7 +109,7 @@ jobs:
           Require ($forbidden.Count -eq 0) "Forbidden staged paths: $($forbidden -join ', ')"
           git diff --cached --check
           Require ($LASTEXITCODE -eq 0) 'Reviewed Stage 4 Batch 2 has whitespace errors.'
-          Write-Host "CLOUDSCRIBE_STAGE4_BATCH2_PATCH_SHA256=$actual files=$($staged.Count)"
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH2_PATCH_SHA256=$actual repair_sha256=$repairActual files=$($staged.Count)"
 
       - name: Portable governance and mutation gates
         shell: pwsh
@@ -210,10 +226,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch2-admission-v1
+          name: cloudscribe-stage4-foundation-batch2-admission-v2
           if-no-files-found: warn
           retention-days: 14
           path: |
             ${{ runner.temp }}/stage4-batch2-tests/**
             ${{ runner.temp }}/stage4-batch2-package/**
             ${{ runner.temp }}/stage4-batch2.patch
+            ${{ runner.temp }}/stage4-batch2-format-repair.patch
