@@ -17,7 +17,7 @@ BASE_TEST_CLASSES = (
     ("SourceManifestToolTests", 3),
     ("Stage2EvidenceInventoryCliTests", 4),
     ("Stage2SourceContractTests", 4),
-    ("Stage4SourceContractTests", 6),
+    ("Stage4SourceContractTests", 8),
     ("VisualEvidencePngParserTests", 9),
 )
 # Process-tree teardown semantics are host-specific. Run these as part of the

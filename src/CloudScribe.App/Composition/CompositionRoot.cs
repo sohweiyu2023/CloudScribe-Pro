@@ -37,7 +37,9 @@ public static class CompositionRoot
             viewModel.ConfigureStage3ImportWorkflow(
                 serviceProvider.GetRequiredService<ILocalDocumentImporter>(),
                 serviceProvider.GetRequiredService<DocumentPreprocessor>());
-            viewModel.ConfigureStage4PricingHistory(serviceProvider.GetRequiredService<IPricingCatalogHistoryStore>());
+            viewModel.ConfigureStage4PricingHistory(
+                serviceProvider.GetRequiredService<IPricingCatalogHistoryStore>(),
+                serviceProvider.GetRequiredService<IPricingContractOverrideStore>());
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
             return viewModel;

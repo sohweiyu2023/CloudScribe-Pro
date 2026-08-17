@@ -46,6 +46,37 @@ public sealed class Stage4FoundationArchitectureTests
         Assert.Contains("history inspection never activates a catalog", window, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void UserPricingOverridesArePhysicallySeparateAndCannotSilentlyActivate()
+    {
+        string root = RepositoryRoot();
+        string context = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Persistence", "CloudScribeDbContext.cs"));
+        string store = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Pricing", "EfPricingContractOverrideStore.cs"));
+        string contract = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Application", "Pricing", "IPricingContractOverrideStore.cs"));
+        string pricingViewModel = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Pricing.cs"));
+
+        Assert.Contains("pricing_contract_overrides", context, StringComparison.Ordinal);
+        Assert.Contains("SaveInactiveAsync", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("Activate", contract, StringComparison.Ordinal);
+        Assert.Contains("strictJsonReader.Parse", store, StringComparison.Ordinal);
+        Assert.Contains("stored inactive override", pricingViewModel, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LiveQuotaObservationsAreProvenanceBearingAndRemainSeparateFromCatalogTruth()
+    {
+        string root = RepositoryRoot();
+        string observation = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Providers.Abstractions", "ProviderQuotaObservation.cs"));
+        string quotaSource = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Providers.Abstractions", "IProviderQuotaSource.cs"));
+        string pricingViewModel = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Pricing.cs"));
+
+        Assert.Contains("ProvenanceId", observation, StringComparison.Ordinal);
+        Assert.Contains("ExpiresAtUtc", observation, StringComparison.Ordinal);
+        Assert.Contains("GetQuotaObservationsAsync", quotaSource, StringComparison.Ordinal);
+        Assert.Contains("Account quota unknown", pricingViewModel, StringComparison.Ordinal);
+    }
+
     private static string RepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

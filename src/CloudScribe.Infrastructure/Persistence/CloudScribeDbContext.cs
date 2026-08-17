@@ -27,11 +27,14 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
 
     public DbSet<PricingCatalogActivationEntity> PricingCatalogActivations => Set<PricingCatalogActivationEntity>();
 
+    public DbSet<PricingContractOverrideEntity> PricingContractOverrides => Set<PricingContractOverrideEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureObservability(modelBuilder);
         ConfigureDocuments(modelBuilder);
         ConfigurePricingCatalogHistory(modelBuilder);
+        ConfigurePricingContractOverrides(modelBuilder);
     }
 
     private static void ConfigureObservability(ModelBuilder modelBuilder)
@@ -85,6 +88,21 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
                 .WithMany()
                 .HasForeignKey(item => item.SnapshotId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigurePricingContractOverrides(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PricingContractOverrideEntity>(entity =>
+        {
+            entity.ToTable("pricing_contract_overrides");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Sha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(item => item.OverrideBytes).IsRequired();
+            entity.Property(item => item.Label).HasMaxLength(240).IsRequired();
+            entity.Property(item => item.ProvenanceId).HasMaxLength(160).IsRequired();
+            entity.HasIndex(item => item.Sha256).IsUnique();
+            entity.HasIndex(item => item.CapturedAtUnixMilliseconds);
         });
     }
 

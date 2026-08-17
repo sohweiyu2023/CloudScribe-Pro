@@ -44,8 +44,14 @@ def main() -> int:
         return fail("Stage 4 foundation must not pretend the unavailable exact v2.22 catalog bytes were admitted")
     if state.get("stage4_foundation_batch2_admitted") is not True:
         return fail("Stage 4 must record the authoritative successful Batch 2 admission")
-    if state.get("stage4_foundation_batch3") is not True:
-        return fail("Stage 4 Batch 3 history/activation foundation is not recorded")
+    if state.get("stage4_foundation_batch3") is not True or state.get("stage4_foundation_batch3_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 3 admission")
+    if state.get("stage4_foundation_batch4") is not True:
+        return fail("Stage 4 Batch 4 override/quota foundation is not recorded")
+    if state.get("stage4_pricing_contract_overrides_separate") is not True:
+        return fail("User pricing contract overrides must remain explicitly separate from upstream catalog truth")
+    if state.get("stage4_provider_quota_observation_contract") is not True:
+        return fail("Provider quota observations must remain an explicit provenance-bearing contract")
     if state.get("whole_application_final_claimed") is not False:
         return fail("Stage 4 source incorrectly claims whole-application final")
 
@@ -95,6 +101,16 @@ def main() -> int:
             "MigrationCreatesCatalogHistoryTablesAndForeignKeys")
         require_text(root, "tests/CloudScribe.Infrastructure.Tests/WindowsCredentialVaultTests.cs",
             "WindowsCredentialManagerRoundTripsAndDeletesEphemeralSecret", "Array.Clear")
+        require_text(root, "src/CloudScribe.Infrastructure/Pricing/EfPricingContractOverrideStore.cs",
+            "SaveInactiveAsync", "strictJsonReader.Parse", "PricingContractOverrides")
+        require_text(root, "src/CloudScribe.Application/Pricing/IPricingContractOverrideStore.cs",
+            "SaveInactiveAsync", "ListInactiveAsync")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderQuotaObservation.cs",
+            "ProvenanceId", "ExpiresAtUtc", "IsStale")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/IProviderQuotaSource.cs",
+            "GetQuotaObservationsAsync")
+        require_text(root, "src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs",
+            "Account quota unknown", "PricingContractOverrideSummary", "stored inactive override")
     except (OSError, ValueError) as exc:
         return fail(str(exc))
 
@@ -107,7 +123,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history with explicit activation/rollback approval, lazy fake-provider coverage, Windows OS-vault storage, and truthful UI without pretending unavailable exact pricing bytes or Ed25519 trust are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history with explicit activation/rollback approval, physically separate inert user pricing overrides, provenance-bearing quota observations, lazy fake-provider coverage, Windows OS-vault storage, and truthful UI without pretending unavailable exact pricing bytes or Ed25519 trust are admitted.")
     return 0
 
 if __name__ == "__main__":

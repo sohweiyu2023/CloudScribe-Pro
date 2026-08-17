@@ -771,6 +771,26 @@ class Stage4SourceContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("explicit user confirmation", result.stderr)
 
+    def test_rejects_pricing_override_separation_regression(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-override-separation-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_pricing_contract_overrides_separate"] = False
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("separate from upstream catalog truth", result.stderr)
+
+    def test_rejects_quota_observation_contract_regression(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-quota-contract-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "src/CloudScribe.Providers.Abstractions/IProviderQuotaSource.cs"
+            path.write_text("namespace CloudScribe.Providers.Abstractions;\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("GetQuotaObservationsAsync", result.stderr)
+
 
 class Stage2EvidenceInventoryCliTests(unittest.TestCase):
     @staticmethod

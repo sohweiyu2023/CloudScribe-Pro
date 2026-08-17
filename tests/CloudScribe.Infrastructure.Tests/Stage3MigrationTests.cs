@@ -29,6 +29,7 @@ public sealed class Stage3MigrationTests
                     Stage3Documents.MigrationId,
                     Stage3DocumentWorkflow.MigrationId,
                     Stage4PricingCatalogHistory.MigrationId,
+                    Stage4PricingContractOverrides.MigrationId,
                 ],
                 migrations);
 
@@ -107,6 +108,7 @@ public sealed class Stage3MigrationTests
                     Stage3Documents.MigrationId,
                     Stage3DocumentWorkflow.MigrationId,
                     Stage4PricingCatalogHistory.MigrationId,
+                    Stage4PricingContractOverrides.MigrationId,
                 ],
                 migrations);
             DocumentEntity document = await upgraded.Documents.SingleAsync(TestContext.Current.CancellationToken);
@@ -165,6 +167,7 @@ public sealed class Stage3MigrationTests
                     Stage3Documents.MigrationId,
                     Stage3DocumentWorkflow.MigrationId,
                     Stage4PricingCatalogHistory.MigrationId,
+                    Stage4PricingContractOverrides.MigrationId,
                 ],
                 migrations);
             ActivityTimelineEntity preserved = await upgrade.ActivityTimeline.SingleAsync(TestContext.Current.CancellationToken);

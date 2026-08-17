@@ -67,6 +67,7 @@ public sealed class DatabaseRecoveryTests
                     Stage3Documents.MigrationId,
                     Stage3DocumentWorkflow.MigrationId,
                     Stage4PricingCatalogHistory.MigrationId,
+                    Stage4PricingContractOverrides.MigrationId,
                 ],
                 currentMigrations);
         }

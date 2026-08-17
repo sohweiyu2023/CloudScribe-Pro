@@ -76,6 +76,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingCatalogSignatureVerifier, UnavailablePricingCatalogSignatureVerifier>();
         services.AddSingleton<IPricingCatalogAdmissionService, PricingCatalogAdmissionService>();
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
+        services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
         services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
         return services;
     }
