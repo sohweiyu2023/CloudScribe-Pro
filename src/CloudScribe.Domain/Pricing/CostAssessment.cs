@@ -14,6 +14,8 @@ public sealed record CostAssessment
         bool isStale,
         bool isConflicting)
     {
+        EnsureDefinedUsageScope(usageScope);
+
         EvidenceKind = evidenceKind;
         UsageScope = usageScope;
         Minimum = minimum;
@@ -50,27 +52,7 @@ public sealed record CostAssessment
             throw new ArgumentException("Known cost evidence requires a bounded amount and provenance.", parameterName);
         }
 
-        ExactMoney low = minimum.Value;
-        ExactMoney high = maximum.Value;
-        low.EnsureValid(nameof(minimum));
-        high.EnsureValid(nameof(maximum));
-        if (!string.Equals(low.CurrencyCode, high.CurrencyCode, StringComparison.Ordinal) || low.Scale != high.Scale)
-        {
-            throw new ArgumentException(
-                "Cost ranges must use one currency and one exact integer scale.",
-                nameof(maximum));
-        }
-        if (low.Units < 0 || high.Units < low.Units)
-        {
-            throw new ArgumentOutOfRangeException(nameof(minimum), "Cost ranges must be non-negative and ordered.");
-        }
-        if (evidenceKind is CostEvidenceKind.Quoted or CostEvidenceKind.ProviderReported or CostEvidenceKind.ReconciledInvoice
-            && low != high)
-        {
-            throw new ArgumentException(
-                "Quoted, provider-reported and reconciled invoice costs must be exact rather than ranges.",
-                nameof(maximum));
-        }
+        ValidateKnownRange(evidenceKind, minimum.Value, maximum.Value);
     }
 
     public CostEvidenceKind EvidenceKind { get; }
@@ -113,6 +95,45 @@ public sealed record CostAssessment
 
     public static CostAssessment ReconciledInvoice(ExactMoney amount, CostUsageScope usageScope, string provenanceId, string reason = "Reconciled invoice cost.") =>
         new(CostEvidenceKind.ReconciledInvoice, usageScope, amount, amount, reason, provenanceId, false, false);
+
+    private static void EnsureDefinedUsageScope(CostUsageScope usageScope)
+    {
+        if (!Enum.IsDefined(usageScope))
+        {
+            ThrowUndefinedUsageScope(nameof(usageScope));
+        }
+    }
+
+    private static void ValidateKnownRange(CostEvidenceKind evidenceKind, ExactMoney minimum, ExactMoney maximum)
+    {
+        minimum.EnsureValid(nameof(minimum));
+        maximum.EnsureValid(nameof(maximum));
+        if (!string.Equals(minimum.CurrencyCode, maximum.CurrencyCode, StringComparison.Ordinal)
+            || minimum.Scale != maximum.Scale)
+        {
+            throw new ArgumentException(
+                "Cost ranges must use one currency and one exact integer scale.",
+                nameof(maximum));
+        }
+
+        if (minimum.Units < 0 || maximum.Units < minimum.Units)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(minimum),
+                "Cost ranges must be non-negative and ordered.");
+        }
+
+        if (evidenceKind is CostEvidenceKind.Quoted or CostEvidenceKind.ProviderReported or CostEvidenceKind.ReconciledInvoice
+            && minimum != maximum)
+        {
+            throw new ArgumentException(
+                "Quoted, provider-reported and reconciled invoice costs must be exact rather than ranges.",
+                nameof(maximum));
+        }
+    }
+
+    private static void ThrowUndefinedUsageScope(string parameterName) =>
+        throw new ArgumentOutOfRangeException(parameterName);
 
     private static string NormalizeRequiredText(string value, string parameterName, int maximumLength)
     {

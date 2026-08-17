@@ -140,6 +140,56 @@ public sealed class PricingCostEngineTests
     }
 
     [Fact]
+    public void MeterRejectsNullAndDuplicateModifiers()
+    {
+        Assert.Throws<ArgumentException>(() => new PricingMeterDefinition(
+            "fixture-meter",
+            "characters",
+            [new PricingTier(null, 1, new ExactMoney(1, 2, "USD"))],
+            modifiers: new PricingModifier[] { null! }));
+
+        Assert.Throws<ArgumentException>(() => new PricingMeterDefinition(
+            "fixture-meter",
+            "characters",
+            [new PricingTier(null, 1, new ExactMoney(1, 2, "USD"))],
+            modifiers:
+            [
+                new PricingModifier("same-id", 1, 1),
+                new PricingModifier("same-id", 2, 1, "region-a"),
+            ]));
+    }
+
+    [Fact]
+    public void UndefinedUsageScopesAreRejectedByPricingContracts()
+    {
+        CostUsageScope invalid = (CostUsageScope)999;
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PricingAllowance(1, invalid));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PricingEstimateRequest(
+            1,
+            "characters",
+            invalid,
+            "catalog:fixture"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CostAssessment.Unknown(invalid, "Unknown."));
+    }
+
+    [Fact]
+    public void CostBeyondExactMoneyLimitFailsClosed()
+    {
+        PricingMeterDefinition meter = new(
+            "fixture-meter",
+            "characters",
+            [new PricingTier(null, 1, new ExactMoney(long.MaxValue, 0, "USD"))]);
+
+        CostAssessment result = PricingCostEngine.Estimate(
+            meter,
+            ResolvedRequest(2, CostUsageScope.AppLocal));
+
+        Assert.Equal(CostEvidenceKind.Unknown, result.EvidenceKind);
+        Assert.False(result.HasKnownAmount);
+        Assert.Contains("representation limit", result.StatusReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StableIdentifiersRejectAmbiguousOrDisplayTextTokens()
     {
         Assert.Throws<ArgumentException>(() => new PricingMeterDefinition(

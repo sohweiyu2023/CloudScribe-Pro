@@ -9,6 +9,8 @@ PROMOTED_STAGE3 = "beb186bc57f30f3f308e398085bc3af3c94f4020"
 FINAL_STAGE3_RUN = "31900688488"
 BATCH5_COMMIT = "fdb274a001043f1a81af0e041efc65fed7b26195"
 BATCH5_RUN = "32047903725"
+BATCH6_COMMIT = "527b0f104662f9ed3292e8c594bcffd782cf07bd"
+BATCH6_RUN = "32051045651"
 
 def fail(message: str) -> int:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -54,8 +56,12 @@ def main() -> int:
         return fail("Stage 4 must preserve the authoritative successful Batch 5 admission")
     if state.get("stage4_foundation_batch5_commit") != BATCH5_COMMIT or str(state.get("stage4_foundation_batch5_admission_run")) != BATCH5_RUN:
         return fail("Stage 4 is not bound to the authoritative Batch 5 Windows admission evidence")
-    if state.get("stage4_foundation_batch6") is not True or state.get("stage4_foundation_batch6_admitted") is not False:
-        return fail("Current Stage 4 Batch 6 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_foundation_batch6") is not True or state.get("stage4_foundation_batch6_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 6 admission")
+    if state.get("stage4_foundation_batch6_commit") != BATCH6_COMMIT or str(state.get("stage4_foundation_batch6_admission_run")) != BATCH6_RUN:
+        return fail("Stage 4 is not bound to the authoritative Batch 6 Windows admission evidence")
+    if state.get("stage4_foundation_batch7") is not True or state.get("stage4_foundation_batch7_admitted") is not False:
+        return fail("Current Stage 4 Batch 7 must remain a source-changing candidate until Windows admission")
     if state.get("stage4_pricing_contract_overrides_separate") is not True:
         return fail("User pricing contract overrides must remain explicitly separate from upstream catalog truth")
     if state.get("stage4_provider_quota_observation_contract") is not True:
@@ -74,6 +80,10 @@ def main() -> int:
         return fail("Stage 4 pricing must not guess unresolved tax, credit, or FX treatment")
     if state.get("stage4_pricing_usage_scope_explicit") is not True or state.get("stage4_pricing_catalog_provenance_required") is not True:
         return fail("Stage 4 pricing must preserve explicit usage scope and catalog provenance")
+    if state.get("stage4_pricing_modifier_set_validated") is not True:
+        return fail("Stage 4 pricing meters must reject malformed modifier sets")
+    if state.get("stage4_pricing_usage_scope_enum_validated") is not True:
+        return fail("Stage 4 pricing contracts must reject undefined usage-scope enum values")
     if state.get("whole_application_final_claimed") is not False:
         return fail("Stage 4 source incorrectly claims whole-application final")
 
@@ -162,6 +172,14 @@ def main() -> int:
         require_text(root, "src/CloudScribe.Domain/Pricing/PricingCostEngine.cs",
             "CostAssessment.Unknown", "BigInteger", "CeilingDivide", "Normalized pricing meter estimate",
             "foreign exchange")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingMeterDefinition.cs",
+            "ValidateModifiers", "Pricing modifiers cannot contain null entries", "stable identifiers must be unique")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingAllowance.cs", "Enum.IsDefined(scope)")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingEstimateRequest.cs", "Enum.IsDefined(usageScope)")
+        require_text(root, "src/CloudScribe.Domain/Pricing/CostAssessment.cs", "Enum.IsDefined(usageScope)")
+        require_text(root, "tests/CloudScribe.Domain.Tests/PricingCostEngineTests.cs",
+            "MeterRejectsNullAndDuplicateModifiers", "UndefinedUsageScopesAreRejectedByPricingContracts",
+            "CostBeyondExactMoneyLimitFailsClosed")
         require_text(root, "tests/CloudScribe.Domain.Tests/PricingCostEngineTests.cs",
             "DeterministicFakeMeterAppliesAllowanceAndTieredBlocks",
             "UnresolvedTaxCreditOrFxNeverProducesPretendAmount",
@@ -183,7 +201,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-5, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider coverage, Windows OS-vault storage, and a provider-neutral exact-integer pricing meter/cost engine that never guesses unresolved tax/credit/FX or pretends unavailable exact pricing bytes or Ed25519 trust are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-6, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider coverage, Windows OS-vault storage, and a provider-neutral exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable exact pricing bytes or Ed25519 trust are admitted.")
     return 0
 
 if __name__ == "__main__":

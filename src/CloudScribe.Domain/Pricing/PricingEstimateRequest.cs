@@ -16,6 +16,11 @@ public sealed record PricingEstimateRequest
     {
         ArgumentOutOfRangeException.ThrowIfNegative(quantity);
 
+        if (!Enum.IsDefined(usageScope))
+        {
+            ThrowUndefinedUsageScope(nameof(usageScope));
+        }
+
         Quantity = quantity;
         QuantityUnitId = PricingMeterDefinition.NormalizeStableToken(quantityUnitId, nameof(quantityUnitId));
         UsageScope = usageScope;
@@ -39,6 +44,9 @@ public sealed record PricingEstimateRequest
         CatalogIsStale = catalogIsStale;
         CatalogIsConflicting = catalogIsConflicting;
     }
+
+    private static void ThrowUndefinedUsageScope(string parameterName) =>
+        throw new ArgumentOutOfRangeException(parameterName);
 
     public long Quantity { get; }
     public string QuantityUnitId { get; }

@@ -23,7 +23,9 @@ public sealed record PricingMeterDefinition
         ValidateTiers(copiedTiers);
         Tiers = copiedTiers;
         Allowance = allowance;
-        Modifiers = modifiers is null ? [] : [.. modifiers];
+        PricingModifier[] copiedModifiers = modifiers is null ? [] : [.. modifiers];
+        ValidateModifiers(copiedModifiers);
+        Modifiers = copiedModifiers;
     }
 
     public string StableId { get; }
@@ -48,6 +50,23 @@ public sealed record PricingMeterDefinition
         }
 
         return normalized;
+    }
+
+    private static void ValidateModifiers(PricingModifier[] modifiers)
+    {
+        var stableIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (PricingModifier modifier in modifiers)
+        {
+            if (modifier is null)
+            {
+                throw new ArgumentException("Pricing modifiers cannot contain null entries.", nameof(modifiers));
+            }
+
+            if (!stableIds.Add(modifier.StableId))
+            {
+                throw new ArgumentException("Pricing modifier stable identifiers must be unique within a meter.", nameof(modifiers));
+            }
+        }
     }
 
     private static void ValidateTiers(PricingTier[] tiers)

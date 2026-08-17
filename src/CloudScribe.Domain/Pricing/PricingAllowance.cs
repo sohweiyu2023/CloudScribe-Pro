@@ -6,9 +6,17 @@ public sealed record PricingAllowance
     {
         ArgumentOutOfRangeException.ThrowIfNegative(includedQuantity);
 
+        if (!Enum.IsDefined(scope))
+        {
+            ThrowUndefinedScope(nameof(scope));
+        }
+
         IncludedQuantity = includedQuantity;
         Scope = scope;
     }
+
+    private static void ThrowUndefinedScope(string parameterName) =>
+        throw new ArgumentOutOfRangeException(parameterName);
 
     public long IncludedQuantity { get; }
     public CostUsageScope Scope { get; }
