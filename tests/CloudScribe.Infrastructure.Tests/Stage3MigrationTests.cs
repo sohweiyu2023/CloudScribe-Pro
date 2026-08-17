@@ -11,7 +11,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage3MigrationTests
 {
     [Fact]
-    public async Task FreshDatabaseAppliesExecutableStage2AndStage3Migrations()
+    public async Task FreshDatabaseAppliesExecutableStage2ThroughStage4Migrations()
     {
         string root = CreateTemporaryRoot();
         string databasePath = Path.Combine(root, "fresh.db");
@@ -24,7 +24,12 @@ public sealed class Stage3MigrationTests
                 .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken))
                 .ToArray();
             Assert.Equal(
-                [Stage2Baseline.MigrationId, Stage3Documents.MigrationId, Stage3DocumentWorkflow.MigrationId],
+                [
+                    Stage2Baseline.MigrationId,
+                    Stage3Documents.MigrationId,
+                    Stage3DocumentWorkflow.MigrationId,
+                    Stage4PricingCatalogHistory.MigrationId,
+                ],
                 migrations);
 
             Guid documentId = Guid.NewGuid();
@@ -93,7 +98,17 @@ public sealed class Stage3MigrationTests
             await using CloudScribeDbContext upgraded = CreateContext(databasePath);
             await upgraded.Database.MigrateAsync(TestContext.Current.CancellationToken);
 
-            Assert.Equal(3, (await upgraded.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)).Count());
+            string[] migrations = (await upgraded.Database
+                .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken))
+                .ToArray();
+            Assert.Equal(
+                [
+                    Stage2Baseline.MigrationId,
+                    Stage3Documents.MigrationId,
+                    Stage3DocumentWorkflow.MigrationId,
+                    Stage4PricingCatalogHistory.MigrationId,
+                ],
+                migrations);
             DocumentEntity document = await upgraded.Documents.SingleAsync(TestContext.Current.CancellationToken);
             Assert.Equal(documentId, document.Id);
             Assert.Equal("slice one text", document.DraftText);
@@ -141,8 +156,17 @@ public sealed class Stage3MigrationTests
             await bridge.PrepareAsync(connection, TestContext.Current.CancellationToken);
             await upgrade.Database.MigrateAsync(TestContext.Current.CancellationToken);
 
-            Assert.Equal(3, (await upgrade.Database
-                .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)).Count());
+            string[] migrations = (await upgrade.Database
+                .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken))
+                .ToArray();
+            Assert.Equal(
+                [
+                    Stage2Baseline.MigrationId,
+                    Stage3Documents.MigrationId,
+                    Stage3DocumentWorkflow.MigrationId,
+                    Stage4PricingCatalogHistory.MigrationId,
+                ],
+                migrations);
             ActivityTimelineEntity preserved = await upgrade.ActivityTimeline.SingleAsync(TestContext.Current.CancellationToken);
             Assert.Equal(activityId, preserved.Id);
             Assert.Equal("Preserve me", preserved.Summary);

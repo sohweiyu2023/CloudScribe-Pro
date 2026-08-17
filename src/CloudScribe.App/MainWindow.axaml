@@ -624,6 +624,12 @@
                   <TextBlock Text="{Binding CurrentPage.StateTitle}" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Title}" />
                   <TextBlock Text="{Binding CurrentPage.StateDescription}" Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" />
                   <TextBlock Text="{Binding CurrentPage.Detail}" Foreground="{DynamicResource Brush.Secondary}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
+                  <StackPanel IsVisible="{Binding IsPricingSelected}" Spacing="7" Margin="0,6,0,0">
+                    <TextBlock Text="CATALOG HISTORY" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                    <TextBlock Text="{Binding PricingCatalogActiveSummary}" Foreground="{DynamicResource Brush.Ink}" TextWrapping="Wrap" AutomationProperties.Name="Active pricing catalog status" />
+                    <ListBox ItemsSource="{Binding PricingCatalogHistoryItems}" MaxHeight="138" IsHitTestVisible="False" IsTabStop="False" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Recent admitted pricing catalog snapshots" />
+                    <TextBlock Text="Catalog activation and rollback always require an explicit reviewed action; history inspection never activates a catalog." Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
+                  </StackPanel>
                   <Button Classes="primary" Content="{Binding CurrentPage.PrimaryActionLabel}" Command="{Binding CurrentPage.PrimaryActionCommand}" IsVisible="{Binding CurrentPage.HasPrimaryAction}" HorizontalAlignment="Left" />
                 </StackPanel>
               </Border>

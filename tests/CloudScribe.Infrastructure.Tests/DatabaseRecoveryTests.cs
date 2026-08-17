@@ -57,9 +57,18 @@ public sealed class DatabaseRecoveryTests
             Assert.Equal("Preserve before migration", preserved.Summary);
 
             using CloudScribeDbContext current = CreateContext(paths.DatabasePath);
-            Assert.Equal(3, (await current.Database
+            string[] currentMigrations = (await current.Database
                 .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)
-                .ConfigureAwait(true)).Count());
+                .ConfigureAwait(true))
+                .ToArray();
+            Assert.Equal(
+                [
+                    Stage2Baseline.MigrationId,
+                    Stage3Documents.MigrationId,
+                    Stage3DocumentWorkflow.MigrationId,
+                    Stage4PricingCatalogHistory.MigrationId,
+                ],
+                currentMigrations);
         }
         finally
         {

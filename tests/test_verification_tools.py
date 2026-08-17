@@ -750,6 +750,27 @@ class Stage4SourceContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("AllowTrailingCommas = false", result.stderr)
 
+    def test_rejects_false_batch2_admission_state(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch2-admission-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch2_admitted"] = False
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative successful Batch 2 admission", result.stderr)
+
+    def test_rejects_silent_catalog_activation_regression(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-silent-activation-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs"
+            text = path.read_text(encoding="utf-8")
+            path.write_text(text.replace("explicit user confirmation", "implicit activation", 1), encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("explicit user confirmation", result.stderr)
+
 
 class Stage2EvidenceInventoryCliTests(unittest.TestCase):
     @staticmethod

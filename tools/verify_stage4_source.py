@@ -42,6 +42,10 @@ def main() -> int:
         return fail("Stage 4 progress flags are inconsistent")
     if state.get("stage4_exact_catalog_bytes_available") is not False or state.get("stage4_catalog_contract_admitted") is not False:
         return fail("Stage 4 foundation must not pretend the unavailable exact v2.22 catalog bytes were admitted")
+    if state.get("stage4_foundation_batch2_admitted") is not True:
+        return fail("Stage 4 must record the authoritative successful Batch 2 admission")
+    if state.get("stage4_foundation_batch3") is not True:
+        return fail("Stage 4 Batch 3 history/activation foundation is not recorded")
     if state.get("whole_application_final_claimed") is not False:
         return fail("Stage 4 source incorrectly claims whole-application final")
 
@@ -57,6 +61,12 @@ def main() -> int:
             "PricingCatalogTrustState.SignatureInvalid", "PricingCatalogTrustState.SignatureVerified")
         require_text(root, "src/CloudScribe.Infrastructure/Pricing/UnavailablePricingCatalogSignatureVerifier.cs",
             "Metadata or an embedded key is never accepted as catalog trust")
+        require_text(root, "src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs",
+            "explicit user confirmation", "ExpectedCurrentActivationSequence",
+            "Rollback can target only", "PricingCatalogApprovalKind.ManualUnsigned",
+            "PricingCatalogApprovalKind.VerifiedSignature")
+        require_text(root, "src/CloudScribe.Infrastructure/Persistence/Migrations/Stage4PricingCatalogHistory.cs",
+            "pricing_catalog_snapshots", "pricing_catalog_activations", "ReferentialAction.Restrict")
         require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderAccountReference.cs",
             "CredentialReference", "EndpointId", "RegionId")
         require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderCapabilitySnapshot.cs",
@@ -76,7 +86,13 @@ def main() -> int:
         require_text(root, "src/CloudScribe.App/Design/StageFeatureAvailability.cs",
             "Stage4", "ShowProviderControls: true")
         require_text(root, "src/CloudScribe.App/MainWindow.axaml",
-            "No admitted account", "stay disabled with explicit reasons")
+            "No admitted account", "stay disabled with explicit reasons",
+            "CATALOG HISTORY", "history inspection never activates a catalog")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/PricingCatalogHistoryStoreTests.cs",
+            "ValidUnsignedSnapshotPersistsWithoutSilentActivationAndDeduplicatesByHash",
+            "StaleActivationSequenceFailsClosedInsteadOfOverwritingNewerChoice",
+            "RollbackTargetsOnlyPreviouslyActiveSnapshotAndAppendsAuditHistory",
+            "MigrationCreatesCatalogHistoryTablesAndForeignKeys")
         require_text(root, "tests/CloudScribe.Infrastructure.Tests/WindowsCredentialVaultTests.cs",
             "WindowsCredentialManagerRoundTripsAndDeletesEphemeralSecret", "Array.Clear")
     except (OSError, ValueError) as exc:
@@ -91,7 +107,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog dry-run trust states, lazy fake-provider coverage, Windows OS-vault storage, and truthful disabled UI without pretending unavailable exact pricing bytes or Ed25519 trust are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history with explicit activation/rollback approval, lazy fake-provider coverage, Windows OS-vault storage, and truthful UI without pretending unavailable exact pricing bytes or Ed25519 trust are admitted.")
     return 0
 
 if __name__ == "__main__":

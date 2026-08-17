@@ -28,6 +28,24 @@ public sealed class Stage4FoundationArchitectureTests
         Assert.Contains("stay disabled with explicit reasons", window, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CatalogHistoryIsPersistentAuditedAndNeverSilentlyActivated()
+    {
+        string root = RepositoryRoot();
+        string store = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Pricing", "EfPricingCatalogHistoryStore.cs"));
+        string context = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Persistence", "CloudScribeDbContext.cs"));
+        string migration = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Persistence", "Migrations", "Stage4PricingCatalogHistory.cs"));
+        string window = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.App", "MainWindow.axaml"));
+
+        Assert.Contains("explicit user confirmation", store, StringComparison.Ordinal);
+        Assert.Contains("ExpectedCurrentActivationSequence", store, StringComparison.Ordinal);
+        Assert.Contains("Rollback can target only", store, StringComparison.Ordinal);
+        Assert.Contains("pricing_catalog_snapshots", context, StringComparison.Ordinal);
+        Assert.Contains("pricing_catalog_activations", migration, StringComparison.Ordinal);
+        Assert.Contains("CATALOG HISTORY", window, StringComparison.Ordinal);
+        Assert.Contains("history inspection never activates a catalog", window, StringComparison.Ordinal);
+    }
+
     private static string RepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

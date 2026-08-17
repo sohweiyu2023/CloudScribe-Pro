@@ -1,5 +1,6 @@
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Documents;
+using CloudScribe.Application.Pricing;
 using CloudScribe.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,7 +37,9 @@ public static class CompositionRoot
             viewModel.ConfigureStage3ImportWorkflow(
                 serviceProvider.GetRequiredService<ILocalDocumentImporter>(),
                 serviceProvider.GetRequiredService<DocumentPreprocessor>());
+            viewModel.ConfigureStage4PricingHistory(serviceProvider.GetRequiredService<IPricingCatalogHistoryStore>());
             viewModel.ScheduleDocumentWorkspaceStart();
+            viewModel.SchedulePricingHistoryStart();
             return viewModel;
         });
         builder.Services.AddSingleton(serviceProvider =>

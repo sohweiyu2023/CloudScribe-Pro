@@ -114,6 +114,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(CanOpenDocumentSurfaces))]
     [NotifyPropertyChangedFor(nameof(CanUseFocusReading))]
     [NotifyPropertyChangedFor(nameof(CommandContextTitle))]
+    [NotifyPropertyChangedFor(nameof(IsPricingSelected))]
     [NotifyPropertyChangedFor(nameof(ShowOutlinePanel))]
     [NotifyPropertyChangedFor(nameof(ShowInspectorPanel))]
     [NotifyPropertyChangedFor(nameof(ShowOutlineButton))]
@@ -239,6 +240,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(CanOpenDocumentSurfaces))]
     [NotifyPropertyChangedFor(nameof(CanUseFocusReading))]
     [NotifyPropertyChangedFor(nameof(CommandContextTitle))]
+    [NotifyPropertyChangedFor(nameof(IsPricingSelected))]
     [NotifyPropertyChangedFor(nameof(ShowOutlinePanel))]
     [NotifyPropertyChangedFor(nameof(ShowInspectorPanel))]
     [NotifyPropertyChangedFor(nameof(ShowOutlineButton))]
@@ -771,10 +773,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         "CATALOG TRUST",
         "Inspect provider pricing and its source, age and uncertainty before spending.",
         "Exact catalog contract not admitted",
-        "Strict parsing, cost states, account/capability contracts and catalog dry-run orchestration are active. Approval remains blocked until the exact v2.22 schema/seed bytes are admitted.",
+        "Strict parsing, cost states, account/capability contracts, dry-run trust and persistent catalog history are active. Approval remains blocked until the exact v2.22 schema/seed bytes are admitted.",
         "BLOCKED")
     {
-        Detail = "No hard-coded provider prices · Exact schema 1.1.5/seed bytes required · Signature metadata alone is never trusted",
+        Detail = "No admitted catalog snapshots · Exact schema 1.1.5/seed bytes required · Activation is never automatic",
     };
 
     private static RoutePageViewModel CreateSettingsPage() => new(

@@ -1,10 +1,10 @@
 {
   "project": "CloudScribe Pro",
-  "repository_version": "0.5.0-stage4-foundation-batch2",
+  "repository_version": "0.5.0-stage4-foundation-batch3",
   "generated_at_utc": "2026-08-16T16:05:00Z",
   "current_stage": 4,
   "stage_title": "Pricing Catalog, Cost Engine, Provider Accounts, and Capability Foundation",
-  "status": "Stage 3 is final-Windows-certified and promoted on exact certified bytes. Stage 4 foundation batches 1-2 provide strict pricing JSON parsing, truthful exact-money cost states, provider account/capability contracts, lazy provider factories, Windows Credential Manager storage, fail-closed catalog dry-run/trust orchestration, and truthful disabled provider/pricing UI. Exact v2.22 pricing schema/seed bytes remain unavailable and are not claimed admitted.",
+  "status": "Stage 3 is final-Windows-certified and promoted on exact certified bytes. Stage 4 foundation batches 1-3 provide strict pricing JSON/trust boundaries, truthful exact-money cost states, provider account/capability contracts, Windows Credential Manager storage, and persistent append-only catalog snapshot/activation history with explicit approval and rollback rules. Exact v2.22 pricing schema/seed bytes remain unavailable and are not claimed admitted.",
   "controlling_package_version": "2.22",
   "blueprint_version": "2.22",
   "pricing_schema_version": "1.1.5",
@@ -46,7 +46,7 @@
   "open_P1": 0,
   "open_P2": 1,
   "next_stage": 4,
-  "next_exact_action": "Admit Stage 4 foundation Batch 2 under exact SDK 10.0.400; then recover/import the exact v2.22 pricing schema/seed bytes and require validator agreement before catalog approval/history/signature trust can advance.",
+  "next_exact_action": "Recover and bind the authentic v2.22 pricing schema/seed bytes if available; otherwise continue only non-catalog-dependent Stage 4 work and require a fresh exact-SDK 10.0.400 Windows admission for every source-changing batch before Stage 4 promotion.",
   "bytes_changed_after_latest_reaudit": true,
   "latest_reaudit_completed_at_utc": "2026-08-16T03:30:00Z",
   "artifact_sha256": "external exact-archive checksum required beside every handoff ZIP; intentionally not self-referential inside source",
@@ -104,5 +104,12 @@
   "stage4_exact_catalog_bytes_available": false,
   "stage4_catalog_contract_admitted": false,
   "stage4_foundation_batch2": true,
-  "stage4_foundation_batch2_admitted": false
+  "stage4_foundation_batch2_admitted": true,
+  "stage4_foundation_batch2_admission_run": "31958110414",
+  "stage4_foundation_batch2_commit": "4fbe6dc843c123ea2e769a6e6d0b4524cfb72e62",
+  "stage4_foundation_batch2_tests": "200/200 compiled .NET tests passed; 59/59 verifier self-tests; 153/153 deterministic regressions",
+  "stage4_foundation_batch3": true,
+  "stage4_catalog_history_persistent": true,
+  "stage4_catalog_activation_silent": false,
+  "stage4_catalog_rollback_audited": true
 }

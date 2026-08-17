@@ -23,10 +23,15 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
 
     public DbSet<ReadingPositionEntity> ReadingPositions => Set<ReadingPositionEntity>();
 
+    public DbSet<PricingCatalogSnapshotEntity> PricingCatalogSnapshots => Set<PricingCatalogSnapshotEntity>();
+
+    public DbSet<PricingCatalogActivationEntity> PricingCatalogActivations => Set<PricingCatalogActivationEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureObservability(modelBuilder);
         ConfigureDocuments(modelBuilder);
+        ConfigurePricingCatalogHistory(modelBuilder);
     }
 
     private static void ConfigureObservability(ModelBuilder modelBuilder)
@@ -51,6 +56,35 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
             entity.Property(item => item.ProviderRequestId).HasMaxLength(160);
             entity.Property(item => item.EventCode).HasMaxLength(80).IsRequired();
             entity.HasIndex(item => new { item.OperationId, item.OccurredAtUnixMilliseconds });
+        });
+    }
+
+    private static void ConfigurePricingCatalogHistory(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PricingCatalogSnapshotEntity>(entity =>
+        {
+            entity.ToTable("pricing_catalog_snapshots");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Sha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(item => item.CatalogBytes).IsRequired();
+            entity.Property(item => item.SourceLabel).HasMaxLength(240).IsRequired();
+            entity.Property(item => item.SignatureKeyId).HasMaxLength(160);
+            entity.HasIndex(item => item.Sha256).IsUnique();
+            entity.HasIndex(item => item.CapturedAtUnixMilliseconds);
+        });
+
+        modelBuilder.Entity<PricingCatalogActivationEntity>(entity =>
+        {
+            entity.ToTable("pricing_catalog_activations");
+            entity.HasKey(item => item.Sequence);
+            entity.Property(item => item.Sequence).ValueGeneratedOnAdd();
+            entity.Property(item => item.Reason).HasMaxLength(240).IsRequired();
+            entity.HasIndex(item => item.SnapshotId);
+            entity.HasIndex(item => item.OccurredAtUnixMilliseconds);
+            entity.HasOne<PricingCatalogSnapshotEntity>()
+                .WithMany()
+                .HasForeignKey(item => item.SnapshotId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
