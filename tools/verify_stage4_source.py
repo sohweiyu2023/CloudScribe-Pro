@@ -7,6 +7,8 @@ from pathlib import Path
 
 PROMOTED_STAGE3 = "beb186bc57f30f3f308e398085bc3af3c94f4020"
 FINAL_STAGE3_RUN = "31900688488"
+BATCH5_COMMIT = "fdb274a001043f1a81af0e041efc65fed7b26195"
+BATCH5_RUN = "32047903725"
 
 def fail(message: str) -> int:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -48,8 +50,12 @@ def main() -> int:
         return fail("Stage 4 must preserve the authoritative successful Batch 3 admission")
     if state.get("stage4_foundation_batch4") is not True or state.get("stage4_foundation_batch4_admitted") is not True:
         return fail("Stage 4 must preserve the authoritative successful Batch 4 admission")
-    if state.get("stage4_foundation_batch5") is not True or state.get("stage4_foundation_batch5_admitted") is not False:
-        return fail("Current Stage 4 Batch 5 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_foundation_batch5") is not True or state.get("stage4_foundation_batch5_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 5 admission")
+    if state.get("stage4_foundation_batch5_commit") != BATCH5_COMMIT or str(state.get("stage4_foundation_batch5_admission_run")) != BATCH5_RUN:
+        return fail("Stage 4 is not bound to the authoritative Batch 5 Windows admission evidence")
+    if state.get("stage4_foundation_batch6") is not True or state.get("stage4_foundation_batch6_admitted") is not False:
+        return fail("Current Stage 4 Batch 6 must remain a source-changing candidate until Windows admission")
     if state.get("stage4_pricing_contract_overrides_separate") is not True:
         return fail("User pricing contract overrides must remain explicitly separate from upstream catalog truth")
     if state.get("stage4_provider_quota_observation_contract") is not True:
@@ -62,6 +68,12 @@ def main() -> int:
         return fail("Provider capability evidence history must be durably persisted")
     if state.get("stage4_provider_default_account_selected") is not False:
         return fail("Stage 4 must not silently select a default provider account")
+    if state.get("stage4_normalized_pricing_meter_engine") is not True or state.get("stage4_pricing_exact_integer_arithmetic") is not True:
+        return fail("Stage 4 Batch 6 must preserve the provider-neutral exact-integer pricing meter engine")
+    if state.get("stage4_pricing_unresolved_tax_credit_fx_guessed") is not False:
+        return fail("Stage 4 pricing must not guess unresolved tax, credit, or FX treatment")
+    if state.get("stage4_pricing_usage_scope_explicit") is not True or state.get("stage4_pricing_catalog_provenance_required") is not True:
+        return fail("Stage 4 pricing must preserve explicit usage scope and catalog provenance")
     if state.get("whole_application_final_claimed") is not False:
         return fail("Stage 4 source incorrectly claims whole-application final")
 
@@ -137,6 +149,28 @@ def main() -> int:
             "CapabilityEvidenceRequiresRegisteredAccountAndRemainsAppendOnly", "HistoricalCapabilityEvidencePreservesAccountMetadataAtCaptureTime")
         require_text(root, "src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs",
             "no default selection", "inspection never refreshes providers")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingMeterDefinition.cs",
+            "The final pricing tier must be open-ended", "one currency and exact integer scale")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingTier.cs",
+            "PricingTier", "PricePerBlock", "BlockSize")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingAllowance.cs",
+            "PricingAllowance", "IncludedQuantity", "CostUsageScope")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingModifier.cs",
+            "PricingModifier", "Numerator", "Denominator", "RegionId")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingEstimateRequest.cs",
+            "TaxResolved", "CreditsResolved", "ForeignExchangeResolved", "ProvenanceId", "UsageScope")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingCostEngine.cs",
+            "CostAssessment.Unknown", "BigInteger", "CeilingDivide", "Normalized pricing meter estimate",
+            "foreign exchange")
+        require_text(root, "tests/CloudScribe.Domain.Tests/PricingCostEngineTests.cs",
+            "DeterministicFakeMeterAppliesAllowanceAndTieredBlocks",
+            "UnresolvedTaxCreditOrFxNeverProducesPretendAmount",
+            "StaleOrConflictingCatalogIsNeverApprovalSafe",
+            "MismatchedMeterUnitFailsClosed")
+        require_text(root, "docs/STAGE4-FOUNDATION-BATCH6.txt",
+            "Exact scaled-integer tier and allowance evaluation",
+            "Tax, credits, and foreign exchange are not guessed",
+            "No provider-specific hard-coded price")
     except (OSError, ValueError) as exc:
         return fail(str(exc))
 
@@ -149,7 +183,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history with explicit activation/rollback approval, physically separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider account metadata, append-only capability evidence history, lazy fake-provider coverage, Windows OS-vault storage, and truthful UI without pretending unavailable exact pricing bytes or Ed25519 trust are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-5, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider coverage, Windows OS-vault storage, and a provider-neutral exact-integer pricing meter/cost engine that never guesses unresolved tax/credit/FX or pretends unavailable exact pricing bytes or Ed25519 trust are admitted.")
     return 0
 
 if __name__ == "__main__":

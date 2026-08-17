@@ -813,6 +813,28 @@ class Stage4SourceContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not silently select", result.stderr)
 
+    def test_rejects_wrong_batch5_admission_binding(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch5-binding-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch5_commit"] = "0" * 40
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative Batch 5 Windows admission evidence", result.stderr)
+
+    def test_rejects_unresolved_tax_credit_fx_guessing_claim(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-pricing-assumption-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_pricing_unresolved_tax_credit_fx_guessed"] = True
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not guess unresolved tax, credit, or FX", result.stderr)
+
 
 class Stage2EvidenceInventoryCliTests(unittest.TestCase):
     @staticmethod

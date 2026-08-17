@@ -1,0 +1,26 @@
+CloudScribe Pro — Stage 4 Foundation Batch 6
+
+Scope
+- Provider-neutral normalized pricing meter definition.
+- Exact scaled-integer tier and allowance evaluation; no floating point money.
+- App-local versus account-wide allowance scope remains explicit.
+- Optional region-scoped rational modifiers produce a conservative exact range when division is not integral.
+- Tax, credit, and FX treatment must be explicitly resolved before an amount can be considered known.
+- Catalog provenance is mandatory for every known estimate.
+- Stale/conflicting catalog evidence remains visible and cannot become approval-safe.
+- Final pricing tier must be open-ended; the engine never silently extrapolates beyond admitted tier coverage.
+- No provider-specific hard-coded price is introduced.
+
+Non-claims / intentionally blocked
+- The exact v2.22 pricing schema 1.1.5 and dated seed bytes are still not present in the current source/runtime context and therefore are not claimed admitted.
+- Standalone Ed25519 verification against an external trusted-key set is not claimed implemented/admitted by this batch.
+- Tax, credits, and foreign exchange are not guessed. Unresolved treatment returns Unknown.
+- Batch 6 does not choose a provider/account/model/voice/region or pricing assumption.
+
+Admission target
+- Exact .NET SDK 10.0.400.
+- All repository/source/verifier gates.
+- 153/153 deterministic material regressions.
+- Analyzer-clean Release build with zero warnings/errors.
+- Exact compiled test count bound by the Batch 6 admission workflow, zero failed/skipped.
+- Post-test source stability and deterministic source archive.

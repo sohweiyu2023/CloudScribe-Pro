@@ -105,23 +105,21 @@ public sealed class StartupAndDiagnosticsResilienceTests
                 new byte[1024 * 1024 + 1],
                 TestContext.Current.CancellationToken);
             WriteTestInformation(provider.CreateLogger("test"), "replacement record", null);
+            long? replacementLength = null;
             for (int attempt = 0; attempt < 100; attempt++)
             {
-                if (File.Exists(currentLog))
+                replacementLength = TryGetFileLength(currentLog);
+                if (replacementLength is > 0 and < 1024 * 1024)
                 {
-                    long length = new FileInfo(currentLog).Length;
-                    if (length > 0 && length < 1024 * 1024)
-                    {
-                        break;
-                    }
+                    break;
                 }
 
                 await Task.Delay(10, TestContext.Current.CancellationToken);
             }
 
             Assert.True(provider.IsAvailable);
-            Assert.True(File.Exists(currentLog));
-            Assert.InRange(new FileInfo(currentLog).Length, 1, 1024 * 1024 - 1);
+            Assert.NotNull(replacementLength);
+            Assert.InRange(replacementLength.Value, 1, 1024 * 1024 - 1);
         }
         finally
         {
@@ -284,6 +282,20 @@ public sealed class StartupAndDiagnosticsResilienceTests
             Directory.Delete(temporary, recursive: true);
         }
     }
+    private static long? TryGetFileLength(string path)
+    {
+        try
+        {
+            return new FileInfo(path).Length;
+        }
+        catch (FileNotFoundException)
+        {
+            // A one-file policy deliberately deletes the full current log before the background
+            // writer recreates it. Treat that bounded replacement window as "not ready yet".
+            return null;
+        }
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
