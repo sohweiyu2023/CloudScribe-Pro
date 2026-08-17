@@ -1,6 +1,6 @@
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path.cwd()
 
 
 def replace_once(relative_path: str, old: str, new: str) -> None:
