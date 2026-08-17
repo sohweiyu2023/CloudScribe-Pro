@@ -56,20 +56,7 @@ public sealed class DatabaseRecoveryTests
             Assert.Equal(activityId, preserved.Id);
             Assert.Equal("Preserve before migration", preserved.Summary);
 
-            using CloudScribeDbContext current = CreateContext(paths.DatabasePath);
-            string[] currentMigrations = (await current.Database
-                .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)
-                .ConfigureAwait(true))
-                .ToArray();
-            Assert.Equal(
-                [
-                    Stage2Baseline.MigrationId,
-                    Stage3Documents.MigrationId,
-                    Stage3DocumentWorkflow.MigrationId,
-                    Stage4PricingCatalogHistory.MigrationId,
-                    Stage4PricingContractOverrides.MigrationId,
-                ],
-                currentMigrations);
+            await AssertCurrentMigrationChainAsync(paths.DatabasePath).ConfigureAwait(true);
         }
         finally
         {
@@ -230,6 +217,25 @@ public sealed class DatabaseRecoveryTests
         string root = Path.Combine(Path.GetTempPath(), "cloudscribe-stage3-recovery-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static async Task AssertCurrentMigrationChainAsync(string databasePath)
+    {
+        using CloudScribeDbContext current = CreateContext(databasePath);
+        string[] currentMigrations = (await current.Database
+            .GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(false))
+            .ToArray();
+        Assert.Equal(
+            [
+                Stage2Baseline.MigrationId,
+                Stage3Documents.MigrationId,
+                Stage3DocumentWorkflow.MigrationId,
+                Stage4PricingCatalogHistory.MigrationId,
+                Stage4PricingContractOverrides.MigrationId,
+                Stage4ProviderAccountsAndCapabilities.MigrationId,
+            ],
+            currentMigrations);
     }
 
     private static void DeleteTemporaryRoot(string root)

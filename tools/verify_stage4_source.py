@@ -46,12 +46,22 @@ def main() -> int:
         return fail("Stage 4 must record the authoritative successful Batch 2 admission")
     if state.get("stage4_foundation_batch3") is not True or state.get("stage4_foundation_batch3_admitted") is not True:
         return fail("Stage 4 must preserve the authoritative successful Batch 3 admission")
-    if state.get("stage4_foundation_batch4") is not True:
-        return fail("Stage 4 Batch 4 override/quota foundation is not recorded")
+    if state.get("stage4_foundation_batch4") is not True or state.get("stage4_foundation_batch4_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 4 admission")
+    if state.get("stage4_foundation_batch5") is not True or state.get("stage4_foundation_batch5_admitted") is not False:
+        return fail("Current Stage 4 Batch 5 must remain a source-changing candidate until Windows admission")
     if state.get("stage4_pricing_contract_overrides_separate") is not True:
         return fail("User pricing contract overrides must remain explicitly separate from upstream catalog truth")
     if state.get("stage4_provider_quota_observation_contract") is not True:
         return fail("Provider quota observations must remain an explicit provenance-bearing contract")
+    if state.get("stage4_provider_account_registry_persistent") is not True:
+        return fail("Provider account metadata must be durably persisted")
+    if state.get("stage4_provider_credentials_persisted_in_database") is not False:
+        return fail("Provider credentials must never be persisted in the application database")
+    if state.get("stage4_provider_capability_history_persistent") is not True:
+        return fail("Provider capability evidence history must be durably persisted")
+    if state.get("stage4_provider_default_account_selected") is not False:
+        return fail("Stage 4 must not silently select a default provider account")
     if state.get("whole_application_final_claimed") is not False:
         return fail("Stage 4 source incorrectly claims whole-application final")
 
@@ -111,6 +121,22 @@ def main() -> int:
             "GetQuotaObservationsAsync")
         require_text(root, "src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs",
             "Account quota unknown", "PricingContractOverrideSummary", "stored inactive override")
+        require_text(root, "src/CloudScribe.Application/Providers/IProviderAccountStore.cs",
+            "CreateAsync", "UpdateAsync", "expectedRevision", "ListAsync")
+        require_text(root, "src/CloudScribe.Infrastructure/Providers/EfProviderAccountStore.cs",
+            "CredentialTargetName", "Revision", "DbUpdateConcurrencyException")
+        require_text(root, "src/CloudScribe.Application/Providers/IProviderCapabilitySnapshotStore.cs",
+            "SaveAsync", "GetLatestAsync", "ListRecentAsync")
+        require_text(root, "src/CloudScribe.Infrastructure/Providers/EfProviderCapabilitySnapshotStore.cs",
+            "Capability evidence cannot be persisted for an unregistered provider account", "ProviderCapabilityEntries")
+        require_text(root, "src/CloudScribe.Infrastructure/Persistence/Migrations/Stage4ProviderAccountsAndCapabilities.cs",
+            "provider_accounts", "provider_capability_snapshots", "provider_capability_entries", "ReferentialAction.Restrict")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/ProviderAccountStoreTests.cs",
+            "RegistryHasNoDefaultSelectionOrSecretBearingApi", "CredentialTargetName")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/ProviderCapabilitySnapshotStoreTests.cs",
+            "CapabilityEvidenceRequiresRegisteredAccountAndRemainsAppendOnly", "HistoricalCapabilityEvidencePreservesAccountMetadataAtCaptureTime")
+        require_text(root, "src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs",
+            "no default selection", "inspection never refreshes providers")
     except (OSError, ValueError) as exc:
         return fail(str(exc))
 
@@ -123,7 +149,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history with explicit activation/rollback approval, physically separate inert user pricing overrides, provenance-bearing quota observations, lazy fake-provider coverage, Windows OS-vault storage, and truthful UI without pretending unavailable exact pricing bytes or Ed25519 trust are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history with explicit activation/rollback approval, physically separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider account metadata, append-only capability evidence history, lazy fake-provider coverage, Windows OS-vault storage, and truthful UI without pretending unavailable exact pricing bytes or Ed25519 trust are admitted.")
     return 0
 
 if __name__ == "__main__":

@@ -791,6 +791,28 @@ class Stage4SourceContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("GetQuotaObservationsAsync", result.stderr)
 
+    def test_rejects_database_secret_persistence_claim(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-secret-persistence-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_provider_credentials_persisted_in_database"] = True
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must never be persisted", result.stderr)
+
+    def test_rejects_default_provider_account_selection_claim(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-default-account-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_provider_default_account_selected"] = True
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not silently select", result.stderr)
+
 
 class Stage2EvidenceInventoryCliTests(unittest.TestCase):
     @staticmethod

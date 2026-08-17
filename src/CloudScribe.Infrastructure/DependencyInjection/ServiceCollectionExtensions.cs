@@ -3,6 +3,7 @@ using CloudScribe.Application.Diagnostics;
 using CloudScribe.Application.Documents;
 using CloudScribe.Application.Observability;
 using CloudScribe.Application.Pricing;
+using CloudScribe.Application.Providers;
 using CloudScribe.Application.Security;
 using CloudScribe.Application.Startup;
 using CloudScribe.Infrastructure.Activation;
@@ -71,6 +72,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IApplicationInitializer, DatabaseInitializer>();
 
         services.AddSingleton<IProviderFactoryRegistry, ProviderFactoryRegistry>();
+        services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
+        services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
         services.AddSingleton<StrictJsonObjectReader>();
         services.AddSingleton<IPricingCatalogContractValidator, UnavailablePricingCatalogContractValidator>();
         services.AddSingleton<IPricingCatalogSignatureVerifier, UnavailablePricingCatalogSignatureVerifier>();

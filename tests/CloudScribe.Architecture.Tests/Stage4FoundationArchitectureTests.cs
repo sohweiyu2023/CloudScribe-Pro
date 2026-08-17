@@ -77,6 +77,43 @@ public sealed class Stage4FoundationArchitectureTests
         Assert.Contains("Account quota unknown", pricingViewModel, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void ProviderAccountPersistenceStoresReferencesNotSecretsAndHasNoDefaultSelectionApi()
+    {
+        string root = RepositoryRoot();
+        string entity = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Persistence", "Entities", "ProviderAccountEntity.cs"));
+        string contract = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Application", "Providers", "IProviderAccountStore.cs"));
+        string window = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.App", "MainWindow.axaml"));
+
+        Assert.Contains("CredentialTargetName", entity, StringComparison.Ordinal);
+        Assert.DoesNotContain("Secret", entity, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ApiKey", entity, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CreateAsync(", contract, StringComparison.Ordinal);
+        Assert.Contains("UpdateAsync(", contract, StringComparison.Ordinal);
+        Assert.Contains("FindAsync(", contract, StringComparison.Ordinal);
+        Assert.Contains("ListAsync(", contract, StringComparison.Ordinal);
+        Assert.Equal(4, contract.Split('\n').Count(line => line.TrimStart().StartsWith("Task", StringComparison.Ordinal)));
+        Assert.DoesNotContain("DefaultAccount", contract, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SelectedAccount", contract, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("never selects a default account", window, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CapabilityEvidenceIsAppendOnlyLocalInspectionAndNeverImplicitlyRefreshesProvider()
+    {
+        string root = RepositoryRoot();
+        string contract = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Application", "Providers", "IProviderCapabilitySnapshotStore.cs"));
+        string store = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Providers", "EfProviderCapabilitySnapshotStore.cs"));
+        string pricingViewModel = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Pricing.cs"));
+
+        Assert.Contains("SaveAsync", contract, StringComparison.Ordinal);
+        Assert.Contains("GetLatestAsync", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("Delete", contract, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("IProviderAdapter", store, StringComparison.Ordinal);
+        Assert.Contains("inspection never refreshes providers", pricingViewModel, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string RepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

@@ -1,6 +1,7 @@
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Documents;
 using CloudScribe.Application.Pricing;
+using CloudScribe.Application.Providers;
 using CloudScribe.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,7 +40,9 @@ public static class CompositionRoot
                 serviceProvider.GetRequiredService<DocumentPreprocessor>());
             viewModel.ConfigureStage4PricingHistory(
                 serviceProvider.GetRequiredService<IPricingCatalogHistoryStore>(),
-                serviceProvider.GetRequiredService<IPricingContractOverrideStore>());
+                serviceProvider.GetRequiredService<IPricingContractOverrideStore>(),
+                serviceProvider.GetRequiredService<IProviderAccountStore>(),
+                serviceProvider.GetRequiredService<IProviderCapabilitySnapshotStore>());
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
             return viewModel;

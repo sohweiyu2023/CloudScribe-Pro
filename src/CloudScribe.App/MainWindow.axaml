@@ -629,6 +629,12 @@
                     <TextBlock Text="{Binding PricingCatalogActiveSummary}" Foreground="{DynamicResource Brush.Ink}" TextWrapping="Wrap" AutomationProperties.Name="Active pricing catalog status" />
                     <ListBox ItemsSource="{Binding PricingCatalogHistoryItems}" MaxHeight="138" IsHitTestVisible="False" IsTabStop="False" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Recent admitted pricing catalog snapshots" />
                     <TextBlock Text="Catalog activation and rollback always require an explicit reviewed action; history inspection never activates a catalog." Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
+                    <TextBlock Text="PROVIDER ACCOUNT REGISTRY" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" Margin="0,7,0,0" />
+                    <TextBlock Text="{Binding ProviderAccountSummary}" Foreground="{DynamicResource Brush.Ink}" TextWrapping="Wrap" AutomationProperties.Name="Provider account registry status" />
+                    <ListBox ItemsSource="{Binding ProviderAccountItems}" MaxHeight="116" IsHitTestVisible="False" IsTabStop="False" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Persisted provider accounts" />
+                    <TextBlock Text="{Binding ProviderCapabilitySummary}" Foreground="{DynamicResource Brush.Ink}" TextWrapping="Wrap" AutomationProperties.Name="Provider capability evidence status" />
+                    <ListBox ItemsSource="{Binding ProviderCapabilityItems}" MaxHeight="116" IsHitTestVisible="False" IsTabStop="False" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Persisted provider capability evidence" />
+                    <TextBlock Text="Inspection reads local metadata only; it never selects a default account or refreshes a provider implicitly." Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
                   </StackPanel>
                   <Button Classes="primary" Content="{Binding CurrentPage.PrimaryActionLabel}" Command="{Binding CurrentPage.PrimaryActionCommand}" IsVisible="{Binding CurrentPage.HasPrimaryAction}" HorizontalAlignment="Left" />
                 </StackPanel>
@@ -681,7 +687,7 @@
                   IsVisible="{Binding FeatureAvailability.ShowProviderControls}">
                 <StackPanel Spacing="5">
                   <TextBlock Text="Provider account" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
-                  <ComboBox IsEnabled="False" PlaceholderText="No admitted account" ToolTip.Tip="No provider account is usable until an admitted catalog, credential reference and capability snapshot agree." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable because no admitted Stage 4 account and capability snapshot exist" />
+                  <ComboBox IsEnabled="False" PlaceholderText="No admitted account" ToolTip.Tip="Persisted account metadata is inspectable, but no provider account is usable until admitted pricing, credential-vault and fresh capability evidence agree." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account selection unavailable because Stage 4 never selects a default account and trust requirements are not yet complete" />
                 </StackPanel>
                 <StackPanel Spacing="5">
                   <TextBlock Text="Voice" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
@@ -692,7 +698,7 @@
               <Border Background="{DynamicResource Brush.WarningSoft}" BorderBrush="{DynamicResource Brush.Warning}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
                 <StackPanel Spacing="6">
                   <TextBlock Text="PROVIDER FOUNDATION" Foreground="{DynamicResource Brush.Warning}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
-                  <TextBlock Text="Stage 4 exposes provider state without pretending a provider is usable. Account and voice choices remain disabled until an admitted pricing source, credential reference and capability snapshot agree." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Meta}" />
+                  <TextBlock Text="Stage 4 exposes persisted provider account and capability evidence without pretending a provider is usable. Account and voice choices remain disabled until admitted pricing, credential-vault and fresh capability evidence agree." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Meta}" />
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -854,7 +860,7 @@
                 x:Name="InspectorDrawerProviderControlPreview"
                 Spacing="14"
                 IsVisible="{Binding FeatureAvailability.ShowProviderControls}">
-              <ComboBox IsEnabled="False" PlaceholderText="No admitted account" ToolTip.Tip="No provider account is usable until admitted pricing and capability evidence agree." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable because Stage 4 trust requirements are not satisfied" />
+              <ComboBox IsEnabled="False" PlaceholderText="No admitted account" ToolTip.Tip="Persisted account metadata is inspectable, but selection stays disabled until admitted pricing, credential-vault and fresh capability evidence agree." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable because Stage 4 trust requirements are not satisfied" />
               <ComboBox IsEnabled="False" PlaceholderText="No voice" ToolTip.Tip="Live voice discovery arrives with provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice unavailable until provider integration" />
               <Button Classes="secondary" IsEnabled="False" Content="Voice sample unavailable" ToolTip.Tip="Voice preview arrives with live provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice sample unavailable until provider integration" />
             </StackPanel>

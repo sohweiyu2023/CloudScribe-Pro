@@ -29,12 +29,19 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
 
     public DbSet<PricingContractOverrideEntity> PricingContractOverrides => Set<PricingContractOverrideEntity>();
 
+    public DbSet<ProviderAccountEntity> ProviderAccounts => Set<ProviderAccountEntity>();
+
+    public DbSet<ProviderCapabilitySnapshotEntity> ProviderCapabilitySnapshots => Set<ProviderCapabilitySnapshotEntity>();
+
+    public DbSet<ProviderCapabilityEntryEntity> ProviderCapabilityEntries => Set<ProviderCapabilityEntryEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureObservability(modelBuilder);
         ConfigureDocuments(modelBuilder);
         ConfigurePricingCatalogHistory(modelBuilder);
         ConfigurePricingContractOverrides(modelBuilder);
+        ConfigureProviderAccountsAndCapabilities(modelBuilder);
     }
 
     private static void ConfigureObservability(ModelBuilder modelBuilder)
@@ -103,6 +110,53 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
             entity.Property(item => item.ProvenanceId).HasMaxLength(160).IsRequired();
             entity.HasIndex(item => item.Sha256).IsUnique();
             entity.HasIndex(item => item.CapturedAtUnixMilliseconds);
+        });
+    }
+
+    private static void ConfigureProviderAccountsAndCapabilities(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProviderAccountEntity>(entity =>
+        {
+            entity.ToTable("provider_accounts");
+            entity.HasKey(item => new { item.ProviderStableId, item.AccountId });
+            entity.Property(item => item.ProviderStableId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.AccountId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.DisplayName).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.CredentialTargetName).HasMaxLength(192);
+            entity.Property(item => item.EndpointId).HasMaxLength(64);
+            entity.Property(item => item.RegionId).HasMaxLength(64);
+            entity.Property(item => item.Revision).IsConcurrencyToken();
+            entity.HasIndex(item => item.UpdatedAtUnixMilliseconds);
+        });
+
+        modelBuilder.Entity<ProviderCapabilitySnapshotEntity>(entity =>
+        {
+            entity.ToTable("provider_capability_snapshots");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ProviderStableId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.AccountId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.AccountDisplayName).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.CredentialTargetName).HasMaxLength(192);
+            entity.Property(item => item.EndpointId).HasMaxLength(64);
+            entity.Property(item => item.RegionId).HasMaxLength(64);
+            entity.Property(item => item.ProvenanceId).HasMaxLength(160).IsRequired();
+            entity.HasIndex(item => new { item.ProviderStableId, item.AccountId, item.CapturedAtUnixMilliseconds });
+            entity.HasOne<ProviderAccountEntity>()
+                .WithMany()
+                .HasForeignKey(item => new { item.ProviderStableId, item.AccountId })
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProviderCapabilityEntryEntity>(entity =>
+        {
+            entity.ToTable("provider_capability_entries");
+            entity.HasKey(item => new { item.SnapshotId, item.CapabilityId });
+            entity.Property(item => item.CapabilityId).HasMaxLength(96).IsRequired();
+            entity.Property(item => item.DisabledReason).HasMaxLength(256);
+            entity.HasOne<ProviderCapabilitySnapshotEntity>()
+                .WithMany()
+                .HasForeignKey(item => item.SnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 
