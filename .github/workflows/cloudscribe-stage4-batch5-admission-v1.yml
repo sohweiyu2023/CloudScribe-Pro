@@ -1,0 +1,99 @@
+name: CloudScribe Stage 4 foundation batch 5 admission v1
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch5-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch5-admission-v1.yml]
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  NUGET_XMLDOC_MODE: skip
+  BASE_HEAD: c6ea343f38a337a962fd816f5d824d6620b8a260
+  TARGET_BRANCH: cloudscribe-0.5.0-stage4
+  PATCH_SHA256: 27d1d6f4fd6c79d153dfec442509c09dbc9a96866c747556d277909f06aea1b3
+  EXPECTED_CHANGED_FILES: '25'
+  EXPECTED_DOTNET_TESTS: '231'
+
+jobs:
+  admit:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-stage4-batch5-dev, path: carrier, fetch-depth: 1}
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-0.5.0-stage4, path: source, fetch-depth: 0}
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.13'}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: source/**/packages.lock.json
+
+      - name: Reconstruct exact Batch 5 candidate
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          function Need([bool]$ok,[string]$message){if(-not $ok){throw $message}}
+          function Expand-GzipBase64([string]$text,[string]$path){$bytes=[Convert]::FromBase64String($text);$input=[IO.MemoryStream]::new($bytes,$false);$gzip=[IO.Compression.GZipStream]::new($input,[IO.Compression.CompressionMode]::Decompress);$output=[IO.File]::Create($path);try{$gzip.CopyTo($output)}finally{$output.Dispose();$gzip.Dispose();$input.Dispose();[Array]::Clear($bytes)}}
+          Need ((git rev-parse HEAD).Trim() -eq $env:BASE_HEAD) 'Stage 4 target moved before Batch 5 admission.'
+          Need ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
+          $root=Join-Path $env:GITHUB_WORKSPACE 'carrier\.cloudscribe-ci\stage4-batch5'
+          $names=@('batch5-01.b64','batch5-02.b64','batch5-03.b64','batch5-04.b64','batch5-05.b64','batch5-06a.b64','batch5-06b1.b64','batch5-06b2.b64','batch5-06b3.b64','batch5-07.b64','batch5-08.b64','batch5-09.b64','batch5-10.b64','batch5-11.b64','batch5-12.b64','batch5-13.b64','batch5-14.b64','batch5-15.b64','batch5-16.b64')
+          $sizes=@(1800,1800,1800,1800,1800,900,300,300,300,1800,1800,1800,1800,1800,1800,1800,1800,1800,1756)
+          $parts=@();for($i=0;$i -lt $names.Count;$i++){$f=Join-Path $root $names[$i];Need (Test-Path $f) "Missing payload piece: $($names[$i])";Need ((Get-Item $f).Length -eq $sizes[$i]) "Payload size mismatch: $($names[$i])";$parts+=(Get-Content $f -Raw).Trim()}
+          $text=$parts -join '';Need ($text.Length -eq 28756) "Expected Base64 length 28756; found $($text.Length)."
+          $patch=Join-Path $env:RUNNER_TEMP 'batch5.patch';Expand-GzipBase64 $text $patch;Need ((Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:PATCH_SHA256) 'Batch 5 patch SHA mismatch.'
+          git apply --check -- $patch;Need ($LASTEXITCODE -eq 0) 'Batch 5 patch does not apply.';git apply --whitespace=nowarn -- $patch;Need ($LASTEXITCODE -eq 0) 'Batch 5 patch failed.'
+          python tools/update_sha256_manifest.py --check;Need ($LASTEXITCODE -eq 0) 'Manifest mismatch after reconstruction.'
+          $changed=@((git diff --name-only --)+(git ls-files --others --exclude-standard)|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique);Need ($changed.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected 25 changed paths; found $($changed.Count): $($changed -join ', ')"
+          $forbidden=@($changed|Where-Object{$_ -match '(^|/)(bin|obj|TestResults)(/|$)' -or $_ -match 'packages\.lock\.json$'});Need ($forbidden.Count -eq 0) "Forbidden paths: $($forbidden -join ', ')"
+          git add -A;Need (@(git diff --cached --name-only|Where-Object{$_ -and $_.Trim()}).Count -eq 25) 'Staged path count changed.';git diff --cached --check;Need ($LASTEXITCODE -eq 0) 'Whitespace check failed.'
+          Write-Host 'CLOUDSCRIBE_STAGE4_BATCH5_V1_RECONSTRUCTED files=25'
+
+      - name: Portable governance and mutation gates
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';foreach($command in @('python tools/update_sha256_manifest.py --check','python tools/verify_repository.py','python tools/verify_project_dependencies.py','python tools/verify_stage1_source.py','python tools/verify_stage2_source.py','python tools/verify_stage3_source.py','python tools/verify_stage4_source.py','python -B tools/run_verifier_self_tests.py','python -B tools/run_python_regression_shards.py --all')){Invoke-Expression $command;if($LASTEXITCODE -ne 0){throw "Gate failed: $command"}}
+      - name: Locked restore and format
+        working-directory: source
+        shell: pwsh
+        run: |
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config;if($LASTEXITCODE -ne 0){throw 'Locked restore failed.'};dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity minimal;if($LASTEXITCODE -ne 0){throw 'Format gate failed.'}
+      - name: Release compile and analyzers
+        working-directory: source
+        shell: pwsh
+        run: |
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false;if($LASTEXITCODE -ne 0){throw 'Release compiler/analyzer gate failed.'}
+      - name: Exact 231 compiled tests
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';$root=Join-Path $env:RUNNER_TEMP 'stage4-batch5-tests';New-Item -ItemType Directory -Force $root|Out-Null;$projects=@('tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj','tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj','tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj','tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj');for($i=0;$i -lt 4;$i++){$dir=Join-Path $root $i;New-Item -ItemType Directory -Force $dir|Out-Null;dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=batch5.trx';if($LASTEXITCODE -ne 0){throw "Tests failed: $($projects[$i])"}};$trx=@(Get-ChildItem $root -Filter '*.trx' -File -Recurse);if($trx.Count -ne 4){throw "Expected 4 TRX files; found $($trx.Count)."};$total=0;$passed=0;$failed=0;$skipped=0;foreach($f in $trx){[xml]$x=Get-Content $f.FullName -Raw;$c=$x.TestRun.ResultSummary.Counters;$total+=[int]$c.total;$passed+=[int]$c.passed;$failed+=[int]$c.failed;$skipped+=[int]$c.notExecuted};Write-Host "CLOUDSCRIBE_STAGE4_BATCH5_DOTNET_TESTS total=$total passed=$passed failed=$failed skipped=$skipped";if($total -ne 231 -or $passed -ne 231 -or $failed -ne 0 -or $skipped -ne 0){throw 'Exact compiled-test gate failed.'}
+      - name: Post-test stability and publish exact tested Batch 5
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';python tools/update_sha256_manifest.py --check;if($LASTEXITCODE -ne 0){throw 'Manifest drifted.'};python tools/verify_stage4_source.py;if($LASTEXITCODE -ne 0){throw 'Stage 4 verifier failed after tests.'};git diff --cached --check;if($LASTEXITCODE -ne 0){throw 'Staged source drifted.'};dotnet build-server shutdown|Out-Null;git clean -fdx;if($LASTEXITCODE -ne 0){throw 'Generated-state cleanup failed.'};python tools/update_sha256_manifest.py --check;if($LASTEXITCODE -ne 0){throw 'Tracked source changed during cleanup.'};$staged=@(git diff --cached --name-only|Where-Object{$_ -and $_.Trim()});if($staged.Count -ne 25){throw "Expected 25 staged paths; found $($staged.Count)."};$remote=(git ls-remote --heads origin "refs/heads/$env:TARGET_BRANCH"|Select-Object -First 1);$remoteHead=($remote -split '\s+')[0].Trim();if($remoteHead -ne $env:BASE_HEAD){throw "Stage 4 target moved: $remoteHead"};git config user.name cloudscribe-ci;git config user.email actions@github.com;git commit -m 'feat: Stage 4 persisted provider accounts and capability evidence batch 5';if($LASTEXITCODE -ne 0){throw 'Batch 5 commit failed.'};$tested=(git rev-parse HEAD).Trim();git push origin "${tested}:refs/heads/$env:TARGET_BRANCH";if($LASTEXITCODE -ne 0){throw 'Unable to publish exact tested Batch 5.'};Write-Host "CLOUDSCRIBE_STAGE4_BATCH5_TESTED_HEAD=$tested"
+      - name: Deterministic admitted source archive
+        working-directory: source
+        shell: pwsh
+        run: |
+          $package=Join-Path $env:RUNNER_TEMP 'stage4-batch5-package';New-Item -ItemType Directory -Force $package|Out-Null;python tools/create_source_archive.py --output-directory $package;if($LASTEXITCODE -ne 0){throw 'Source archive creation failed.'}
+      - name: Upload admission evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage4-foundation-batch5-admission-v1
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/stage4-batch5-tests/**
+            ${{ runner.temp }}/stage4-batch5-package/**
+            ${{ runner.temp }}/batch5.patch
