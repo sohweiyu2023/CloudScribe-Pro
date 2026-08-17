@@ -1,0 +1,104 @@
+name: CloudScribe Stage 4 foundation batch 4 admission v3
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch4-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch4-admission-v3.yml]
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  NUGET_XMLDOC_MODE: skip
+  BASE_HEAD: a7895ad3b6053d47a311364aefd6ab6ee7b4cd12
+  TARGET_BRANCH: cloudscribe-0.5.0-stage4
+  PATCH_SHA256: 5b23db90e4e1b4362e433cc290cace5c467e2b7956adf6c69b8b078aa0bc6adc
+  CS9135_SHA256: 9850d9a3c4f9b0022e017bb44f9928df542b75a84c4469231d7ecbf550379944
+  CA1822_SHA256: f02e64c8db5363c38ba9082ea29727f9b15948703c8b85904972ae4c86d44e0a
+  EXPECTED_CHANGED_FILES: '22'
+  EXPECTED_DOTNET_TESTS: '222'
+
+jobs:
+  admit:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-stage4-batch4-dev, path: carrier, fetch-depth: 1}
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-0.5.0-stage4, path: source, fetch-depth: 0}
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.13'}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: source/**/packages.lock.json
+
+      - name: Reconstruct exact repaired Batch 4 candidate
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          function Need([bool]$ok,[string]$message){if(-not $ok){throw $message}}
+          function Expand-GzipBase64([string]$text,[string]$path){$bytes=[Convert]::FromBase64String($text);$input=[IO.MemoryStream]::new($bytes,$false);$gzip=[IO.Compression.GZipStream]::new($input,[IO.Compression.CompressionMode]::Decompress);$output=[IO.File]::Create($path);try{$gzip.CopyTo($output)}finally{$output.Dispose();$gzip.Dispose();$input.Dispose();[Array]::Clear($bytes)}}
+          Need ((git rev-parse HEAD).Trim() -eq $env:BASE_HEAD) 'Stage 4 target moved before admission.'
+          Need ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
+          $root=Join-Path $env:GITHUB_WORKSPACE 'carrier\.cloudscribe-ci\stage4-batch4'
+          $chunks=@(Get-ChildItem $root -File|Where-Object{$_.Name -match '^batch4-\d{2}\.b64$'}|Sort-Object Name);Need ($chunks.Count -eq 15) "Expected 15 primary chunks; found $($chunks.Count)."
+          $sizes=@(1800,1800,1800,1800,1800,1800,1800,1800,1800,1800,1800,1800,1800,1800,92);for($i=0;$i -lt 15;$i++){Need ($chunks[$i].Length -eq $sizes[$i]) "Primary chunk size mismatch: $($chunks[$i].Name)"}
+          $t1=($chunks|ForEach-Object{(Get-Content $_.FullName -Raw).Trim()}) -join '';Need ($t1.Length -eq 25292) 'Primary Base64 length mismatch.'
+          $p1=Join-Path $env:RUNNER_TEMP 'batch4-primary.patch';Expand-GzipBase64 $t1 $p1;Need ((Get-FileHash $p1 -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:PATCH_SHA256) 'Primary patch SHA mismatch.'
+          $c2=Join-Path $root 'batch4-cs9135-repair.b64';Need ((Get-Item $c2).Length -eq 1000) 'CS9135 carrier length mismatch.';$p2=Join-Path $env:RUNNER_TEMP 'batch4-cs9135-repair.patch';Expand-GzipBase64 ((Get-Content $c2 -Raw).Trim()) $p2;Need ((Get-FileHash $p2 -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:CS9135_SHA256) 'CS9135 patch SHA mismatch.'
+          $c3=@(Get-ChildItem $root -File|Where-Object{$_.Name -match '^batch4-ca1822-\d{2}\.b64$'}|Sort-Object Name);Need ($c3.Count -eq 2) 'Expected two CA1822 chunks.';Need ($c3[0].Length -eq 1200 -and $c3[1].Length -eq 844) 'CA1822 carrier size mismatch.';$t3=($c3|ForEach-Object{(Get-Content $_.FullName -Raw).Trim()}) -join '';Need ($t3.Length -eq 2044) 'CA1822 Base64 length mismatch.';$p3=Join-Path $env:RUNNER_TEMP 'batch4-ca1822-repair.patch';Expand-GzipBase64 $t3 $p3;Need ((Get-FileHash $p3 -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:CA1822_SHA256) 'CA1822 patch SHA mismatch.'
+          foreach($patch in @($p1,$p2,$p3)){git apply --check -- $patch;Need ($LASTEXITCODE -eq 0) "Patch does not apply: $patch";git apply --whitespace=nowarn -- $patch;Need ($LASTEXITCODE -eq 0) "Patch failed: $patch"}
+          python tools/update_sha256_manifest.py --check;Need ($LASTEXITCODE -eq 0) 'Manifest mismatch after reconstruction.'
+          $changed=@((git diff --name-only --)+(git ls-files --others --exclude-standard)|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique);Need ($changed.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected 22 changed paths; found $($changed.Count): $($changed -join ', ')"
+          $forbidden=@($changed|Where-Object{$_ -match '(^|/)(bin|obj|TestResults)(/|$)' -or $_ -match 'packages\.lock\.json$'});Need ($forbidden.Count -eq 0) "Forbidden paths: $($forbidden -join ', ')"
+          git add -A;Need (@(git diff --cached --name-only|Where-Object{$_ -and $_.Trim()}).Count -eq 22) 'Staged path count changed.';git diff --cached --check;Need ($LASTEXITCODE -eq 0) 'Whitespace check failed.'
+          Write-Host 'CLOUDSCRIBE_STAGE4_BATCH4_V3_RECONSTRUCTED files=22'
+
+      - name: Portable governance and mutation gates
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';foreach($command in @('python tools/update_sha256_manifest.py --check','python tools/verify_repository.py','python tools/verify_project_dependencies.py','python tools/verify_stage1_source.py','python tools/verify_stage2_source.py','python tools/verify_stage3_source.py','python tools/verify_stage4_source.py','python -B tools/run_verifier_self_tests.py','python -B tools/run_python_regression_shards.py --all')){Invoke-Expression $command;if($LASTEXITCODE -ne 0){throw "Gate failed: $command"}}
+      - name: Locked restore and format
+        working-directory: source
+        shell: pwsh
+        run: |
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config;if($LASTEXITCODE -ne 0){throw 'Locked restore failed.'};dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity minimal;if($LASTEXITCODE -ne 0){throw 'Format gate failed.'}
+      - name: Release compile and analyzers
+        working-directory: source
+        shell: pwsh
+        run: |
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false;if($LASTEXITCODE -ne 0){throw 'Release compiler/analyzer gate failed.'}
+      - name: Exact 222 compiled tests
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';$root=Join-Path $env:RUNNER_TEMP 'stage4-batch4-tests';New-Item -ItemType Directory -Force $root|Out-Null;$projects=@('tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj','tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj','tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj','tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj');for($i=0;$i -lt 4;$i++){$dir=Join-Path $root $i;New-Item -ItemType Directory -Force $dir|Out-Null;dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=batch4.trx';if($LASTEXITCODE -ne 0){throw "Tests failed: $($projects[$i])"}};$trx=@(Get-ChildItem $root -Filter '*.trx' -File -Recurse);if($trx.Count -ne 4){throw "Expected 4 TRX files; found $($trx.Count)."};$total=0;$passed=0;$failed=0;$skipped=0;foreach($f in $trx){[xml]$x=Get-Content $f.FullName -Raw;$c=$x.TestRun.ResultSummary.Counters;$total+=[int]$c.total;$passed+=[int]$c.passed;$failed+=[int]$c.failed;$skipped+=[int]$c.notExecuted};Write-Host "CLOUDSCRIBE_STAGE4_BATCH4_DOTNET_TESTS total=$total passed=$passed failed=$failed skipped=$skipped";if($total -ne 222 -or $passed -ne 222 -or $failed -ne 0 -or $skipped -ne 0){throw 'Exact compiled-test gate failed.'}
+      - name: Post-test stability and publish exact tested Batch 4
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';python tools/update_sha256_manifest.py --check;if($LASTEXITCODE -ne 0){throw 'Manifest drifted.'};python tools/verify_stage4_source.py;if($LASTEXITCODE -ne 0){throw 'Stage 4 verifier failed after tests.'};git diff --cached --check;if($LASTEXITCODE -ne 0){throw 'Staged source drifted.'};dotnet build-server shutdown|Out-Null;git clean -fdx;if($LASTEXITCODE -ne 0){throw 'Generated-state cleanup failed.'};python tools/update_sha256_manifest.py --check;if($LASTEXITCODE -ne 0){throw 'Tracked source changed during cleanup.'};$staged=@(git diff --cached --name-only|Where-Object{$_ -and $_.Trim()});if($staged.Count -ne 22){throw "Expected 22 staged paths; found $($staged.Count)."};$remote=(git ls-remote --heads origin "refs/heads/$env:TARGET_BRANCH"|Select-Object -First 1);$remoteHead=($remote -split '\s+')[0].Trim();if($remoteHead -ne $env:BASE_HEAD){throw "Stage 4 target moved: $remoteHead"};git config user.name cloudscribe-ci;git config user.email actions@github.com;git commit -m 'feat: Stage 4 separate pricing overrides and quota observations batch 4';if($LASTEXITCODE -ne 0){throw 'Batch 4 commit failed.'};$tested=(git rev-parse HEAD).Trim();git push origin "${tested}:refs/heads/$env:TARGET_BRANCH";if($LASTEXITCODE -ne 0){throw 'Unable to publish exact tested Batch 4.'};Write-Host "CLOUDSCRIBE_STAGE4_BATCH4_TESTED_HEAD=$tested"
+      - name: Deterministic admitted source archive
+        working-directory: source
+        shell: pwsh
+        run: |
+          $package=Join-Path $env:RUNNER_TEMP 'stage4-batch4-package';New-Item -ItemType Directory -Force $package|Out-Null;python tools/create_source_archive.py --output-directory $package;if($LASTEXITCODE -ne 0){throw 'Source archive creation failed.'}
+      - name: Upload admission evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage4-foundation-batch4-admission-v3
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/stage4-batch4-tests/**
+            ${{ runner.temp }}/stage4-batch4-package/**
+            ${{ runner.temp }}/batch4-primary.patch
+            ${{ runner.temp }}/batch4-cs9135-repair.patch
+            ${{ runner.temp }}/batch4-ca1822-repair.patch
