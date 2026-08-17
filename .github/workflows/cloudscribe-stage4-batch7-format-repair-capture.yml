@@ -1,0 +1,47 @@
+name: CloudScribe Stage 4 Batch 7 format repair capture
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch7-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch7-format-repair-capture.yml]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  NUGET_XMLDOC_MODE: skip
+  BASE_HEAD: 527b0f104662f9ed3292e8c594bcffd782cf07bd
+  PATCH_SHA256: 6e27ac6c5245cb81acc8b52e18c73fa72c54d7cbbd2eb228353068829adba271
+
+jobs:
+  capture:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-stage4-batch7-dev, path: carrier, fetch-depth: 1}
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-0.5.0-stage4, path: source, fetch-depth: 0}
+      - uses: actions/setup-dotnet@v5
+        with: {dotnet-version: '10.0.400'}
+      - name: Reconstruct Batch 7 and capture formatter delta
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          function Need([bool]$ok,[string]$message){if(-not $ok){throw $message}}
+          function Expand-GzipBase64([string]$text,[string]$path){$bytes=[Convert]::FromBase64String($text);$input=[IO.MemoryStream]::new($bytes,$false);$gzip=[IO.Compression.GZipStream]::new($input,[IO.Compression.CompressionMode]::Decompress);$output=[IO.File]::Create($path);try{$gzip.CopyTo($output)}finally{$output.Dispose();$gzip.Dispose();$input.Dispose();[Array]::Clear($bytes)}}
+          Need ((git rev-parse HEAD).Trim() -eq $env:BASE_HEAD) 'Target moved.'
+          $root=Join-Path $env:GITHUB_WORKSPACE 'carrier\.cloudscribe-ci\stage4-batch7';$parts=@();foreach($name in @('batch7-01.b64','batch7-02.b64','batch7-03.b64','batch7-04.b64','batch7-05.b64','batch7-06.b64','batch7-07.b64')){$parts+=(Get-Content (Join-Path $root $name) -Raw).Trim()};$text=$parts -join '';Need ($text.Length -eq 11976) "Wrong Base64 length $($text.Length).";$primary=Join-Path $env:RUNNER_TEMP 'batch7-primary.patch';Expand-GzipBase64 $text $primary;Need ((Get-FileHash $primary -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:PATCH_SHA256) 'Primary SHA mismatch.';git apply --check -- $primary;Need ($LASTEXITCODE -eq 0) 'Primary does not apply.';git apply --whitespace=nowarn -- $primary;Need ($LASTEXITCODE -eq 0) 'Primary failed.'
+          python tools/update_sha256_manifest.py --check;Need ($LASTEXITCODE -eq 0) 'Primary manifest mismatch.'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config;Need ($LASTEXITCODE -eq 0) 'Locked restore failed.'
+          git add -A
+          dotnet format CloudScribe.sln --no-restore --verbosity diagnostic;Need ($LASTEXITCODE -eq 0) 'Formatter execution failed.'
+          python tools/update_sha256_manifest.py
+          $repair=Join-Path $env:RUNNER_TEMP 'batch7-format-repair.patch';git diff --binary --full-index > $repair;Need ((Get-Item $repair).Length -gt 0) 'Formatter produced no repair patch despite verify failure.';Write-Host "BATCH7_FORMAT_REPAIR_SHA256=$((Get-FileHash $repair -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage4-batch7-format-repair
+          retention-days: 14
+          path: ${{ runner.temp }}/batch7-format-repair.patch
