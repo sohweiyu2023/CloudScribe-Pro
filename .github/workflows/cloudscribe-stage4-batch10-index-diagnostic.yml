@@ -1,5 +1,5 @@
-name: CloudScribe Stage 4 Batch 10 index identity diagnostic
-# registration trigger v2
+name: CloudScribe Stage 4 Batch 10 canonical index identity diagnostic
+# canonical-LF manifest regeneration v3
 
 on:
   workflow_dispatch:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Capture normalized staged identities
+      - name: Capture canonical staged identities
         working-directory: source
         shell: pwsh
         run: |
@@ -51,31 +51,38 @@ jobs:
           Need ($changed.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected 15 paths; found $($changed.Count)."
           git add -A
           Need ($LASTEXITCODE -eq 0) 'Initial stage failed.'
-          foreach($relative in $changed){git checkout-index -f -- $relative;if($LASTEXITCODE -ne 0){throw "checkout-index failed: $relative"}}
+          foreach($relative in ($changed|Where-Object{$_ -ne 'SHA256SUMS.txt'})){
+            $env:BATCH10_INDEX_PATH=$relative
+            python -c "import os,pathlib,subprocess; p=os.environ['BATCH10_INDEX_PATH']; pathlib.Path(p).write_bytes(subprocess.check_output(['git','show',':'+p]))"
+            Need ($LASTEXITCODE -eq 0) "Unable to materialize canonical index blob: $relative"
+          }
+          Remove-Item Env:BATCH10_INDEX_PATH -ErrorAction SilentlyContinue
           python tools/update_sha256_manifest.py
-          Need ($LASTEXITCODE -eq 0) 'Manifest regeneration failed.'
+          Need ($LASTEXITCODE -eq 0) 'Canonical manifest regeneration failed.'
           git add SHA256SUMS.txt
-          Need ($LASTEXITCODE -eq 0) 'Manifest stage failed.'
+          Need ($LASTEXITCODE -eq 0) 'Canonical manifest stage failed.'
+          $env:BATCH10_INDEX_PATH='SHA256SUMS.txt'
+          python -c "import os,pathlib,subprocess; p=os.environ['BATCH10_INDEX_PATH']; pathlib.Path(p).write_bytes(subprocess.check_output(['git','show',':'+p]))"
+          Need ($LASTEXITCODE -eq 0) 'Unable to materialize canonical manifest blob.'
+          Remove-Item Env:BATCH10_INDEX_PATH -ErrorAction SilentlyContinue
           python tools/update_sha256_manifest.py --check
-          Need ($LASTEXITCODE -eq 0) 'Manifest check failed.'
+          Need ($LASTEXITCODE -eq 0) 'Canonical manifest check failed.'
+          $drift=@(git diff --name-only|Where-Object{$_ -and $_.Trim()});Need ($drift.Count -eq 0) "Working tree differs from canonical staged bytes: $($drift -join ', ')"
           $staged=@(git diff --cached --name-only|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique)
+          Need ($staged.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected 15 staged paths; found $($staged.Count)."
           $lines=@()
           foreach($relative in $staged){
             $entry=(git ls-files -s -- $relative).Trim()
             Need ($entry -match '^\d+\s+([0-9a-f]{40,64})\s+0\t') "Cannot parse index entry: $relative"
-            $line="$($Matches[1])  $relative"
-            $lines += $line
-            Write-Host "BATCH10_INDEX $line"
+            $line="$($Matches[1])  $relative";$lines += $line;Write-Host "BATCH10_CANONICAL_INDEX $line"
           }
-          $text=($lines -join "`n")+"`n"
-          $bytes=[Text.UTF8Encoding]::new($false).GetBytes($text)
+          $text=($lines -join "`n")+"`n";$bytes=[Text.UTF8Encoding]::new($false).GetBytes($text)
           $fp=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
-          Write-Host "BATCH10_INDEX_FINGERPRINT=$fp"
-          $status='carrier/.cloudscribe-ci/stage4-batch10/index-diagnostic-status.txt'
+          Write-Host "BATCH10_CANONICAL_INDEX_FINGERPRINT=$fp"
+          $status='carrier/.cloudscribe-ci/stage4-batch10/canonical-index-diagnostic-status.txt'
           [IO.Directory]::CreateDirectory((Split-Path $status -Parent))|Out-Null
-          [IO.File]::WriteAllText($status,"RUN_ID=$env:GITHUB_RUN_ID`nSTATUS=success`nINDEX_FINGERPRINT=$fp`n",[Text.UTF8Encoding]::new($false))
-          git -C ../carrier config user.name cloudscribe-ci
-          git -C ../carrier config user.email actions@github.com
-          git -C ../carrier add .cloudscribe-ci/stage4-batch10/index-diagnostic-status.txt
-          git -C ../carrier commit -m "ci: record Batch 10 index diagnostic $env:GITHUB_RUN_ID"
+          [IO.File]::WriteAllText($status,"RUN_ID=$env:GITHUB_RUN_ID`nSTATUS=success`nCANONICAL_INDEX_FINGERPRINT=$fp`n",[Text.UTF8Encoding]::new($false))
+          git -C ../carrier config user.name cloudscribe-ci;git -C ../carrier config user.email actions@github.com
+          git -C ../carrier add .cloudscribe-ci/stage4-batch10/canonical-index-diagnostic-status.txt
+          git -C ../carrier commit -m "ci: record Batch 10 canonical index diagnostic $env:GITHUB_RUN_ID"
           if($LASTEXITCODE -eq 0){git -C ../carrier push origin HEAD:cloudscribe-stage4-batch10-dev}
