@@ -1,0 +1,36 @@
+name: CloudScribe Stage 4 Batch 8 test carrier diagnostic v2
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch8-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch8-test-carrier-diagnostic-v2.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-stage4-batch8-dev, fetch-depth: 1}
+      - name: Verify corrected joined payload
+        shell: pwsh
+        run: |
+          $root='.cloudscribe-ci/stage4-batch8';$joined='';$lines=@()
+          for($i=1;$i -le 8;$i++){$name=('batch8-test-memory-repair-{0:d2}.b64' -f $i);$text=(Get-Content (Join-Path $root $name) -Raw).Trim();$lines += "PART_${i}_LENGTH=$($text.Length)";$joined += $text}
+          $decoded=[Convert]::FromBase64String($joined)
+          $sha=([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($decoded))).ToLowerInvariant()
+          $lines += "JOINED_LENGTH=$($joined.Length)";$lines += "JOINED_DECODED_BYTES=$($decoded.Length)";$lines += "JOINED_DECODED_SHA256=$sha"
+          if($joined.Length -ne 10056){throw "Unexpected joined length $($joined.Length)."}
+          if($sha -ne '557b59a5ee709eed3ea7580e3a0733f94b004042f1c07e0d95cc210a4d159c31'){throw "Unexpected decoded SHA $sha."}
+          [IO.File]::WriteAllLines((Join-Path $root 'batch8-test-carrier-diagnostic-v2.txt'),$lines,[Text.UTF8Encoding]::new($false))
+      - name: Publish diagnostic
+        shell: pwsh
+        run: |
+          git config user.name cloudscribe-ci;git config user.email actions@github.com
+          git add .cloudscribe-ci/stage4-batch8/batch8-test-carrier-diagnostic-v2.txt
+          git commit -m "ci: record corrected Batch 8 carrier diagnostic run $env:GITHUB_RUN_ID"
+          if($LASTEXITCODE -ne 0){throw 'Diagnostic commit failed.'}
+          git push origin HEAD:cloudscribe-stage4-batch8-dev
+          if($LASTEXITCODE -ne 0){throw 'Diagnostic publish failed.'}
