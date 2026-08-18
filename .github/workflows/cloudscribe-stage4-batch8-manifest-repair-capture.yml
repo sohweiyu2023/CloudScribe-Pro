@@ -1,0 +1,79 @@
+name: CloudScribe Stage 4 Batch 8 manifest repair capture
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch8-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch8-manifest-repair-capture.yml]
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  NUGET_XMLDOC_MODE: skip
+  BASE_HEAD: 82344da168aa9aaa9ca50c141e85fbf63ed63bbf
+  PRIMARY_SHA256: 75df0a3975ece263ac20449cc71222bdf64cf5c09bad8be93dc4541718f739e7
+  LOCK_SHA256: b2853cc1b051f7bc6abe2366cef0bbb3efb938577bc549d4540e95d646f49bf9
+
+jobs:
+  capture:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-stage4-batch8-dev, path: carrier, fetch-depth: 1}
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-0.5.0-stage4, path: source, fetch-depth: 0}
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.13'}
+      - uses: actions/setup-dotnet@v5
+        with: {dotnet-version: '10.0.400'}
+
+      - name: Replay exact primary and lock patches then repair manifest
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          function Need([bool]$ok,[string]$message){if(-not $ok){throw $message}}
+          Need ((git rev-parse HEAD).Trim() -eq $env:BASE_HEAD) 'Stage 4 target moved.'
+          Need ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK.'
+          python ../carrier/.cloudscribe-ci/stage4-batch8/batch8_lock_helper.py reconstruct --carrier-root ../carrier/.cloudscribe-ci/stage4-batch8 --base-head $env:BASE_HEAD --patch-sha $env:PRIMARY_SHA256 --b64-length 16956 --expected-paths 14
+          Need ($LASTEXITCODE -eq 0) 'Primary reconstruction failed.'
+          $lockB64=(Get-Content ../carrier/.cloudscribe-ci/stage4-batch8/batch8-lock-repair.b64 -Raw).Trim()
+          $lockBytes=[Convert]::FromBase64String($lockB64)
+          $lockPatch=Join-Path $env:RUNNER_TEMP 'batch8-lock-repair.patch'
+          [IO.File]::WriteAllBytes($lockPatch,$lockBytes);[Array]::Clear($lockBytes)
+          Need ((Get-FileHash $lockPatch -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:LOCK_SHA256) 'Lock repair SHA mismatch.'
+          git apply --check -- $lockPatch;Need ($LASTEXITCODE -eq 0) 'Lock repair does not apply.'
+          git apply --whitespace=nowarn -- $lockPatch;Need ($LASTEXITCODE -eq 0) 'Lock repair failed.'
+          git add -A
+          git diff --cached --check;Need ($LASTEXITCODE -eq 0) 'Combined candidate whitespace check failed.'
+          python tools/update_sha256_manifest.py
+          Need ($LASTEXITCODE -eq 0) 'Manifest repair generation failed.'
+          $unstaged=@(git diff --name-only|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique)
+          Need ($unstaged.Count -eq 1 -and $unstaged[0] -eq 'SHA256SUMS.txt') "Expected manifest-only repair; found: $($unstaged -join ', ')"
+          python tools/update_sha256_manifest.py --check;Need ($LASTEXITCODE -eq 0) 'Manifest remains stale after repair.'
+          $repair=Join-Path $env:RUNNER_TEMP 'batch8-manifest-repair.patch'
+          git diff --binary --full-index -- SHA256SUMS.txt | Out-File -FilePath $repair -Encoding utf8NoBOM
+          Need ((Get-Item $repair).Length -gt 0) 'Manifest repair patch is empty.'
+          $repairSha=(Get-FileHash $repair -Algorithm SHA256).Hash.ToLowerInvariant()
+          $repairB64=[Convert]::ToBase64String([IO.File]::ReadAllBytes($repair))
+          $carrierRoot='../carrier/.cloudscribe-ci/stage4-batch8'
+          Set-Content -Path "$carrierRoot/batch8-manifest-repair.b64" -Value $repairB64 -Encoding ascii -NoNewline
+          @("BATCH8_MANIFEST_REPAIR_SHA256=$repairSha","BATCH8_MANIFEST_REPAIR_PATHS=1","BATCH8_MANIFEST_REPAIR_FILE=SHA256SUMS.txt") | Set-Content -Path "$carrierRoot/batch8-manifest-repair.txt" -Encoding utf8NoBOM
+          Write-Host "BATCH8_MANIFEST_REPAIR_SHA256=$repairSha"
+
+      - name: Seal Windows-native manifest repair onto carrier
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cd carrier
+          git config user.name cloudscribe-ci
+          git config user.email actions@github.com
+          git add .cloudscribe-ci/stage4-batch8/batch8-manifest-repair.b64 .cloudscribe-ci/stage4-batch8/batch8-manifest-repair.txt
+          git diff --cached --check
+          if($LASTEXITCODE -ne 0){throw 'Manifest-repair carrier whitespace check failed.'}
+          git commit -m 'ci: seal Windows-native Batch 8 manifest repair'
+          if($LASTEXITCODE -ne 0){throw 'Unable to commit manifest repair.'}
+          git push origin HEAD:cloudscribe-stage4-batch8-dev
+          if($LASTEXITCODE -ne 0){throw 'Unable to publish manifest repair.'}
