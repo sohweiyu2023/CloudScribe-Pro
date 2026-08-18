@@ -1,0 +1,3 @@
+BATCH8_LOCK_REPAIR_SHA256=b2853cc1b051f7bc6abe2366cef0bbb3efb938577bc549d4540e95d646f49bf9
+BATCH8_LOCK_REPAIR_PATHS=7
+BATCH8_LOCK_REPAIR_FILES=SHA256SUMS.txt,src/CloudScribe.App/packages.lock.json,src/CloudScribe.Infrastructure/packages.lock.json,tests/CloudScribe.Application.Tests/packages.lock.json,tests/CloudScribe.Architecture.Tests/packages.lock.json,tests/CloudScribe.Domain.Tests/packages.lock.json,tests/CloudScribe.Infrastructure.Tests/packages.lock.json
