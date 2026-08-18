@@ -1,0 +1,80 @@
+name: CloudScribe Stage 4 Batch 10 index identity diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [cloudscribe-stage4-batch10-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch10-index-diagnostic.yml]
+
+permissions:
+  contents: write
+
+env:
+  BASE_HEAD: 88c58ed876de71518c4d6c538cdbc0697f4606fb
+  TRANSFORM_SHA256: 9602221ce009fbb588612395ca8a4fdd154779fac951b762f87bd03a4c152e60
+  EXPECTED_CHANGED_FILES: '15'
+
+jobs:
+  diagnose:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-stage4-batch10-dev
+          path: carrier
+          fetch-depth: 1
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-0.5.0-stage4
+          path: source
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Capture normalized staged identities
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          function Need([bool]$ok,[string]$message){if(-not $ok){throw $message}}
+          Need ((git rev-parse HEAD).Trim() -eq $env:BASE_HEAD) 'Stage 4 target moved.'
+          $root=Join-Path $env:GITHUB_WORKSPACE 'carrier/.cloudscribe-ci/stage4-batch10'
+          $script=Join-Path $env:RUNNER_TEMP 'apply_batch10.py'
+          $parts=1..4 | ForEach-Object { Join-Path $root ('apply_batch10-{0:d2}.part' -f $_) }
+          $joined=($parts | ForEach-Object {[IO.File]::ReadAllText($_)}) -join ''
+          [IO.File]::WriteAllText($script,$joined,[Text.UTF8Encoding]::new($false))
+          Need ((Get-FileHash $script -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:TRANSFORM_SHA256) 'Transform SHA mismatch.'
+          python $script
+          Need ($LASTEXITCODE -eq 0) 'Transform failed.'
+          $changed=@((git diff --name-only --)+(git ls-files --others --exclude-standard)|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique)
+          Need ($changed.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected 15 paths; found $($changed.Count)."
+          git add -A
+          Need ($LASTEXITCODE -eq 0) 'Initial stage failed.'
+          foreach($relative in $changed){git checkout-index -f -- $relative;if($LASTEXITCODE -ne 0){throw "checkout-index failed: $relative"}}
+          python tools/update_sha256_manifest.py
+          Need ($LASTEXITCODE -eq 0) 'Manifest regeneration failed.'
+          git add SHA256SUMS.txt
+          Need ($LASTEXITCODE -eq 0) 'Manifest stage failed.'
+          python tools/update_sha256_manifest.py --check
+          Need ($LASTEXITCODE -eq 0) 'Manifest check failed.'
+          $staged=@(git diff --cached --name-only|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique)
+          $lines=@()
+          foreach($relative in $staged){
+            $entry=(git ls-files -s -- $relative).Trim()
+            Need ($entry -match '^\d+\s+([0-9a-f]{40,64})\s+0\t') "Cannot parse index entry: $relative"
+            $line="$($Matches[1])  $relative"
+            $lines += $line
+            Write-Host "BATCH10_INDEX $line"
+          }
+          $text=($lines -join "`n")+"`n"
+          $bytes=[Text.UTF8Encoding]::new($false).GetBytes($text)
+          $fp=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+          Write-Host "BATCH10_INDEX_FINGERPRINT=$fp"
+          $status='carrier/.cloudscribe-ci/stage4-batch10/index-diagnostic-status.txt'
+          [IO.Directory]::CreateDirectory((Split-Path $status -Parent))|Out-Null
+          [IO.File]::WriteAllText($status,"RUN_ID=$env:GITHUB_RUN_ID`nSTATUS=success`nINDEX_FINGERPRINT=$fp`n",[Text.UTF8Encoding]::new($false))
+          git -C ../carrier config user.name cloudscribe-ci
+          git -C ../carrier config user.email actions@github.com
+          git -C ../carrier add .cloudscribe-ci/stage4-batch10/index-diagnostic-status.txt
+          git -C ../carrier commit -m "ci: record Batch 10 index diagnostic $env:GITHUB_RUN_ID"
+          if($LASTEXITCODE -eq 0){git -C ../carrier push origin HEAD:cloudscribe-stage4-batch10-dev}
