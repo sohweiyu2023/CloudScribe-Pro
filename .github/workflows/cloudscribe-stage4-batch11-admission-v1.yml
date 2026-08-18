@@ -1,6 +1,5 @@
-name: CloudScribe Stage 4 foundation batch 11 admission v4 via registered trigger
-# registered-trigger bridge with single-path rematerialization repair
-# registration trigger 2026-08-18T23:55+08:00
+name: CloudScribe Stage 4 foundation batch 11 admission v5 via registered trigger
+# registered-trigger bridge with single-path rematerialization repair and canonical fingerprint binding
 
 on:
   workflow_dispatch:
@@ -9,7 +8,7 @@ on:
     paths: [.github/workflows/cloudscribe-stage4-batch11-admission-v1.yml]
 
 concurrency:
-  group: cloudscribe-stage4-batch11-v4-registered-trigger
+  group: cloudscribe-stage4-batch11-v5-registered-trigger
   cancel-in-progress: true
 
 permissions:
@@ -37,7 +36,7 @@ jobs:
           dotnet-version: '10.0.400'
           cache: true
           cache-dependency-path: source/**/packages.lock.json
-      - name: Run exact Batch 11 v4 admission
+      - name: Run exact Batch 11 v5 admission
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -48,22 +47,30 @@ jobs:
           if ($actualRunnerBlob -ne $expectedRunnerBlob) { throw "Batch 11 v3 admission runner blob mismatch: $actualRunnerBlob" }
 
           $text = [IO.File]::ReadAllText($runner)
-          $old = '$env:CLOUDSCRIBE_STAGED_PATHS = ($paths | ConvertTo-Json -Compress)'
-          $new = '$env:CLOUDSCRIBE_STAGED_PATHS = (ConvertTo-Json -InputObject ([object[]]$paths) -Compress)'
-          $first = $text.IndexOf($old, [StringComparison]::Ordinal)
-          if ($first -lt 0) { throw 'Expected Batch 11 single-path serialization line is missing.' }
-          if ($text.IndexOf($old, $first + $old.Length, [StringComparison]::Ordinal) -ge 0) { throw 'Expected exactly one Batch 11 serialization repair site.' }
-          $patched = $text.Replace($old, $new)
-          $patchedRunner = Join-Path $env:RUNNER_TEMP 'admit_batch11_v4.ps1'
+          $oldSerialization = '$env:CLOUDSCRIBE_STAGED_PATHS = ($paths | ConvertTo-Json -Compress)'
+          $newSerialization = '$env:CLOUDSCRIBE_STAGED_PATHS = (ConvertTo-Json -InputObject ([object[]]$paths) -Compress)'
+          $firstSerialization = $text.IndexOf($oldSerialization, [StringComparison]::Ordinal)
+          if ($firstSerialization -lt 0) { throw 'Expected Batch 11 single-path serialization line is missing.' }
+          if ($text.IndexOf($oldSerialization, $firstSerialization + $oldSerialization.Length, [StringComparison]::Ordinal) -ge 0) { throw 'Expected exactly one Batch 11 serialization repair site.' }
+          $patched = $text.Replace($oldSerialization, $newSerialization)
+
+          $oldFingerprint = "$" + "expectedFingerprint = 'f8311ad3beefcd6b6182c176d2b3c704ff5513c54f5ca98e4b26a754292f4dc3'"
+          $newFingerprint = "$" + "expectedFingerprint = 'adf69fb8266a762cbcfe7b57a058e17b356a34626cf8da0300ecab72f3866184'"
+          $firstFingerprint = $patched.IndexOf($oldFingerprint, [StringComparison]::Ordinal)
+          if ($firstFingerprint -lt 0) { throw 'Expected stale Batch 11 fingerprint binding is missing.' }
+          if ($patched.IndexOf($oldFingerprint, $firstFingerprint + $oldFingerprint.Length, [StringComparison]::Ordinal) -ge 0) { throw 'Expected exactly one Batch 11 fingerprint repair site.' }
+          $patched = $patched.Replace($oldFingerprint, $newFingerprint)
+
+          $patchedRunner = Join-Path $env:RUNNER_TEMP 'admit_batch11_v5.ps1'
           [IO.File]::WriteAllText($patchedRunner, $patched, [Text.UTF8Encoding]::new($false))
-          Write-Host "CLOUDSCRIBE_STAGE4_BATCH11_V4_RUNNER_SHA256=$((Get-FileHash $patchedRunner -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH11_V5_RUNNER_SHA256=$((Get-FileHash $patchedRunner -Algorithm SHA256).Hash.ToLowerInvariant())"
           & $patchedRunner
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Upload Batch 11 v4 evidence
+      - name: Upload Batch 11 v5 evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch11-admission-v4
+          name: cloudscribe-stage4-foundation-batch11-admission-v5
           retention-days: 14
           if-no-files-found: warn
           path: |
