@@ -1,0 +1,56 @@
+name: CloudScribe Stage 4 Batch 8 test carrier diagnostic
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch8-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch8-test-carrier-diagnostic.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-stage4-batch8-dev
+          fetch-depth: 1
+      - name: Measure exact carrier chunks
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='.cloudscribe-ci/stage4-batch8'
+          $lines=@()
+          $joined=''
+          for($i=1;$i -le 8;$i++){
+            $name=('batch8-test-memory-repair-{0:d2}.b64' -f $i)
+            $text=(Get-Content (Join-Path $root $name) -Raw).Trim()
+            $bytes=[Text.Encoding]::ASCII.GetBytes($text)
+            $sha=([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))).ToLowerInvariant()
+            $lines += "PART_${i}_LENGTH=$($text.Length)"
+            $lines += "PART_${i}_TEXT_SHA256=$sha"
+            $joined += $text
+          }
+          $lines += "JOINED_LENGTH=$($joined.Length)"
+          try {
+            $decoded=[Convert]::FromBase64String($joined)
+            $decodedSha=([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($decoded))).ToLowerInvariant()
+            $lines += "JOINED_DECODED_BYTES=$($decoded.Length)"
+            $lines += "JOINED_DECODED_SHA256=$decodedSha"
+          } catch {
+            $lines += "JOINED_DECODE_ERROR=$($_.Exception.GetType().Name)"
+          }
+          $path=Join-Path $root 'batch8-test-carrier-diagnostic.txt'
+          [IO.File]::WriteAllLines($path,$lines,[Text.UTF8Encoding]::new($false))
+          $lines | ForEach-Object { Write-Host $_ }
+      - name: Publish diagnostic
+        shell: pwsh
+        run: |
+          git config user.name cloudscribe-ci
+          git config user.email actions@github.com
+          git add .cloudscribe-ci/stage4-batch8/batch8-test-carrier-diagnostic.txt
+          git commit -m "ci: record Batch 8 test carrier diagnostic run $env:GITHUB_RUN_ID"
+          if($LASTEXITCODE -ne 0){throw 'Unable to commit carrier diagnostic.'}
+          git push origin HEAD:cloudscribe-stage4-batch8-dev
+          if($LASTEXITCODE -ne 0){throw 'Unable to publish carrier diagnostic.'}
