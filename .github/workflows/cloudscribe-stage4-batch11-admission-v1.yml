@@ -1,5 +1,6 @@
 name: CloudScribe Stage 4 foundation batch 11 admission v5 via registered trigger
 # registered-trigger bridge with single-path rematerialization repair and canonical fingerprint binding
+# registration trigger 2 2026-08-18T23:58+08:00
 
 on:
   workflow_dispatch:
