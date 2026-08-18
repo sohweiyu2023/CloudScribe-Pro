@@ -38,7 +38,7 @@
     for ($i = 0; $i -lt $projects.Count; $i++) {
         $dir = Join-Path $testRoot $i
         New-Item -ItemType Directory -Force $dir | Out-Null
-        & dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=batch10-v5.trx'
+        & dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=batch10-v6.trx'
         Need ($LASTEXITCODE -eq 0) "Tests failed: $($projects[$i])"
     }
     $trx = @(Get-ChildItem $testRoot -Filter '*.trx' -File -Recurse)
@@ -86,7 +86,7 @@
     $exitCode = 0
 }
 catch {
-    Write-Host "BATCH10_V5_FAILURE: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "BATCH10_V6_FAILURE: $($_.Exception.Message)" -ForegroundColor Red
     $status = 'failure'
     $exitCode = 1
 }
@@ -96,7 +96,7 @@ finally {
         Write-Locator $status
     }
     catch {
-        Write-Host "BATCH10_V5_LOCATOR_FAILURE: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "BATCH10_V6_LOCATOR_FAILURE: $($_.Exception.Message)" -ForegroundColor Red
         $exitCode = 1
     }
 }
