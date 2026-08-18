@@ -7,6 +7,25 @@ namespace CloudScribe.Infrastructure.Tests;
 
 public sealed class PricingCatalogAdmissionServiceTests
 {
+    private static readonly byte[] DeterministicFakeCatalog = """{"fixture":"stage4-fake-catalog","schemaVersion":"1.1.5"}"""u8.ToArray();
+
+    [Fact]
+    public void DeterministicFakePricingCatalogExercisesStrictAdmissionContract()
+    {
+        PricingCatalogAdmissionService service = new(
+            new StrictJsonObjectReader(),
+            new AcceptingValidator(),
+            new UnavailablePricingCatalogSignatureVerifier());
+
+        PricingCatalogDryRunResult first = service.DryRun(DeterministicFakeCatalog);
+        PricingCatalogDryRunResult second = service.DryRun(DeterministicFakeCatalog);
+
+        Assert.Equal(PricingCatalogTrustState.ValidUnsigned, first.TrustState);
+        Assert.Equal(first.TrustState, second.TrustState);
+        Assert.Equal(first.StatusReason, second.StatusReason);
+        Assert.True(first.CanApprove);
+    }
+
     [Fact]
     public void ExactContractUnavailableBlocksApprovalAfterStrictParsing()
     {

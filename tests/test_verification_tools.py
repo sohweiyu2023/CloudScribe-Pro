@@ -925,6 +925,59 @@ class Stage4SourceContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must never contain catalog private signing keys", result.stderr)
 
+    def test_rejects_false_batch9_admission_state(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch9-admission-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch9_admitted"] = False
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative successful Batch 9 admission", result.stderr)
+
+    def test_rejects_wrong_batch9_evidence_binding(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch9-binding-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch9_evidence_sha256"] = "0" * 64
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative Batch 9 evidence artifact", result.stderr)
+
+    def test_rejects_provider_reference_contract_regression(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-provider-reference-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "src/CloudScribe.Providers.Abstractions/ProviderModelReference.cs"
+            path.write_text("namespace CloudScribe.Providers.Abstractions;\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("StableId", result.stderr)
+
+    def test_rejects_false_runtime_policy_admission_claim(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-runtime-policy-claim-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_runtime_policy_contract_admitted"] = True
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("runtime-policy 1.3 bytes", result.stderr)
+
+    def test_rejects_false_limit_taxonomy_admission_claim(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-limit-taxonomy-claim-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_limit_taxonomy_contract_admitted"] = True
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("limit-taxonomy bytes", result.stderr)
+
 class Stage2EvidenceInventoryCliTests(unittest.TestCase):
     @staticmethod
     def create_valid_inventory(root: Path) -> None:

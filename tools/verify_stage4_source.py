@@ -18,6 +18,11 @@ BATCH8_RUN = "32094911733"
 BATCH8_SOURCE_SHA256 = "57d2a9196395cd6fbbae9cf7b4af830c4619ac323a7c192510c8f0b3372bd738"
 BATCH8_EVIDENCE_ARTIFACT = 9309652831
 BATCH8_EVIDENCE_SHA256 = "9dcb5121e43c05d239227bdb169d2f322d2fe023fe578b3d3970e521028bdf00"
+BATCH9_COMMIT = "88c58ed876de71518c4d6c538cdbc0697f4606fb"
+BATCH9_RUN = "32095990711"
+BATCH9_SOURCE_SHA256 = "5cb164c3bcde199a53924293ab5bdb6d888f5e0427eb1dec4fb80852dbc950a9"
+BATCH9_EVIDENCE_ARTIFACT = 9310008713
+BATCH9_EVIDENCE_SHA256 = "358de956d5deca6b0382794b53721a64eea76a0835e4aa5592a111953945c991"
 
 def fail(message: str) -> int:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -79,8 +84,28 @@ def main() -> int:
         return fail("Stage 4 is not bound to the deterministic Batch 8 admitted source archive")
     if state.get("stage4_foundation_batch8_evidence_artifact") != BATCH8_EVIDENCE_ARTIFACT or state.get("stage4_foundation_batch8_evidence_sha256") != BATCH8_EVIDENCE_SHA256:
         return fail("Stage 4 is not bound to the authoritative Batch 8 evidence artifact")
-    if state.get("stage4_foundation_batch9") is not True or state.get("stage4_foundation_batch9_admitted") is not False or state.get("stage4_batch9_evidence_binding_checkpoint") is not True:
-        return fail("Current Stage 4 Batch 9 must remain a source-changing evidence-binding candidate until Windows admission")
+    if state.get("stage4_foundation_batch9") is not True or state.get("stage4_foundation_batch9_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 9 admission")
+    if state.get("stage4_foundation_batch9_commit") != BATCH9_COMMIT or str(state.get("stage4_foundation_batch9_admission_run")) != BATCH9_RUN:
+        return fail("Stage 4 is not bound to the authoritative Batch 9 Windows admission evidence")
+    if state.get("stage4_foundation_batch9_source_sha256") != BATCH9_SOURCE_SHA256:
+        return fail("Stage 4 is not bound to the deterministic Batch 9 admitted source archive")
+    if state.get("stage4_foundation_batch9_evidence_artifact") != BATCH9_EVIDENCE_ARTIFACT or state.get("stage4_foundation_batch9_evidence_sha256") != BATCH9_EVIDENCE_SHA256:
+        return fail("Stage 4 is not bound to the authoritative Batch 9 evidence artifact")
+    if state.get("stage4_foundation_batch10") is not True or state.get("stage4_foundation_batch10_admitted") is not False:
+        return fail("Current Stage 4 Batch 10 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_provider_endpoint_reference_explicit") is not True:
+        return fail("Stage 4 must expose endpoint and region as an explicit provider-neutral reference")
+    if state.get("stage4_provider_model_alias_voice_operation_contracts") is not True:
+        return fail("Stage 4 must expose explicit model, alias, voice and operation provider-neutral contracts")
+    if state.get("stage4_provider_governance_data_handling_references") is not True:
+        return fail("Stage 4 must expose explicit governance and data-handling evidence references")
+    if state.get("stage4_deterministic_fake_pricing_catalog_tested") is not True:
+        return fail("Stage 4 must retain deterministic fake pricing-catalog admission coverage")
+    if state.get("stage4_runtime_policy_exact_bytes_available") is not False or state.get("stage4_runtime_policy_contract_admitted") is not False:
+        return fail("Stage 4 must not pretend unavailable runtime-policy 1.3 bytes were admitted")
+    if state.get("stage4_limit_taxonomy_exact_bytes_available") is not False or state.get("stage4_limit_taxonomy_contract_admitted") is not False:
+        return fail("Stage 4 must not pretend unavailable schema-1.1.5 limit-taxonomy bytes were admitted")
     if state.get("stage4_ed25519_signature_verification_implemented") is not True:
         return fail("Stage 4 Batch 8 must implement real Ed25519 catalog-signature verification")
     if state.get("stage4_trusted_catalog_keys_external_only") is not True or state.get("stage4_built_in_catalog_trusted_key_count") != 0:
@@ -140,6 +165,10 @@ def main() -> int:
             "Admission run: 32094911733", "255/255 passed", "Evidence artifact: 9309652831",
             "57d2a9196395cd6fbbae9cf7b4af830c4619ac323a7c192510c8f0b3372bd738",
             "Do not begin Stage 5")
+        require_text(root, "docs/STAGE4-FOUNDATION-BATCH10.txt",
+            "Admission run: 32095990711", "255/255 passed", "Evidence artifact: 9310008713",
+            "5cb164c3bcde199a53924293ab5bdb6d888f5e0427eb1dec4fb80852dbc950a9",
+            "runtime-policy 1.3 schema/seed validation", "Stage 4 completion or promotion")
         require_text(root, "src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs",
             "explicit user confirmation", "ExpectedCurrentActivationSequence",
             "Rollback can target only", "PricingCatalogApprovalKind.ManualUnsigned",
@@ -150,6 +179,20 @@ def main() -> int:
             "CredentialReference", "EndpointId", "RegionId")
         require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderCapabilitySnapshot.cs",
             "StringComparer.Ordinal", "ProviderCapabilityState.Unknown", "ProvenanceId")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderEndpointReference.cs",
+            "EndpointId", "RegionId", "NormalizeStableId")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderModelReference.cs",
+            "StableId", "ExactApiAlias", "ResolvedVersion", "ProviderLifecycleState")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderAliasReference.cs",
+            "Alias", "TargetStableId", "ProvenanceId")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderVoiceReference.cs",
+            "StableId", "ExactProviderVoiceId", "ModelStableId")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderOperationReference.cs",
+            "StableId", "ProviderLifecycleState")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderGovernanceReference.cs",
+            "ProfileId", "ProvenanceId")
+        require_text(root, "src/CloudScribe.Providers.Abstractions/ProviderDataHandlingReference.cs",
+            "ProfileId", "ProvenanceId")
         require_text(root, "src/CloudScribe.Application/Security/ICredentialVault.cs",
             "CredentialReference", "StoreAsync", "ReadAsync", "DeleteAsync")
         require_text(root, "src/CloudScribe.Infrastructure/Security/WindowsCredentialVault.cs",
@@ -157,11 +200,13 @@ def main() -> int:
         require_text(root, "tests/CloudScribe.Infrastructure.Tests/StrictJsonObjectReaderTests.cs",
             "DuplicateProperty", "TopLevelNotObject", "InvalidUtf8", "NaN", "Infinity")
         require_text(root, "tests/CloudScribe.Infrastructure.Tests/Stage4ProviderFoundationTests.cs",
-            "FakeProviderRemainsLazy", "ProviderCapabilityState.Unknown", "synthesize-speech")
+            "FakeProviderRemainsLazy", "ProviderCapabilityState.Unknown", "synthesize-speech",
+            "ProviderNeutralReferencesKeepEverySelectionAndPolicyEvidenceExplicit", "models/acme:v1", "voices/en-US/A")
         require_text(root, "tests/CloudScribe.Infrastructure.Tests/PricingCatalogAdmissionServiceTests.cs",
             "ExactContractUnavailableBlocksApprovalAfterStrictParsing",
             "ValidUnsignedCatalogRequiresExplicitManualApprovalState",
-            "SignatureMetadataCannotBecomeTrustWithoutExternalVerification")
+            "SignatureMetadataCannotBecomeTrustWithoutExternalVerification",
+            "DeterministicFakePricingCatalogExercisesStrictAdmissionContract")
         require_text(root, "src/CloudScribe.App/Design/StageFeatureAvailability.cs",
             "Stage4", "ShowProviderControls: true")
         require_text(root, "src/CloudScribe.App/MainWindow.axaml",
@@ -257,7 +302,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-8, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider coverage, Windows OS-vault storage, and a provider-neutral exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable exact pricing bytes are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-9, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider and deterministic fake-catalog coverage, Windows OS-vault storage, explicit provider endpoint/model/alias/voice/operation/governance/data-handling references, and a provider-neutral exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable pricing, limit-taxonomy, or runtime-policy bytes are admitted.")
     return 0
 
 if __name__ == "__main__":

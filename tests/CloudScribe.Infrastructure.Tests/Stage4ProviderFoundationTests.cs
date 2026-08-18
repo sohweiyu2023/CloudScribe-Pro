@@ -23,6 +23,29 @@ public sealed class Stage4ProviderFoundationTests
     }
 
     [Fact]
+    public void ProviderNeutralReferencesKeepEverySelectionAndPolicyEvidenceExplicit()
+    {
+        ProviderEndpointReference endpoint = new("default", "global");
+        ProviderModelReference model = new("tts-model", "models/acme:v1", ProviderLifecycleState.Available, "snapshot-2026-08");
+        ProviderAliasReference alias = new("models/acme:v1", model.StableId, "test-fixture:alias-v1");
+        ProviderVoiceReference voice = new("voice-a", "voices/en-US/A", model.StableId);
+        ProviderOperationReference operation = new("synthesize-speech", ProviderLifecycleState.Available);
+        ProviderGovernanceReference governance = new("standard-policy", "test-fixture:governance-v1");
+        ProviderDataHandlingReference dataHandling = new("no-training", "test-fixture:data-handling-v1");
+
+        Assert.Equal("default", endpoint.EndpointId);
+        Assert.Equal("global", endpoint.RegionId);
+        Assert.Equal("models/acme:v1", model.ExactApiAlias);
+        Assert.Equal(model.StableId, alias.TargetStableId);
+        Assert.Equal("voices/en-US/A", voice.ExactProviderVoiceId);
+        Assert.Equal("synthesize-speech", operation.StableId);
+        Assert.Equal("standard-policy", governance.ProfileId);
+        Assert.Equal("no-training", dataHandling.ProfileId);
+        Assert.Throws<ArgumentException>(() => new ProviderModelReference("Implicit Default", "model", ProviderLifecycleState.Available));
+        Assert.Throws<ArgumentException>(() => new ProviderAliasReference("model", "Implicit Default", "test"));
+    }
+
+    [Fact]
     public void AccountAndCapabilityIdentifiersCannotHideControlOrImplicitSwitches()
     {
         CredentialReference credential = new("fake.test-account.api-key");
