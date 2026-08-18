@@ -22,6 +22,19 @@
     Need ($regCode -eq 0) 'Deterministic regression suite failed.'
     Need (($reg -join "`n") -match "$EXPECTED_REGRESSIONS/$EXPECTED_REGRESSIONS") 'Exact 153/153 regression count missing.'
 
+    # Materialize the exact already-verified Git index blobs into the working tree.
+    # This bypasses Windows checkout EOL conversion while leaving the staged source identity unchanged.
+    foreach ($relative in $staged) {
+        $env:BATCH10_INDEX_PATH = $relative
+        & python -c "import os,pathlib,subprocess; p=os.environ['BATCH10_INDEX_PATH']; pathlib.Path(p).write_bytes(subprocess.check_output(['git','show',':'+p]))"
+        Need ($LASTEXITCODE -eq 0) "Unable to materialize raw staged blob bytes: $relative"
+    }
+    Remove-Item Env:BATCH10_INDEX_PATH -ErrorAction SilentlyContinue
+    & python tools/update_sha256_manifest.py --check
+    Need ($LASTEXITCODE -eq 0) 'Manifest mismatch after raw staged-blob materialization.'
+    $worktreeDrift = @(git diff --name-only | Where-Object { $_ -and $_.Trim() })
+    Need ($worktreeDrift.Count -eq 0) "Working tree differs from verified index after raw materialization: $($worktreeDrift -join ', ')"
+
     & dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
     Need ($LASTEXITCODE -eq 0) 'Locked restore failed.'
     & dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity minimal
