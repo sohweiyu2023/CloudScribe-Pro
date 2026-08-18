@@ -1,5 +1,5 @@
 name: CloudScribe Stage 4 foundation batch 11 admission v1
-# text-safe Base64 carrier repair v2
+# binary-gzip carrier repair v3: bypass text Base64 transport; preserve exact gzip + patch SHA gates
 
 on:
   workflow_dispatch:
@@ -80,19 +80,15 @@ jobs:
             Need ((git rev-parse HEAD).Trim() -eq $baseHead) 'Stage 4 target moved before Batch 11 admission.'
             Need ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK; expected exact 10.0.400.'
 
-            $payloadText = Join-Path $env:GITHUB_WORKSPACE 'carrier/.cloudscribe-ci/stage4-batch11/batch11.patch.gz.b64'
-            $gzipPath = Join-Path $env:RUNNER_TEMP 'batch11.patch.gz'
-            Need (Test-Path $payloadText -PathType Leaf) 'Batch 11 Base64 patch payload is missing.'
-            $env:BATCH11_B64 = $payloadText
+            $gzipPath = Join-Path $env:GITHUB_WORKSPACE 'carrier/.cloudscribe-ci/stage4-batch11/batch11.patch.gz'
+            Need (Test-Path $gzipPath -PathType Leaf) 'Batch 11 binary gzip patch payload is missing.'
+            Need ((Get-FileHash $gzipPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $patchGzipSha) 'Batch 11 binary gzip payload SHA-256 mismatch.'
             $env:BATCH11_GZIP = $gzipPath
-            python -c "import base64,os,pathlib; pathlib.Path(os.environ['BATCH11_GZIP']).write_bytes(base64.b64decode(pathlib.Path(os.environ['BATCH11_B64']).read_text(encoding='ascii'), validate=True))"
-            Need ($LASTEXITCODE -eq 0) 'Unable to decode Batch 11 Base64 patch payload.'
-            Need ((Get-FileHash $gzipPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $patchGzipSha) 'Batch 11 decoded gzip payload SHA-256 mismatch.'
             $env:BATCH11_PATCH = $patchPath
             python -c "import gzip,os,pathlib; pathlib.Path(os.environ['BATCH11_PATCH']).write_bytes(gzip.decompress(pathlib.Path(os.environ['BATCH11_GZIP']).read_bytes()))"
             Need ($LASTEXITCODE -eq 0) 'Unable to decompress Batch 11 patch.'
             Need ((Get-FileHash $patchPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $patchSha) 'Batch 11 patch SHA-256 mismatch.'
-            Remove-Item Env:BATCH11_B64, Env:BATCH11_GZIP, Env:BATCH11_PATCH -ErrorAction SilentlyContinue
+            Remove-Item Env:BATCH11_GZIP, Env:BATCH11_PATCH -ErrorAction SilentlyContinue
 
             git apply --index --check $patchPath
             Need ($LASTEXITCODE -eq 0) 'Batch 11 patch does not apply exactly to admitted Batch 10.'
