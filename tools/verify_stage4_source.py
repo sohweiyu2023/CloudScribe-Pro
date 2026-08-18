@@ -23,6 +23,11 @@ BATCH9_RUN = "32095990711"
 BATCH9_SOURCE_SHA256 = "5cb164c3bcde199a53924293ab5bdb6d888f5e0427eb1dec4fb80852dbc950a9"
 BATCH9_EVIDENCE_ARTIFACT = 9310008713
 BATCH9_EVIDENCE_SHA256 = "358de956d5deca6b0382794b53721a64eea76a0835e4aa5592a111953945c991"
+BATCH10_COMMIT = "e21f1a055e22f99bd6a3d88d6e2802b6d0b6d4da"
+BATCH10_RUN = "32113025375"
+BATCH10_SOURCE_SHA256 = "5f4d5bd9550c7beaecff69bc9e50b855384a445db1bd5a9b12623c4594b2e4c9"
+BATCH10_EVIDENCE_ARTIFACT = 9315742662
+BATCH10_EVIDENCE_SHA256 = "75bf495e893e8d11ad44b5d0b97fcf948e7939fa83702f6a07066e13b8951533"
 
 def fail(message: str) -> int:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -92,8 +97,18 @@ def main() -> int:
         return fail("Stage 4 is not bound to the deterministic Batch 9 admitted source archive")
     if state.get("stage4_foundation_batch9_evidence_artifact") != BATCH9_EVIDENCE_ARTIFACT or state.get("stage4_foundation_batch9_evidence_sha256") != BATCH9_EVIDENCE_SHA256:
         return fail("Stage 4 is not bound to the authoritative Batch 9 evidence artifact")
-    if state.get("stage4_foundation_batch10") is not True or state.get("stage4_foundation_batch10_admitted") is not False:
-        return fail("Current Stage 4 Batch 10 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_foundation_batch10") is not True or state.get("stage4_foundation_batch10_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 10 admission")
+    if state.get("stage4_foundation_batch10_commit") != BATCH10_COMMIT or str(state.get("stage4_foundation_batch10_admission_run")) != BATCH10_RUN:
+        return fail("Stage 4 is not bound to the authoritative Batch 10 Windows admission evidence")
+    if state.get("stage4_foundation_batch10_source_sha256") != BATCH10_SOURCE_SHA256:
+        return fail("Stage 4 is not bound to the deterministic Batch 10 admitted source archive")
+    if state.get("stage4_foundation_batch10_evidence_artifact") != BATCH10_EVIDENCE_ARTIFACT or state.get("stage4_foundation_batch10_evidence_sha256") != BATCH10_EVIDENCE_SHA256:
+        return fail("Stage 4 is not bound to the authoritative Batch 10 evidence artifact")
+    if state.get("stage4_foundation_batch11") is not True or state.get("stage4_foundation_batch11_admitted") is not False:
+        return fail("Current Stage 4 Batch 11 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_pricing_plan_contract_explicit") is not True:
+        return fail("Stage 4 must expose an explicit provider-neutral pricing-plan contract")
     if state.get("stage4_provider_endpoint_reference_explicit") is not True:
         return fail("Stage 4 must expose endpoint and region as an explicit provider-neutral reference")
     if state.get("stage4_provider_model_alias_voice_operation_contracts") is not True:
@@ -247,6 +262,16 @@ def main() -> int:
             "no default selection", "inspection never refreshes providers")
         require_text(root, "src/CloudScribe.Domain/Pricing/PricingMeterDefinition.cs",
             "The final pricing tier must be open-ended", "one currency and exact integer scale")
+        require_text(root, "src/CloudScribe.Domain/Pricing/PricingPlanDefinition.cs",
+            "PricingPlanDefinition", "MeterStableIds", "ProvenanceId",
+            "requires at least one meter reference", "meter references must be unique")
+        require_text(root, "tests/CloudScribe.Domain.Tests/PricingPlanDefinitionTests.cs",
+            "PlanPreservesExplicitMeterReferencesAndProvenance",
+            "PlanRejectsMissingOrDuplicateMeterReferences",
+            "PlanRejectsAmbiguousIdentifiersAndInvisibleProvenance")
+        require_text(root, "docs/STAGE4-FOUNDATION-BATCH11.txt",
+            "plans are required alongside meters", "Admission run: 32113025375",
+            "257/257 passed", "Stage 4 completion or promotion", "Stage 5 start")
         require_text(root, "src/CloudScribe.Domain/Pricing/PricingTier.cs",
             "PricingTier", "PricePerBlock", "BlockSize")
         require_text(root, "src/CloudScribe.Domain/Pricing/PricingAllowance.cs",
@@ -302,7 +327,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-9, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider and deterministic fake-catalog coverage, Windows OS-vault storage, explicit provider endpoint/model/alias/voice/operation/governance/data-handling references, and a provider-neutral exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable pricing, limit-taxonomy, or runtime-policy bytes are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-10, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider and deterministic fake-catalog coverage, Windows OS-vault storage, explicit provider endpoint/model/alias/voice/operation/governance/data-handling references, and provider-neutral provenance-bearing pricing plans plus the exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable pricing, limit-taxonomy, or runtime-policy bytes are admitted.")
     return 0
 
 if __name__ == "__main__":

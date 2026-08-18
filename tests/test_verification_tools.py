@@ -978,6 +978,18 @@ class Stage4SourceContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("limit-taxonomy bytes", result.stderr)
 
+    def test_rejects_pricing_plan_contract_regression(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-pricing-plan-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_pricing_plan_contract_explicit"] = False
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("pricing-plan contract", result.stderr)
+
+
 class Stage2EvidenceInventoryCliTests(unittest.TestCase):
     @staticmethod
     def create_valid_inventory(root: Path) -> None:
