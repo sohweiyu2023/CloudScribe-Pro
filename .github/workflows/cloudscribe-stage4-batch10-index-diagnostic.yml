@@ -1,4 +1,5 @@
 name: CloudScribe Stage 4 Batch 10 index identity diagnostic
+# registration trigger v2
 
 on:
   workflow_dispatch:
