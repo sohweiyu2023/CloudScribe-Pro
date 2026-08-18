@@ -1,0 +1,68 @@
+schema/seed validation.\n- Any inferred production Ed25519 trust anchor.\n- Stage 4 completion or promotion.\n\nReason\n- The active source/file-retrieval context contains the controlling prompt and historical validation evidence but not the authoritative machine-readable pricing schema/seed, runtime-policy schema/seed, or intended production trust-anchor bytes. Their field/taxonomy semantics must not be recreated from summaries.\n''',
+}
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    target = ROOT / path
+    text = target.read_text(encoding="utf-8")
+    if text.count(old) != 1:
+        raise ValueError(f"Expected one transform anchor in {path}: {old[:80]!r}; found {text.count(old)}")
+    target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+def write_new_files() -> None:
+    for relative, content in NEW_FILES.items():
+        path = ROOT / relative
+        if path.exists():
+            raise ValueError(f"Batch 10 new file already exists: {relative}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+
+def update_state() -> None:
+    path = ROOT / "SESSION_STATE.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("repository_version") != "0.5.0-stage4-foundation-batch9":
+        raise ValueError("Batch 10 requires exact Batch 9 repository version")
+    data["repository_version"] = "0.5.0-stage4-foundation-batch10"
+    data["generated_at_utc"] = "2026-08-18T06:45:00Z"
+    data["status"] = "Stage 3 is final-Windows-certified and promoted. Stage 4 foundation Batches 1-9 are Windows-admitted. Batch 10 completes the provider-neutral model/alias/voice/operation/endpoint/governance/data-handling reference layer without fabricating unavailable schema-1.1.5 limit-taxonomy, runtime-policy 1.3, production pricing, or production trust-anchor bytes."
+    data["next_exact_action"] = "Windows-admit Stage 4 Batch 10 provider-contract completion under exact SDK 10.0.400; then recover and authenticate the exact v2.22 pricing schema/seed, runtime-policy 1.3 schema/seed, schema-1.1.5 limit taxonomy and intended production trusted public key before Stage 4 promotion. Do not start Stage 5 or fabricate unavailable controlling-package bytes."
+    data["latest_reaudit_completed_at_utc"] = "2026-08-18T06:45:00Z"
+    data["stage4_foundation_batch9_admitted"] = True
+    data["stage4_foundation_batch9_admission_run"] = 32095990711
+    data["stage4_foundation_batch9_commit"] = "88c58ed876de71518c4d6c538cdbc0697f4606fb"
+    data["stage4_foundation_batch9_tests"] = "255/255 compiled .NET tests passed; 75/75 verifier self-tests; 153/153 deterministic regressions; Release build 0 warnings/0 errors; locked restore and dotnet format passed"
+    data["stage4_foundation_batch9_source_sha256"] = "5cb164c3bcde199a53924293ab5bdb6d888f5e0427eb1dec4fb80852dbc950a9"
+    data["stage4_foundation_batch9_evidence_artifact"] = 9310008713
+    data["stage4_foundation_batch9_evidence_sha256"] = "358de956d5deca6b0382794b53721a64eea76a0835e4aa5592a111953945c991"
+    data["stage4_foundation_batch10"] = True
+    data["stage4_foundation_batch10_admitted"] = False
+    data["stage4_provider_endpoint_reference_explicit"] = True
+    data["stage4_provider_model_alias_voice_operation_contracts"] = True
+    data["stage4_provider_governance_data_handling_references"] = True
+    data["stage4_deterministic_fake_pricing_catalog_tested"] = True
+    data["stage4_runtime_policy_exact_bytes_available"] = False
+    data["stage4_runtime_policy_contract_admitted"] = False
+    data["stage4_limit_taxonomy_exact_bytes_available"] = False
+    data["stage4_limit_taxonomy_contract_admitted"] = False
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def update_csharp_tests() -> None:
+    replace_once(
+        "tests/CloudScribe.Infrastructure.Tests/Stage4ProviderFoundationTests.cs",
+        "    [Fact]\n    public void AccountAndCapabilityIdentifiersCannotHideControlOrImplicitSwitches()\n",
+        '''    [Fact]\n    public void ProviderNeutralReferencesKeepEverySelectionAndPolicyEvidenceExplicit()\n    {\n        ProviderEndpointReference endpoint = new("default", "global");\n        ProviderModelReference model = new("tts-model", "models/acme:v1", ProviderLifecycleState.Available, "snapshot-2026-08");\n        ProviderAliasReference alias = new("models/acme:v1", model.StableId, "test-fixture:alias-v1");\n        ProviderVoiceReference voice = new("voice-a", "voices/en-US/A", model.StableId);\n        ProviderOperationReference operation = new("synthesize-speech", ProviderLifecycleState.Available);\n        ProviderGovernanceReference governance = new("standard-policy", "test-fixture:governance-v1");\n        ProviderDataHandlingReference dataHandling = new("no-training", "test-fixture:data-handling-v1");\n\n        Assert.Equal("default", endpoint.EndpointId);\n        Assert.Equal("global", endpoint.RegionId);\n        Assert.Equal("models/acme:v1", model.ExactApiAlias);\n        Assert.Equal(model.StableId, alias.TargetStableId);\n        Assert.Equal("voices/en-US/A", voice.ExactProviderVoiceId);\n        Assert.Equal("synthesize-speech", operation.StableId);\n        Assert.Equal("standard-policy", governance.ProfileId);\n        Assert.Equal("no-training", dataHandling.ProfileId);\n        Assert.Throws<ArgumentException>(() => new ProviderModelReference("Implicit Default", "model", ProviderLifecycleState.Available));\n        Assert.Throws<ArgumentException>(() => new ProviderAliasReference("model", "Implicit Default", "test"));\n    }\n\n    [Fact]\n    public void AccountAndCapabilityIdentifiersCannotHideControlOrImplicitSwitches()\n''',
+    )
+    replace_once(
+        "tests/CloudScribe.Infrastructure.Tests/PricingCatalogAdmissionServiceTests.cs",
+        "public sealed class PricingCatalogAdmissionServiceTests\n{\n",
+        '''public sealed class PricingCatalogAdmissionServiceTests\n{\n    private static readonly byte[] DeterministicFakeCatalog = """{"fixture":"stage4-fake-catalog","schemaVersion":"1.1.5"}"""u8.ToArray();\n\n    [Fact]\n    public void DeterministicFakePricingCatalogExercisesStrictAdmissionContract()\n    {\n        PricingCatalogAdmissionService service = new(\n            new StrictJsonObjectReader(),\n            new AcceptingValidator(),\n            new UnavailablePricingCatalogSignatureVerifier());\n\n        PricingCatalogDryRunResult first = service.DryRun(DeterministicFakeCatalog);\n        PricingCatalogDryRunResult second = service.DryRun(DeterministicFakeCatalog);\n\n        Assert.Equal(PricingCatalogTrustState.ValidUnsigned, first.TrustState);\n        Assert.Equal(first.TrustState, second.TrustState);\n        Assert.Equal(first.StatusReason, second.StatusReason);\n        Assert.True(first.CanApprove);\n    }\n\n''',
+    )
+
+
+def update_verifier() -> None:
+    path = ROOT / "tools/verify_stage4_source.py"
+    text = path.read_text(encoding="utf-8")
+    text = text.re
