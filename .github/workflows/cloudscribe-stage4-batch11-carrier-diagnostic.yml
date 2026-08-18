@@ -1,5 +1,5 @@
 name: CloudScribe Stage 4 batch 11 carrier diagnostic
-# observable carrier identity diagnostic v2
+# observable carrier identity diagnostic v3 registration trigger
 
 on:
   workflow_dispatch:
