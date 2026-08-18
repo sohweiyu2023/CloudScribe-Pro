@@ -1,4 +1,5 @@
 name: CloudScribe Stage 4 foundation batch 11 admission v2
+# registration trigger v2
 
 on:
   workflow_dispatch:
