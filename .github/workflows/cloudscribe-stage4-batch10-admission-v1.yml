@@ -1,4 +1,4 @@
-name: CloudScribe Stage 4 foundation batch 10 admission v1
+name: CloudScribe Stage 4 foundation batch 10 admission v2
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ env:
   TARGET_BRANCH: cloudscribe-0.5.0-stage4
   TRANSFORM_SHA256: 9602221ce009fbb588612395ca8a4fdd154779fac951b762f87bd03a4c152e60
   LOCAL_AUDITED_PATCH_SHA256: dbbd6f17aa2aa35818cdf147490d7f3abe9f89e7e376db9d2be2f46cd1b45066
-  CANDIDATE_FINGERPRINT_SHA256: 2648c5f64e2104cd2137398ca50dbeeb12342d8203dd9c95e13828311438ea0d
+  CANDIDATE_INDEX_FINGERPRINT_SHA256: a42b9fe94b908ff5e01f8a550f199de371a15dbaf37aa5131c78854ac4abf778
   EXPECTED_CHANGED_FILES: '15'
   EXPECTED_VERIFIER_TESTS: '80'
   EXPECTED_REGRESSIONS: '153'
@@ -52,7 +52,7 @@ jobs:
           $ErrorActionPreference='Stop'
           $path='carrier/.cloudscribe-ci/stage4-batch10/admission-status.txt'
           [IO.Directory]::CreateDirectory((Split-Path $path -Parent)) | Out-Null
-          [IO.File]::WriteAllText($path,"RUN_ID=$env:GITHUB_RUN_ID`nRUN_ATTEMPT=$env:GITHUB_RUN_ATTEMPT`nSTATUS=in_progress`nSOURCE_BASE=$env:BASE_HEAD`nTRANSFORM_SHA256=$env:TRANSFORM_SHA256`nLOCAL_AUDITED_PATCH_SHA256=$env:LOCAL_AUDITED_PATCH_SHA256`nCANDIDATE_FINGERPRINT_SHA256=$env:CANDIDATE_FINGERPRINT_SHA256`n",[Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllText($path,"RUN_ID=$env:GITHUB_RUN_ID`nRUN_ATTEMPT=$env:GITHUB_RUN_ATTEMPT`nSTATUS=in_progress`nSOURCE_BASE=$env:BASE_HEAD`nTRANSFORM_SHA256=$env:TRANSFORM_SHA256`nLOCAL_AUDITED_PATCH_SHA256=$env:LOCAL_AUDITED_PATCH_SHA256`nCANDIDATE_INDEX_FINGERPRINT_SHA256=$env:CANDIDATE_INDEX_FINGERPRINT_SHA256`n",[Text.UTF8Encoding]::new($false))
           git -C carrier config user.name cloudscribe-ci
           git -C carrier config user.email actions@github.com
           git -C carrier add .cloudscribe-ci/stage4-batch10/admission-status.txt
@@ -78,28 +78,37 @@ jobs:
           Need ((Get-FileHash $script -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:TRANSFORM_SHA256) 'Batch 10 transform SHA mismatch.'
           python $script
           Need ($LASTEXITCODE -eq 0) 'Batch 10 deterministic transform failed.'
-          python tools/update_sha256_manifest.py --check
-          Need ($LASTEXITCODE -eq 0) 'Batch 10 manifest mismatch after transform.'
           $changed=@((git diff --name-only --)+(git ls-files --others --exclude-standard)|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique)
           Need ($changed.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected 15 changed paths; found $($changed.Count): $($changed -join ', ')"
           Need (@($changed|Where-Object{$_ -match 'packages\.lock\.json$' -or $_ -match '(^|/)(bin|obj|TestResults|__pycache__)(/|$)'}).Count -eq 0) 'Batch 10 contains forbidden generated or dependency-lock changes.'
           git add -A
+          Need ($LASTEXITCODE -eq 0) 'Unable to stage Batch 10 candidate.'
+          foreach($relative in $changed){git checkout-index -f -- $relative;if($LASTEXITCODE -ne 0){throw "Unable to materialize normalized Batch 10 index blob: $relative"}}
+          python tools/update_sha256_manifest.py
+          Need ($LASTEXITCODE -eq 0) 'Unable to regenerate Batch 10 manifest from normalized bytes.'
+          git add SHA256SUMS.txt
+          Need ($LASTEXITCODE -eq 0) 'Unable to stage normalized Batch 10 manifest.'
+          python tools/update_sha256_manifest.py --check
+          Need ($LASTEXITCODE -eq 0) 'Batch 10 manifest mismatch after normalization.'
           git diff --cached --check
           Need ($LASTEXITCODE -eq 0) 'Batch 10 staged whitespace check failed.'
+          $staged=@(git diff --cached --name-only|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique)
+          Need ($staged.Count -eq [int]$env:EXPECTED_CHANGED_FILES) "Expected 15 staged paths; found $($staged.Count): $($staged -join ', ')"
           $fingerprintLines=@()
-          foreach($relative in ($changed|Sort-Object)){
-            $hash=(Get-FileHash $relative -Algorithm SHA256).Hash.ToLowerInvariant()
-            $fingerprintLines += "$hash  $relative"
+          foreach($relative in $staged){
+            $entry=(git ls-files -s -- $relative).Trim()
+            Need ($entry -match '^\d+\s+([0-9a-f]{40,64})\s+0\t') "Unable to read staged blob identity: $relative"
+            $fingerprintLines += "$($Matches[1])  $relative"
           }
           $fingerprintText=($fingerprintLines -join "`n")+"`n"
           $fingerprintBytes=[Text.UTF8Encoding]::new($false).GetBytes($fingerprintText)
           $fingerprint=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($fingerprintBytes)).ToLowerInvariant()
-          Need ($fingerprint -eq $env:CANDIDATE_FINGERPRINT_SHA256) "Batch 10 candidate fingerprint mismatch: $fingerprint"
+          Need ($fingerprint -eq $env:CANDIDATE_INDEX_FINGERPRINT_SHA256) "Batch 10 staged-index fingerprint mismatch: $fingerprint"
           $patch=Join-Path $env:RUNNER_TEMP 'batch10-candidate.patch'
           $patchText=(git diff --cached --binary --full-index) -join "`n"
           [IO.File]::WriteAllText($patch,$patchText+"`n",[Text.UTF8Encoding]::new($false))
           Need ($LASTEXITCODE -eq 0) 'Unable to capture Batch 10 candidate patch.'
-          Write-Host "CLOUDSCRIBE_STAGE4_BATCH10_RECONSTRUCTED files=$($changed.Count) fingerprint=$fingerprint local_audited_patch=$env:LOCAL_AUDITED_PATCH_SHA256"
+          Write-Host "CLOUDSCRIBE_STAGE4_BATCH10_RECONSTRUCTED files=$($staged.Count) index_fingerprint=$fingerprint local_audited_patch=$env:LOCAL_AUDITED_PATCH_SHA256"
 
       - name: Portable governance and mutation gates
         working-directory: source
@@ -141,9 +150,9 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           function Need([bool]$ok,[string]$message){if(-not $ok){throw $message}}
-          $root=Join-Path $env:RUNNER_TEMP 'stage4-batch10-v1-tests';New-Item -ItemType Directory -Force $root|Out-Null
+          $root=Join-Path $env:RUNNER_TEMP 'stage4-batch10-v2-tests';New-Item -ItemType Directory -Force $root|Out-Null
           $projects=@('tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj','tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj','tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj','tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj')
-          for($i=0;$i -lt $projects.Count;$i++){$dir=Join-Path $root $i;New-Item -ItemType Directory -Force $dir|Out-Null;dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=batch10-v1.trx';if($LASTEXITCODE -ne 0){throw "Tests failed: $($projects[$i])"}}
+          for($i=0;$i -lt $projects.Count;$i++){$dir=Join-Path $root $i;New-Item -ItemType Directory -Force $dir|Out-Null;dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=batch10-v2.trx';if($LASTEXITCODE -ne 0){throw "Tests failed: $($projects[$i])"}}
           $trx=@(Get-ChildItem $root -Filter '*.trx' -File -Recurse);Need ($trx.Count -eq 4) "Expected 4 TRX files; found $($trx.Count)."
           $total=0;$passed=0;$failed=0;$skipped=0
           foreach($f in $trx){[xml]$x=Get-Content $f.FullName -Raw;$c=$x.TestRun.ResultSummary.Counters;$total+=[int]$c.total;$passed+=[int]$c.passed;$failed+=[int]$c.failed;$skipped+=[int]$c.notExecuted}
@@ -173,7 +182,7 @@ jobs:
         working-directory: source
         shell: pwsh
         run: |
-          $package=Join-Path $env:RUNNER_TEMP 'stage4-batch10-v1-package';New-Item -ItemType Directory -Force $package|Out-Null
+          $package=Join-Path $env:RUNNER_TEMP 'stage4-batch10-v2-package';New-Item -ItemType Directory -Force $package|Out-Null
           python tools/create_source_archive.py --output-directory $package
           if($LASTEXITCODE -ne 0){throw 'Source archive creation failed.'}
 
@@ -181,12 +190,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch10-admission-v1
+          name: cloudscribe-stage4-foundation-batch10-admission-v2
           retention-days: 14
           if-no-files-found: warn
           path: |
-            ${{ runner.temp }}/stage4-batch10-v1-tests/**
-            ${{ runner.temp }}/stage4-batch10-v1-package/**
+            ${{ runner.temp }}/stage4-batch10-v2-tests/**
+            ${{ runner.temp }}/stage4-batch10-v2-package/**
             ${{ runner.temp }}/batch10-candidate.patch
 
       - name: Publish final admission locator
@@ -198,7 +207,7 @@ jobs:
           git -C carrier pull --ff-only origin cloudscribe-stage4-batch10-dev
           if($LASTEXITCODE -ne 0){throw 'Unable to refresh Batch 10 carrier for final locator.'}
           $path='carrier/.cloudscribe-ci/stage4-batch10/admission-status.txt'
-          [IO.File]::WriteAllText($path,"RUN_ID=$env:GITHUB_RUN_ID`nRUN_ATTEMPT=$env:GITHUB_RUN_ATTEMPT`nSTATUS=$status`nSOURCE_BASE=$env:BASE_HEAD`nTRANSFORM_SHA256=$env:TRANSFORM_SHA256`nLOCAL_AUDITED_PATCH_SHA256=$env:LOCAL_AUDITED_PATCH_SHA256`nCANDIDATE_FINGERPRINT_SHA256=$env:CANDIDATE_FINGERPRINT_SHA256`n",[Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllText($path,"RUN_ID=$env:GITHUB_RUN_ID`nRUN_ATTEMPT=$env:GITHUB_RUN_ATTEMPT`nSTATUS=$status`nSOURCE_BASE=$env:BASE_HEAD`nTRANSFORM_SHA256=$env:TRANSFORM_SHA256`nLOCAL_AUDITED_PATCH_SHA256=$env:LOCAL_AUDITED_PATCH_SHA256`nCANDIDATE_INDEX_FINGERPRINT_SHA256=$env:CANDIDATE_INDEX_FINGERPRINT_SHA256`n",[Text.UTF8Encoding]::new($false))
           git -C carrier config user.name cloudscribe-ci
           git -C carrier config user.email actions@github.com
           git -C carrier add .cloudscribe-ci/stage4-batch10/admission-status.txt
