@@ -1,0 +1,102 @@
+param(
+    [Parameter(Mandatory=$true)][string]$SourceRoot,
+    [Parameter(Mandatory=$true)][string]$CarrierRoot
+)
+
+$ErrorActionPreference = 'Stop'
+$BASE_HEAD = '88c58ed876de71518c4d6c538cdbc0697f4606fb'
+$TARGET_BRANCH = 'cloudscribe-0.5.0-stage4'
+$TRANSFORM_SHA256 = '9602221ce009fbb588612395ca8a4fdd154779fac951b762f87bd03a4c152e60'
+$INDEX_FINGERPRINT_SHA256 = 'aff4f3e483538509d0db4143bd403b7f4bba7450af68fa99ba728ea64770982f'
+$EXPECTED_CHANGED_FILES = 15
+$EXPECTED_VERIFIER_TESTS = 80
+$EXPECTED_REGRESSIONS = 153
+$EXPECTED_DOTNET_TESTS = 257
+
+$SourceRoot = (Resolve-Path $SourceRoot).Path
+$CarrierRoot = (Resolve-Path $CarrierRoot).Path
+$testRoot = Join-Path $env:RUNNER_TEMP 'stage4-batch10-v3-tests'
+$packageRoot = Join-Path $env:RUNNER_TEMP 'stage4-batch10-v3-package'
+$patchPath = Join-Path $env:RUNNER_TEMP 'batch10-v3-candidate.patch'
+$status = 'failure'
+$exitCode = 1
+
+function Need([bool]$ok, [string]$message) {
+    if (-not $ok) { throw $message }
+}
+
+function Run-Native([scriptblock]$command, [string]$message) {
+    & $command
+    if ($LASTEXITCODE -ne 0) { throw $message }
+}
+
+function Write-Locator([string]$value) {
+    $path = Join-Path $CarrierRoot '.cloudscribe-ci/stage4-batch10/admission-v3-status.txt'
+    [IO.Directory]::CreateDirectory((Split-Path $path -Parent)) | Out-Null
+    $body = "RUN_ID=$env:GITHUB_RUN_ID`nRUN_ATTEMPT=$env:GITHUB_RUN_ATTEMPT`nSTATUS=$value`nSOURCE_BASE=$BASE_HEAD`nTRANSFORM_SHA256=$TRANSFORM_SHA256`nCANDIDATE_INDEX_FINGERPRINT_SHA256=$INDEX_FINGERPRINT_SHA256`n"
+    [IO.File]::WriteAllText($path, $body, [Text.UTF8Encoding]::new($false))
+    git -C $CarrierRoot config user.name cloudscribe-ci
+    git -C $CarrierRoot config user.email actions@github.com
+    git -C $CarrierRoot add .cloudscribe-ci/stage4-batch10/admission-v3-status.txt
+    git -C $CarrierRoot commit -m "ci: record Batch 10 v3 $value run $env:GITHUB_RUN_ID"
+    if ($LASTEXITCODE -eq 0) {
+        git -C $CarrierRoot push origin HEAD:cloudscribe-stage4-batch10-dev
+        Need ($LASTEXITCODE -eq 0) 'Unable to publish Batch 10 v3 locator.'
+    }
+}
+
+try {
+    Write-Locator 'in_progress'
+    Set-Location $SourceRoot
+
+    Need ((git rev-parse HEAD).Trim() -eq $BASE_HEAD) 'Stage 4 target moved before Batch 10 v3 admission.'
+    Need ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK; expected 10.0.400.'
+
+    $payloadRoot = Join-Path $CarrierRoot '.cloudscribe-ci/stage4-batch10'
+    $scriptPath = Join-Path $env:RUNNER_TEMP 'apply_batch10-v3.py'
+    $parts = 1..4 | ForEach-Object { Join-Path $payloadRoot ('apply_batch10-{0:d2}.part' -f $_) }
+    foreach ($part in $parts) { Need (Test-Path $part) "Missing transform part: $part" }
+    $joined = ($parts | ForEach-Object { [IO.File]::ReadAllText($_) }) -join ''
+    [IO.File]::WriteAllText($scriptPath, $joined, [Text.UTF8Encoding]::new($false))
+    Need ((Get-FileHash $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $TRANSFORM_SHA256) 'Batch 10 transform SHA mismatch.'
+    & python $scriptPath
+    Need ($LASTEXITCODE -eq 0) 'Batch 10 deterministic transform failed.'
+
+    $changed = @((git diff --name-only --) + (git ls-files --others --exclude-standard) | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
+    Need ($changed.Count -eq $EXPECTED_CHANGED_FILES) "Expected 15 changed paths; found $($changed.Count): $($changed -join ', ')"
+    Need (@($changed | Where-Object { $_ -match 'packages\.lock\.json$' -or $_ -match '(^|/)(bin|obj|TestResults|__pycache__)(/|$)' }).Count -eq 0) 'Batch 10 contains forbidden generated or lockfile changes.'
+
+    git add -A
+    Need ($LASTEXITCODE -eq 0) 'Unable to stage initial Batch 10 candidate.'
+    foreach ($relative in $changed) {
+        git checkout-index -f -- $relative
+        Need ($LASTEXITCODE -eq 0) "Unable to materialize normalized index blob: $relative"
+    }
+    & python tools/update_sha256_manifest.py
+    Need ($LASTEXITCODE -eq 0) 'Unable to regenerate Batch 10 manifest from normalized bytes.'
+    git add SHA256SUMS.txt
+    Need ($LASTEXITCODE -eq 0) 'Unable to stage normalized manifest.'
+    & python tools/update_sha256_manifest.py --check
+    Need ($LASTEXITCODE -eq 0) 'Batch 10 manifest mismatch after normalization.'
+    git diff --cached --check
+    Need ($LASTEXITCODE -eq 0) 'Batch 10 staged whitespace check failed.'
+
+    $staged = @(git diff --cached --name-only | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
+    Need ($staged.Count -eq $EXPECTED_CHANGED_FILES) "Expected 15 staged paths; found $($staged.Count)."
+    $fingerprintLines = @()
+    foreach ($relative in $staged) {
+        $entry = (git ls-files -s -- $relative).Trim()
+        Need ($entry -match '^\d+\s+([0-9a-f]{40,64})\s+0\t') "Unable to read staged blob: $relative"
+        $line = "$($Matches[1])  $relative"
+        $fingerprintLines += $line
+        Write-Host "BATCH10_INDEX $line"
+    }
+    $fingerprintText = ($fingerprintLines -join "`n") + "`n"
+    $fingerprintBytes = [Text.UTF8Encoding]::new($false).GetBytes($fingerprintText)
+    $fingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($fingerprintBytes)).ToLowerInvariant()
+    Write-Host "BATCH10_INDEX_FINGERPRINT=$fingerprint"
+    Need ($fingerprint -eq $INDEX_FINGERPRINT_SHA256) "Batch 10 staged-index fingerprint mismatch: $fingerprint"
+
+    $patchText = (git diff --cached --binary --full-index) -join "`n"
+    [IO.File]::WriteAllText($patchPath, $patchText + "`n", [Text.UTF8Encoding]::new($false))
+
