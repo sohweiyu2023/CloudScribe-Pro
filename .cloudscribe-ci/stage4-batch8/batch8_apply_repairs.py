@@ -13,14 +13,32 @@ def run(*args: str) -> None:
         raise SystemExit(f"command failed ({result.returncode}): {' '.join(args)}")
 
 
-def apply_b64(path: Path, expected_sha: str, output: Path) -> None:
-    payload = base64.b64decode(path.read_text(encoding='ascii').strip(), validate=True)
+def apply_payload(payload: bytes, label: str, expected_sha: str, output: Path) -> None:
     digest = hashlib.sha256(payload).hexdigest()
     if digest != expected_sha:
-        raise SystemExit(f'SHA mismatch for {path.name}: {digest}')
+        raise SystemExit(f'SHA mismatch for {label}: {digest}')
     output.write_bytes(payload)
     run('git', 'apply', '--check', '--', str(output))
     run('git', 'apply', '--whitespace=nowarn', '--', str(output))
+
+
+def apply_b64(path: Path, expected_sha: str, output: Path) -> None:
+    payload = base64.b64decode(path.read_text(encoding='ascii').strip(), validate=True)
+    apply_payload(payload, path.name, expected_sha, output)
+
+
+def apply_b64_parts(carrier: Path, prefix: str, count: int, expected_b64_length: int, expected_sha: str, output: Path) -> None:
+    parts = []
+    for index in range(1, count + 1):
+        path = carrier / f'{prefix}-{index:02d}.b64'
+        if not path.is_file():
+            raise SystemExit(f'Missing carrier chunk: {path.name}')
+        parts.append(path.read_text(encoding='ascii').strip())
+    text = ''.join(parts)
+    if len(text) != expected_b64_length:
+        raise SystemExit(f'Unexpected Base64 length for {prefix}: {len(text)}')
+    payload = base64.b64decode(text, validate=True)
+    apply_payload(payload, prefix, expected_sha, output)
 
 
 def main() -> None:
@@ -41,7 +59,7 @@ def main() -> None:
     apply_b64(carrier / 'batch8-ma0016-repair.b64', args.source_repair_sha, temp / 'batch8-ma0016-repair.patch')
     apply_b64(carrier / 'batch8-cs0266-repair.b64', args.compile_repair_sha, temp / 'batch8-cs0266-repair.patch')
     apply_b64(carrier / 'batch8-ca1859-repair.b64', args.analyzer_repair_sha, temp / 'batch8-ca1859-repair.patch')
-    apply_b64(carrier / 'batch8-test-memory-repair.b64', args.test_repair_sha, temp / 'batch8-test-memory-repair.patch')
+    apply_b64_parts(carrier, 'batch8-test-memory-repair', 8, 10056, args.test_repair_sha, temp / 'batch8-test-memory-repair.patch')
     run('python', 'tools/update_sha256_manifest.py', '--check')
     run('git', 'add', '-A')
     paths = sorted(filter(None, subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()))
@@ -61,7 +79,7 @@ def main() -> None:
     if any(set(Path(path).parts) & {'bin', 'obj', 'TestResults', '__pycache__'} for path in paths):
         raise SystemExit('Generated path entered the Batch 8 candidate.')
     run('git', 'diff', '--cached', '--check')
-    print(f'CLOUDSCRIBE_STAGE4_BATCH8_V6_RECONSTRUCTED files={len(paths)} locks={len(locks)}')
+    print(f'CLOUDSCRIBE_STAGE4_BATCH8_V7_RECONSTRUCTED files={len(paths)} locks={len(locks)} test_b64=10056')
 
 
 if __name__ == '__main__':
