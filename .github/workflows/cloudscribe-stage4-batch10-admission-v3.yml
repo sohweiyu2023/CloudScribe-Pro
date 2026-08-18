@@ -1,5 +1,4 @@
-name: CloudScribe Stage 4 foundation batch 10 admission v3
-# registration trigger v2
+name: CloudScribe Stage 4 foundation batch 10 admission v4
 
 on:
   workflow_dispatch:
@@ -32,23 +31,27 @@ jobs:
           dotnet-version: '10.0.400'
           cache: true
           cache-dependency-path: source/**/packages.lock.json
-      - name: Run exact Batch 10 v3 admission
+      - name: Run exact Batch 10 v4 admission
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
           $root='carrier/.cloudscribe-ci/stage4-batch10'
-          $script=Join-Path $env:RUNNER_TEMP 'admit-batch10-v3.ps1'
-          $text=[IO.File]::ReadAllText((Join-Path $root 'admit-v3-01.part'))+[IO.File]::ReadAllText((Join-Path $root 'admit-v3-02.part'))
+          $part1=Join-Path $root 'admit-v3-01.part'
+          $part2=Join-Path $root 'admit-v3-02.part'
+          $blob1=(git -C carrier hash-object '.cloudscribe-ci/stage4-batch10/admit-v3-01.part').Trim()
+          $blob2=(git -C carrier hash-object '.cloudscribe-ci/stage4-batch10/admit-v3-02.part').Trim()
+          if($blob1 -ne '17332a75c9a9fddada436c31492b4e6825991482'){throw "Admission runner part 1 blob mismatch: $blob1"}
+          if($blob2 -ne 'd2ce23e6708192450310dc9f68b4ae8050029b0d'){throw "Admission runner part 2 blob mismatch: $blob2"}
+          $script=Join-Path $env:RUNNER_TEMP 'admit-batch10-v4.ps1'
+          $text=[IO.File]::ReadAllText($part1)+[IO.File]::ReadAllText($part2)
           [IO.File]::WriteAllText($script,$text,[Text.UTF8Encoding]::new($false))
-          $sha=(Get-FileHash $script -Algorithm SHA256).Hash.ToLowerInvariant()
-          if($sha -ne 'b62096d1bc7b5524a29540bc63468f0a9c8b1d22a7111374f2ed455d13fcfc79'){throw "Admission script SHA mismatch: $sha"}
           & $script -SourceRoot source -CarrierRoot carrier
-          if($LASTEXITCODE -ne 0){throw 'Batch 10 v3 admission failed.'}
-      - name: Upload Batch 10 v3 evidence
+          if($LASTEXITCODE -ne 0){throw 'Batch 10 v4 admission failed.'}
+      - name: Upload Batch 10 v4 evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch10-admission-v3
+          name: cloudscribe-stage4-foundation-batch10-admission-v4
           retention-days: 14
           if-no-files-found: warn
           path: |
