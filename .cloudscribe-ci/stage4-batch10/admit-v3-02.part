@@ -1,0 +1,104 @@
+    foreach ($command in @(
+        'python tools/update_sha256_manifest.py --check',
+        'python tools/verify_repository.py',
+        'python tools/verify_project_dependencies.py',
+        'python tools/verify_stage1_source.py',
+        'python tools/verify_stage2_source.py',
+        'python tools/verify_stage3_source.py',
+        'python tools/verify_stage4_source.py')) {
+        Invoke-Expression $command
+        if ($LASTEXITCODE -ne 0) { throw "Gate failed: $command" }
+    }
+
+    $verifier = @(& python -B tools/run_verifier_self_tests.py 2>&1)
+    $verifierCode = $LASTEXITCODE
+    $verifier | ForEach-Object { Write-Host $_ }
+    Need ($verifierCode -eq 0) 'Verifier self-tests failed.'
+    Need (($verifier -join "`n") -match "PASS: $EXPECTED_VERIFIER_TESTS/$EXPECTED_VERIFIER_TESTS isolated auxiliary Python verifier self-tests") 'Exact 80/80 verifier self-test count missing.'
+
+    $reg = @(& python -B tools/run_python_regression_shards.py --all 2>&1)
+    $regCode = $LASTEXITCODE
+    $reg | ForEach-Object { Write-Host $_ }
+    Need ($regCode -eq 0) 'Deterministic regression suite failed.'
+    Need (($reg -join "`n") -match "$EXPECTED_REGRESSIONS/$EXPECTED_REGRESSIONS") 'Exact 153/153 regression count missing.'
+
+    & dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+    Need ($LASTEXITCODE -eq 0) 'Locked restore failed.'
+    & dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity minimal
+    Need ($LASTEXITCODE -eq 0) 'Format gate failed.'
+    & dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+    Need ($LASTEXITCODE -eq 0) 'Release compiler/analyzer gate failed.'
+
+    New-Item -ItemType Directory -Force $testRoot | Out-Null
+    $projects = @(
+        'tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj',
+        'tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj',
+        'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
+        'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj')
+    for ($i = 0; $i -lt $projects.Count; $i++) {
+        $dir = Join-Path $testRoot $i
+        New-Item -ItemType Directory -Force $dir | Out-Null
+        & dotnet test $projects[$i] -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false --results-directory $dir --logger 'trx;LogFileName=batch10-v3.trx'
+        Need ($LASTEXITCODE -eq 0) "Tests failed: $($projects[$i])"
+    }
+    $trx = @(Get-ChildItem $testRoot -Filter '*.trx' -File -Recurse)
+    Need ($trx.Count -eq 4) "Expected 4 TRX files; found $($trx.Count)."
+    $total=0; $passed=0; $failed=0; $skipped=0
+    foreach ($f in $trx) {
+        [xml]$x = Get-Content $f.FullName -Raw
+        $c = $x.TestRun.ResultSummary.Counters
+        $total += [int]$c.total; $passed += [int]$c.passed; $failed += [int]$c.failed; $skipped += [int]$c.notExecuted
+    }
+    Write-Host "CLOUDSCRIBE_STAGE4_BATCH10_DOTNET_TESTS total=$total passed=$passed failed=$failed skipped=$skipped"
+    Need ($total -eq $EXPECTED_DOTNET_TESTS -and $passed -eq $EXPECTED_DOTNET_TESTS -and $failed -eq 0 -and $skipped -eq 0) 'Exact 257 compiled-test gate failed.'
+
+    & python tools/update_sha256_manifest.py --check
+    Need ($LASTEXITCODE -eq 0) 'Manifest drifted after tests.'
+    & python tools/verify_stage4_source.py
+    Need ($LASTEXITCODE -eq 0) 'Stage 4 verifier failed after tests.'
+    git diff --cached --check
+    Need ($LASTEXITCODE -eq 0) 'Staged source drifted after tests.'
+    & dotnet build-server shutdown | Out-Null
+    git clean -fdx
+    Need ($LASTEXITCODE -eq 0) 'Generated-state cleanup failed.'
+    & python tools/update_sha256_manifest.py --check
+    Need ($LASTEXITCODE -eq 0) 'Tracked source changed during cleanup.'
+    $stagedAfter = @(git diff --cached --name-only | Where-Object { $_ -and $_.Trim() })
+    Need ($stagedAfter.Count -eq $EXPECTED_CHANGED_FILES) "Expected 15 staged paths after tests; found $($stagedAfter.Count)."
+
+    $remote = (git ls-remote --heads origin "refs/heads/$TARGET_BRANCH" | Select-Object -First 1)
+    $remoteHead = ($remote -split '\s+')[0].Trim()
+    Need ($remoteHead -eq $BASE_HEAD) "Stage 4 target moved: $remoteHead"
+    git config user.name cloudscribe-ci
+    git config user.email actions@github.com
+    git commit -m 'feat: complete Stage 4 provider-neutral reference contracts batch 10'
+    Need ($LASTEXITCODE -eq 0) 'Batch 10 commit failed.'
+    $tested = (git rev-parse HEAD).Trim()
+    git push origin "${tested}:refs/heads/$TARGET_BRANCH"
+    Need ($LASTEXITCODE -eq 0) 'Unable to publish exact tested Batch 10.'
+    Write-Host "CLOUDSCRIBE_STAGE4_BATCH10_TESTED_HEAD=$tested"
+
+    New-Item -ItemType Directory -Force $packageRoot | Out-Null
+    & python tools/create_source_archive.py --output-directory $packageRoot
+    Need ($LASTEXITCODE -eq 0) 'Source archive creation failed.'
+
+    $status = 'success'
+    $exitCode = 0
+}
+catch {
+    Write-Host "BATCH10_V3_FAILURE: $($_.Exception.Message)" -ForegroundColor Red
+    $status = 'failure'
+    $exitCode = 1
+}
+finally {
+    try {
+        git -C $CarrierRoot pull --ff-only origin cloudscribe-stage4-batch10-dev | Out-Null
+        Write-Locator $status
+    }
+    catch {
+        Write-Host "BATCH10_V3_LOCATOR_FAILURE: $($_.Exception.Message)" -ForegroundColor Red
+        $exitCode = 1
+    }
+}
+
+exit $exitCode
