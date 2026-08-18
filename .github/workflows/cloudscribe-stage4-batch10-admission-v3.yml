@@ -1,12 +1,16 @@
 name: CloudScribe Stage 4 foundation batch 10 admission v5
 # canonical self-consistent LF candidate
-# registration trigger v2
+# registration trigger v3
 
 on:
   workflow_dispatch:
   push:
     branches: [cloudscribe-stage4-batch10-dev]
     paths: [.github/workflows/cloudscribe-stage4-batch10-admission-v3.yml]
+
+concurrency:
+  group: cloudscribe-stage4-batch10-admission-v5
+  cancel-in-progress: true
 
 permissions:
   contents: write
