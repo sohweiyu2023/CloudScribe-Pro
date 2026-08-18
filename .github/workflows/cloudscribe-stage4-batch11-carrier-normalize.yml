@@ -1,0 +1,56 @@
+name: CloudScribe Stage 4 batch 11 carrier normalize
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [cloudscribe-stage4-batch11-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch11-carrier-normalize.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: cloudscribe-stage4-batch11-dev
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Regenerate exact Base64 carrier from binary gzip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $gzip = '.cloudscribe-ci/stage4-batch11/batch11.patch.gz'
+          $b64 = '.cloudscribe-ci/stage4-batch11/batch11.patch.gz.b64'
+          $expected = '405b0e3a83322999cc45ce85e5e12099ce3e357b2e5c8bc32ad832f33cfa7c00'
+          if (-not (Test-Path $gzip -PathType Leaf)) { throw 'Batch 11 binary gzip carrier is missing.' }
+          $actual = (Get-FileHash $gzip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Batch 11 binary gzip SHA mismatch: $actual" }
+          $env:BATCH11_GZIP = (Resolve-Path $gzip).Path
+          $env:BATCH11_B64 = (Resolve-Path (Split-Path $b64 -Parent)).Path + '\batch11.patch.gz.b64'
+          python -c "import base64,os,pathlib; g=pathlib.Path(os.environ['BATCH11_GZIP']).read_bytes(); s=base64.b64encode(g).decode('ascii'); pathlib.Path(os.environ['BATCH11_B64']).write_text(s, encoding='ascii', newline=''); assert base64.b64decode(s, validate=True)==g"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to regenerate or round-trip Batch 11 Base64 carrier.' }
+          $decoded = Join-Path $env:RUNNER_TEMP 'batch11-roundtrip.patch.gz'
+          $env:BATCH11_DECODED = $decoded
+          python -c "import base64,os,pathlib; pathlib.Path(os.environ['BATCH11_DECODED']).write_bytes(base64.b64decode(pathlib.Path(os.environ['BATCH11_B64']).read_text(encoding='ascii'), validate=True))"
+          if ($LASTEXITCODE -ne 0) { throw 'Batch 11 regenerated Base64 did not decode strictly.' }
+          $roundtrip = (Get-FileHash $decoded -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($roundtrip -ne $expected) { throw "Batch 11 round-trip SHA mismatch: $roundtrip" }
+          git config user.name cloudscribe-ci
+          git config user.email actions@github.com
+          git add $b64
+          git diff --cached --check
+          if ($LASTEXITCODE -ne 0) { throw 'Batch 11 normalized carrier failed staged whitespace check.' }
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Batch 11 Base64 carrier was already exact.'
+            exit 0
+          }
+          git commit -m 'ci: normalize Batch 11 Base64 carrier from verified gzip'
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to commit normalized Batch 11 carrier.' }
+          git push origin HEAD:refs/heads/cloudscribe-stage4-batch11-dev
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to push normalized Batch 11 carrier.' }
