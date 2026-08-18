@@ -15,28 +15,29 @@ $EXPECTED_DOTNET_TESTS = 257
 
 $SourceRoot = (Resolve-Path $SourceRoot).Path
 $CarrierRoot = (Resolve-Path $CarrierRoot).Path
-$testRoot = Join-Path $env:RUNNER_TEMP 'stage4-batch10-v5-tests'
-$packageRoot = Join-Path $env:RUNNER_TEMP 'stage4-batch10-v5-package'
-$patchPath = Join-Path $env:RUNNER_TEMP 'batch10-v5-candidate.patch'
+$testRoot = Join-Path $env:RUNNER_TEMP 'stage4-batch10-v6-tests'
+$packageRoot = Join-Path $env:RUNNER_TEMP 'stage4-batch10-v6-package'
+$patchPath = Join-Path $env:RUNNER_TEMP 'batch10-v6-candidate.patch'
 $status = 'failure'
 $exitCode = 1
+$locatorRelative = ".cloudscribe-ci/stage4-batch10/admission-v6-$env:GITHUB_RUN_ID-status.txt"
 
 function Need([bool]$ok, [string]$message) {
     if (-not $ok) { throw $message }
 }
 
 function Write-Locator([string]$value) {
-    $path = Join-Path $CarrierRoot '.cloudscribe-ci/stage4-batch10/admission-v5-status.txt'
+    $path = Join-Path $CarrierRoot $locatorRelative
     [IO.Directory]::CreateDirectory((Split-Path $path -Parent)) | Out-Null
     $body = "RUN_ID=$env:GITHUB_RUN_ID`nRUN_ATTEMPT=$env:GITHUB_RUN_ATTEMPT`nSTATUS=$value`nSOURCE_BASE=$BASE_HEAD`nTRANSFORM_SHA256=$TRANSFORM_SHA256`nCANONICAL_INDEX_FINGERPRINT_SHA256=$INDEX_FINGERPRINT_SHA256`n"
     [IO.File]::WriteAllText($path, $body, [Text.UTF8Encoding]::new($false))
     git -C $CarrierRoot config user.name cloudscribe-ci
     git -C $CarrierRoot config user.email actions@github.com
-    git -C $CarrierRoot add .cloudscribe-ci/stage4-batch10/admission-v5-status.txt
-    git -C $CarrierRoot commit -m "ci: record Batch 10 v5 $value run $env:GITHUB_RUN_ID"
+    git -C $CarrierRoot add $locatorRelative
+    git -C $CarrierRoot commit -m "ci: record Batch 10 v6 $value run $env:GITHUB_RUN_ID"
     if ($LASTEXITCODE -eq 0) {
         git -C $CarrierRoot push origin HEAD:cloudscribe-stage4-batch10-dev
-        Need ($LASTEXITCODE -eq 0) 'Unable to publish Batch 10 v5 locator.'
+        Need ($LASTEXITCODE -eq 0) 'Unable to publish Batch 10 v6 locator.'
     }
 }
 
@@ -44,11 +45,11 @@ try {
     Write-Locator 'in_progress'
     Set-Location $SourceRoot
 
-    Need ((git rev-parse HEAD).Trim() -eq $BASE_HEAD) 'Stage 4 target moved before Batch 10 v5 admission.'
+    Need ((git rev-parse HEAD).Trim() -eq $BASE_HEAD) 'Stage 4 target moved before Batch 10 v6 admission.'
     Need ((dotnet --version).Trim() -eq '10.0.400') 'Wrong .NET SDK; expected 10.0.400.'
 
     $payloadRoot = Join-Path $CarrierRoot '.cloudscribe-ci/stage4-batch10'
-    $scriptPath = Join-Path $env:RUNNER_TEMP 'apply_batch10-v5.py'
+    $scriptPath = Join-Path $env:RUNNER_TEMP 'apply_batch10-v6.py'
     $parts = 1..4 | ForEach-Object { Join-Path $payloadRoot ('apply_batch10-{0:d2}.part' -f $_) }
     foreach ($part in $parts) { Need (Test-Path $part) "Missing transform part: $part" }
     $joined = ($parts | ForEach-Object { [IO.File]::ReadAllText($_) }) -join ''
@@ -61,7 +62,6 @@ try {
     Need ($changed.Count -eq $EXPECTED_CHANGED_FILES) "Expected 15 changed paths; found $($changed.Count): $($changed -join ', ')"
     Need (@($changed | Where-Object { $_ -match 'packages\.lock\.json$' -or $_ -match '(^|/)(bin|obj|TestResults|__pycache__)(/|$)' }).Count -eq 0) 'Batch 10 contains forbidden generated or lockfile changes.'
 
-    # Stage the transform once so Git supplies canonical LF blobs for every non-manifest path.
     git add -A
     Need ($LASTEXITCODE -eq 0) 'Unable to stage initial Batch 10 candidate.'
     foreach ($relative in ($changed | Where-Object { $_ -ne 'SHA256SUMS.txt' })) {
@@ -71,7 +71,6 @@ try {
     }
     Remove-Item Env:BATCH10_INDEX_PATH -ErrorAction SilentlyContinue
 
-    # The manifest must be generated from those canonical LF working-tree bytes, not CRLF transform output.
     & python tools/update_sha256_manifest.py
     Need ($LASTEXITCODE -eq 0) 'Unable to regenerate canonical Batch 10 manifest.'
     git add SHA256SUMS.txt
