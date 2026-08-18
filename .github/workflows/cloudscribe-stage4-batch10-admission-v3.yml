@@ -1,5 +1,5 @@
-name: CloudScribe Stage 4 foundation batch 10 admission v4
-# registration trigger v2
+name: CloudScribe Stage 4 foundation batch 10 admission v5
+# canonical self-consistent LF candidate
 
 on:
   workflow_dispatch:
@@ -32,7 +32,7 @@ jobs:
           dotnet-version: '10.0.400'
           cache: true
           cache-dependency-path: source/**/packages.lock.json
-      - name: Run exact Batch 10 v4 admission
+      - name: Run exact Batch 10 v5 admission
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -41,21 +41,21 @@ jobs:
           $part2=Join-Path $root 'admit-v3-02.part'
           $blob1=(git -C carrier hash-object '.cloudscribe-ci/stage4-batch10/admit-v3-01.part').Trim()
           $blob2=(git -C carrier hash-object '.cloudscribe-ci/stage4-batch10/admit-v3-02.part').Trim()
-          if($blob1 -ne '17332a75c9a9fddada436c31492b4e6825991482'){throw "Admission runner part 1 blob mismatch: $blob1"}
-          if($blob2 -ne 'd2ce23e6708192450310dc9f68b4ae8050029b0d'){throw "Admission runner part 2 blob mismatch: $blob2"}
-          $script=Join-Path $env:RUNNER_TEMP 'admit-batch10-v4.ps1'
+          if($blob1 -ne '57cd8913cff4760a13bf3ea8b3b6fafc63a2bec8'){throw "Admission runner part 1 blob mismatch: $blob1"}
+          if($blob2 -ne '6b77dfb7b7d85f28e883d1c2f8bd4458f99a714c'){throw "Admission runner part 2 blob mismatch: $blob2"}
+          $script=Join-Path $env:RUNNER_TEMP 'admit-batch10-v5.ps1'
           $text=[IO.File]::ReadAllText($part1)+[IO.File]::ReadAllText($part2)
           [IO.File]::WriteAllText($script,$text,[Text.UTF8Encoding]::new($false))
           & $script -SourceRoot source -CarrierRoot carrier
-          if($LASTEXITCODE -ne 0){throw 'Batch 10 v4 admission failed.'}
-      - name: Upload Batch 10 v4 evidence
+          if($LASTEXITCODE -ne 0){throw 'Batch 10 v5 admission failed.'}
+      - name: Upload Batch 10 v5 evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch10-admission-v4
+          name: cloudscribe-stage4-foundation-batch10-admission-v5
           retention-days: 14
           if-no-files-found: warn
           path: |
-            ${{ runner.temp }}/stage4-batch10-v3-tests/**
-            ${{ runner.temp }}/stage4-batch10-v3-package/**
-            ${{ runner.temp }}/batch10-v3-candidate.patch
+            ${{ runner.temp }}/stage4-batch10-v5-tests/**
+            ${{ runner.temp }}/stage4-batch10-v5-package/**
+            ${{ runner.temp }}/batch10-v5-candidate.patch
