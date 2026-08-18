@@ -31,6 +31,7 @@ def main() -> None:
     p.add_argument('--manifest-sha', required=True)
     p.add_argument('--source-repair-sha', required=True)
     p.add_argument('--compile-repair-sha', required=True)
+    p.add_argument('--analyzer-repair-sha', required=True)
     args = p.parse_args()
     carrier = Path(args.carrier_root)
     temp = Path(args.temp_root)
@@ -38,6 +39,7 @@ def main() -> None:
     apply_b64(carrier / 'batch8-manifest-repair.b64', args.manifest_sha, temp / 'batch8-manifest-repair.patch')
     apply_b64(carrier / 'batch8-ma0016-repair.b64', args.source_repair_sha, temp / 'batch8-ma0016-repair.patch')
     apply_b64(carrier / 'batch8-cs0266-repair.b64', args.compile_repair_sha, temp / 'batch8-cs0266-repair.patch')
+    apply_b64(carrier / 'batch8-ca1859-repair.b64', args.analyzer_repair_sha, temp / 'batch8-ca1859-repair.patch')
     run('python', 'tools/update_sha256_manifest.py', '--check')
     run('git', 'add', '-A')
     paths = sorted(filter(None, subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()))
@@ -57,7 +59,7 @@ def main() -> None:
     if any(set(Path(path).parts) & {'bin', 'obj', 'TestResults', '__pycache__'} for path in paths):
         raise SystemExit('Generated path entered the Batch 8 candidate.')
     run('git', 'diff', '--cached', '--check')
-    print(f'CLOUDSCRIBE_STAGE4_BATCH8_V4_RECONSTRUCTED files={len(paths)} locks={len(locks)}')
+    print(f'CLOUDSCRIBE_STAGE4_BATCH8_V5_RECONSTRUCTED files={len(paths)} locks={len(locks)}')
 
 
 if __name__ == '__main__':
