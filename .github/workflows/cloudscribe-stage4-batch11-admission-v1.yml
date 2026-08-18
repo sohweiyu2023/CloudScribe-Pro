@@ -1,5 +1,5 @@
-name: CloudScribe Stage 4 foundation batch 11 admission v2 via registered trigger
-# registered-trigger bridge to clean v2 carrier
+name: CloudScribe Stage 4 foundation batch 11 admission v3 via registered trigger
+# registered-trigger bridge to canonical v3 runner
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
     paths: [.github/workflows/cloudscribe-stage4-batch11-admission-v1.yml]
 
 concurrency:
-  group: cloudscribe-stage4-batch11-v2-registered-trigger
+  group: cloudscribe-stage4-batch11-v3-registered-trigger
   cancel-in-progress: true
 
 permissions:
@@ -36,25 +36,25 @@ jobs:
           dotnet-version: '10.0.400'
           cache: true
           cache-dependency-path: source/**/packages.lock.json
-      - name: Run exact Batch 11 v2 admission
+      - name: Run exact Batch 11 v3 admission
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $runner = 'carrier/.cloudscribe-ci/stage4-batch11-v2/admit_batch11_v2.ps1'
-          $expectedRunnerBlob = '36c828cb728535c2b1b301362eef0aea68658faa'
-          if (-not (Test-Path $runner -PathType Leaf)) { throw 'Batch 11 v2 admission runner is missing.' }
-          $actualRunnerBlob = (git -C carrier hash-object .cloudscribe-ci/stage4-batch11-v2/admit_batch11_v2.ps1).Trim()
-          if ($actualRunnerBlob -ne $expectedRunnerBlob) { throw "Batch 11 v2 admission runner blob mismatch: $actualRunnerBlob" }
+          $runner = 'carrier/.cloudscribe-ci/stage4-batch11-v2/admit_batch11_v3.ps1'
+          $expectedRunnerBlob = '715236f144490081d27d01c1a36504fca4e4993e'
+          if (-not (Test-Path $runner -PathType Leaf)) { throw 'Batch 11 v3 admission runner is missing.' }
+          $actualRunnerBlob = (git -C carrier hash-object .cloudscribe-ci/stage4-batch11-v2/admit_batch11_v3.ps1).Trim()
+          if ($actualRunnerBlob -ne $expectedRunnerBlob) { throw "Batch 11 v3 admission runner blob mismatch: $actualRunnerBlob" }
           & $runner
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Upload Batch 11 v2 evidence
+      - name: Upload Batch 11 v3 evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cloudscribe-stage4-foundation-batch11-admission-v2
+          name: cloudscribe-stage4-foundation-batch11-admission-v3
           retention-days: 14
           if-no-files-found: warn
           path: |
-            ${{ runner.temp }}/stage4-batch11-v2-tests/**
-            ${{ runner.temp }}/stage4-batch11-v2-package/**
-            ${{ runner.temp }}/stage4-batch11-v2-evidence/**
+            ${{ runner.temp }}/stage4-batch11-v3-tests/**
+            ${{ runner.temp }}/stage4-batch11-v3-package/**
+            ${{ runner.temp }}/stage4-batch11-v3-evidence/**
