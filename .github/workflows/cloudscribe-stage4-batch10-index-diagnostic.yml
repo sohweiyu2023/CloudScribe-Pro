@@ -1,5 +1,6 @@
 name: CloudScribe Stage 4 Batch 10 canonical index identity diagnostic
 # canonical-LF manifest regeneration v3
+# registration trigger v2
 
 on:
   workflow_dispatch:
