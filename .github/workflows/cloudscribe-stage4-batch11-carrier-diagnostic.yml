@@ -1,4 +1,5 @@
 name: CloudScribe Stage 4 batch 11 carrier diagnostic
+# observable carrier identity diagnostic v2
 
 on:
   workflow_dispatch:
@@ -27,6 +28,7 @@ jobs:
           $gzip = '.cloudscribe-ci/stage4-batch11/batch11.patch.gz'
           $b64 = '.cloudscribe-ci/stage4-batch11/batch11.patch.gz.b64'
           $patch = Join-Path $env:RUNNER_TEMP 'batch11-diagnostic.patch'
+          $statusPath = '.cloudscribe-ci/stage4-batch11/carrier-diagnostic-status.txt'
           $expectedPatch = '1ab81a857507ab7404f5952e0fd7832321aef735e10b79101a21f990a2f0d28c'
           if (-not (Test-Path $gzip -PathType Leaf)) { throw 'Binary gzip carrier missing.' }
           $gzipSha = (Get-FileHash $gzip -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -39,11 +41,27 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Binary gzip does not decompress.' }
           $patchSha = (Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant()
           $patchSize = (Get-Item $patch).Length
+          $b64Length = -1
+          $b64Mod4 = -1
+          if (Test-Path $b64 -PathType Leaf) {
+            $raw = Get-Content $b64 -Raw
+            $b64Length = $raw.Length
+            $b64Mod4 = $b64Length % 4
+          }
           Write-Host "BATCH11_DIAGNOSTIC_PATCH_SHA256=$patchSha"
           Write-Host "BATCH11_DIAGNOSTIC_PATCH_SIZE=$patchSize"
-          if (Test-Path $b64 -PathType Leaf) {
-            $env:BATCH11_B64 = (Resolve-Path $b64).Path
-            python -c "import base64,os,pathlib; s=pathlib.Path(os.environ['BATCH11_B64']).read_text(encoding='ascii'); print('BATCH11_DIAGNOSTIC_B64_LENGTH='+str(len(s))); print('BATCH11_DIAGNOSTIC_B64_MOD4='+str(len(s)%4));"
+          Write-Host "BATCH11_DIAGNOSTIC_B64_LENGTH=$b64Length"
+          Write-Host "BATCH11_DIAGNOSTIC_B64_MOD4=$b64Mod4"
+          $identity = if ($patchSha -eq $expectedPatch) { 'PASS' } else { 'FAIL' }
+          $body = "RUN_ID=$env:GITHUB_RUN_ID`nGZIP_SHA256=$gzipSha`nGZIP_SIZE=$gzipSize`nPATCH_SHA256=$patchSha`nPATCH_SIZE=$patchSize`nEXPECTED_PATCH_SHA256=$expectedPatch`nB64_LENGTH=$b64Length`nB64_MOD4=$b64Mod4`nPATCH_IDENTITY=$identity`n"
+          [IO.File]::WriteAllText($statusPath, $body, [Text.UTF8Encoding]::new($false))
+          git config user.name cloudscribe-ci
+          git config user.email actions@github.com
+          git add $statusPath
+          git commit -m "ci: record Batch 11 carrier diagnostic run $env:GITHUB_RUN_ID"
+          if ($LASTEXITCODE -eq 0) {
+            git push origin HEAD:refs/heads/cloudscribe-stage4-batch11-dev
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to publish Batch 11 carrier diagnostic status.' }
           }
           if ($patchSha -ne $expectedPatch) { throw "Decoded patch SHA mismatch: $patchSha" }
           Write-Host 'BATCH11_DIAGNOSTIC_PATCH_IDENTITY=PASS'
