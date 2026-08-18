@@ -1,6 +1,6 @@
 name: CloudScribe Stage 4 foundation batch 10 admission v5
 # canonical self-consistent LF candidate
-# registration trigger v3
+# registration trigger v4
 
 on:
   workflow_dispatch:
