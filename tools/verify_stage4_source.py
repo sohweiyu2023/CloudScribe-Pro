@@ -13,6 +13,11 @@ BATCH6_COMMIT = "527b0f104662f9ed3292e8c594bcffd782cf07bd"
 BATCH6_RUN = "32051045651"
 BATCH7_COMMIT = "82344da168aa9aaa9ca50c141e85fbf63ed63bbf"
 BATCH7_RUN = "32053498219"
+BATCH8_COMMIT = "77fea4e152738eafc00efb78242fa95ec4d56ed3"
+BATCH8_RUN = "32094911733"
+BATCH8_SOURCE_SHA256 = "57d2a9196395cd6fbbae9cf7b4af830c4619ac323a7c192510c8f0b3372bd738"
+BATCH8_EVIDENCE_ARTIFACT = 9309652831
+BATCH8_EVIDENCE_SHA256 = "9dcb5121e43c05d239227bdb169d2f322d2fe023fe578b3d3970e521028bdf00"
 
 def fail(message: str) -> int:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -66,8 +71,16 @@ def main() -> int:
         return fail("Stage 4 must preserve the authoritative successful Batch 7 admission")
     if state.get("stage4_foundation_batch7_commit") != BATCH7_COMMIT or str(state.get("stage4_foundation_batch7_admission_run")) != BATCH7_RUN:
         return fail("Stage 4 is not bound to the authoritative Batch 7 Windows admission evidence")
-    if state.get("stage4_foundation_batch8") is not True or state.get("stage4_foundation_batch8_admitted") is not False:
-        return fail("Current Stage 4 Batch 8 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_foundation_batch8") is not True or state.get("stage4_foundation_batch8_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 8 admission")
+    if state.get("stage4_foundation_batch8_commit") != BATCH8_COMMIT or str(state.get("stage4_foundation_batch8_admission_run")) != BATCH8_RUN:
+        return fail("Stage 4 is not bound to the authoritative Batch 8 Windows admission evidence")
+    if state.get("stage4_foundation_batch8_source_sha256") != BATCH8_SOURCE_SHA256:
+        return fail("Stage 4 is not bound to the deterministic Batch 8 admitted source archive")
+    if state.get("stage4_foundation_batch8_evidence_artifact") != BATCH8_EVIDENCE_ARTIFACT or state.get("stage4_foundation_batch8_evidence_sha256") != BATCH8_EVIDENCE_SHA256:
+        return fail("Stage 4 is not bound to the authoritative Batch 8 evidence artifact")
+    if state.get("stage4_foundation_batch9") is not True or state.get("stage4_foundation_batch9_admitted") is not False or state.get("stage4_batch9_evidence_binding_checkpoint") is not True:
+        return fail("Current Stage 4 Batch 9 must remain a source-changing evidence-binding candidate until Windows admission")
     if state.get("stage4_ed25519_signature_verification_implemented") is not True:
         return fail("Stage 4 Batch 8 must implement real Ed25519 catalog-signature verification")
     if state.get("stage4_trusted_catalog_keys_external_only") is not True or state.get("stage4_built_in_catalog_trusted_key_count") != 0:
@@ -123,6 +136,10 @@ def main() -> int:
             "TamperedCatalogBytesFailVerification", "MalformedConfiguredPublicKeyFailsClosed")
         require_text(root, "docs/STAGE4-FOUNDATION-BATCH8.txt",
             "real Ed25519 verification", "shipped trusted-key mapping empty", "does not contain private signing key material")
+        require_text(root, "docs/STAGE4-FOUNDATION-BATCH9.txt",
+            "Admission run: 32094911733", "255/255 passed", "Evidence artifact: 9309652831",
+            "57d2a9196395cd6fbbae9cf7b4af830c4619ac323a7c192510c8f0b3372bd738",
+            "Do not begin Stage 5")
         require_text(root, "src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs",
             "explicit user confirmation", "ExpectedCurrentActivationSequence",
             "Rollback can target only", "PricingCatalogApprovalKind.ManualUnsigned",
@@ -240,7 +257,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-7, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider coverage, Windows OS-vault storage, and a provider-neutral exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable exact pricing bytes are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-8, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider coverage, Windows OS-vault storage, and a provider-neutral exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable exact pricing bytes are admitted.")
     return 0
 
 if __name__ == "__main__":

@@ -870,6 +870,39 @@ class Stage4SourceContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("authoritative Batch 7 Windows admission evidence", result.stderr)
 
+    def test_rejects_false_batch8_admission_state(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch8-admission-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch8_admitted"] = False
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative successful Batch 8 admission", result.stderr)
+
+    def test_rejects_wrong_batch8_admission_binding(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch8-binding-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch8_commit"] = "0" * 40
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative Batch 8 Windows admission evidence", result.stderr)
+
+    def test_rejects_wrong_batch8_evidence_artifact_binding(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch8-artifact-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch8_evidence_sha256"] = "0" * 64
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative Batch 8 evidence artifact", result.stderr)
+
     def test_rejects_built_in_pricing_trust_key(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = _copy_source(Path(temporary))
