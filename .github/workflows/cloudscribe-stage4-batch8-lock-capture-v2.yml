@@ -1,0 +1,64 @@
+name: CloudScribe Stage 4 Batch 8 dependency lock capture v2
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch8-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch8-lock-capture-v2.yml]
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  NUGET_XMLDOC_MODE: skip
+
+jobs:
+  capture:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-stage4-batch8-dev, path: carrier, fetch-depth: 1}
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-0.5.0-stage4, path: source, fetch-depth: 0}
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.13'}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: source/**/packages.lock.json
+      - name: Reconstruct exact Batch 8 primary source
+        working-directory: source
+        shell: pwsh
+        run: >-
+          python ../carrier/.cloudscribe-ci/stage4-batch8/batch8_lock_helper.py reconstruct
+          --carrier-root ../carrier/.cloudscribe-ci/stage4-batch8
+          --base-head 82344da168aa9aaa9ca50c141e85fbf63ed63bbf
+          --patch-sha 75df0a3975ece263ac20449cc71222bdf64cf5c09bad8be93dc4541718f739e7
+          --b64-length 16956 --expected-paths 14
+      - name: Regenerate exact dependency lock state
+        working-directory: source
+        shell: pwsh
+        run: |
+          dotnet restore CloudScribe.sln --force-evaluate --disable-parallel --configfile NuGet.config -p:RestoreLockedMode=false
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency lock regeneration failed.' }
+      - name: Capture lock-only delta
+        working-directory: source
+        shell: pwsh
+        run: python ../carrier/.cloudscribe-ci/stage4-batch8/batch8_lock_helper.py capture
+      - name: Seal captured lock delta onto carrier
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python -c "import base64,os,pathlib; t=pathlib.Path(os.environ['RUNNER_TEMP']); c=pathlib.Path('carrier/.cloudscribe-ci/stage4-batch8'); c.mkdir(parents=True,exist_ok=True); c.joinpath('batch8-lock-repair.b64').write_text(base64.b64encode(t.joinpath('batch8-lock-repair.patch').read_bytes()).decode(),encoding='ascii'); c.joinpath('batch8-lock-capture.txt').write_bytes(t.joinpath('batch8-lock-capture.txt').read_bytes())"
+          cd carrier
+          git config user.name cloudscribe-ci
+          git config user.email actions@github.com
+          git add .cloudscribe-ci/stage4-batch8/batch8-lock-repair.b64 .cloudscribe-ci/stage4-batch8/batch8-lock-capture.txt
+          git diff --cached --check
+          if ($LASTEXITCODE -ne 0) { throw 'Captured lock carrier whitespace check failed.' }
+          git commit -m 'ci: seal Windows-generated Batch 8 dependency locks'
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to commit captured Batch 8 locks.' }
+          git push origin HEAD:cloudscribe-stage4-batch8-dev
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to publish captured Batch 8 locks.' }
