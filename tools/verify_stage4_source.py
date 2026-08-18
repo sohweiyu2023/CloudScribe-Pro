@@ -11,6 +11,8 @@ BATCH5_COMMIT = "fdb274a001043f1a81af0e041efc65fed7b26195"
 BATCH5_RUN = "32047903725"
 BATCH6_COMMIT = "527b0f104662f9ed3292e8c594bcffd782cf07bd"
 BATCH6_RUN = "32051045651"
+BATCH7_COMMIT = "82344da168aa9aaa9ca50c141e85fbf63ed63bbf"
+BATCH7_RUN = "32053498219"
 
 def fail(message: str) -> int:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -60,8 +62,18 @@ def main() -> int:
         return fail("Stage 4 must preserve the authoritative successful Batch 6 admission")
     if state.get("stage4_foundation_batch6_commit") != BATCH6_COMMIT or str(state.get("stage4_foundation_batch6_admission_run")) != BATCH6_RUN:
         return fail("Stage 4 is not bound to the authoritative Batch 6 Windows admission evidence")
-    if state.get("stage4_foundation_batch7") is not True or state.get("stage4_foundation_batch7_admitted") is not False:
-        return fail("Current Stage 4 Batch 7 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_foundation_batch7") is not True or state.get("stage4_foundation_batch7_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 7 admission")
+    if state.get("stage4_foundation_batch7_commit") != BATCH7_COMMIT or str(state.get("stage4_foundation_batch7_admission_run")) != BATCH7_RUN:
+        return fail("Stage 4 is not bound to the authoritative Batch 7 Windows admission evidence")
+    if state.get("stage4_foundation_batch8") is not True or state.get("stage4_foundation_batch8_admitted") is not False:
+        return fail("Current Stage 4 Batch 8 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_ed25519_signature_verification_implemented") is not True:
+        return fail("Stage 4 Batch 8 must implement real Ed25519 catalog-signature verification")
+    if state.get("stage4_trusted_catalog_keys_external_only") is not True or state.get("stage4_built_in_catalog_trusted_key_count") != 0:
+        return fail("Stage 4 catalog trust must be external-only and empty by default")
+    if state.get("stage4_private_catalog_signing_keys_present") is not False:
+        return fail("CloudScribe product source must never contain catalog private signing keys")
     if state.get("stage4_pricing_contract_overrides_separate") is not True:
         return fail("User pricing contract overrides must remain explicitly separate from upstream catalog truth")
     if state.get("stage4_provider_quota_observation_contract") is not True:
@@ -99,6 +111,18 @@ def main() -> int:
             "PricingCatalogTrustState.SignatureInvalid", "PricingCatalogTrustState.SignatureVerified")
         require_text(root, "src/CloudScribe.Infrastructure/Pricing/UnavailablePricingCatalogSignatureVerifier.cs",
             "Metadata or an embedded key is never accepted as catalog trust")
+        require_text(root, "src/CloudScribe.Infrastructure/Pricing/Ed25519PricingCatalogSignatureVerifier.cs",
+            "SignatureAlgorithm.Ed25519", "KeyBlobFormat.RawPublicKey", "algorithm.SignatureSize",
+            "algorithm.PublicKeySize", "StringComparer.Ordinal", "Array.Clear(publicKeyBytes)")
+        require_text(root, "src/CloudScribe.Infrastructure/Pricing/PricingCatalogTrustOptions.cs",
+            "CloudScribe:PricingCatalogTrust", "TrustedEd25519PublicKeys", "StringComparer.Ordinal")
+        require_text(root, "src/CloudScribe.Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs",
+            "AddOptions<PricingCatalogTrustOptions>()", "Ed25519PricingCatalogSignatureVerifier")
+        require_text(root, "tests/CloudScribe.Infrastructure.Tests/Ed25519PricingCatalogSignatureVerifierTests.cs",
+            "Rfc8032VectorVerifiesAgainstExternallyConfiguredTrustedKey", "EmptyTrustedKeySetFailsClosed",
+            "TamperedCatalogBytesFailVerification", "MalformedConfiguredPublicKeyFailsClosed")
+        require_text(root, "docs/STAGE4-FOUNDATION-BATCH8.txt",
+            "real Ed25519 verification", "shipped trusted-key mapping empty", "does not contain private signing key material")
         require_text(root, "src/CloudScribe.Infrastructure/Pricing/EfPricingCatalogHistoryStore.cs",
             "explicit user confirmation", "ExpectedCurrentActivationSequence",
             "Rollback can target only", "PricingCatalogApprovalKind.ManualUnsigned",
@@ -192,6 +216,21 @@ def main() -> int:
     except (OSError, ValueError) as exc:
         return fail(str(exc))
 
+    try:
+        settings = json.loads((root / "src/CloudScribe.App/appsettings.json").read_text(encoding="utf-8-sig"))
+        trusted_keys = settings["CloudScribe"]["PricingCatalogTrust"]["TrustedEd25519PublicKeys"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        return fail(f"invalid empty-by-default pricing trust configuration: {exc}")
+    if trusted_keys != {}:
+        return fail("shipped pricing trust configuration must contain zero built-in trusted Ed25519 public keys")
+
+    package_props = (root / "Directory.Packages.props").read_text(encoding="utf-8-sig")
+    infrastructure_project = (root / "src/CloudScribe.Infrastructure/CloudScribe.Infrastructure.csproj").read_text(encoding="utf-8-sig")
+    if 'PackageVersion Include="NSec.Cryptography" Version="26.4.0"' not in package_props:
+        return fail("Stage 4 Batch 8 must bind the reviewed NSec.Cryptography 26.4.0 dependency")
+    if 'PackageReference Include="NSec.Cryptography"' not in infrastructure_project:
+        return fail("CloudScribe.Infrastructure must reference NSec.Cryptography for Ed25519 verification")
+
     forbidden_price_markers = ("pricePerMillion", "price_per_million", "0.000016", "15.00 / 1M")
     source_roots = (root / "src/CloudScribe.App", root / "src/CloudScribe.Application", root / "src/CloudScribe.Domain", root / "src/CloudScribe.Infrastructure")
     for source_root in source_roots:
@@ -201,7 +240,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-6, strict bounded JSON, truthful cost/account/capability contracts, fail-closed catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider coverage, Windows OS-vault storage, and a provider-neutral exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable exact pricing bytes or Ed25519 trust are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-7, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider coverage, Windows OS-vault storage, and a provider-neutral exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable exact pricing bytes are admitted.")
     return 0
 
 if __name__ == "__main__":

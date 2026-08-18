@@ -859,6 +859,39 @@ class Stage4SourceContractTests(unittest.TestCase):
 
 
 
+    def test_rejects_wrong_batch7_admission_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch7_commit"] = "0" * 40
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("authoritative Batch 7 Windows admission evidence", result.stderr)
+
+    def test_rejects_built_in_pricing_trust_key(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "src/CloudScribe.App/appsettings.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["CloudScribe"]["PricingCatalogTrust"]["TrustedEd25519PublicKeys"]["forbidden-built-in"] = "AA=="
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("zero built-in trusted Ed25519 public keys", result.stderr)
+
+    def test_rejects_false_private_signing_key_absence_claim(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_private_catalog_signing_keys_present"] = True
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must never contain catalog private signing keys", result.stderr)
+
 class Stage2EvidenceInventoryCliTests(unittest.TestCase):
     @staticmethod
     def create_valid_inventory(root: Path) -> None:

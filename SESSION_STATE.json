@@ -1,6 +1,6 @@
 {
   "project": "CloudScribe Pro",
-  "repository_version": "0.5.0-stage4-foundation-batch7",
+  "repository_version": "0.5.0-stage4-foundation-batch8",
   "generated_at_utc": "2026-08-17T17:03:00Z",
   "current_stage": 4,
   "stage_title": "Pricing Catalog, Cost Engine, Provider Accounts, and Capability Foundation",
@@ -149,7 +149,19 @@
   "stage4_foundation_batch6_evidence_artifact": 9294846286,
   "stage4_foundation_batch6_evidence_sha256": "0e5ff9ae77d4106f49b7510b05a7a5b50146ee4607989d253a6f83ae0c71d18b",
   "stage4_foundation_batch7": true,
-  "stage4_foundation_batch7_admitted": false,
+  "stage4_foundation_batch7_admitted": true,
   "stage4_pricing_modifier_set_validated": true,
-  "stage4_pricing_usage_scope_enum_validated": true
+  "stage4_pricing_usage_scope_enum_validated": true,
+  "stage4_foundation_batch7_admission_run": 32053498219,
+  "stage4_foundation_batch7_commit": "82344da168aa9aaa9ca50c141e85fbf63ed63bbf",
+  "stage4_foundation_batch7_tests": "245/245 compiled .NET tests passed; 69/69 verifier self-tests; 153/153 deterministic regressions; Release build 0 warnings/0 errors",
+  "stage4_foundation_batch7_source_sha256": "8c4d9512346397373dd55196360f7dc0f255a1caeb8f614491ef88e0d5365a84",
+  "stage4_foundation_batch7_evidence_artifact": 9295637854,
+  "stage4_foundation_batch7_evidence_sha256": "f445dbb9658ce91d1cf69032b317103fc809fca9deb59ac3d997e6cf8146bd17",
+  "stage4_foundation_batch8": true,
+  "stage4_foundation_batch8_admitted": false,
+  "stage4_ed25519_signature_verification_implemented": true,
+  "stage4_trusted_catalog_keys_external_only": true,
+  "stage4_built_in_catalog_trusted_key_count": 0,
+  "stage4_private_catalog_signing_keys_present": false
 }

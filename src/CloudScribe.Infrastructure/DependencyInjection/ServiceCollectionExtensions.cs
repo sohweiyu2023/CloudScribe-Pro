@@ -75,8 +75,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
         services.AddSingleton<StrictJsonObjectReader>();
+        services.AddOptions<PricingCatalogTrustOptions>()
+            .Bind(configuration.GetSection(PricingCatalogTrustOptions.SectionName));
         services.AddSingleton<IPricingCatalogContractValidator, UnavailablePricingCatalogContractValidator>();
-        services.AddSingleton<IPricingCatalogSignatureVerifier, UnavailablePricingCatalogSignatureVerifier>();
+        services.AddSingleton<IPricingCatalogSignatureVerifier, Ed25519PricingCatalogSignatureVerifier>();
         services.AddSingleton<IPricingCatalogAdmissionService, PricingCatalogAdmissionService>();
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();

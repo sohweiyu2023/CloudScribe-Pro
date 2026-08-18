@@ -114,6 +114,25 @@ public sealed class Stage4FoundationArchitectureTests
         Assert.Contains("inspection never refreshes providers", pricingViewModel, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void CatalogTrustUsesExternalEmptyByDefaultEd25519KeySetWithoutPrivateKeys()
+    {
+        string root = RepositoryRoot();
+        string verifier = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Pricing", "Ed25519PricingCatalogSignatureVerifier.cs"));
+        string options = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "Pricing", "PricingCatalogTrustOptions.cs"));
+        string services = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.Infrastructure", "DependencyInjection", "ServiceCollectionExtensions.cs"));
+        string settings = File.ReadAllText(Path.Combine(root, "src", "CloudScribe.App", "appsettings.json"));
+
+        Assert.Contains("SignatureAlgorithm.Ed25519", verifier, StringComparison.Ordinal);
+        Assert.Contains("KeyBlobFormat.RawPublicKey", verifier, StringComparison.Ordinal);
+        Assert.Contains("TrustedEd25519PublicKeys", options, StringComparison.Ordinal);
+        Assert.Contains("Ed25519PricingCatalogSignatureVerifier", services, StringComparison.Ordinal);
+        Assert.DoesNotContain("UnavailablePricingCatalogSignatureVerifier>();", services, StringComparison.Ordinal);
+        Assert.Contains("\"TrustedEd25519PublicKeys\": {}", settings, StringComparison.Ordinal);
+        Assert.DoesNotContain("PrivateKey", verifier, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("BEGIN PRIVATE", settings, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string RepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

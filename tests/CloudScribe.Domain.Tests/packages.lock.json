@@ -39,9 +39,6 @@
           "xunit.v3.mtp-v1": "[3.2.2]"
         }
       },
-      "cloudscribe.domain": {
-        "type": "Project"
-      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -171,6 +168,9 @@
           "xunit.v3.extensibility.core": "[3.2.2]",
           "xunit.v3.runner.common": "[3.2.2]"
         }
+      },
+      "cloudscribe.domain": {
+        "type": "Project"
       }
     }
   }
