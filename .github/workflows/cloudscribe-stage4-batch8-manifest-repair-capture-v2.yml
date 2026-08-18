@@ -1,0 +1,72 @@
+name: CloudScribe Stage 4 Batch 8 manifest repair capture v2
+
+on:
+  push:
+    branches: [cloudscribe-stage4-batch8-dev]
+    paths: [.github/workflows/cloudscribe-stage4-batch8-manifest-repair-capture-v2.yml]
+
+permissions:
+  contents: write
+
+env:
+  BASE_HEAD: 82344da168aa9aaa9ca50c141e85fbf63ed63bbf
+  PRIMARY_SHA256: 75df0a3975ece263ac20449cc71222bdf64cf5c09bad8be93dc4541718f739e7
+  LOCK_SHA256: b2853cc1b051f7bc6abe2366cef0bbb3efb938577bc549d4540e95d646f49bf9
+
+jobs:
+  capture:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-stage4-batch8-dev, path: carrier, fetch-depth: 1}
+      - uses: actions/checkout@v6
+        with: {ref: cloudscribe-0.5.0-stage4, path: source, fetch-depth: 0}
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.13'}
+
+      - name: Generate manifest-only replay repair
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          function Need([bool]$ok,[string]$message){if(-not $ok){throw $message}}
+          Need ((git rev-parse HEAD).Trim() -eq $env:BASE_HEAD) 'Stage 4 target moved.'
+          python ../carrier/.cloudscribe-ci/stage4-batch8/batch8_lock_helper.py reconstruct --carrier-root ../carrier/.cloudscribe-ci/stage4-batch8 --base-head $env:BASE_HEAD --patch-sha $env:PRIMARY_SHA256 --b64-length 16956 --expected-paths 14
+          Need ($LASTEXITCODE -eq 0) 'Primary reconstruction failed.'
+          $bytes=[Convert]::FromBase64String((Get-Content ../carrier/.cloudscribe-ci/stage4-batch8/batch8-lock-repair.b64 -Raw).Trim())
+          $lock=Join-Path $env:RUNNER_TEMP 'batch8-lock-repair.patch';[IO.File]::WriteAllBytes($lock,$bytes);[Array]::Clear($bytes)
+          Need ((Get-FileHash $lock -Algorithm SHA256).Hash.ToLowerInvariant() -eq $env:LOCK_SHA256) 'Lock SHA mismatch.'
+          git apply --check -- $lock;Need ($LASTEXITCODE -eq 0) 'Lock patch does not apply.'
+          git apply --whitespace=nowarn -- $lock;Need ($LASTEXITCODE -eq 0) 'Lock patch failed.'
+          git add -A
+          python tools/update_sha256_manifest.py;Need ($LASTEXITCODE -eq 0) 'Manifest updater failed.'
+          $unstaged=@(git diff --name-only|Where-Object{$_ -and $_.Trim()}|Sort-Object -Unique)
+          Need ($unstaged.Count -eq 1 -and $unstaged[0] -eq 'SHA256SUMS.txt') "Repair is not manifest-only: $($unstaged -join ', ')"
+          python tools/update_sha256_manifest.py --check;Need ($LASTEXITCODE -eq 0) 'Manifest remains stale.'
+          $repair=Join-Path $env:RUNNER_TEMP 'batch8-manifest-repair.patch'
+          cmd /c "git diff --binary --full-index -- SHA256SUMS.txt > `"$repair`""
+          Need ((Get-Item $repair).Length -gt 0) 'Manifest repair patch is empty.'
+          $sha=(Get-FileHash $repair -Algorithm SHA256).Hash.ToLowerInvariant()
+          $root='../carrier/.cloudscribe-ci/stage4-batch8'
+          [IO.File]::WriteAllText("$root/batch8-manifest-repair.b64",[Convert]::ToBase64String([IO.File]::ReadAllBytes($repair)),[Text.Encoding]::ASCII)
+          [IO.File]::WriteAllText("$root/batch8-manifest-repair.txt","BATCH8_MANIFEST_REPAIR_SHA256=$sha`nBATCH8_MANIFEST_REPAIR_PATHS=1`nBATCH8_MANIFEST_REPAIR_FILE=SHA256SUMS.txt`n",[Text.UTF8Encoding]::new($false))
+
+      - name: Publish captured repair
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';cd carrier
+          git config user.name cloudscribe-ci;git config user.email actions@github.com
+          git add .cloudscribe-ci/stage4-batch8/batch8-manifest-repair.b64 .cloudscribe-ci/stage4-batch8/batch8-manifest-repair.txt
+          git diff --cached --check;if($LASTEXITCODE -ne 0){throw 'Carrier check failed.'}
+          git commit -m 'ci: seal Windows-native Batch 8 manifest repair v2';if($LASTEXITCODE -ne 0){throw 'Commit failed.'}
+          git push origin HEAD:cloudscribe-stage4-batch8-dev;if($LASTEXITCODE -ne 0){throw 'Push failed.'}
+
+      - name: Record capture run locator
+        if: always()
+        shell: pwsh
+        run: |
+          $status='${{ job.status }}';$path='carrier/.cloudscribe-ci/stage4-batch8/batch8-manifest-capture-status.txt'
+          [IO.File]::WriteAllText($path,"RUN_ID=$env:GITHUB_RUN_ID`nRUN_ATTEMPT=$env:GITHUB_RUN_ATTEMPT`nSTATUS=$status`n",[Text.UTF8Encoding]::new($false))
+          cd carrier;git pull --ff-only origin cloudscribe-stage4-batch8-dev;git config user.name cloudscribe-ci;git config user.email actions@github.com
+          git add .cloudscribe-ci/stage4-batch8/batch8-manifest-capture-status.txt;git commit -m "ci: record Batch 8 manifest capture $status run $env:GITHUB_RUN_ID"
+          if($LASTEXITCODE -eq 0){git push origin HEAD:cloudscribe-stage4-batch8-dev}
