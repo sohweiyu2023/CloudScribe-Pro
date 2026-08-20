@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -142,6 +143,13 @@ Non-claims
 - Stage 5 remains blocked until Stage 4 is fully promoted.
 """,
         encoding="utf-8",
+    )
+    # The generated document is an intended Batch-12 source file, not a build byproduct.
+    # Stage it immediately so the pre-freeze untracked-file guard can remain strict.
+    subprocess.run(
+        ["git", "add", "docs/STAGE4-FOUNDATION-BATCH12.txt"],
+        cwd=root,
+        check=True,
     )
     return 0
 
