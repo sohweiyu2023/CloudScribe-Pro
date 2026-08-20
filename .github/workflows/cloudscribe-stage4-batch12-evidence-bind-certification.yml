@@ -1,0 +1,394 @@
+name: CloudScribe Stage 4 Batch 12 evidence-binding certification
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  certify:
+    if: github.event.issue.title == 'TRIGGER-STAGE4-B12-EVIDENCE-BIND-34EA9435'
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      BASE_HEAD: 34ea9435c72ce3229afc5d52cd6851d3a4d43078
+      TARGET_BRANCH: agent/stage4-batch12-exact-pricing-controls
+      EXPECTED_TEST_TOTAL: '262'
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/stage4-batch12-exact-pricing-controls
+          path: source
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: 'source/**/packages.lock.json'
+
+      - name: Bind exact Batch 12 starting point
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:BASE_HEAD) { throw "Unexpected Batch 12 starting head: $head" }
+          if ((dotnet --version).Trim() -ne '10.0.400') { throw 'Wrong .NET SDK.' }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Starting checkout is not clean.' }
+
+      - name: Advance Batch 11 evidence into Batch 12 candidate
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from __future__ import annotations
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path.cwd()
+          state_path = root / 'SESSION_STATE.json'
+          state = json.loads(state_path.read_text(encoding='utf-8-sig'))
+          assert state['repository_version'] == '0.5.0-stage4-foundation-batch11'
+          assert state['stage4_foundation_batch11'] is True
+          assert state['stage4_foundation_batch11_admitted'] is False
+          assert state['stage4_exact_catalog_bytes_available'] is False
+          assert state['stage4_catalog_contract_admitted'] is False
+          assert state['stage4_runtime_policy_exact_bytes_available'] is False
+          assert state['stage4_runtime_policy_contract_admitted'] is False
+          assert state['stage4_limit_taxonomy_exact_bytes_available'] is False
+          assert state['stage4_limit_taxonomy_contract_admitted'] is False
+
+          state['repository_version'] = '0.5.0-stage4-foundation-batch12'
+          state['generated_at_utc'] = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+          state['status'] = (
+              'Stage 3 is final-Windows-certified and promoted. Stage 4 foundation Batches 1-11 are Windows-admitted. '
+              'Batch 12 binds the exact Batch 11 admission evidence and authenticated v2.22 control identities while '
+              'keeping unavailable exact pricing schema/seed, runtime-policy, limit-taxonomy and production trust bytes fail-closed.'
+          )
+          state['next_exact_action'] = (
+              'Windows-admit this Batch 12 evidence-binding checkpoint under exact SDK 10.0.400; then import only authenticated '
+              'exact v2.22 pricing schema/seed bytes and prove Draft 2020-12 plus supplied semantic-validator agreement before '
+              'catalog-contract admission. Runtime-policy 1.3 and schema-1.1.5 limit taxonomy remain separately gated. Do not start Stage 5.'
+          )
+          state['latest_reaudit_completed_at_utc'] = state['generated_at_utc']
+          state['stage4_foundation_batch11_admitted'] = True
+          state['stage4_foundation_batch11_admission_run'] = 32387286642
+          state['stage4_foundation_batch11_commit'] = '801952c69b17ab38d7bacb527f9de1401076bc2a'
+          state['stage4_foundation_batch11_merge_commit'] = '34ea9435c72ce3229afc5d52cd6851d3a4d43078'
+          state['stage4_foundation_batch11_tests'] = (
+              '262/262 compiled .NET tests passed; 0 failed; 0 skipped; full native Windows, formatter, launcher, '
+              'source-stability and deterministic archive gates passed'
+          )
+          state['stage4_foundation_batch11_source_sha256'] = '50750f49c2fda74e99f5b1f8d382778d43d9c72a3ff5dfcc057c2890250e1174'
+          state['stage4_foundation_batch11_evidence_artifact'] = 9413736543
+          state['stage4_foundation_batch11_evidence_sha256'] = '5b91ba0b6ed72f7be433308d3faa19655ceec3bab67a751bee4329e3e3965124'
+          state['stage4_foundation_batch12'] = True
+          state['stage4_foundation_batch12_admitted'] = False
+          state['stage4_batch12_evidence_binding_checkpoint'] = True
+          state['controlling_package_expected_sha256'] = '22b0609ca1375488ac04c8a807cfb08ad34a08aa883a8dc2984516e64f68f8b3'
+          state['stage4_pricing_schema_expected_sha256'] = '1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b'
+          state['stage4_pricing_seed_expected_sha256'] = '3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61'
+          state['stage4_runtime_policy_schema_expected_sha256'] = 'bdcc03005a48d9d8bdcb139d468a9c3f277526aa4d9dbe19c2c6309b5bff390c'
+          state['stage4_runtime_policy_seed_expected_sha256'] = '9561a4f5c1d58dd471424566b05f7325a52ed06a4c57ec53b17f5395ae621525'
+          state_path.write_text(json.dumps(state, indent=2) + '\n', encoding='utf-8')
+
+          app_project = root / 'src/CloudScribe.App/CloudScribe.App.csproj'
+          app_text = app_project.read_text(encoding='utf-8-sig')
+          old = '<InformationalVersion>0.5.0-stage4-foundation-batch11</InformationalVersion>'
+          new = '<InformationalVersion>0.5.0-stage4-foundation-batch12</InformationalVersion>'
+          assert app_text.count(old) == 1
+          app_project.write_text(app_text.replace(old, new), encoding='utf-8')
+
+          verifier_path = root / 'tools/verify_stage4_source.py'
+          verifier = verifier_path.read_text(encoding='utf-8-sig')
+          anchor = 'BATCH10_EVIDENCE_SHA256 = "75bf495e893e8d11ad44b5d0b97fcf948e7939fa83702f6a07066e13b8951533"\n'
+          addition = anchor + (
+              'BATCH11_COMMIT = "801952c69b17ab38d7bacb527f9de1401076bc2a"\n'
+              'BATCH11_MERGE_COMMIT = "34ea9435c72ce3229afc5d52cd6851d3a4d43078"\n'
+              'BATCH11_RUN = "32387286642"\n'
+              'BATCH11_SOURCE_SHA256 = "50750f49c2fda74e99f5b1f8d382778d43d9c72a3ff5dfcc057c2890250e1174"\n'
+              'BATCH11_EVIDENCE_ARTIFACT = 9413736543\n'
+              'BATCH11_EVIDENCE_SHA256 = "5b91ba0b6ed72f7be433308d3faa19655ceec3bab67a751bee4329e3e3965124"\n'
+              'V222_PACKAGE_SHA256 = "22b0609ca1375488ac04c8a807cfb08ad34a08aa883a8dc2984516e64f68f8b3"\n'
+              'V222_PRICING_SCHEMA_SHA256 = "1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b"\n'
+              'V222_PRICING_SEED_SHA256 = "3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61"\n'
+          )
+          assert verifier.count(anchor) == 1
+          verifier = verifier.replace(anchor, addition)
+          old_block = '''    if state.get("stage4_foundation_batch11") is not True or state.get("stage4_foundation_batch11_admitted") is not False:\n        return fail("Current Stage 4 Batch 11 must remain a source-changing candidate until Windows admission")\n'''
+          new_block = '''    if state.get("stage4_foundation_batch11") is not True or state.get("stage4_foundation_batch11_admitted") is not True:\n        return fail("Stage 4 must preserve the authoritative successful Batch 11 admission")\n    if state.get("stage4_foundation_batch11_commit") != BATCH11_COMMIT or str(state.get("stage4_foundation_batch11_admission_run")) != BATCH11_RUN:\n        return fail("Stage 4 is not bound to the authoritative Batch 11 Windows admission evidence")\n    if state.get("stage4_foundation_batch11_merge_commit") != BATCH11_MERGE_COMMIT:\n        return fail("Stage 4 is not bound to the authoritative Batch 11 merge checkpoint")\n    if state.get("stage4_foundation_batch11_source_sha256") != BATCH11_SOURCE_SHA256:\n        return fail("Stage 4 is not bound to the deterministic Batch 11 admitted source archive")\n    if state.get("stage4_foundation_batch11_evidence_artifact") != BATCH11_EVIDENCE_ARTIFACT or state.get("stage4_foundation_batch11_evidence_sha256") != BATCH11_EVIDENCE_SHA256:\n        return fail("Stage 4 is not bound to the authoritative Batch 11 evidence artifact")\n    if state.get("stage4_foundation_batch12") is not True or state.get("stage4_foundation_batch12_admitted") is not False:\n        return fail("Current Stage 4 Batch 12 must remain a source-changing candidate until Windows admission")\n    if state.get("stage4_batch12_evidence_binding_checkpoint") is not True:\n        return fail("Stage 4 Batch 12 must explicitly bind the prior admission evidence before further source changes")\n    if state.get("controlling_package_expected_sha256") != V222_PACKAGE_SHA256 or state.get("stage4_pricing_schema_expected_sha256") != V222_PRICING_SCHEMA_SHA256 or state.get("stage4_pricing_seed_expected_sha256") != V222_PRICING_SEED_SHA256:\n        return fail("Stage 4 Batch 12 is not bound to the authenticated v2.22 pricing control identities")\n'''
+          assert verifier.count(old_block) == 1
+          verifier = verifier.replace(old_block, new_block)
+          doc_anchor = '''        require_text(root, "docs/STAGE4-FOUNDATION-BATCH11.txt",\n            "plans are required alongside meters", "Admission run: 32113025375",\n            "257/257 passed", "Stage 4 completion or promotion", "Stage 5 start")\n'''
+          doc_addition = doc_anchor + '''        require_text(root, "docs/STAGE4-FOUNDATION-BATCH12.txt",\n            "Run 32387286642", "262/262", "50750f49c2fda74e99f5b1f8d382778d43d9c72a3ff5dfcc057c2890250e1174",\n            "exact v2.22 pricing schema/seed bytes are not yet imported", "Stage 5 remains blocked")\n'''
+          assert verifier.count(doc_anchor) == 1
+          verifier = verifier.replace(doc_anchor, doc_addition)
+          verifier = verifier.replace('admitted Batches 1-10, strict bounded JSON', 'admitted Batches 1-11 and current unadmitted Batch 12, strict bounded JSON')
+          verifier_path.write_text(verifier, encoding='utf-8')
+
+          tests_path = root / 'tests/test_verification_tools.py'
+          tests = tests_path.read_text(encoding='utf-8-sig')
+          test_anchor = '''    def test_rejects_false_exact_catalog_admission_claim(self):\n'''
+          test_method = '''    def test_rejects_false_batch12_admission_state(self):\n        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch12-admission-") as temporary:\n            root = _copy_source(Path(temporary))\n            path = root / "SESSION_STATE.json"\n            payload = json.loads(path.read_text(encoding="utf-8"))\n            payload["stage4_foundation_batch12_admitted"] = True\n            path.write_text(json.dumps(payload, indent=2) + "\\n", encoding="utf-8")\n            result = _run_tool("verify_stage4_source.py", cwd=root)\n            self.assertNotEqual(result.returncode, 0)\n            self.assertIn("Batch 12 must remain a source-changing candidate", result.stderr)\n\n'''
+          assert tests.count(test_anchor) == 1
+          tests_path.write_text(tests.replace(test_anchor, test_method + test_anchor), encoding='utf-8')
+
+          selftest_path = root / 'tools/run_verifier_self_tests.py'
+          selftests = selftest_path.read_text(encoding='utf-8-sig')
+          old_count = '("Stage4SourceContractTests", 26),'
+          new_count = '("Stage4SourceContractTests", 27),'
+          assert selftests.count(old_count) == 1
+          selftest_path.write_text(selftests.replace(old_count, new_count), encoding='utf-8')
+
+          doc = root / 'docs/STAGE4-FOUNDATION-BATCH12.txt'
+          assert not doc.exists()
+          doc.write_text('''CloudScribe Pro — Stage 4 Foundation Batch 12\n\nPurpose\n- Bind the exact admitted Batch 11 Windows evidence before any further Stage 4 product changes.\n- Lock authenticated v2.22 package/schema/seed identities without pretending hash knowledge equals possession of exact bytes.\n- Preserve fail-closed catalog/runtime-policy/limit-taxonomy seams until their exact bytes are imported and independently validated.\n\nAuthoritative Batch 11 evidence\n- Run 32387286642\n- Tested head: 801952c69b17ab38d7bacb527f9de1401076bc2a\n- Merge checkpoint: 34ea9435c72ce3229afc5d52cd6851d3a4d43078\n- 262/262 compiled .NET tests passed; 0 failed; 0 skipped.\n- Deterministic admitted source archive SHA-256: 50750f49c2fda74e99f5b1f8d382778d43d9c72a3ff5dfcc057c2890250e1174\n- Evidence artifact: 9413736543\n- Evidence artifact SHA-256: 5b91ba0b6ed72f7be433308d3faa19655ceec3bab67a751bee4329e3e3965124\n\nExact-control truth boundary\n- Controlling v2.22 package expected SHA-256: 22b0609ca1375488ac04c8a807cfb08ad34a08aa883a8dc2984516e64f68f8b3\n- Pricing schema 1.1.5 expected SHA-256: 1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b\n- Dated pricing seed expected SHA-256: 3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61\n- The exact v2.22 pricing schema/seed bytes are not yet imported into this product source checkpoint.\n- Runtime-policy 1.3 and schema-1.1.5 limit-taxonomy bytes remain separately unadmitted.\n- No production trusted Ed25519 key is invented or embedded; trusted keys remain external-only.\n\nNon-claims\n- This Batch 12 candidate does not claim catalog-contract admission, current production pricing, Stage 4 completion or promotion.\n- Stage 5 remains blocked until Stage 4 is fully promoted.\n''', encoding='utf-8')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Batch 12 mutation script failed.' }
+
+      - name: Locked restore
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+
+      - name: Pre-freeze source gates and formatting
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/update_sha256_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw 'Manifest update failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+          python tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Manifest verification failed.' }
+          python tools/verify_stage4_source.py
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 4 verifier failed before freeze.' }
+          python -B tools/run_verifier_self_tests.py
+          if ($LASTEXITCODE -ne 0) { throw 'Verifier self-tests failed before freeze.' }
+          python -B tools/run_python_regression_shards.py --all
+          if ($LASTEXITCODE -ne 0) { throw 'Deterministic regressions failed before freeze.' }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'git diff check failed.' }
+
+      - name: Freeze exact Batch 12 candidate
+        id: freeze
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add SESSION_STATE.json SHA256SUMS.txt docs/STAGE4-FOUNDATION-BATCH12.txt src/CloudScribe.App/CloudScribe.App.csproj tools/verify_stage4_source.py tools/run_verifier_self_tests.py tests/test_verification_tools.py
+          $actual = @(git diff --cached --name-only | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
+          $expected = @(
+            'SESSION_STATE.json',
+            'SHA256SUMS.txt',
+            'docs/STAGE4-FOUNDATION-BATCH12.txt',
+            'src/CloudScribe.App/CloudScribe.App.csproj',
+            'tests/test_verification_tools.py',
+            'tools/run_verifier_self_tests.py',
+            'tools/verify_stage4_source.py')
+          if ($actual.Count -ne $expected.Count) { $actual | Write-Host; throw "Unexpected Batch 12 file count: $($actual.Count)" }
+          foreach ($path in $expected) { if ($actual -notcontains $path) { throw "Missing intended Batch 12 file: $path" } }
+          foreach ($path in $actual) { if ($expected -notcontains $path) { throw "Unexpected Batch 12 file: $path" } }
+          git commit -m 'chore: bind Stage 4 Batch 11 admission evidence'
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to freeze Batch 12 candidate.' }
+          $head = (git rev-parse HEAD).Trim()
+          "TESTED_HEAD=$head" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "tested_head=$head" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Frozen Batch 12 candidate is not clean.' }
+
+      - name: Portable governance and deterministic regressions
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $commands = @(
+            'python tools/update_sha256_manifest.py --check',
+            'python tools/verify_repository.py',
+            'python tools/verify_project_dependencies.py',
+            'python tools/verify_stage1_source.py',
+            'python tools/verify_stage2_source.py',
+            'python tools/verify_stage3_source.py',
+            'python tools/verify_stage4_source.py',
+            'python -B tools/run_verifier_self_tests.py',
+            'python -B tools/run_python_regression_shards.py --all')
+          foreach ($command in $commands) {
+            Invoke-Expression $command
+            if ($LASTEXITCODE -ne 0) { throw "Gate failed: $command" }
+          }
+
+      - name: Strict Release build and analyzers
+        id: release_build
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Release build/analyzer gate failed.' }
+
+      - name: Native Windows compiled-test and visual admission
+        id: native
+        shell: pwsh
+        working-directory: source
+        env:
+          CLOUDSCRIBE_STAGE2_EVIDENCE_DIR: ${{ runner.temp }}\stage4-b12-evidence
+          CLOUDSCRIBE_EXPECTED_DOTNET_TEST_TOTAL: '262'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force $env:CLOUDSCRIBE_STAGE2_EVIDENCE_DIR | Out-Null
+          pwsh -NoProfile -File scripts/verify-stage2.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows regression certification failed.' }
+
+      - name: Exact compiled-test count
+        id: compiled_count
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $trx = @(Get-ChildItem (Join-Path $env:RUNNER_TEMP 'stage4-b12-evidence') -Filter '*.trx' -File -Recurse)
+          if ($trx.Count -lt 4) { throw "Expected at least four TRX files, found $($trx.Count)" }
+          $total = 0; $passed = 0; $failed = 0; $skipped = 0
+          foreach ($file in $trx) {
+            [xml]$xml = Get-Content $file.FullName -Raw
+            $c = $xml.TestRun.ResultSummary.Counters
+            $total += [int]$c.total
+            $passed += [int]$c.passed
+            $failed += [int]$c.failed
+            $skipped += [int]$c.notExecuted
+          }
+          if ($total -ne [int]$env:EXPECTED_TEST_TOTAL -or $passed -ne $total -or $failed -ne 0 -or $skipped -ne 0) { throw "Compiled-test count failed: total=$total passed=$passed failed=$failed skipped=$skipped" }
+          "CLOUDSCRIBE_COMPILED_TEST_TOTAL=$total" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Clean generated intermediates and rehydrate restore
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tracked = @((git diff --name-only), (git diff --cached --name-only)) | Where-Object { $_ -and $_.Trim() }
+          if ($tracked.Count -ne 0) { $tracked | Write-Host; throw 'Native verification changed tracked files.' }
+          foreach ($project in @(Get-ChildItem src,tests -Filter '*.csproj' -File -Recurse)) {
+            foreach ($leaf in @('bin','obj')) {
+              $target = Join-Path $project.Directory.FullName $leaf
+              if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+            }
+          }
+          $unexpected = @(git ls-files --others --exclude-standard | Where-Object { $_ -and $_.Trim() })
+          if ($unexpected.Count -ne 0) { $unexpected | Write-Host; throw 'Unexpected untracked files after native cleanup.' }
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Post-native locked restore failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Post-native formatting stability failed.' }
+          foreach ($project in @(Get-ChildItem src,tests -Filter '*.csproj' -File -Recurse)) {
+            foreach ($leaf in @('bin','obj')) {
+              $target = Join-Path $project.Directory.FullName $leaf
+              if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+            }
+          }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Post-format worktree is not clean.' }
+
+      - name: Special-character launcher regression
+        id: launcher
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          pwsh -NoProfile -File scripts/test-build-launcher-special-paths.ps1 -SourceRoot (Get-Location).Path -ScratchRoot (Join-Path $env:RUNNER_TEMP 'Stage4 Batch12 Evidence (7) & ! literal')
+          if ($LASTEXITCODE -ne 0) { throw 'Special-character launcher regression failed.' }
+          foreach ($project in @(Get-ChildItem src,tests -Filter '*.csproj' -File -Recurse)) {
+            foreach ($leaf in @('bin','obj')) {
+              $target = Join-Path $project.Directory.FullName $leaf
+              if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+            }
+          }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Launcher regression changed source.' }
+
+      - name: Deterministic source archive and final guard
+        id: final_guard
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/verify_stage4_source.py
+          if ($LASTEXITCODE -ne 0) { throw 'Final Stage 4 source verifier failed.' }
+          python tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Final manifest check failed.' }
+          python -B tools/run_verifier_self_tests.py
+          if ($LASTEXITCODE -ne 0) { throw 'Final verifier self-tests failed.' }
+          python -B tools/run_python_regression_shards.py --all
+          if ($LASTEXITCODE -ne 0) { throw 'Final deterministic regressions failed.' }
+          $package = Join-Path $env:RUNNER_TEMP 'stage4-b12-package'
+          New-Item -ItemType Directory -Force $package | Out-Null
+          python tools/create_source_archive.py --output-directory $package
+          if ($LASTEXITCODE -ne 0) { throw 'Deterministic source archive failed.' }
+          $zip = Get-ChildItem $package -Filter '*.zip' -File | Select-Object -First 1
+          if ($null -eq $zip) { throw 'Source archive ZIP missing.' }
+          $zipHash = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "CLOUDSCRIBE_SOURCE_ARCHIVE=$($zip.Name)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "CLOUDSCRIBE_SOURCE_ARCHIVE_SHA256=$zipHash" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          if ((git rev-parse HEAD).Trim() -ne $env:TESTED_HEAD) { throw 'HEAD moved during certification.' }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Final exact no-mutation guard failed.' }
+
+      - name: Push exact certified Batch 12 candidate
+        id: push
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git push origin "HEAD:$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to publish exact certified Batch 12 candidate.' }
+
+      - name: Upload certification evidence
+        id: upload
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cloudscribe-stage4-batch12-evidence-bind-certification
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/stage4-b12-evidence/**
+            ${{ runner.temp }}/stage4-b12-package/**
+
+      - name: Report result
+        if: always()
+        uses: actions/github-script@v8
+        env:
+          TESTED_HEAD: ${{ steps.freeze.outputs.tested_head }}
+          SOURCE_ARCHIVE_SHA256: ${{ env.CLOUDSCRIBE_SOURCE_ARCHIVE_SHA256 }}
+        with:
+          script: |
+            const body = [
+              `STATUS: Batch 12 evidence binding`,
+              `Run: ${context.runId}`,
+              `Tested head: ${process.env.TESTED_HEAD || ''}`,
+              `Release build: ${{ steps.release_build.outcome }}`,
+              `Native Windows: ${{ steps.native.outcome }}`,
+              `Compiled count: ${{ steps.compiled_count.outcome }}`,
+              `Launcher: ${{ steps.launcher.outcome }}`,
+              `Final guard: ${{ steps.final_guard.outcome }}`,
+              `Push: ${{ steps.push.outcome }}`,
+              `Compiled tests: ${process.env.CLOUDSCRIBE_COMPILED_TEST_TOTAL || ''}`,
+              `Source archive SHA256: ${process.env.SOURCE_ARCHIVE_SHA256 || ''}`,
+              `Artifact ID: ${{ steps.upload.outputs.artifact-id }}`,
+              `Job status: ${{ job.status }}`
+            ].join('\n');
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
