@@ -31,7 +31,7 @@ public sealed record PricingPlanDefinition
             copiedMeterStableIds[index] = meterStableId;
         }
 
-        MeterStableIds = copiedMeterStableIds;
+        MeterStableIds = Array.AsReadOnly(copiedMeterStableIds);
         ProvenanceId = NormalizeProvenance(provenanceId);
     }
 

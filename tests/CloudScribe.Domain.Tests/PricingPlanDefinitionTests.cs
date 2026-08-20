@@ -18,6 +18,24 @@ public sealed class PricingPlanDefinitionTests
     }
 
     [Fact]
+    public void PlanDefensivelyExposesMeterReferencesAsReadOnly()
+    {
+        string[] sourceMeterStableIds = ["text-input", "audio-output"];
+        PricingPlanDefinition plan = new(
+            "standard-plan",
+            sourceMeterStableIds,
+            "catalog:fixture-plan");
+
+        sourceMeterStableIds[0] = "mutated-source";
+        Assert.Equal("text-input", plan.MeterStableIds[0]);
+        Assert.False(plan.MeterStableIds is string[]);
+
+        IList<string> listView = Assert.IsAssignableFrom<IList<string>>(plan.MeterStableIds);
+        Assert.Throws<NotSupportedException>(() => listView[0] = "mutated-view");
+        Assert.Equal("text-input", plan.MeterStableIds[0]);
+    }
+
+    [Fact]
     public void PlanRejectsMissingOrDuplicateMeterReferences()
     {
         Assert.Throws<ArgumentException>(() => new PricingPlanDefinition(
