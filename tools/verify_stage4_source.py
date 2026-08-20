@@ -37,6 +37,11 @@ BATCH11_EVIDENCE_SHA256 = "5b91ba0b6ed72f7be433308d3faa19655ceec3bab67a751bee432
 V222_PACKAGE_SHA256 = "22b0609ca1375488ac04c8a807cfb08ad34a08aa883a8dc2984516e64f68f8b3"
 V222_PRICING_SCHEMA_SHA256 = "1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b"
 V222_PRICING_SEED_SHA256 = "3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61"
+BATCH12_COMMIT = "eb7236d72765377804b9c8b7131ff4d26d7d6357"
+BATCH12_RUN = "32398889342"
+BATCH12_SOURCE_SHA256 = "2a87cf181e8fcdbe9e6cc9c075512fe24e3c69d248f0f8da9d95035448b80889"
+BATCH12_EVIDENCE_ARTIFACT = 9418053746
+BATCH12_EVIDENCE_SHA256 = "01344f43bab48d947dca5ecb1e51c6f9add3c9e90f4ff0adc91c706a235bb607"
 
 def fail(message: str) -> int:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -124,12 +129,20 @@ def main() -> int:
         return fail("Stage 4 is not bound to the deterministic Batch 11 admitted source archive")
     if state.get("stage4_foundation_batch11_evidence_artifact") != BATCH11_EVIDENCE_ARTIFACT or state.get("stage4_foundation_batch11_evidence_sha256") != BATCH11_EVIDENCE_SHA256:
         return fail("Stage 4 is not bound to the authoritative Batch 11 evidence artifact")
-    if state.get("stage4_foundation_batch12") is not True or state.get("stage4_foundation_batch12_admitted") is not False:
-        return fail("Current Stage 4 Batch 12 must remain a source-changing candidate until Windows admission")
-    if state.get("stage4_batch12_evidence_binding_checkpoint") is not True:
-        return fail("Stage 4 Batch 12 must explicitly bind the prior admission evidence before further source changes")
+    if state.get("stage4_foundation_batch12") is not True or state.get("stage4_foundation_batch12_admitted") is not True:
+        return fail("Stage 4 must preserve the authoritative successful Batch 12 admission")
+    if state.get("stage4_foundation_batch12_commit") != BATCH12_COMMIT or str(state.get("stage4_foundation_batch12_admission_run")) != BATCH12_RUN:
+        return fail("Stage 4 is not bound to the authoritative Batch 12 Windows admission evidence")
+    if state.get("stage4_foundation_batch12_source_sha256") != BATCH12_SOURCE_SHA256:
+        return fail("Stage 4 is not bound to the deterministic Batch 12 admitted source archive")
+    if state.get("stage4_foundation_batch12_evidence_artifact") != BATCH12_EVIDENCE_ARTIFACT or state.get("stage4_foundation_batch12_evidence_sha256") != BATCH12_EVIDENCE_SHA256:
+        return fail("Stage 4 is not bound to the authoritative Batch 12 evidence artifact")
+    if state.get("stage4_foundation_batch13") is not True or state.get("stage4_foundation_batch13_admitted") is not False:
+        return fail("Current Stage 4 Batch 13 must remain a source-changing candidate until Windows admission")
+    if state.get("stage4_batch13_evidence_binding_checkpoint") is not True:
+        return fail("Stage 4 Batch 13 must explicitly bind the Batch 12 admission evidence before further source changes")
     if state.get("controlling_package_expected_sha256") != V222_PACKAGE_SHA256 or state.get("stage4_pricing_schema_expected_sha256") != V222_PRICING_SCHEMA_SHA256 or state.get("stage4_pricing_seed_expected_sha256") != V222_PRICING_SEED_SHA256:
-        return fail("Stage 4 Batch 12 is not bound to the authenticated v2.22 pricing control identities")
+        return fail("Stage 4 remains unbound from the authenticated v2.22 pricing control identities")
     if state.get("stage4_pricing_plan_contract_explicit") is not True:
         return fail("Stage 4 must expose an explicit provider-neutral pricing-plan contract")
     if state.get("stage4_provider_endpoint_reference_explicit") is not True:
@@ -298,6 +311,11 @@ def main() -> int:
         require_text(root, "docs/STAGE4-FOUNDATION-BATCH12.txt",
             "Run 32387286642", "262/262", "50750f49c2fda74e99f5b1f8d382778d43d9c72a3ff5dfcc057c2890250e1174",
             "exact v2.22 pricing schema/seed bytes are not yet imported", "Stage 5 remains blocked")
+        require_text(root, "docs/STAGE4-FOUNDATION-BATCH13.txt",
+            "Run 32398889342", "262/262", "82/82", "153/153",
+            "2a87cf181e8fcdbe9e6cc9c075512fe24e3c69d248f0f8da9d95035448b80889",
+            "9418053746", "01344f43bab48d947dca5ecb1e51c6f9add3c9e90f4ff0adc91c706a235bb607",
+            "exact v2.22 pricing schema/seed bytes remain unavailable", "Stage 5 remains blocked")
         require_text(root, "src/CloudScribe.Domain/Pricing/PricingTier.cs",
             "PricingTier", "PricePerBlock", "BlockSize")
         require_text(root, "src/CloudScribe.Domain/Pricing/PricingAllowance.cs",
@@ -353,7 +371,7 @@ def main() -> int:
                 if marker in text:
                     return fail(f"hard-coded provider-price marker {marker!r} found in {path.relative_to(root)}")
 
-    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-11 and current unadmitted Batch 12, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider and deterministic fake-catalog coverage, Windows OS-vault storage, explicit provider endpoint/model/alias/voice/operation/governance/data-handling references, and provider-neutral provenance-bearing pricing plans plus the exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable pricing, limit-taxonomy, or runtime-policy bytes are admitted.")
+    print("PASS: Stage 4 foundation preserves promoted Stage 3 lineage and admitted Batches 1-12 and current unadmitted Batch 13, strict bounded JSON, truthful cost/account/capability contracts, external-only empty-by-default Ed25519 catalog trust, persistent append-only catalog history, separate inert user pricing overrides, provenance-bearing quota observations, durable non-secret provider accounts, append-only capability evidence, lazy fake-provider and deterministic fake-catalog coverage, Windows OS-vault storage, explicit provider endpoint/model/alias/voice/operation/governance/data-handling references, and provider-neutral provenance-bearing pricing plans plus the exact-integer pricing meter/cost engine with fail-closed modifier and usage-scope validation that never guesses unresolved tax/credit/FX or pretends unavailable pricing, limit-taxonomy, or runtime-policy bytes are admitted.")
     return 0
 
 if __name__ == "__main__":
