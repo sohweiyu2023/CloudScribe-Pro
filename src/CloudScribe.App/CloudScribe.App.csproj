@@ -7,7 +7,7 @@
     <Product>CloudScribe Pro</Product>
     <Description>Local-first long-form text-to-speech production studio.</Description>
     <Version>0.5.0</Version>
-    <InformationalVersion>0.5.0-stage4-foundation-batch11</InformationalVersion>
+    <InformationalVersion>0.5.0-stage4-foundation-batch12</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <FileVersion>0.5.0.0</FileVersion>
     <AssemblyVersion>0.5.0.0</AssemblyVersion>

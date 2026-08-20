@@ -718,6 +718,17 @@ class Stage4SourceContractTests(unittest.TestCase):
         result = _run_tool("verify_stage4_source.py")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_rejects_false_batch12_admission_state(self):
+        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch12-admission-") as temporary:
+            root = _copy_source(Path(temporary))
+            path = root / "SESSION_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage4_foundation_batch12_admitted"] = True
+            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            result = _run_tool("verify_stage4_source.py", cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Batch 12 must remain a source-changing candidate", result.stderr)
+
     def test_rejects_false_exact_catalog_admission_claim(self):
         with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-catalog-claim-") as temporary:
             root = _copy_source(Path(temporary))
