@@ -79,6 +79,13 @@ def main() -> int:
     test = '''class Stage4SourceContractTests(unittest.TestCase):\n    def test_rejects_wrong_batch13_evidence_artifact_binding(self):\n        with tempfile.TemporaryDirectory(prefix="cloudscribe-stage4-batch13-evidence-") as temporary:\n            root = _copy_source(Path(temporary))\n            path = root / "SESSION_STATE.json"\n            payload = json.loads(path.read_text(encoding="utf-8"))\n            payload["stage4_foundation_batch13_evidence_sha256"] = "0" * 64\n            path.write_text(json.dumps(payload, indent=2) + "\\n", encoding="utf-8")\n            result = _run_tool("verify_stage4_source.py", cwd=root)\n            self.assertNotEqual(result.returncode, 0)\n            self.assertIn("authoritative Batch 13 evidence artifact", result.stderr)\n\n'''
     tests_path.write_text(tests.replace(marker, test, 1), encoding="utf-8")
 
+    runner_path = root / "tools/run_verifier_self_tests.py"
+    runner = runner_path.read_text(encoding="utf-8-sig")
+    old_count = '("Stage4SourceContractTests", 27)'
+    new_count = '("Stage4SourceContractTests", 28)'
+    assert runner.count(old_count) == 1
+    runner_path.write_text(runner.replace(old_count, new_count), encoding="utf-8")
+
     doc = root / "docs/STAGE4-FOUNDATION-BATCH14.txt"
     assert not doc.exists()
     doc.write_text("""CloudScribe Pro — Stage 4 Foundation Batch 14\n\nPurpose\n- Bind exact successful Batch 13 Windows certification evidence before further Stage 4 product-source changes.\n- Preserve fail-closed boundaries for unavailable exact pricing/runtime-policy/limit-taxonomy bytes and production trust.\n\nAuthoritative Batch 13 evidence\n- Run 32408857066\n- Tested head: 2f3761802f58f824c70d824087cf027f03697d38\n- 262/262 compiled .NET tests passed; 0 failed; 0 skipped.\n- 82/82 auxiliary Python verifier self-tests and 153/153 deterministic material regressions passed.\n- Strict Release/analyzers, native Windows visual/runtime, post-native restore/format/source stability, special-character launcher and final no-mutation guard passed.\n- Deterministic source archive SHA-256: e2b2956dd9e6c4fcb6bcdc9e3a2a6fe64adda119f3e512db756a2267437ffe9d\n- Evidence artifact: 9421654212\n- Evidence artifact ZIP SHA-256: 72691cb9d090ec83fa51daad7714c02d816f4fb636a855c63e377eb30fcd3ebb\n\nTruth boundary\n- Exact v2.22 pricing schema/seed bytes remain unavailable and are not imported or reconstructed.\n- Runtime-policy 1.3 and schema-1.1.5 limit-taxonomy exact bytes remain unavailable/unadmitted.\n- No production trust anchor or private signing key is fabricated.\n- This checkpoint does not claim Stage 4 completion/promotion. Stage 5 remains blocked.\n""", encoding="utf-8")
