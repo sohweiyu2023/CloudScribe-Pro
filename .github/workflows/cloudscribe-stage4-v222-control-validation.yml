@@ -34,33 +34,16 @@ jobs:
           if ($head -ne $env:EXPECTED_HEAD) { throw "Unexpected exact-control candidate: $head" }
           if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { throw 'Starting checkout is not clean.' }
 
-      - name: Rehydrate supplied validator dependencies
+      - name: Install exact supplied validator dependencies
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          @'
-          import base64, hashlib, pathlib, zipfile
-          root = pathlib.Path('.')
-          parts = sorted((root/'controls/v2.22/carrier-parts').glob('part*.b64'))
-          expected_names = [f'part{i:02d}.b64' for i in range(1, 6)]
-          if [p.name for p in parts] != expected_names:
-              raise SystemExit(f'unexpected carrier parts: {[p.name for p in parts]}')
-          encoded = ''.join(p.read_text(encoding='ascii').strip() for p in parts)
-          archive = base64.b64decode(encoded, validate=True)
-          actual = hashlib.sha256(archive).hexdigest()
-          expected = '${{ env.EXPECTED_ARCHIVE_SHA256 }}'
-          if actual != expected:
-              raise SystemExit(f'carrier archive identity mismatch: {actual}')
-          path = pathlib.Path(r'${{ runner.temp }}')/'v222-controls.zip'
-          path.write_bytes(archive)
-          out = pathlib.Path(r'${{ runner.temp }}')/'v222-controls'
-          with zipfile.ZipFile(path) as zf:
-              zf.extractall(out)
-          print(out)
-          '@ | python -
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to rehydrate exact controls.' }
-          python -m pip install --disable-pip-version-check -r "${{ runner.temp }}\v222-controls\05_Tools_and_Tests\requirements.txt"
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to install supplied validator dependencies.' }
+          # These versions are copied exactly from the authenticated v2.22
+          # 05_Tools_and_Tests/requirements.txt. The candidate-side verifier
+          # independently authenticates the carrier archive and all normative
+          # control members before invoking the supplied validator.
+          python -m pip install --disable-pip-version-check "jsonschema[format-nongpl]==4.26.0" "rfc8785==0.1.4" "cryptography==49.0.0"
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install exact supplied validator runtime dependencies.' }
 
       - name: Exact identities plus supplied validator agreement
         id: controls
