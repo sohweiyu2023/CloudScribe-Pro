@@ -1,0 +1,131 @@
+name: CloudScribe Stage 4 restore authenticated v2.22 carrier push
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/ci/trigger-v222-restore.txt'
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  repair:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      TARGET_BRANCH: agent/stage4-batch12-exact-pricing-controls
+      EXPECTED_START_HEAD: 1dab914d12a440f27241da621938ab8a6ac037ef
+      HISTORIC_CARRIER_HEAD: 8efe1c2564e80d09852908856e8afdb6cb2e11d9
+      REPORT_ISSUE: '43'
+    steps:
+      - name: Checkout CI controls
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: ci
+          fetch-depth: 1
+
+      - name: Checkout Stage 4 source branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/stage4-batch12-exact-pricing-controls
+          path: source
+          fetch-depth: 0
+
+      - name: Bind exact starting point
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:EXPECTED_START_HEAD) { throw "Unexpected Stage 4 branch head: $head" }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Starting checkout is not clean.' }
+
+      - name: Restore known-good carrier and authenticated controls
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location source
+          try {
+            git checkout $env:HISTORIC_CARRIER_HEAD -- controls/v2.22/carrier-parts/part01.b64 controls/v2.22/carrier-parts/part02.b64 controls/v2.22/carrier-parts/part03.b64 controls/v2.22/carrier-parts/part04.b64 controls/v2.22/carrier-parts/part05.b64
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to restore authenticated historical carrier.' }
+            Copy-Item -LiteralPath ../ci/.github/ci/v222_exact_limits_contract.md -Destination controls/v2.22/CloudScribe_Pro_Batch_Limits_Autosave_Settings_Contract_v2.22.md -Force
+            Copy-Item -LiteralPath ../ci/.github/ci/verify_exact_v222_controls_repacked.py -Destination tools/verify_exact_v222_controls.py -Force
+            if (Test-Path -LiteralPath controls/v2.22/exact-controls.bundle.zip) {
+              git rm -f -- controls/v2.22/exact-controls.bundle.zip
+              if ($LASTEXITCODE -ne 0) { throw 'Failed to remove corrupted binary carrier.' }
+            }
+          }
+          finally { Pop-Location }
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install exact supplied validator dependencies
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install --disable-pip-version-check "jsonschema[format-nongpl]==4.26.0" "rfc8785==0.1.4" "cryptography==49.0.0"
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install exact supplied validator runtime dependencies.' }
+
+      - name: Validate restored exact controls before commit
+        id: controls
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/verify_exact_v222_controls.py
+          if ($LASTEXITCODE -ne 0) { throw 'Restored exact v2.22 controls failed validation.' }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed.' }
+
+      - name: Freeze and publish repaired transport
+        id: freeze
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- controls/v2.22/carrier-parts/part01.b64 controls/v2.22/carrier-parts/part02.b64 controls/v2.22/carrier-parts/part03.b64 controls/v2.22/carrier-parts/part04.b64 controls/v2.22/carrier-parts/part05.b64 controls/v2.22/CloudScribe_Pro_Batch_Limits_Autosave_Settings_Contract_v2.22.md tools/verify_exact_v222_controls.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to stage repaired text controls.' }
+          $actual = @(git diff --cached --name-only | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
+          $expected = @(
+            'controls/v2.22/CloudScribe_Pro_Batch_Limits_Autosave_Settings_Contract_v2.22.md',
+            'controls/v2.22/carrier-parts/part01.b64',
+            'controls/v2.22/carrier-parts/part02.b64',
+            'controls/v2.22/carrier-parts/part03.b64',
+            'controls/v2.22/carrier-parts/part04.b64',
+            'controls/v2.22/carrier-parts/part05.b64',
+            'controls/v2.22/exact-controls.bundle.zip',
+            'tools/verify_exact_v222_controls.py')
+          if ($actual.Count -ne $expected.Count) { $actual | Write-Host; throw "Unexpected repaired file count: $($actual.Count)" }
+          foreach ($path in $expected) { if ($actual -notcontains $path) { throw "Missing intended repaired path: $path" } }
+          foreach ($path in $actual) { if ($expected -notcontains $path) { throw "Unexpected repaired path: $path" } }
+          git commit -m 'fix(stage4): restore authenticated v2.22 text carrier'
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to freeze repaired carrier.' }
+          $head = (git rev-parse HEAD).Trim()
+          "candidate_head=$head" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Repaired candidate is not clean.' }
+          git push origin "HEAD:$env:TARGET_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to publish repaired carrier.' }
+
+      - name: Report result
+        if: always()
+        uses: actions/github-script@v8
+        env:
+          CANDIDATE_HEAD: ${{ steps.freeze.outputs.candidate_head }}
+        with:
+          script: |
+            const body = [
+              'STATUS: v2.22 historic-carrier restoration (push trigger)',
+              `Run: ${context.runId}`,
+              `Exact-control validation: ${{ steps.controls.outcome }}`,
+              `Candidate head: ${process.env.CANDIDATE_HEAD || ''}`,
+              `Job status: ${{ job.status }}`
+            ].join('\n');
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: Number(process.env.REPORT_ISSUE), body});
