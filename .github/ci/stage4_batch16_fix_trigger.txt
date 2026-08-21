@@ -1,0 +1,1 @@
+Repair generated C# JSON literal escaping in stage4_batch16_bind.py.
