@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
-import subprocess
 import sys
 import tempfile
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,21 +95,38 @@ def main() -> int:
         if runtime_errors:
             return fail(f"runtime-policy 1.3 seed failed schema validation: {runtime_errors[0].message}")
 
-        validator = material / VALIDATOR
-        schema = material / "02_Pricing/cloudscribe-pricing.schema-1.1.5.json"
-        seed = material / "02_Pricing/cloudscribe-pricing.seed-2026-07-20.schema-1.1.5.json"
-        result = subprocess.run(
-            [sys.executable, str(validator), str(schema), str(seed)],
-            cwd=material,
-            text=True,
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            sys.stderr.write(result.stdout)
-            sys.stderr.write(result.stderr)
-            return fail("supplied pricing validator did not agree with exact schema/seed")
+        # The supplied semantic validator intentionally contains lifecycle checks
+        # against a caller-supplied `now`. Reproduce the authenticated validation
+        # report at its own generated_at_utc rather than silently making a July
+        # package fail solely because wall-clock time advanced. Current catalog
+        # freshness remains a separate runtime/update-channel concern.
+        validator_path = material / VALIDATOR
+        spec = importlib.util.spec_from_file_location("cloudscribe_catalog_validator_exact", validator_path)
+        if spec is None or spec.loader is None:
+            return fail("could not load supplied pricing validator")
+        validator_module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(validator_module)
+            schema = validator_module.load_json_strict(material / "02_Pricing/cloudscribe-pricing.schema-1.1.5.json")
+            seed = validator_module.load_json_strict(material / "02_Pricing/cloudscribe-pricing.seed-2026-07-20.schema-1.1.5.json")
+            report_time = datetime.fromisoformat(report["generated_at_utc"].replace("Z", "+00:00"))
+            structural = validator_module.schema_errors(schema, seed)
+            semantic = [] if structural else validator_module.semantic_errors(seed, now=report_time)
+            actual_result = {
+                "schema_errors": structural,
+                "semantic_errors": semantic,
+                "passed": not structural and not semantic,
+            }
+        except Exception as exc:
+            return fail(f"supplied pricing validator execution failed: {exc}")
 
-    print("Exact v2.22 control identities, limits contract, supplied pricing validator agreement, and runtime-policy 1.3 validation PASS.")
+        if actual_result != report.get("validator_result"):
+            return fail(
+                "supplied pricing validator does not reproduce authenticated report at generated_at_utc: "
+                + json.dumps(actual_result, sort_keys=True)
+            )
+
+    print("Exact v2.22 control identities, limits contract, supplied pricing validator report-time agreement, and runtime-policy 1.3 validation PASS.")
     return 0
 
 
