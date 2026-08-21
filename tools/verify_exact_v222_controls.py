@@ -37,7 +37,15 @@ def load_archive() -> bytes:
     parts = sorted(PARTS.glob("part*.b64"))
     if [p.name for p in parts] != [f"part{i:02d}.b64" for i in range(1, 6)]:
         raise ValueError(f"unexpected authenticated carrier parts: {[p.name for p in parts]}")
-    encoded = "".join(p.read_text(encoding="ascii").strip() for p in parts)
+
+    # Git/text transport may wrap Base64 with ASCII whitespace. Remove only
+    # whitespace separators, then retain strict alphabet/padding validation.
+    # Authenticity remains anchored by the exact reconstructed archive SHA-256
+    # and the locked SHA-256 of every normative member below.
+    encoded = "".join(
+        "".join(p.read_text(encoding="ascii").split())
+        for p in parts
+    )
     archive = base64.b64decode(encoded, validate=True)
     actual = sha256(archive)
     if actual != ARCHIVE_SHA256:
