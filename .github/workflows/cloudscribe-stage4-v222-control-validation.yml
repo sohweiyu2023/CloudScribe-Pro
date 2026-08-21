@@ -1,0 +1,85 @@
+name: CloudScribe Stage 4 v2.22 exact-control validation
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-03B3C2F8'
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      EXPECTED_HEAD: 03b3c2f83c1f83d0eba9772b087ac8963abd5552
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/stage4-batch12-exact-pricing-controls
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Bind exact candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:EXPECTED_HEAD) { throw "Unexpected exact-control candidate: $head" }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { throw 'Starting checkout is not clean.' }
+
+      - name: Rehydrate supplied validator dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          import base64, pathlib, zipfile
+          root = pathlib.Path('.')
+          archive = base64.b64decode((root/'controls/v2.22/exact-controls.bundle.zip.b64').read_text(encoding='ascii'), validate=True)
+          path = pathlib.Path(r'${{ runner.temp }}')/'v222-controls.zip'
+          path.write_bytes(archive)
+          out = pathlib.Path(r'${{ runner.temp }}')/'v222-controls'
+          with zipfile.ZipFile(path) as zf:
+              zf.extractall(out)
+          print(out)
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to rehydrate exact controls.' }
+          python -m pip install --disable-pip-version-check -r "${{ runner.temp }}\v222-controls\05_Tools_and_Tests\requirements.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install supplied validator dependencies.' }
+
+      - name: Exact identities plus supplied validator agreement
+        id: controls
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/verify_exact_v222_controls.py
+          if ($LASTEXITCODE -ne 0) { throw 'Exact v2.22 control validation failed.' }
+
+      - name: Repository source hygiene
+        id: hygiene
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed.' }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Validation mutated the source tree.' }
+
+      - name: Report result
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const body = [
+              'STATUS: v2.22 exact-control focused validation',
+              `Run: ${context.runId}`,
+              `Expected head: ${process.env.EXPECTED_HEAD}`,
+              `Exact controls: ${{ steps.controls.outcome }}`,
+              `Source hygiene: ${{ steps.hygiene.outcome }}`,
+              `Job status: ${{ job.status }}`
+            ].join('\n');
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
