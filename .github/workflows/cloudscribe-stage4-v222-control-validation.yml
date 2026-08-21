@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   validate:
-    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-B563CF4B'
+    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-68386F2D'
     runs-on: windows-2025
     timeout-minutes: 30
     env:
-      EXPECTED_HEAD: b563cf4ba72b9701fbdfa60bbee8449c73bb5c63
+      EXPECTED_HEAD: 68386f2d1c3d7fb99dfb2e6efcde80a4a33d256d
     steps:
       - uses: actions/checkout@v6
         with:
@@ -40,8 +40,7 @@ jobs:
           @'
           import base64, pathlib, zipfile
           root = pathlib.Path('.')
-          encoded = ''.join((root/'controls/v2.22/exact-controls.bundle.zip.b64').read_text(encoding='ascii').split())
-          archive = base64.b64decode(encoded, validate=True)
+          archive = base64.b64decode((root/'controls/v2.22/exact-controls.bundle.zip.b64').read_text(encoding='ascii'), validate=False)
           path = pathlib.Path(r'${{ runner.temp }}')/'v222-controls.zip'
           path.write_bytes(archive)
           out = pathlib.Path(r'${{ runner.temp }}')/'v222-controls'
