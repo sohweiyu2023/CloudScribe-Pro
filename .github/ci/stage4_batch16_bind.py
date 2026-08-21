@@ -320,7 +320,17 @@ Truth boundary
 - This slice does not claim Stage 4 completion/promotion. Stage 5 remains blocked.
 """,
     )
-    subprocess.run(["git", "add", "docs/STAGE4-FOUNDATION-BATCH16.txt"], cwd=root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "add",
+            "docs/STAGE4-FOUNDATION-BATCH16.txt",
+            "src/CloudScribe.Infrastructure/Pricing/ExactPricingControlMaterialInspector.cs",
+            "tests/CloudScribe.Infrastructure.Tests/ExactPricingControlMaterialInspectorTests.cs",
+        ],
+        cwd=root,
+        check=True,
+    )
     return 0
 
 
