@@ -36,9 +36,10 @@ def main() -> int:
     if not BUNDLE.is_file():
         return fail(f"missing authenticated control bundle: {BUNDLE.relative_to(ROOT)}")
     try:
-        archive = base64.b64decode(BUNDLE.read_text(encoding="ascii"), validate=True)
+        encoded = "".join(BUNDLE.read_text(encoding="ascii").split())
+        archive = base64.b64decode(encoded, validate=True)
     except Exception as exc:
-        return fail(f"control bundle is not strict base64: {exc}")
+        return fail(f"control bundle is not strict base64 after ASCII whitespace normalization: {exc}")
 
     with tempfile.TemporaryDirectory(prefix="cloudscribe-v222-controls-") as tmp:
         tmp_root = Path(tmp)
