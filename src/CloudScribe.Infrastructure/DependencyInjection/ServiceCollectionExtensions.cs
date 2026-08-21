@@ -75,6 +75,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
         services.AddSingleton<StrictJsonObjectReader>();
+        services.AddSingleton<ExactPricingControlMaterialInspector>();
         services.AddOptions<PricingCatalogTrustOptions>()
             .Bind(configuration.GetSection(PricingCatalogTrustOptions.SectionName));
         services.AddSingleton<IPricingCatalogContractValidator, UnavailablePricingCatalogContractValidator>();
