@@ -1,0 +1,67 @@
+name: CloudScribe Stage 4 admitted v2.22 repair check
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    if: github.event.issue.title == 'TRIGGER-STAGE4-ADMITTED-V222-REPAIR-81FEAFF8'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      EXPECTED_HEAD: 81feaff8c63fea1b071977423b9aa1c3729f3616
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/stage4-batch12-exact-pricing-controls
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Exact head and formatting
+        id: format
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD) { throw 'Unexpected candidate head.' }
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+      - name: Strict Release compile
+        id: build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+      - name: Admitted v2.22 contract tests
+        id: tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter FullyQualifiedName~AdmittedV222PricingCatalogContractValidatorTests
+          if ($LASTEXITCODE -ne 0) { throw 'Admitted v2.22 contract tests failed.' }
+      - name: Report result
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const body = [
+              `STATUS: Stage 4 admitted v2.22 repair check`,
+              `Run: ${context.runId}`,
+              `Formatting: ${{ steps.format.outcome }}`,
+              `Release build: ${{ steps.build.outcome }}`,
+              `Contract tests: ${{ steps.tests.outcome }}`,
+              `Job status: ${{ job.status }}`
+            ].join('\n');
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
