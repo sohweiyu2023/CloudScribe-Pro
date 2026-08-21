@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
-import string
 import subprocess
 import sys
 import tempfile
@@ -12,18 +10,18 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PARTS = ROOT / "controls/v2.22/carrier-parts"
-ARCHIVE_SHA256 = "6031608216e76c1b8d8186c6f0c7ba6e226a5f49550da011b523abab5ee6e510"
+ARCHIVE = ROOT / "controls/v2.22/exact-controls.bundle.zip"
+ARCHIVE_SHA256 = "32818c608304aca3a76bef7b5ec4aae16e530a01ba4ef5d679d35ea50bd611c1"
 EXPECTED = {
     "02_Pricing/cloudscribe-pricing.schema-1.1.5.json": "1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b",
     "02_Pricing/cloudscribe-pricing.seed-2026-07-20.schema-1.1.5.json": "3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61",
     "03_Implementation/cloudscribe-runtime-policy.schema-1.3.json": "bdcc03005a48d9d8bdcb139d468a9c3f277526aa4d9dbe19c2c6309b5bff390c",
     "03_Implementation/cloudscribe-runtime-policy.seed-2026-07-20.schema-1.3.json": "9561a4f5c1d58dd471424566b05f7325a52ed06a4c57ec53b17f5395ae621525",
+    "06_Product_and_Distribution/CloudScribe_Pro_Batch_Limits_Autosave_Settings_Contract_v2.22.md": "5d3e17debc58e0775bf472f7eebd79db32447de457fcec20d924a860dcfcb6d7",
 }
 VALIDATION_REPORT = "02_Pricing/CloudScribe_Pricing_Catalog_Validation_v1.1.5_2026-07-20.json"
 VALIDATOR = "05_Tools_and_Tests/cloudscribe_catalog_validator.py"
 REQUIREMENTS = "05_Tools_and_Tests/requirements.txt"
-_BASE64_ALPHABET = set(string.ascii_letters + string.digits + "+/=")
 
 
 def fail(message: str) -> int:
@@ -36,22 +34,9 @@ def sha256(data: bytes) -> str:
 
 
 def load_archive() -> bytes:
-    parts = sorted(PARTS.glob("part*.b64"))
-    if [p.name for p in parts] != [f"part{i:02d}.b64" for i in range(1, 6)]:
-        raise ValueError(f"unexpected authenticated carrier parts: {[p.name for p in parts]}")
-
-    normalized_parts: list[str] = []
-    for part in parts:
-        raw = part.read_text(encoding="ascii")
-        normalized = "".join(raw.split())
-        invalid = [(index, char, ord(char)) for index, char in enumerate(normalized) if char not in _BASE64_ALPHABET]
-        if invalid:
-            sample = ", ".join(f"index={index} char={char!r} ord={code}" for index, char, code in invalid[:8])
-            raise ValueError(f"non-Base64 transport characters in {part.name}: {sample}")
-        normalized_parts.append(normalized)
-
-    encoded = "".join(normalized_parts)
-    archive = base64.b64decode(encoded, validate=True)
+    if not ARCHIVE.is_file():
+        raise ValueError(f"authenticated control archive missing: {ARCHIVE.relative_to(ROOT)}")
+    archive = ARCHIVE.read_bytes()
     actual = sha256(archive)
     if actual != ARCHIVE_SHA256:
         raise ValueError(f"authenticated carrier archive identity mismatch: {actual}")
@@ -62,7 +47,7 @@ def main() -> int:
     try:
         archive = load_archive()
     except Exception as exc:
-        return fail(f"authenticated v2.22 carrier rehydration failed: {exc}")
+        return fail(f"authenticated v2.22 control archive load failed: {exc}")
 
     with tempfile.TemporaryDirectory(prefix="cloudscribe-v222-controls-") as tmp:
         tmp_root = Path(tmp)
@@ -123,7 +108,7 @@ def main() -> int:
             sys.stderr.write(result.stderr)
             return fail("supplied pricing validator did not agree with exact schema/seed")
 
-    print("Exact v2.22 control identities, supplied pricing validator agreement, and runtime-policy 1.3 validation PASS.")
+    print("Exact v2.22 control identities, limits contract, supplied pricing validator agreement, and runtime-policy 1.3 validation PASS.")
     return 0
 
 
