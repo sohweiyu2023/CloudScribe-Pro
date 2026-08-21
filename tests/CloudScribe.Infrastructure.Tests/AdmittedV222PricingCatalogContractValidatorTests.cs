@@ -1,3 +1,4 @@
+using CloudScribe.Application.Pricing;
 using CloudScribe.Domain.Pricing;
 using CloudScribe.Infrastructure.Pricing;
 
