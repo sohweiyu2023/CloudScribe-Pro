@@ -11,7 +11,8 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BUNDLE = ROOT / "controls/v2.22/exact-controls.bundle.zip.b64"
+PARTS = ROOT / "controls/v2.22/carrier-parts"
+ARCHIVE_SHA256 = "6031608216e76c1b8d8186c6f0c7ba6e226a5f49550da011b523abab5ee6e510"
 EXPECTED = {
     "02_Pricing/cloudscribe-pricing.schema-1.1.5.json": "1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b",
     "02_Pricing/cloudscribe-pricing.seed-2026-07-20.schema-1.1.5.json": "3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61",
@@ -32,16 +33,23 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def load_archive() -> bytes:
+    parts = sorted(PARTS.glob("part*.b64"))
+    if [p.name for p in parts] != [f"part{i:02d}.b64" for i in range(1, 6)]:
+        raise ValueError(f"unexpected authenticated carrier parts: {[p.name for p in parts]}")
+    encoded = "".join(p.read_text(encoding="ascii").strip() for p in parts)
+    archive = base64.b64decode(encoded, validate=True)
+    actual = sha256(archive)
+    if actual != ARCHIVE_SHA256:
+        raise ValueError(f"authenticated carrier archive identity mismatch: {actual}")
+    return archive
+
+
 def main() -> int:
-    if not BUNDLE.is_file():
-        return fail(f"missing authenticated control bundle: {BUNDLE.relative_to(ROOT)}")
     try:
-        # The .b64 file is only a transport carrier. Git/text transport may add
-        # non-alphabet separators. Decode permissively, then authenticate every
-        # normative member by its locked SHA-256 before it can be used.
-        archive = base64.b64decode(BUNDLE.read_text(encoding="ascii"), validate=False)
+        archive = load_archive()
     except Exception as exc:
-        return fail(f"control bundle transport decode failed: {exc}")
+        return fail(f"authenticated v2.22 carrier rehydration failed: {exc}")
 
     with tempfile.TemporaryDirectory(prefix="cloudscribe-v222-controls-") as tmp:
         tmp_root = Path(tmp)
@@ -81,14 +89,22 @@ def main() -> int:
             Draft202012Validator.check_schema(runtime_schema)
         except Exception as exc:
             return fail(f"runtime-policy Draft 2020-12 schema self-validation failed: {exc}")
-        runtime_errors = sorted(Draft202012Validator(runtime_schema, format_checker=FormatChecker()).iter_errors(runtime_seed), key=lambda e: list(e.path))
+        runtime_errors = sorted(
+            Draft202012Validator(runtime_schema, format_checker=FormatChecker()).iter_errors(runtime_seed),
+            key=lambda e: list(e.path),
+        )
         if runtime_errors:
             return fail(f"runtime-policy 1.3 seed failed schema validation: {runtime_errors[0].message}")
 
         validator = material / VALIDATOR
         schema = material / "02_Pricing/cloudscribe-pricing.schema-1.1.5.json"
         seed = material / "02_Pricing/cloudscribe-pricing.seed-2026-07-20.schema-1.1.5.json"
-        result = subprocess.run([sys.executable, str(validator), str(schema), str(seed)], cwd=material, text=True, capture_output=True)
+        result = subprocess.run(
+            [sys.executable, str(validator), str(schema), str(seed)],
+            cwd=material,
+            text=True,
+            capture_output=True,
+        )
         if result.returncode != 0:
             sys.stderr.write(result.stdout)
             sys.stderr.write(result.stderr)
