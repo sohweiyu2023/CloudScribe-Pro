@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import json
+import re
 import sys
 import tempfile
 import zipfile
@@ -11,11 +13,14 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / "controls/v2.22/exact-controls.bundle.zip"
-# Deterministic transport regenerated from the independently authenticated v2.22
-# master package. .gitattributes marks ZIPs binary so Windows checkout cannot
-# line-ending-normalize these authenticated bytes.
-ARCHIVE_SHA256 = "32818c608304aca3a76bef7b5ec4aae16e530a01ba4ef5d679d35ea50bd611c1"
+CARRIER_DIR = ROOT / "controls/v2.22/clean-carrier"
+PART_NAMES = tuple(f"part{i:02}.b64" for i in range(1, 12))
+# Deterministic ZIP_STORED/deflate-level-9 transport regenerated directly from
+# independently authenticated v2.22 normative member bytes. The transport is
+# represented as small Base64 text parts to avoid binary checkout/API mutation;
+# member identities below remain the authoritative normative locks.
+ARCHIVE_SHA256 = "62a2b2bf1da323b87430264568340a41cce71d65d975328cfc6f9a0b2b3cc986"
+BASE64_RE = re.compile(r"^[A-Za-z0-9+/=]*$")
 EXPECTED = {
     "02_Pricing/cloudscribe-pricing.schema-1.1.5.json": "1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b",
     "02_Pricing/cloudscribe-pricing.seed-2026-07-20.schema-1.1.5.json": "3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61",
@@ -38,12 +43,24 @@ def sha256(data: bytes) -> str:
 
 
 def load_archive() -> bytes:
-    if not ARCHIVE.is_file():
-        raise ValueError(f"authenticated control archive missing: {ARCHIVE.relative_to(ROOT)}")
-    archive = ARCHIVE.read_bytes()
+    encoded_parts: list[str] = []
+    for name in PART_NAMES:
+        path = CARRIER_DIR / name
+        if not path.is_file():
+            raise ValueError(f"authenticated carrier part missing: {path.relative_to(ROOT)}")
+        raw = path.read_text(encoding="ascii")
+        normalized = "".join(raw.split())
+        if not BASE64_RE.fullmatch(normalized):
+            bad = next((i, ch, ord(ch)) for i, ch in enumerate(normalized) if ch not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
+            raise ValueError(f"non-Base64 transport character in {name}: index={bad[0]} char={bad[1]!r} ord={bad[2]}")
+        encoded_parts.append(normalized)
+    try:
+        archive = base64.b64decode("".join(encoded_parts), validate=True)
+    except Exception as exc:
+        raise ValueError(f"strict clean-carrier Base64 decoding failed: {exc}") from exc
     actual = sha256(archive)
     if actual != ARCHIVE_SHA256:
-        raise ValueError(f"authenticated carrier archive identity mismatch: {actual}")
+        raise ValueError(f"authenticated clean carrier archive identity mismatch: {actual}")
     return archive
 
 
@@ -129,7 +146,7 @@ def main() -> int:
                 + json.dumps(actual_result, sort_keys=True)
             )
 
-    print("Exact v2.22 control identities, limits contract, supplied pricing validator report-time agreement, and runtime-policy 1.3 validation PASS.")
+    print("Exact v2.22 clean-carrier identity, normative member identities, limits contract, supplied pricing validator report-time agreement, and runtime-policy 1.3 validation PASS.")
     return 0
 
 
