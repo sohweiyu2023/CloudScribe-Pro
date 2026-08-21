@@ -41,7 +41,9 @@ public sealed class AdmittedV222PricingCatalogContractValidatorTests
 
         Assert.Equal(PricingCatalogTrustState.ValidationFailed, result.TrustState);
         Assert.False(result.CanApprove);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == "catalog.contract.unrecognized-bytes");
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => string.Equals(diagnostic.Code, "catalog.contract.unrecognized-bytes", StringComparison.Ordinal));
     }
 
     [Fact]
