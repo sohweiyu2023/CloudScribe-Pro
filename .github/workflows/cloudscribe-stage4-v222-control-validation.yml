@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   validate:
-    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-22EB1B31'
+    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-B9F3F8CB'
     runs-on: windows-2025
     timeout-minutes: 30
     env:
-      EXPECTED_HEAD: 22eb1b315e8b604dd25c99481a2dc3fce8a3bbed
+      EXPECTED_HEAD: b9f3f8cbc71e00c3eaa8a2e1426cb60b6db95c44
       EXPECTED_ARCHIVE_SHA256: 6031608216e76c1b8d8186c6f0c7ba6e226a5f49550da011b523abab5ee6e510
     steps:
       - uses: actions/checkout@v6
@@ -38,10 +38,6 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # These versions are copied exactly from the authenticated v2.22
-          # 05_Tools_and_Tests/requirements.txt. The candidate-side verifier
-          # independently authenticates the carrier archive and all normative
-          # control members before invoking the supplied validator.
           python -m pip install --disable-pip-version-check "jsonschema[format-nongpl]==4.26.0" "rfc8785==0.1.4" "cryptography==49.0.0"
           if ($LASTEXITCODE -ne 0) { throw 'Failed to install exact supplied validator runtime dependencies.' }
 
