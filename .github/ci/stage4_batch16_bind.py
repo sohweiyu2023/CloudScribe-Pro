@@ -169,7 +169,7 @@ public sealed class ExactPricingControlMaterialInspectorTests
     [Fact]
     public void ExactIdentityAndStrictObjectAreAcceptedForIntakeOnly()
     {
-        byte[] material = "{\"schemaVersion\":\"1.1.5\"}"u8.ToArray();
+        byte[] material = "{\\\"schemaVersion\\\":\\\"1.1.5\\\"}"u8.ToArray();
         ExactPricingControlMaterialInspector inspector = new(new StrictJsonObjectReader());
 
         ExactPricingControlMaterialInspector.Inspection result = inspector.Inspect(material, Sha256(material));
@@ -183,7 +183,7 @@ public sealed class ExactPricingControlMaterialInspectorTests
     [Fact]
     public void IdentityMismatchFailsClosedBeforeAdmission()
     {
-        byte[] material = "{\"schemaVersion\":\"1.1.5\"}"u8.ToArray();
+        byte[] material = "{\\\"schemaVersion\\\":\\\"1.1.5\\\"}"u8.ToArray();
         ExactPricingControlMaterialInspector inspector = new(new StrictJsonObjectReader());
 
         ExactPricingControlMaterialInspector.Inspection result = inspector.Inspect(material, new string('0', 64));
@@ -196,7 +196,7 @@ public sealed class ExactPricingControlMaterialInspectorTests
     [Fact]
     public void MatchingIdentityStillRejectsHostileDuplicateMemberJson()
     {
-        byte[] material = "{\"schemaVersion\":1,\"schemaVersion\":2}"u8.ToArray();
+        byte[] material = "{\\\"schemaVersion\\\":1,\\\"schemaVersion\\\":2}"u8.ToArray();
         ExactPricingControlMaterialInspector inspector = new(new StrictJsonObjectReader());
 
         ExactPricingControlMaterialInspector.Inspection result = inspector.Inspect(material, Sha256(material));
