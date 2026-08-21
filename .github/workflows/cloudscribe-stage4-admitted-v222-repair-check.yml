@@ -10,13 +10,13 @@ permissions:
 
 jobs:
   validate:
-    if: github.event.issue.title == 'TRIGGER-STAGE4-ADMITTED-V222-REPAIR-81FEAFF8'
+    if: github.event.issue.title == 'TRIGGER-STAGE4-ADMITTED-V222-REPAIR-5935EF21'
     runs-on: windows-2025
     timeout-minutes: 45
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
-      EXPECTED_HEAD: 81feaff8c63fea1b071977423b9aa1c3729f3616
+      EXPECTED_HEAD: 5935ef2110b76235ef626ac8b3340952d6ec4210
     steps:
       - uses: actions/checkout@v6
         with:
