@@ -40,7 +40,8 @@ jobs:
           @'
           import base64, pathlib, zipfile
           root = pathlib.Path('.')
-          archive = base64.b64decode((root/'controls/v2.22/exact-controls.bundle.zip.b64').read_text(encoding='ascii'), validate=True)
+          encoded = ''.join((root/'controls/v2.22/exact-controls.bundle.zip.b64').read_text(encoding='ascii').split())
+          archive = base64.b64decode(encoded, validate=True)
           path = pathlib.Path(r'${{ runner.temp }}')/'v222-controls.zip'
           path.write_bytes(archive)
           out = pathlib.Path(r'${{ runner.temp }}')/'v222-controls'
