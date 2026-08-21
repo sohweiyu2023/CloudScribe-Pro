@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   validate:
-    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-CLEAN-CARRIER-9DF70F23'
+    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-CLEAN-CARRIER-C971FEE1'
     runs-on: windows-2025
     timeout-minutes: 30
     env:
-      EXPECTED_HEAD: 9df70f233a5af1246a37f9babfeefc9b1e4b24ff
+      EXPECTED_HEAD: c971fee1d57419a6ddb2f530614b4261ea12c7ed
     steps:
       - uses: actions/checkout@v6
         with:
@@ -63,7 +63,7 @@ jobs:
         with:
           script: |
             const body = [
-              'STATUS: v2.22 exact-control focused validation (clean text carrier)',
+              'STATUS: v2.22 exact-control focused validation (corrected clean text carrier)',
               `Run: ${context.runId}`,
               `Expected head: ${process.env.EXPECTED_HEAD}`,
               `Exact controls: ${{ steps.controls.outcome }}`,
