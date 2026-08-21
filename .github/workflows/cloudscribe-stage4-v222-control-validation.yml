@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   validate:
-    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-A359E566'
+    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-50D533CD'
     runs-on: windows-2025
     timeout-minutes: 30
     env:
-      EXPECTED_HEAD: a359e566d7c9fbcae5486b78a72509fdbb57eb16
+      EXPECTED_HEAD: 50d533cd6f3d433061c451371d7c4b726cd062c0
       EXPECTED_ARCHIVE_SHA256: 32818c608304aca3a76bef7b5ec4aae16e530a01ba4ef5d679d35ea50bd611c1
     steps:
       - uses: actions/checkout@v6
