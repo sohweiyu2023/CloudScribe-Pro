@@ -10,12 +10,12 @@ permissions:
 
 jobs:
   validate:
-    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-0BFF7E6B'
+    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-2F4F13B5'
     runs-on: windows-2025
     timeout-minutes: 30
     env:
-      EXPECTED_HEAD: 0bff7e6bc916f4395bd355afbb671cd423ae5e0f
-      EXPECTED_ARCHIVE_SHA256: 89dc301c69480cbe4a2d867cd3135b6bea888a5e327b9791fd3d71e2f93960b7
+      EXPECTED_HEAD: 2f4f13b542f3907721c3de3dca8af877376ffc6c
+      EXPECTED_ARCHIVE_SHA256: 32818c608304aca3a76bef7b5ec4aae16e530a01ba4ef5d679d35ea50bd611c1
     steps:
       - uses: actions/checkout@v6
         with:
@@ -46,6 +46,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $actualArchive = (Get-FileHash 'controls/v2.22/exact-controls.bundle.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualArchive -ne $env:EXPECTED_ARCHIVE_SHA256) { throw "Checkout changed authenticated control archive: $actualArchive" }
           python tools/verify_exact_v222_controls.py
           if ($LASTEXITCODE -ne 0) { throw 'Exact v2.22 control validation failed.' }
 
