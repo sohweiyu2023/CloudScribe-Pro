@@ -12,10 +12,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "controls/v2.22/exact-controls.bundle.zip"
-# Transport identity observed from the exact repository carrier on Windows run
-# 32497642155. Normative authenticity remains independently enforced below by
-# per-member SHA-256 pins before any control material is used.
-ARCHIVE_SHA256 = "89dc301c69480cbe4a2d867cd3135b6bea888a5e327b9791fd3d71e2f93960b7"
+# Deterministic transport regenerated from the independently authenticated v2.22
+# master package. .gitattributes marks ZIPs binary so Windows checkout cannot
+# line-ending-normalize these authenticated bytes.
+ARCHIVE_SHA256 = "32818c608304aca3a76bef7b5ec4aae16e530a01ba4ef5d679d35ea50bd611c1"
 EXPECTED = {
     "02_Pricing/cloudscribe-pricing.schema-1.1.5.json": "1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b",
     "02_Pricing/cloudscribe-pricing.seed-2026-07-20.schema-1.1.5.json": "3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61",
