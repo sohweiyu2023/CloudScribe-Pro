@@ -17,4 +17,7 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="NSec.Cryptography" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../controls/v2.22/clean-carrier/*.b64" LogicalName="CloudScribe.V222Carrier.%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

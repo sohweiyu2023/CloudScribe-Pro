@@ -13,7 +13,7 @@ public sealed class PricingCatalogAdmissionService(
         PricingCatalogSignature? signature = null)
     {
         using System.Text.Json.JsonDocument document = reader.Parse(utf8Catalog);
-        PricingCatalogContractValidation validation = contractValidator.Validate(document.RootElement);
+        PricingCatalogContractValidation validation = contractValidator.Validate(utf8Catalog, document.RootElement);
         if (!validation.ContractAvailable)
         {
             return new PricingCatalogDryRunResult(
