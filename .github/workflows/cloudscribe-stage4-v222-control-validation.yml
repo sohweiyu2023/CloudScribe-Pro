@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   validate:
-    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-2F4F13B5'
+    if: github.event.issue.title == 'TRIGGER-STAGE4-V222-EXACT-CONTROLS-RAW-2F4F13B5'
     runs-on: windows-2025
     timeout-minutes: 30
     env:
@@ -34,6 +34,17 @@ jobs:
           if ($head -ne $env:EXPECTED_HEAD) { throw "Unexpected exact-control candidate: $head" }
           if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { throw 'Starting checkout is not clean.' }
 
+      - name: Restore authenticated archive from raw Git blob
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'controls/v2.22/exact-controls.bundle.zip'
+          python -c "import pathlib, subprocess; p=pathlib.Path(r'$path'); p.write_bytes(subprocess.check_output(['git','cat-file','blob','HEAD:' + r'$path']))"
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to restore authenticated archive from raw Git blob.' }
+          $rawArchive = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Raw Git blob archive SHA256: $rawArchive"
+          if ($rawArchive -ne $env:EXPECTED_ARCHIVE_SHA256) { throw "Repository blob is not the authenticated deterministic archive: $rawArchive" }
+
       - name: Install exact supplied validator dependencies
         shell: pwsh
         run: |
@@ -47,7 +58,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $actualArchive = (Get-FileHash 'controls/v2.22/exact-controls.bundle.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualArchive -ne $env:EXPECTED_ARCHIVE_SHA256) { throw "Checkout changed authenticated control archive: $actualArchive" }
+          if ($actualArchive -ne $env:EXPECTED_ARCHIVE_SHA256) { throw "Authenticated control archive mismatch after raw-blob restore: $actualArchive" }
           python tools/verify_exact_v222_controls.py
           if ($LASTEXITCODE -ne 0) { throw 'Exact v2.22 control validation failed.' }
 
@@ -58,6 +69,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed.' }
+          git checkout -- 'controls/v2.22/exact-controls.bundle.zip'
           if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { git status --short; throw 'Validation mutated the source tree.' }
 
       - name: Report result
@@ -66,7 +78,7 @@ jobs:
         with:
           script: |
             const body = [
-              'STATUS: v2.22 exact-control focused validation',
+              'STATUS: v2.22 exact-control focused validation (raw Git blob)',
               `Run: ${context.runId}`,
               `Expected head: ${process.env.EXPECTED_HEAD}`,
               `Exact controls: ${{ steps.controls.outcome }}`,
