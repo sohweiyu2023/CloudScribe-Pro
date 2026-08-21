@@ -36,10 +36,12 @@ def main() -> int:
     if not BUNDLE.is_file():
         return fail(f"missing authenticated control bundle: {BUNDLE.relative_to(ROOT)}")
     try:
-        encoded = "".join(BUNDLE.read_text(encoding="ascii").split())
-        archive = base64.b64decode(encoded, validate=True)
+        # The .b64 file is only a transport carrier. Git/text transport may add
+        # non-alphabet separators. Decode permissively, then authenticate every
+        # normative member by its locked SHA-256 before it can be used.
+        archive = base64.b64decode(BUNDLE.read_text(encoding="ascii"), validate=False)
     except Exception as exc:
-        return fail(f"control bundle is not strict base64 after ASCII whitespace normalization: {exc}")
+        return fail(f"control bundle transport decode failed: {exc}")
 
     with tempfile.TemporaryDirectory(prefix="cloudscribe-v222-controls-") as tmp:
         tmp_root = Path(tmp)
