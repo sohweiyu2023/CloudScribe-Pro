@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import string
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,7 @@ EXPECTED = {
 VALIDATION_REPORT = "02_Pricing/CloudScribe_Pricing_Catalog_Validation_v1.1.5_2026-07-20.json"
 VALIDATOR = "05_Tools_and_Tests/cloudscribe_catalog_validator.py"
 REQUIREMENTS = "05_Tools_and_Tests/requirements.txt"
+_BASE64_ALPHABET = set(string.ascii_letters + string.digits + "+/=")
 
 
 def fail(message: str) -> int:
@@ -38,14 +40,17 @@ def load_archive() -> bytes:
     if [p.name for p in parts] != [f"part{i:02d}.b64" for i in range(1, 6)]:
         raise ValueError(f"unexpected authenticated carrier parts: {[p.name for p in parts]}")
 
-    # Git/text transport may wrap Base64 with ASCII whitespace. Remove only
-    # whitespace separators, then retain strict alphabet/padding validation.
-    # Authenticity remains anchored by the exact reconstructed archive SHA-256
-    # and the locked SHA-256 of every normative member below.
-    encoded = "".join(
-        "".join(p.read_text(encoding="ascii").split())
-        for p in parts
-    )
+    normalized_parts: list[str] = []
+    for part in parts:
+        raw = part.read_text(encoding="ascii")
+        normalized = "".join(raw.split())
+        invalid = [(index, char, ord(char)) for index, char in enumerate(normalized) if char not in _BASE64_ALPHABET]
+        if invalid:
+            sample = ", ".join(f"index={index} char={char!r} ord={code}" for index, char, code in invalid[:8])
+            raise ValueError(f"non-Base64 transport characters in {part.name}: {sample}")
+        normalized_parts.append(normalized)
+
+    encoded = "".join(normalized_parts)
     archive = base64.b64decode(encoded, validate=True)
     actual = sha256(archive)
     if actual != ARCHIVE_SHA256:
