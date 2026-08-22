@@ -36,8 +36,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
           dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
           if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
-          dotnet test tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage5GenerationCoreTests|FullyQualifiedName~Stage5ExecutionPolicyTests|FullyQualifiedName~Stage5ReturnedMediaValidationTests|FullyQualifiedName~Stage5PlaybackSessionTests"
-          if ($LASTEXITCODE -ne 0) { throw 'Stage 5 domain/player tests failed.' }
+          dotnet test tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage5GenerationCoreTests|FullyQualifiedName~Stage5ExecutionPolicyTests|FullyQualifiedName~Stage5ReturnedMediaValidationTests|FullyQualifiedName~Stage5PlaybackSessionTests|FullyQualifiedName~Stage5GenerationSafetyTests"
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 5 domain/player/safety tests failed.' }
           dotnet test tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage5GenerationSegmentExecutorTests|FullyQualifiedName~Stage5NativeMediaBoundaryTests"
           if ($LASTEXITCODE -ne 0) { throw 'Stage 5 application/native-boundary tests failed.' }
           dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter FullyQualifiedName~Stage5DurabilityAndFakeProviderTests
