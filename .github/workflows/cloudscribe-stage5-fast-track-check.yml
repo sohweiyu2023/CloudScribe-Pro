@@ -1,0 +1,40 @@
+name: CloudScribe Stage 5 fast-track check
+
+on:
+  push:
+    branches:
+      - agent/stage5-fast-track
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Verify isolated branch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $branch = (git branch --show-current).Trim()
+          if ($branch -ne 'agent/stage5-fast-track') { throw "Unexpected branch: $branch" }
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+          dotnet test tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj -c Release --no-build --no-restore --filter FullyQualifiedName~Stage5GenerationCoreTests
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 5 generation-core tests failed.' }
