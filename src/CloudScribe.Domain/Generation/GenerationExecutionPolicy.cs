@@ -19,29 +19,42 @@ public sealed record GenerationRetryDecision(
     public static GenerationRetryDecision Blocked(string reason) => new(false, TimeSpan.Zero, reason);
 }
 
-public sealed record GenerationExecutionPolicy(
-    int MaximumAttempts,
-    TimeSpan InitialBackoff,
-    TimeSpan MaximumBackoff,
-    int MaximumConcurrentRequests)
+public sealed class GenerationExecutionPolicy
 {
-    public GenerationExecutionPolicy
+    public GenerationExecutionPolicy(
+        int maximumAttempts,
+        TimeSpan initialBackoff,
+        TimeSpan maximumBackoff,
+        int maximumConcurrentRequests)
     {
-        if (MaximumAttempts < 1)
+        if (maximumAttempts < 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(MaximumAttempts));
+            throw new ArgumentOutOfRangeException(nameof(maximumAttempts));
         }
 
-        if (InitialBackoff <= TimeSpan.Zero || MaximumBackoff < InitialBackoff)
+        if (initialBackoff <= TimeSpan.Zero || maximumBackoff < initialBackoff)
         {
-            throw new ArgumentOutOfRangeException(nameof(InitialBackoff));
+            throw new ArgumentOutOfRangeException(nameof(initialBackoff));
         }
 
-        if (MaximumConcurrentRequests < 1)
+        if (maximumConcurrentRequests < 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(MaximumConcurrentRequests));
+            throw new ArgumentOutOfRangeException(nameof(maximumConcurrentRequests));
         }
+
+        MaximumAttempts = maximumAttempts;
+        InitialBackoff = initialBackoff;
+        MaximumBackoff = maximumBackoff;
+        MaximumConcurrentRequests = maximumConcurrentRequests;
     }
+
+    public int MaximumAttempts { get; }
+
+    public TimeSpan InitialBackoff { get; }
+
+    public TimeSpan MaximumBackoff { get; }
+
+    public int MaximumConcurrentRequests { get; }
 
     public GenerationRetryDecision DecideRetry(
         GenerationJobState state,
@@ -50,6 +63,11 @@ public sealed record GenerationExecutionPolicy(
         TimeSpan? retryAfter,
         ulong deterministicJitterSeed)
     {
+        if (completedAttempts < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(completedAttempts));
+        }
+
         if (GenerationJobStateMachine.RequiresReconciliationBeforeAutomaticRetry(state) ||
             disposition == SubmissionDisposition.UnknownRequiresReconciliation)
         {
@@ -130,20 +148,33 @@ public sealed record ContentAddressedSegmentKey(string Sha256)
     }
 }
 
-public sealed record GenerationSubmissionRecord(
-    string IdempotencyKey,
-    SubmissionDisposition Disposition,
-    string? ProviderRequestId,
-    long RecordedAtUnixMilliseconds)
+public sealed class GenerationSubmissionRecord
 {
-    public GenerationSubmissionRecord
+    public GenerationSubmissionRecord(
+        string idempotencyKey,
+        SubmissionDisposition disposition,
+        string? providerRequestId,
+        long recordedAtUnixMilliseconds)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(IdempotencyKey);
-        if (Disposition == SubmissionDisposition.Accepted && string.IsNullOrWhiteSpace(ProviderRequestId))
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        if (disposition == SubmissionDisposition.Accepted && string.IsNullOrWhiteSpace(providerRequestId))
         {
-            throw new ArgumentException("Accepted submissions require a provider request identifier.", nameof(ProviderRequestId));
+            throw new ArgumentException("Accepted submissions require a provider request identifier.", nameof(providerRequestId));
         }
+
+        IdempotencyKey = idempotencyKey;
+        Disposition = disposition;
+        ProviderRequestId = providerRequestId;
+        RecordedAtUnixMilliseconds = recordedAtUnixMilliseconds;
     }
+
+    public string IdempotencyKey { get; }
+
+    public SubmissionDisposition Disposition { get; }
+
+    public string? ProviderRequestId { get; }
+
+    public long RecordedAtUnixMilliseconds { get; }
 
     public bool RequiresReconciliation => Disposition == SubmissionDisposition.UnknownRequiresReconciliation;
 }
