@@ -106,7 +106,7 @@ public static class GoogleProviderResponsePolicy
         {
             throw new ArgumentOutOfRangeException(nameof(statusCode));
         }
-        if (retryAfter < TimeSpan.Zero || retryAfter > TimeSpan.FromHours(24))
+        if (retryAfter is { } boundedDelay && (boundedDelay < TimeSpan.Zero || boundedDelay > TimeSpan.FromHours(24)))
         {
             throw new ArgumentOutOfRangeException(nameof(retryAfter));
         }
