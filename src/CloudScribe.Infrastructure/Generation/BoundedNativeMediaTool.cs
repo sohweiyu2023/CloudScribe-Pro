@@ -38,8 +38,8 @@ public sealed class BoundedNativeMediaTool : INativeMediaTool
             throw new InvalidOperationException("Native media process could not be started.");
         }
 
-        var stdoutTask = ReadBoundedAsync(process.StandardOutput, invocation.MaximumCapturedOutputCharacters, cancellationToken);
-        var stderrTask = ReadBoundedAsync(process.StandardError, invocation.MaximumCapturedOutputCharacters, cancellationToken);
+        var stdoutTask = ReadBoundedButDrainAsync(process.StandardOutput, invocation.MaximumCapturedOutputCharacters);
+        var stderrTask = ReadBoundedButDrainAsync(process.StandardError, invocation.MaximumCapturedOutputCharacters);
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(invocation.Timeout);
 
@@ -54,11 +54,16 @@ public sealed class BoundedNativeMediaTool : INativeMediaTool
             TryKill(process);
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            TryKill(process);
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
 
         stopwatch.Stop();
         var stdout = await stdoutTask.ConfigureAwait(false);
         var stderr = await stderrTask.ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
 
         return new NativeMediaToolResult(
             timedOut ? -1 : process.ExitCode,
@@ -68,24 +73,23 @@ public sealed class BoundedNativeMediaTool : INativeMediaTool
             stopwatch.Elapsed);
     }
 
-    private static async Task<string> ReadBoundedAsync(
-        StreamReader reader,
-        int maximumCharacters,
-        CancellationToken cancellationToken)
+    private static async Task<string> ReadBoundedButDrainAsync(StreamReader reader, int maximumCharacters)
     {
         var buffer = new char[Math.Min(4096, maximumCharacters)];
         var output = new System.Text.StringBuilder(Math.Min(maximumCharacters, 16_384));
-        while (output.Length < maximumCharacters)
+        while (true)
         {
-            var remaining = maximumCharacters - output.Length;
-            var read = await reader.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)), cancellationToken)
-                .ConfigureAwait(false);
+            var read = await reader.ReadAsync(buffer.AsMemory()).ConfigureAwait(false);
             if (read == 0)
             {
                 break;
             }
 
-            output.Append(buffer, 0, read);
+            var remaining = maximumCharacters - output.Length;
+            if (remaining > 0)
+            {
+                output.Append(buffer, 0, Math.Min(read, remaining));
+            }
         }
 
         return output.ToString();
