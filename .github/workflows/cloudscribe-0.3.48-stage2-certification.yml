@@ -1,0 +1,151 @@
+name: CloudScribe 0.3.48 Stage 2 Windows Certification
+
+on:
+  push:
+    branches:
+      - cloudscribe-0.3.48-stage2-certification
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  windows-stage2:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.302'
+
+      - name: Reconstruct exact repaired source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $payloadRoot = '.cloudscribe-ci/payload'
+          $partNames = @(
+            '000.bin','001.bin','002.bin','003.bin','004.bin','005.bin','006.bin',
+            '007a.bin','007b.bin','008.bin','009.bin','010a.bin','010b.bin','011a.bin','011b.bin'
+          )
+          $archive = Join-Path $env:RUNNER_TEMP 'CloudScribe-0.3.48-native-ci-min.tar.xz'
+          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($name in $partNames) {
+              $path = Join-Path $payloadRoot $name
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing carrier part: $name" }
+              $bytes = [IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          $info = Get-Item $archive
+          if ($info.Length -ne 95596) { throw "Carrier length mismatch: $($info.Length)" }
+          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b') { throw "Carrier SHA-256 mismatch: $sha" }
+          $root = Join-Path $env:RUNNER_TEMP 'cloudscribe-0.3.48-src'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          & tar.exe -xJf $archive -C $root
+          if ($LASTEXITCODE -ne 0) { throw "Source extraction failed: $LASTEXITCODE" }
+          if (-not (Test-Path (Join-Path $root 'CloudScribe.sln'))) { throw 'CloudScribe.sln missing after source extraction.' }
+          "CS_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Exact source carrier verified: $sha ($($info.Length) bytes)"
+
+      - name: Reconstruct hash-bound architecture fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtureRoot = '.cloudscribe-ci/fixtures'
+          $fixtureNames = @('000.bin','001.bin','002.bin')
+          $archive = Join-Path $env:RUNNER_TEMP 'architecture-fixtures.tar.xz'
+          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($name in $fixtureNames) {
+              $path = Join-Path $fixtureRoot $name
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing fixture part: $name" }
+              $bytes = [IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          $info = Get-Item $archive
+          if ($info.Length -ne 8812) { throw "Fixture carrier length mismatch: $($info.Length)" }
+          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne 'a866788937570bd4be228c76035b170aec47d929712e96d7a08b9152239a6d11') { throw "Fixture carrier SHA-256 mismatch: $sha" }
+          & tar.exe -xJf $archive -C $env:CS_ROOT
+          if ($LASTEXITCODE -ne 0) { throw "Fixture extraction failed: $LASTEXITCODE" }
+          $expected = @{
+            'scripts/verify-stage2.sh' = 'b57f01ec004db6850ee0170d0410b0515089da58645b2643153cec1f8eedd28c'
+            'scripts/verify-stage2.ps1' = '6c33fc799e1d26882ebc8398f0e89fc84c3787d8fa6f7acff7f24d320149e23a'
+            'scripts/capture-stage2-linux.sh' = 'c9b1018a799b460d1ba004fd45b792febdade90eda88f71d7e2255adf37f689f'
+            'scripts/invoke-nuget-audit-scan.sh' = '573264ce2f752cd59834ddd68dc51b0fe87411cb643e84a0bb225876286b2de5'
+          }
+          foreach ($relative in $expected.Keys) {
+            $path = Join-Path $env:CS_ROOT $relative
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected[$relative]) { throw "Fixture hash mismatch for ${relative}: $actual" }
+          }
+          Write-Host "Exact architecture fixture carrier verified: $sha ($($info.Length) bytes)"
+
+      - name: Overlay hash-bound candidate hotfixes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $hotfixRoot = '.cloudscribe-ci/hotfix'
+          $hotfixNames = @(
+            '000.bin','001.bin',
+            '002s_00.bin','002s_01.bin','002s_02.bin','002s_03.bin','002s_04.bin','002s_05.bin','002s_06.bin'
+          )
+          $archive = Join-Path $env:RUNNER_TEMP 'candidate-hotfixes.tar.xz'
+          $stream = [IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+          try {
+            foreach ($name in $hotfixNames) {
+              $path = Join-Path $hotfixRoot $name
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing hotfix part: $name" }
+              $bytes = [IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $stream.Dispose() }
+          $info = Get-Item $archive
+          if ($info.Length -ne 11364) { throw "Hotfix carrier length mismatch: $($info.Length)" }
+          $sha = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '7d64e649b9f3f2d8480d3f093da8eebc3caf01a89e92e4a4b006891c4e43e6aa') { throw "Hotfix carrier SHA-256 mismatch: $sha" }
+          & tar.exe -xJf $archive -C $env:CS_ROOT
+          if ($LASTEXITCODE -ne 0) { throw "Hotfix extraction failed: $LASTEXITCODE" }
+          $expected = @{
+            'scripts/invoke-nuget-audit-scan.ps1' = '3c70d5c1cb30c5c8f805353c81cc1a6aed2fc365da9a9d52092cf14e339f0be3'
+            'tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs' = 'ccf6b1d09e0c7a0cc232d5f2d19fc2a742006a13cc91727bdba00eacf30c81a3'
+            'tests/CloudScribe.Infrastructure.Tests/StartupAndDiagnosticsResilienceTests.cs' = 'd0d6a3d8e2a88aa09ecb1fb6a00943d71a6b4c92d0d36e37e94c0b5e83edb764'
+          }
+          foreach ($relative in $expected.Keys) {
+            $path = Join-Path $env:CS_ROOT $relative
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected[$relative]) { throw "Candidate hotfix hash mismatch for ${relative}: $actual" }
+          }
+          Write-Host "Exact candidate hotfix carrier verified: $sha ($($info.Length) bytes)"
+
+      - name: Run full native Windows certification
+        shell: pwsh
+        run: |
+          & pwsh -NoProfile -File .cloudscribe-ci/run-cloudscribe-048-certification.ps1 -SourceRoot $env:CS_ROOT
+          if ($LASTEXITCODE -ne 0) { throw "Native certification failed: $LASTEXITCODE" }
+
+      - name: Upload native Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cloudscribe-0.3.48-windows-certification-evidence
+          path: |
+            ${{ runner.temp }}/test-results
+            ${{ runner.temp }}/package-scans
+            ${{ runner.temp }}/stage2-screenshots
+            ${{ runner.temp }}/CloudScribe-publish
+          if-no-files-found: warn
+          retention-days: 7

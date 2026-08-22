@@ -1,3 +1,0 @@
--- EF migration plan placeholder for InitialCreate
--- Create tables: Documents, Tags, DocumentTags, VoicePresets, Generations, Segments, Lexicon, MonthlyUsage
--- Apply unique index on MonthlyUsage(MonthKey, Tier)

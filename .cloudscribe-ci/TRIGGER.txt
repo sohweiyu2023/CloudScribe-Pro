@@ -1,0 +1,2 @@
+CloudScribe Pro 0.3.48 native Windows Stage 2 certification trigger.
+Carrier SHA-256: 1649cdfaa71f10ce4803fd468285295bf597cb805bf594dd542c386fa04fcd3b
