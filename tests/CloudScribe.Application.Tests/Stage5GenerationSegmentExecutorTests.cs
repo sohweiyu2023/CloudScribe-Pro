@@ -18,22 +18,46 @@ public sealed class Stage5GenerationSegmentExecutorTests
             request.OperationStableId,
             request.VoiceStableId,
             request.CompilationProfileId);
-        await cache.StoreAsync(key, new byte[] { 1, 2, 3 });
+        await cache.StoreAsync(key, CreateMinimalWav(1));
 
         var result = await new GenerationSegmentExecutor(provider, cache).ExecuteAsync(request);
 
         Assert.True(result.CacheHit);
         Assert.Equal(0, provider.SubmitCount);
-        Assert.Equal(new byte[] { 1, 2, 3 }, result.MediaBytes.ToArray());
         Assert.Equal("segment.cache.hit", result.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task CorruptCacheEntryIsIgnoredAndProviderRefreshesIt()
+    {
+        var provider = new RecordingProvider
+        {
+            SubmitResponse = Accepted(CreateMinimalWav(7)),
+        };
+        var cache = new MemorySegmentCache();
+        var request = CreateRequest();
+        var key = ContentAddressedSegmentKey.Create(
+            request.CompiledPayload.Span,
+            request.ProviderStableId,
+            request.OperationStableId,
+            request.VoiceStableId,
+            request.CompilationProfileId);
+        await cache.StoreAsync(key, new byte[] { 1, 2, 3 });
+
+        var result = await new GenerationSegmentExecutor(provider, cache).ExecuteAsync(request);
+
+        Assert.False(result.CacheHit);
+        Assert.Equal(1, provider.SubmitCount);
+        Assert.Equal(CreateMinimalWav(7), result.MediaBytes.ToArray());
     }
 
     [Fact]
     public async Task AcceptedProviderMediaIsStoredAndSecondExecutionReusesIt()
     {
+        var media = CreateMinimalWav(7);
         var provider = new RecordingProvider
         {
-            SubmitResponse = Accepted(new byte[] { 7, 8, 9 }),
+            SubmitResponse = Accepted(media),
         };
         var cache = new MemorySegmentCache();
         var executor = new GenerationSegmentExecutor(provider, cache);
@@ -45,7 +69,44 @@ public sealed class Stage5GenerationSegmentExecutorTests
         Assert.False(first.CacheHit);
         Assert.True(second.CacheHit);
         Assert.Equal(1, provider.SubmitCount);
-        Assert.Equal(new byte[] { 7, 8, 9 }, second.MediaBytes.ToArray());
+        Assert.Equal(media, second.MediaBytes.ToArray());
+    }
+
+    [Fact]
+    public async Task AcceptedCorruptProviderMediaFailsClosedAndIsNeverCached()
+    {
+        var provider = new RecordingProvider
+        {
+            SubmitResponse = Accepted(new byte[] { 7, 8, 9 }),
+        };
+        var cache = new MemorySegmentCache();
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => new GenerationSegmentExecutor(provider, cache).ExecuteAsync(CreateRequest()));
+
+        Assert.Equal(1, provider.SubmitCount);
+        Assert.Equal(0, cache.StoreCount);
+    }
+
+    [Fact]
+    public async Task AcceptedWrongFormatProviderMediaFailsClosedAndIsNeverCached()
+    {
+        var provider = new RecordingProvider
+        {
+            SubmitResponse = new GenerationProviderResponse(
+                SubmissionDisposition.Accepted,
+                "provider-request-1",
+                new byte[] { 0xFF, 0xFB, 0x90, 0x64 },
+                "audio/mpeg",
+                null,
+                "provider.accepted"),
+        };
+        var cache = new MemorySegmentCache();
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => new GenerationSegmentExecutor(provider, cache).ExecuteAsync(CreateRequest()));
+
+        Assert.Equal(0, cache.StoreCount);
     }
 
     [Fact]
@@ -75,9 +136,10 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task ReconciliationCanPersistAcceptedMediaWithoutResubmission()
     {
+        var media = CreateMinimalWav(4);
         var provider = new RecordingProvider
         {
-            ReconcileResponse = Accepted(new byte[] { 4, 5, 6 }),
+            ReconcileResponse = Accepted(media),
         };
         var cache = new MemorySegmentCache();
         var executor = new GenerationSegmentExecutor(provider, cache);
@@ -90,7 +152,7 @@ public sealed class Stage5GenerationSegmentExecutorTests
         Assert.Equal(0, provider.SubmitCount);
         Assert.Equal(1, provider.ReconcileCount);
         Assert.True(cached.CacheHit);
-        Assert.Equal(new byte[] { 4, 5, 6 }, cached.MediaBytes.ToArray());
+        Assert.Equal(media, cached.MediaBytes.ToArray());
     }
 
     [Fact]
@@ -125,6 +187,27 @@ public sealed class Stage5GenerationSegmentExecutorTests
             null,
             "provider.accepted");
 
+    private static byte[] CreateMinimalWav(byte sample)
+    {
+        var bytes = new byte[46];
+        "RIFF"u8.CopyTo(bytes);
+        BitConverter.GetBytes((uint)38).CopyTo(bytes, 4);
+        "WAVE"u8.CopyTo(bytes.AsSpan(8));
+        "fmt "u8.CopyTo(bytes.AsSpan(12));
+        BitConverter.GetBytes((uint)16).CopyTo(bytes, 16);
+        BitConverter.GetBytes((ushort)1).CopyTo(bytes, 20);
+        BitConverter.GetBytes((ushort)1).CopyTo(bytes, 22);
+        BitConverter.GetBytes((uint)8000).CopyTo(bytes, 24);
+        BitConverter.GetBytes((uint)8000).CopyTo(bytes, 28);
+        BitConverter.GetBytes((ushort)1).CopyTo(bytes, 32);
+        BitConverter.GetBytes((ushort)8).CopyTo(bytes, 34);
+        "data"u8.CopyTo(bytes.AsSpan(36));
+        BitConverter.GetBytes((uint)2).CopyTo(bytes, 40);
+        bytes[44] = sample;
+        bytes[45] = sample;
+        return bytes;
+    }
+
     private sealed class RecordingProvider : IGenerationProvider
     {
         public string ProviderStableId => "fake-provider";
@@ -133,7 +216,7 @@ public sealed class Stage5GenerationSegmentExecutorTests
 
         public int ReconcileCount { get; private set; }
 
-        public GenerationProviderResponse SubmitResponse { get; init; } = Accepted(new byte[] { 1 });
+        public GenerationProviderResponse SubmitResponse { get; init; } = Accepted(CreateMinimalWav(1));
 
         public GenerationProviderResponse? ReconcileResponse { get; init; }
 
