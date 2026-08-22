@@ -66,27 +66,27 @@ public sealed record GenerationSegmentProgress
         DiagnosticCode = diagnosticCode;
     }
 
-    public Guid JobId { get; }
+    public Guid JobId { get; init; }
 
-    public string SegmentId { get; }
+    public string SegmentId { get; init; }
 
-    public int SegmentIndex { get; }
+    public int SegmentIndex { get; init; }
 
-    public string IdempotencyKey { get; }
+    public string IdempotencyKey { get; init; }
 
-    public GenerationSegmentProgressState State { get; }
+    public GenerationSegmentProgressState State { get; init; }
 
-    public int CompletedAttempts { get; }
+    public int CompletedAttempts { get; init; }
 
-    public long UpdatedAtUnixMilliseconds { get; }
+    public long UpdatedAtUnixMilliseconds { get; init; }
 
-    public long? NotBeforeUnixMilliseconds { get; }
+    public long? NotBeforeUnixMilliseconds { get; init; }
 
-    public string? ProviderRequestId { get; }
+    public string? ProviderRequestId { get; init; }
 
-    public string? CacheKeySha256 { get; }
+    public string? CacheKeySha256 { get; init; }
 
-    public string? DiagnosticCode { get; }
+    public string? DiagnosticCode { get; init; }
 
     public bool RequiresReconciliation =>
         State is GenerationSegmentProgressState.Submitting or GenerationSegmentProgressState.SubmissionUnknown;
