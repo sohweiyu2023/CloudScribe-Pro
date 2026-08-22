@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
@@ -77,10 +78,7 @@ public sealed class DeterministicFakeGenerationProvider : IGenerationProvider
     {
         var requestIdentity = SHA256.HashData(Encoding.UTF8.GetBytes(request.IdempotencyKey));
         var payloadHash = SHA256.HashData(request.CompiledPayload.Span);
-        var media = new byte[12 + payloadHash.Length];
-        "RIFF"u8.CopyTo(media);
-        "WAVE"u8.CopyTo(media.AsSpan(8));
-        payloadHash.CopyTo(media.AsSpan(12));
+        var media = CreateWave(payloadHash);
         var providerRequestId = "fake-" + Convert.ToHexString(requestIdentity.AsSpan(0, 8)).ToLowerInvariant();
         Array.Clear(requestIdentity);
         Array.Clear(payloadHash);
@@ -91,5 +89,26 @@ public sealed class DeterministicFakeGenerationProvider : IGenerationProvider
             "audio/wav",
             null,
             "fake.accepted");
+    }
+
+    private static byte[] CreateWave(ReadOnlySpan<byte> seed)
+    {
+        const int dataLength = 32;
+        var media = new byte[44 + dataLength];
+        "RIFF"u8.CopyTo(media.AsSpan(0, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(media.AsSpan(4, 4), (uint)(media.Length - 8));
+        "WAVE"u8.CopyTo(media.AsSpan(8, 4));
+        "fmt "u8.CopyTo(media.AsSpan(12, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(media.AsSpan(16, 4), 16);
+        BinaryPrimitives.WriteUInt16LittleEndian(media.AsSpan(20, 2), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(media.AsSpan(22, 2), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(media.AsSpan(24, 4), 16000);
+        BinaryPrimitives.WriteUInt32LittleEndian(media.AsSpan(28, 4), 32000);
+        BinaryPrimitives.WriteUInt16LittleEndian(media.AsSpan(32, 2), 2);
+        BinaryPrimitives.WriteUInt16LittleEndian(media.AsSpan(34, 2), 16);
+        "data"u8.CopyTo(media.AsSpan(36, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(media.AsSpan(40, 4), dataLength);
+        seed[..dataLength].CopyTo(media.AsSpan(44));
+        return media;
     }
 }
