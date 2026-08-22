@@ -51,7 +51,7 @@ public sealed class GenerationSegmentExecutor
             request.CompilationProfileId);
 
         var cached = await _cache.ReadAsync(key, cancellationToken).ConfigureAwait(false);
-        if (cached is { Length: > 0 })
+        if (cached is { Length: > 0 } && IsExpectedValidMedia(cached, null, request.OutputFormat))
         {
             return new GenerationSegmentExecutionResult(
                 true,
@@ -72,11 +72,7 @@ public sealed class GenerationSegmentExecutor
             request.OutputFormat);
 
         var response = await _provider.SubmitAsync(providerRequest, cancellationToken).ConfigureAwait(false);
-        if (response.Disposition == SubmissionDisposition.Accepted && !response.MediaBytes.IsEmpty)
-        {
-            await _cache.StoreAsync(key, response.MediaBytes, cancellationToken).ConfigureAwait(false);
-        }
-
+        await ValidateAndCacheAcceptedMediaAsync(key, request.OutputFormat, response, cancellationToken).ConfigureAwait(false);
         return FromProviderResponse(false, key, response);
     }
 
@@ -100,12 +96,45 @@ public sealed class GenerationSegmentExecutor
             return null;
         }
 
-        if (response.Disposition == SubmissionDisposition.Accepted && !response.MediaBytes.IsEmpty)
+        await ValidateAndCacheAcceptedMediaAsync(key, request.OutputFormat, response, cancellationToken).ConfigureAwait(false);
+        return FromProviderResponse(false, key, response);
+    }
+
+    private async Task ValidateAndCacheAcceptedMediaAsync(
+        ContentAddressedSegmentKey key,
+        string outputFormat,
+        GenerationProviderResponse response,
+        CancellationToken cancellationToken)
+    {
+        if (response.Disposition != SubmissionDisposition.Accepted)
         {
-            await _cache.StoreAsync(key, response.MediaBytes, cancellationToken).ConfigureAwait(false);
+            return;
         }
 
-        return FromProviderResponse(false, key, response);
+        if (!IsExpectedValidMedia(response.MediaBytes.Span, response.MediaContentType, outputFormat))
+        {
+            throw new InvalidDataException("Provider returned accepted media that failed structural or requested-format validation; the bytes were not cached.");
+        }
+
+        await _cache.StoreAsync(key, response.MediaBytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsExpectedValidMedia(ReadOnlySpan<byte> mediaBytes, string? contentType, string outputFormat)
+    {
+        var validation = ReturnedMediaValidator.Validate(mediaBytes, contentType);
+        if (!validation.IsValid || validation.DetectedFormat is null)
+        {
+            return false;
+        }
+
+        var expected = outputFormat.Trim().ToLowerInvariant() switch
+        {
+            "wav" or "wave" => GenerationAudioFormat.Wav,
+            "mp3" or "mpeg" => GenerationAudioFormat.Mp3,
+            _ => throw new NotSupportedException($"Generation output format '{outputFormat}' is not supported by the strict returned-media validator."),
+        };
+
+        return validation.DetectedFormat.Value == expected;
     }
 
     private void ValidateProvider(string providerStableId)
