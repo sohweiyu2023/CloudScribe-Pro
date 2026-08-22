@@ -1,0 +1,107 @@
+using System.Diagnostics;
+using CloudScribe.Application.Generation;
+
+namespace CloudScribe.Infrastructure.Generation;
+
+public sealed class BoundedNativeMediaTool : INativeMediaTool
+{
+    public async Task<NativeMediaToolResult> RunAsync(
+        NativeMediaToolInvocation invocation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(invocation);
+        invocation.Validate();
+        if (!File.Exists(invocation.ExecutablePath))
+        {
+            throw new FileNotFoundException("Native media executable not found.", invocation.ExecutablePath);
+        }
+
+        Directory.CreateDirectory(invocation.WorkingDirectory);
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = invocation.ExecutablePath,
+            WorkingDirectory = invocation.WorkingDirectory,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in invocation.Arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+        var stopwatch = Stopwatch.StartNew();
+        if (!process.Start())
+        {
+            throw new InvalidOperationException("Native media process could not be started.");
+        }
+
+        var stdoutTask = ReadBoundedAsync(process.StandardOutput, invocation.MaximumCapturedOutputCharacters, cancellationToken);
+        var stderrTask = ReadBoundedAsync(process.StandardError, invocation.MaximumCapturedOutputCharacters, cancellationToken);
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(invocation.Timeout);
+
+        var timedOut = false;
+        try
+        {
+            await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            timedOut = true;
+            TryKill(process);
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+
+        stopwatch.Stop();
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return new NativeMediaToolResult(
+            timedOut ? -1 : process.ExitCode,
+            timedOut,
+            stdout,
+            stderr,
+            stopwatch.Elapsed);
+    }
+
+    private static async Task<string> ReadBoundedAsync(
+        StreamReader reader,
+        int maximumCharacters,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new char[Math.Min(4096, maximumCharacters)];
+        var output = new System.Text.StringBuilder(Math.Min(maximumCharacters, 16_384));
+        while (output.Length < maximumCharacters)
+        {
+            var remaining = maximumCharacters - output.Length;
+            var read = await reader.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)), cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            output.Append(buffer, 0, read);
+        }
+
+        return output.ToString();
+    }
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+}
