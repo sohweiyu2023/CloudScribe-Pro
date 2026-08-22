@@ -9,7 +9,8 @@ public static class AudioAssemblyNativePlanner
         AudioAssemblyPlan assembly,
         string ffmpegExecutablePath,
         TimeSpan timeout,
-        int maximumCapturedOutputCharacters = 64_000)
+        int maximumCapturedOutputCharacters = 64_000,
+        bool allowOverwrite = false)
     {
         ArgumentNullException.ThrowIfNull(assembly);
         ArgumentException.ThrowIfNullOrWhiteSpace(ffmpegExecutablePath);
@@ -22,7 +23,7 @@ public static class AudioAssemblyNativePlanner
         for (var partIndex = 0; partIndex < assembly.Parts.Count; partIndex++)
         {
             var part = assembly.Parts[partIndex];
-            var arguments = new List<string> { "-hide_banner", "-nostdin", "-y" };
+            var arguments = new List<string> { "-hide_banner", "-nostdin", allowOverwrite ? "-y" : "-n" };
             foreach (var segment in part.Segments)
             {
                 if (!Path.IsPathFullyQualified(segment.SourcePath))
