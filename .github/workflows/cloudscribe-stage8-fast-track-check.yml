@@ -35,5 +35,5 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
           dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
           if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
-          dotnet test tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage8ArchiveExtractionPolicyTests|FullyQualifiedName~Stage8SecretRedactionPolicyTests|FullyQualifiedName~Stage8BackupRestoreManifestTests|FullyQualifiedName~Stage8DatabaseMigrationPlanTests|FullyQualifiedName~Stage8PseudoLocalizerTests"
+          dotnet test tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage8ArchiveExtractionPolicyTests|FullyQualifiedName~Stage8SecretRedactionPolicyTests|FullyQualifiedName~Stage8BackupRestoreManifestTests|FullyQualifiedName~Stage8DatabaseMigrationPlanTests|FullyQualifiedName~Stage8PseudoLocalizerTests|FullyQualifiedName~Stage8AccessiblePlaybackCommandMapTests|FullyQualifiedName~Stage8AccessiblePlaybackStateTests"
           if ($LASTEXITCODE -ne 0) { throw 'Stage 8 focused tests failed.' }
