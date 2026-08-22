@@ -1,31 +1,53 @@
 namespace CloudScribe.Domain.Generation;
 
-public sealed record GenerationRecoverySnapshot(
-    Guid JobId,
-    GenerationJobState State,
-    int AttemptCount,
-    int Priority,
-    long Revision,
-    GenerationSubmissionRecord? LastSubmission,
-    long UpdatedAtUnixMilliseconds)
+public sealed class GenerationRecoverySnapshot
 {
-    public GenerationRecoverySnapshot
+    public GenerationRecoverySnapshot(
+        Guid jobId,
+        GenerationJobState state,
+        int attemptCount,
+        int priority,
+        long revision,
+        GenerationSubmissionRecord? lastSubmission,
+        long updatedAtUnixMilliseconds)
     {
-        if (JobId == Guid.Empty)
+        if (jobId == Guid.Empty)
         {
-            throw new ArgumentException("Job id is required.", nameof(JobId));
+            throw new ArgumentException("Job id is required.", nameof(jobId));
         }
 
-        if (AttemptCount < 0)
+        if (attemptCount < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(AttemptCount));
+            throw new ArgumentOutOfRangeException(nameof(attemptCount));
         }
 
-        if (Revision < 0)
+        if (revision < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(Revision));
+            throw new ArgumentOutOfRangeException(nameof(revision));
         }
+
+        JobId = jobId;
+        State = state;
+        AttemptCount = attemptCount;
+        Priority = priority;
+        Revision = revision;
+        LastSubmission = lastSubmission;
+        UpdatedAtUnixMilliseconds = updatedAtUnixMilliseconds;
     }
+
+    public Guid JobId { get; }
+
+    public GenerationJobState State { get; }
+
+    public int AttemptCount { get; }
+
+    public int Priority { get; }
+
+    public long Revision { get; }
+
+    public GenerationSubmissionRecord? LastSubmission { get; }
+
+    public long UpdatedAtUnixMilliseconds { get; }
 
     public GenerationRecoveryAction DecideRecovery()
     {
