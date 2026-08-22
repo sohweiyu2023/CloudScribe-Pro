@@ -2,7 +2,7 @@ name: CloudScribe Stage 4 admitted v2.22 repair check
 
 on:
   issues:
-    types: [opened]
+    types: [opened, edited]
 
 permissions:
   contents: write
