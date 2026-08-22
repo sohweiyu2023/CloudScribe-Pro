@@ -42,7 +42,7 @@ public sealed class AudioAssemblyPlan
 {
     public AudioAssemblyPlan(
         IEnumerable<AudioSegmentArtifact> segments,
-        MasteringProfile masteringProfile,
+        GenerationMasteringProfile masteringProfile,
         ReleaseAudioFormat outputFormat,
         TimeSpan targetPartDuration,
         string outputDirectory,
@@ -95,7 +95,7 @@ public sealed class AudioAssemblyPlan
 
     public IReadOnlyList<AudioSegmentArtifact> Segments { get; }
 
-    public MasteringProfile MasteringProfile { get; }
+    public GenerationMasteringProfile MasteringProfile { get; }
 
     public ReleaseAudioFormat OutputFormat { get; }
 
