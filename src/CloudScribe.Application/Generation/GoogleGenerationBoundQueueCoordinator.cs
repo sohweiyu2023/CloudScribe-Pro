@@ -20,6 +20,7 @@ public sealed class GoogleGenerationBoundQueueCoordinator
         bool pricingApproved,
         bool postCompileLimitsSatisfied,
         bool unresolvedPriorSubmission,
+        string? persistedIdempotencyKey,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -28,6 +29,11 @@ public sealed class GoogleGenerationBoundQueueCoordinator
         GoogleGenerationRequestBindingPolicy.RequireBound(request, admittedTrust);
         if (!admissionCurrent)
             throw new InvalidOperationException("Google queue execution requires the same current v2.23 admission used to bind the provider request.");
+
+        GoogleGenerationReconciliationBarrier.RequireNoDuplicateSubmission(
+            unresolvedPriorSubmission,
+            request.IdempotencyKey,
+            persistedIdempotencyKey);
 
         return _queueCoordinator.ProcessAsync(
             request,
