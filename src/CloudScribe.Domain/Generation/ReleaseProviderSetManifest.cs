@@ -54,6 +54,18 @@ public sealed class ReleaseProviderSetManifest
             ?? throw new InvalidOperationException("Provider is not admitted by the authenticated release-provider manifest.");
     }
 
+    public ReleaseProviderDescriptor RequireProviderOperation(string providerStableId, string operationStableId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationStableId);
+        var provider = RequireProvider(providerStableId);
+        if (!provider.OperationStableIds.Contains(operationStableId))
+        {
+            throw new InvalidOperationException("Provider operation is not admitted by the authenticated release-provider manifest.");
+        }
+
+        return provider;
+    }
+
     private string ComputeManifestSha256()
     {
         var builder = new StringBuilder();
