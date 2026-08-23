@@ -1,0 +1,44 @@
+name: CloudScribe Stage 4 v2.23 Admission
+
+on:
+  workflow_dispatch:
+    inputs:
+      master_package_path:
+        description: Absolute path to the authenticated CloudScribe Pro v2.23 master ZIP on the Windows runner
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  v223-control-admission:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require Stage 4 reconciliation branch
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_name }}' -ne 'agent/stage4-v223-reconciliation') {
+            throw "Stage 4 v2.23 admission must run from agent/stage4-v223-reconciliation; got ${{ github.ref_name }}"
+          }
+          if ($env:GITHUB_SHA -ne (git rev-parse HEAD)) {
+            throw 'Checked-out candidate does not match GITHUB_SHA.'
+          }
+
+      - name: Admit exact v2.23 control package
+        shell: pwsh
+        run: |
+          ./tools/Test-V223ControlAdmission.ps1 -MasterPackagePath '${{ inputs.master_package_path }}'
+
+      - name: Preserve candidate identity for downstream full certification
+        shell: pwsh
+        run: |
+          $head = git rev-parse HEAD
+          "candidate_sha=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "v2.23 Stage 4 control admission candidate: $head"
