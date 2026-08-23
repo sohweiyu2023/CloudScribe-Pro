@@ -4,10 +4,10 @@ using CloudScribe.Providers.Abstractions;
 namespace CloudScribe.Application.Generation;
 
 public sealed record VoiceLabAuditionRequest(
+    VoiceLabCatalogSelection Selection,
     bool CachePolicyEligible,
     bool ForceFresh,
     bool ExplicitSpendApproved,
-    bool CapabilityCurrent,
     bool PricingCurrent,
     string OutputFormat);
 
@@ -34,6 +34,8 @@ public sealed class VoiceLabAuditionCoordinator
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Selection);
+        request.Selection.Validate();
         ArgumentException.ThrowIfNullOrWhiteSpace(request.OutputFormat);
 
         ReadOnlyMemory<byte>? cached = null;
@@ -48,7 +50,7 @@ public sealed class VoiceLabAuditionCoordinator
             cacheHitEligible,
             request.ForceFresh,
             request.ExplicitSpendApproved,
-            request.CapabilityCurrent,
+            request.Selection.CapabilityCurrent,
             request.PricingCurrent);
 
         if (authorization.UseCachedMedia)
