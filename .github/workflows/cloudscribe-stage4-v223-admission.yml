@@ -15,6 +15,8 @@ jobs:
   v223-control-admission:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 15
+    outputs:
+      candidate_sha: ${{ steps.candidate.outputs.candidate_sha }}
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v4
@@ -33,12 +35,21 @@ jobs:
 
       - name: Admit exact v2.23 control package
         shell: pwsh
+        env:
+          CLOUDSCRIBE_V223_MASTER_PACKAGE: ${{ inputs.master_package_path }}
         run: |
-          ./tools/Test-V223ControlAdmission.ps1 -MasterPackagePath '${{ inputs.master_package_path }}'
+          if ([string]::IsNullOrWhiteSpace($env:CLOUDSCRIBE_V223_MASTER_PACKAGE)) {
+            throw 'Authenticated v2.23 master package path is required.'
+          }
+          ./tools/Test-V223ControlAdmission.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
 
       - name: Preserve candidate identity for downstream full certification
+        id: candidate
         shell: pwsh
         run: |
           $head = git rev-parse HEAD
+          if ($head -ne $env:GITHUB_SHA) {
+            throw 'Candidate identity changed after v2.23 control admission.'
+          }
           "candidate_sha=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "v2.23 Stage 4 control admission candidate: $head"
