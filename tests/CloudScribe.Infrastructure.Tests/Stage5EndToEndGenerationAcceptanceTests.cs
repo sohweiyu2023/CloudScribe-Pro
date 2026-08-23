@@ -51,12 +51,12 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
                 "USD",
                 itemEstimates.Sum(static item => item.ScaledAmount),
                 2,
-                "pricing/v2.22/test",
+                "pricing/v2.23/test",
                 itemEstimates);
             var approval = new GenerationApproval(
                 collectionId,
                 42,
-                "pricing/v2.22/test",
+                "pricing/v2.23/test",
                 "USD",
                 estimate.ScaledTotal,
                 2,
@@ -65,21 +65,17 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
             Assert.True(approval.Authorizes(estimate));
 
             var provider = new DeterministicFakeGenerationProvider();
-            var executor = new GenerationSegmentExecutor(provider, new FileGenerationSegmentCache(root));
+            var cache = new FileGenerationSegmentCache(root);
+            var executor = CreateExecutor(provider, cache);
             var proofInputs = new List<GenerationProofInput>();
 
             foreach (var segment in segments)
             {
                 var payload = Encoding.UTF8.GetBytes(Compile(segment.Nodes));
-                var request = new GenerationSegmentExecutionRequest(
+                var request = CreateRequest(
                     provider.ProviderStableId,
-                    "synthesize-speech",
-                    "account-test",
-                    "voice/en-SG/A",
-                    "stage5-e2e-v1",
                     $"collection-{collectionId:N}-segment-{segment.Index}",
-                    payload,
-                    "wav");
+                    payload);
 
                 var result = await executor.ExecuteAsync(request);
                 Assert.False(result.CacheHit);
@@ -93,7 +89,7 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
                     ActualDuration: TimeSpan.FromSeconds(1),
                     RequiredTimingMarksPresent: true,
                     ProviderDiagnostics: Array.Empty<string>(),
-                    ProvenanceId: result.CacheKey.Sha256));
+                    ProvenanceId: result.CacheKey.PrivateLookupHmacSha256));
             }
 
             Assert.Equal(segments.Count, provider.PhysicalSubmissionCount);
@@ -101,15 +97,10 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
             foreach (var segment in segments)
             {
                 var payload = Encoding.UTF8.GetBytes(Compile(segment.Nodes));
-                var cached = await executor.ExecuteAsync(new GenerationSegmentExecutionRequest(
+                var cached = await executor.ExecuteAsync(CreateRequest(
                     provider.ProviderStableId,
-                    "synthesize-speech",
-                    "account-test",
-                    "voice/en-SG/A",
-                    "stage5-e2e-v1",
                     $"collection-{collectionId:N}-segment-{segment.Index}",
-                    payload,
-                    "wav"));
+                    payload));
 
                 Assert.True(cached.CacheHit);
                 Assert.Equal(SubmissionDisposition.Accepted, cached.Disposition);
@@ -151,21 +142,16 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
                     jobId,
                     $"segment-{index:D2}",
                     index,
-                    new GenerationSegmentExecutionRequest(
+                    CreateRequest(
                         provider.ProviderStableId,
-                        "synthesize-speech",
-                        "account-test",
-                        "voice/en-SG/A",
-                        "stage5-e2e-v1",
                         $"job-{jobId:N}-segment-{index}",
-                        Encoding.UTF8.GetBytes($"payload-{index}"),
-                        "wav")))
+                        Encoding.UTF8.GetBytes($"payload-{index}"))))
                 .ToArray();
 
             var firstCache = new FileGenerationSegmentCache(cacheDirectory);
             var firstStore = new AtomicJsonGenerationSegmentProgressStore(progressDirectory);
             var firstScheduler = new GenerationSegmentScheduler(
-                new GenerationSegmentExecutor(provider, firstCache),
+                CreateExecutor(provider, firstCache),
                 firstCache,
                 firstStore,
                 policy);
@@ -179,7 +165,7 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
             var restartedCache = new FileGenerationSegmentCache(cacheDirectory);
             var restartedStore = new AtomicJsonGenerationSegmentProgressStore(progressDirectory);
             var restartedScheduler = new GenerationSegmentScheduler(
-                new GenerationSegmentExecutor(provider, restartedCache),
+                CreateExecutor(provider, restartedCache),
                 restartedCache,
                 restartedStore,
                 policy);
@@ -225,12 +211,12 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
                 "USD",
                 10,
                 2,
-                "pricing/v2.22/test",
+                "pricing/v2.23/test",
                 [new GenerationItemEstimate(segmentId, 0, "USD", 10, 2)]);
             var approval = new GenerationApproval(
                 collectionId,
                 42,
-                "pricing/v2.22/test",
+                "pricing/v2.23/test",
                 "USD",
                 10,
                 2,
@@ -242,7 +228,7 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
                 {
                     [segmentId] = new AuthorizedSpendCeiling("USD", 10, 2),
                 },
-                "pricing/v2.22/test",
+                "pricing/v2.23/test",
                 42);
 
             var assemblyPlan = new AudioAssemblyPlan(
@@ -323,16 +309,11 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
         try
         {
             var provider = new DeterministicFakeGenerationProvider(FakeGenerationOutcome.SubmissionUnknown);
-            var executor = new GenerationSegmentExecutor(provider, new FileGenerationSegmentCache(root));
-            var request = new GenerationSegmentExecutionRequest(
+            var executor = CreateExecutor(provider, new FileGenerationSegmentCache(root));
+            var request = CreateRequest(
                 provider.ProviderStableId,
-                "synthesize-speech",
-                "account-test",
-                "voice/en-SG/A",
-                "stage5-e2e-v1",
                 "ambiguous-idempotency-key",
-                Encoding.UTF8.GetBytes("ambiguous payload"),
-                "wav");
+                Encoding.UTF8.GetBytes("ambiguous payload"));
 
             var submitted = await executor.ExecuteAsync(request);
             Assert.True(submitted.RequiresReconciliation);
@@ -352,6 +333,30 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    private static GenerationSegmentExecutor CreateExecutor(IGenerationProvider provider, IGenerationSegmentCache cache) =>
+        new(provider, cache, new DeterministicGenerationPrivateCacheKeyProvider("stage5-end-to-end-v2.23"));
+
+    private static GenerationSegmentExecutionRequest CreateRequest(
+        string providerStableId,
+        string idempotencyKey,
+        ReadOnlyMemory<byte> payload) => new(
+            providerStableId,
+            "synthesize-speech",
+            "account-test",
+            "voice/en-SG/A",
+            "stage5-e2e-v1",
+            idempotencyKey,
+            payload,
+            "wav",
+            CreateTrustContext(providerStableId));
+
+    private static GenerationCacheTrustContext CreateTrustContext(string providerStableId) => new(
+        providerStableId, "account-test", "project-test", "endpoint-test", "local", "synthesize-speech",
+        "fake-model-snapshot-v1", "voice/en-SG/A", "stock-voice-fingerprint", "speech-plan-v1", "en-SG",
+        "controls-stage5-e2e", "wav", "pcm16", "fake-adapter-v1", "stage5-e2e-v1", "ast-v1",
+        "normalize-v1", "pricing/v2.23/test", "capabilities-test", "governance-test", "features-test",
+        "account-capabilities-test");
 
     private static string Compile(IEnumerable<SpeechPlanNode> nodes) =>
         string.Join('|', nodes.Select(static node => node switch
