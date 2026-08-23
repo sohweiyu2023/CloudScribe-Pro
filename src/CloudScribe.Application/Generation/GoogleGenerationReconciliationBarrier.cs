@@ -8,11 +8,17 @@ public static class GoogleGenerationReconciliationBarrier
         string? persistedIdempotencyKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
-        if (unresolvedPriorSubmission)
-            throw new InvalidOperationException("Google generation is reconciliation-gated; a prior ambiguous submission forbids duplicate billable submission.");
 
         if (!string.IsNullOrWhiteSpace(persistedIdempotencyKey) &&
             !string.Equals(idempotencyKey, persistedIdempotencyKey, StringComparison.Ordinal))
             throw new InvalidOperationException("Google generation idempotency identity changed across persisted queue state.");
+
+        if (unresolvedPriorSubmission)
+        {
+            if (string.IsNullOrWhiteSpace(persistedIdempotencyKey))
+                throw new InvalidOperationException("Google generation reconciliation state is incomplete; an unresolved prior submission must retain its persisted idempotency identity.");
+
+            throw new InvalidOperationException("Google generation is reconciliation-gated; a prior ambiguous submission forbids duplicate billable submission.");
+        }
     }
 }
