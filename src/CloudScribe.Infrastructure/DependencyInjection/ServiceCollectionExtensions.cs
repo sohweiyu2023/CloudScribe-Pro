@@ -1,6 +1,7 @@
 using CloudScribe.Application.Activation;
 using CloudScribe.Application.Diagnostics;
 using CloudScribe.Application.Documents;
+using CloudScribe.Application.Generation;
 using CloudScribe.Application.Observability;
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Providers;
@@ -10,6 +11,7 @@ using CloudScribe.Infrastructure.Activation;
 using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.Diagnostics;
 using CloudScribe.Infrastructure.Files;
+using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Persistence;
 using CloudScribe.Infrastructure.Pricing;
 using CloudScribe.Infrastructure.Providers;
@@ -85,6 +87,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
         services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
+        services.AddSingleton<IGenerationPrivateCacheKeyProvider, VaultBackedGenerationPrivateCacheKeyProvider>();
         return services;
     }
 }
