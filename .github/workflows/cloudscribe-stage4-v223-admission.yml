@@ -7,9 +7,17 @@ on:
         description: Absolute path to the authenticated CloudScribe Pro v2.23 master ZIP on the Windows runner
         required: true
         type: string
+      expected_candidate_sha:
+        description: Exact 40-character Stage 4 candidate commit SHA intended for certification
+        required: true
+        type: string
 
 permissions:
   contents: read
+
+concurrency:
+  group: cloudscribe-stage4-v223-certification
+  cancel-in-progress: false
 
 jobs:
   v223-control-admission:
@@ -21,12 +29,18 @@ jobs:
       - name: Checkout exact candidate
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.expected_candidate_sha }}
           fetch-depth: 0
-      - name: Require Stage 4 reconciliation branch
+      - name: Require exact Stage 4 candidate identity
         shell: pwsh
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ inputs.expected_candidate_sha }}
         run: |
-          if ('${{ github.ref_name }}' -ne 'agent/stage4-v223-reconciliation') { throw "Unexpected branch: ${{ github.ref_name }}" }
-          if ($env:GITHUB_SHA -ne (git rev-parse HEAD)) { throw 'Checked-out candidate does not match GITHUB_SHA.' }
+          if ($env:EXPECTED_CANDIDATE_SHA -notmatch '^[0-9a-f]{40}$') { throw 'Expected candidate SHA must be exact lowercase 40-character hex.' }
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:EXPECTED_CANDIDATE_SHA) { throw 'Checked-out candidate does not match the explicitly dispatched SHA.' }
+          $branchContains = git branch -r --contains $head | Select-String 'origin/agent/stage4-v223-reconciliation$'
+          if (-not $branchContains) { throw 'Explicit candidate SHA is not reachable from agent/stage4-v223-reconciliation.' }
       - name: Preflight exact Windows certification runner and package path
         shell: pwsh
         env:
@@ -38,16 +52,18 @@ jobs:
         shell: pwsh
         env:
           CLOUDSCRIBE_V223_MASTER_PACKAGE: ${{ inputs.master_package_path }}
-          CLOUDSCRIBE_STAGE4_CANDIDATE_SHA: ${{ github.sha }}
+          CLOUDSCRIBE_STAGE4_CANDIDATE_SHA: ${{ inputs.expected_candidate_sha }}
         run: |
           $result = ./tools/Invoke-Stage4V223Certification.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE -CandidateSha $env:CLOUDSCRIBE_STAGE4_CANDIDATE_SHA | ConvertFrom-Json
           if (-not $result.AdmissionPassed -or -not $result.CandidateUnchanged) { throw 'v2.23 admission failed closed.' }
       - name: Preserve candidate identity
         id: candidate
         shell: pwsh
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ inputs.expected_candidate_sha }}
         run: |
           $head = (git rev-parse HEAD).Trim()
-          if ($head -ne $env:GITHUB_SHA) { throw 'Candidate identity changed after admission.' }
+          if ($head -ne $env:EXPECTED_CANDIDATE_SHA) { throw 'Candidate identity changed after admission.' }
           if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Tracked candidate bytes changed after admission.' }
           "candidate_sha=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
