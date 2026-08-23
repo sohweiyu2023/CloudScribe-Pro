@@ -11,7 +11,9 @@ public sealed record GenerationSegmentExecutionRequest(
     string CompilationProfileId,
     string IdempotencyKey,
     ReadOnlyMemory<byte> CompiledPayload,
-    string OutputFormat);
+    string OutputFormat,
+    GenerationCacheTrustContext? CacheTrustContext = null,
+    bool ForceFresh = false);
 
 public sealed record GenerationSegmentExecutionResult(
     bool CacheHit,
@@ -29,11 +31,16 @@ public sealed class GenerationSegmentExecutor
 {
     private readonly IGenerationProvider _provider;
     private readonly IGenerationSegmentCache _cache;
+    private readonly IGenerationPrivateCacheKeyProvider? _privateCacheKeyProvider;
 
-    public GenerationSegmentExecutor(IGenerationProvider provider, IGenerationSegmentCache cache)
+    public GenerationSegmentExecutor(
+        IGenerationProvider provider,
+        IGenerationSegmentCache cache,
+        IGenerationPrivateCacheKeyProvider? privateCacheKeyProvider = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        _privateCacheKeyProvider = privateCacheKeyProvider;
     }
 
     public async Task<GenerationSegmentExecutionResult> ExecuteAsync(
@@ -42,25 +49,22 @@ public sealed class GenerationSegmentExecutor
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateProvider(request.ProviderStableId);
+        var key = await CreatePrivateCacheKeyAsync(request, cancellationToken).ConfigureAwait(false);
 
-        var key = ContentAddressedSegmentKey.Create(
-            request.CompiledPayload.Span,
-            request.ProviderStableId,
-            request.OperationStableId,
-            request.VoiceStableId,
-            request.CompilationProfileId);
-
-        var cached = await _cache.ReadAsync(key, cancellationToken).ConfigureAwait(false);
-        if (cached is { Length: > 0 } && IsExpectedValidMedia(cached, null, request.OutputFormat))
+        if (!request.ForceFresh)
         {
-            return new GenerationSegmentExecutionResult(
-                true,
-                SubmissionDisposition.Accepted,
-                null,
-                cached,
-                "segment.cache.hit",
-                null,
-                key);
+            var cached = await _cache.ReadAsync(key, cancellationToken).ConfigureAwait(false);
+            if (cached is { Length: > 0 } && IsExpectedValidMedia(cached, null, request.OutputFormat))
+            {
+                return new GenerationSegmentExecutionResult(
+                    true,
+                    SubmissionDisposition.Accepted,
+                    null,
+                    cached,
+                    "segment.cache.hit",
+                    null,
+                    key);
+            }
         }
 
         var providerRequest = new GenerationProviderRequest(
@@ -82,13 +86,7 @@ public sealed class GenerationSegmentExecutor
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateProvider(request.ProviderStableId);
-
-        var key = ContentAddressedSegmentKey.Create(
-            request.CompiledPayload.Span,
-            request.ProviderStableId,
-            request.OperationStableId,
-            request.VoiceStableId,
-            request.CompilationProfileId);
+        var key = await CreatePrivateCacheKeyAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await _provider.ReconcileAsync(request.IdempotencyKey, cancellationToken).ConfigureAwait(false);
         if (response is null)
@@ -98,6 +96,22 @@ public sealed class GenerationSegmentExecutor
 
         await ValidateAndCacheAcceptedMediaAsync(key, request.OutputFormat, response, cancellationToken).ConfigureAwait(false);
         return FromProviderResponse(false, key, response);
+    }
+
+    public async ValueTask<ContentAddressedSegmentKey> CreatePrivateCacheKeyAsync(
+        GenerationSegmentExecutionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var trust = request.CacheTrustContext
+            ?? throw new InvalidOperationException("CloudScribe v2.23 requires an explicit complete cache trust context before cache lookup or publication.");
+        ValidateTrustBinding(request, trust);
+        var provider = _privateCacheKeyProvider
+            ?? throw new InvalidOperationException("CloudScribe v2.23 requires an OS-protected private cache HMAC key provider; cache reuse is disabled until one is supplied.");
+
+        using var keyMaterial = await provider.GetOrCreateAsync(cancellationToken).ConfigureAwait(false);
+        var lookup = PrivateCacheLookupKey.Derive(keyMaterial.Span, trust, request.CompiledPayload.Span);
+        return ContentAddressedSegmentKey.FromPrivateLookup(lookup);
     }
 
     private async Task ValidateAndCacheAcceptedMediaAsync(
@@ -135,6 +149,19 @@ public sealed class GenerationSegmentExecutor
         };
 
         return validation.DetectedFormat.Value == expected;
+    }
+
+    private static void ValidateTrustBinding(GenerationSegmentExecutionRequest request, GenerationCacheTrustContext trust)
+    {
+        trust.Validate();
+        if (!string.Equals(trust.ProviderStableId, request.ProviderStableId, StringComparison.Ordinal) ||
+            !string.Equals(trust.AccountId, request.AccountId, StringComparison.Ordinal) ||
+            !string.Equals(trust.OperationStableId, request.OperationStableId, StringComparison.Ordinal) ||
+            !string.Equals(trust.VoiceStableId, request.VoiceStableId, StringComparison.Ordinal) ||
+            !string.Equals(trust.OutputFormat, request.OutputFormat, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Cache trust context does not match the immutable generation request binding.");
+        }
     }
 
     private void ValidateProvider(string providerStableId)
