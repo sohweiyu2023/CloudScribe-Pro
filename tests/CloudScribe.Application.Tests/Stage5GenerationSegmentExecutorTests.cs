@@ -1,5 +1,6 @@
 using CloudScribe.Application.Generation;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Application.Tests;
@@ -12,15 +13,11 @@ public sealed class Stage5GenerationSegmentExecutorTests
         var provider = new RecordingProvider();
         var cache = new MemorySegmentCache();
         var request = CreateRequest();
-        var key = ContentAddressedSegmentKey.Create(
-            request.CompiledPayload.Span,
-            request.ProviderStableId,
-            request.OperationStableId,
-            request.VoiceStableId,
-            request.CompilationProfileId);
+        var executor = CreateExecutor(provider, cache);
+        var key = await executor.CreatePrivateCacheKeyAsync(request);
         await cache.StoreAsync(key, CreateMinimalWav(1));
 
-        var result = await new GenerationSegmentExecutor(provider, cache).ExecuteAsync(request);
+        var result = await executor.ExecuteAsync(request);
 
         Assert.True(result.CacheHit);
         Assert.Equal(0, provider.SubmitCount);
@@ -28,23 +25,33 @@ public sealed class Stage5GenerationSegmentExecutorTests
     }
 
     [Fact]
+    public async Task ForceFreshBypassesReusableEntryAndSubmitsAgain()
+    {
+        var provider = new RecordingProvider { SubmitResponse = Accepted(CreateMinimalWav(7)) };
+        var cache = new MemorySegmentCache();
+        var executor = CreateExecutor(provider, cache);
+        var request = CreateRequest();
+        var key = await executor.CreatePrivateCacheKeyAsync(request);
+        await cache.StoreAsync(key, CreateMinimalWav(1));
+
+        var result = await executor.ExecuteAsync(request with { ForceFresh = true });
+
+        Assert.False(result.CacheHit);
+        Assert.Equal(1, provider.SubmitCount);
+        Assert.Equal(CreateMinimalWav(7), result.MediaBytes.ToArray());
+    }
+
+    [Fact]
     public async Task CorruptCacheEntryIsIgnoredAndProviderRefreshesIt()
     {
-        var provider = new RecordingProvider
-        {
-            SubmitResponse = Accepted(CreateMinimalWav(7)),
-        };
+        var provider = new RecordingProvider { SubmitResponse = Accepted(CreateMinimalWav(7)) };
         var cache = new MemorySegmentCache();
         var request = CreateRequest();
-        var key = ContentAddressedSegmentKey.Create(
-            request.CompiledPayload.Span,
-            request.ProviderStableId,
-            request.OperationStableId,
-            request.VoiceStableId,
-            request.CompilationProfileId);
+        var executor = CreateExecutor(provider, cache);
+        var key = await executor.CreatePrivateCacheKeyAsync(request);
         await cache.StoreAsync(key, new byte[] { 1, 2, 3 });
 
-        var result = await new GenerationSegmentExecutor(provider, cache).ExecuteAsync(request);
+        var result = await executor.ExecuteAsync(request);
 
         Assert.False(result.CacheHit);
         Assert.Equal(1, provider.SubmitCount);
@@ -55,12 +62,9 @@ public sealed class Stage5GenerationSegmentExecutorTests
     public async Task AcceptedProviderMediaIsStoredAndSecondExecutionReusesIt()
     {
         var media = CreateMinimalWav(7);
-        var provider = new RecordingProvider
-        {
-            SubmitResponse = Accepted(media),
-        };
+        var provider = new RecordingProvider { SubmitResponse = Accepted(media) };
         var cache = new MemorySegmentCache();
-        var executor = new GenerationSegmentExecutor(provider, cache);
+        var executor = CreateExecutor(provider, cache);
         var request = CreateRequest();
 
         var first = await executor.ExecuteAsync(request);
@@ -75,14 +79,10 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task AcceptedCorruptProviderMediaFailsClosedAndIsNeverCached()
     {
-        var provider = new RecordingProvider
-        {
-            SubmitResponse = Accepted(new byte[] { 7, 8, 9 }),
-        };
+        var provider = new RecordingProvider { SubmitResponse = Accepted(new byte[] { 7, 8, 9 }) };
         var cache = new MemorySegmentCache();
 
-        await Assert.ThrowsAsync<InvalidDataException>(
-            () => new GenerationSegmentExecutor(provider, cache).ExecuteAsync(CreateRequest()));
+        await Assert.ThrowsAsync<InvalidDataException>(() => CreateExecutor(provider, cache).ExecuteAsync(CreateRequest()));
 
         Assert.Equal(1, provider.SubmitCount);
         Assert.Equal(0, cache.StoreCount);
@@ -103,8 +103,7 @@ public sealed class Stage5GenerationSegmentExecutorTests
         };
         var cache = new MemorySegmentCache();
 
-        await Assert.ThrowsAsync<InvalidDataException>(
-            () => new GenerationSegmentExecutor(provider, cache).ExecuteAsync(CreateRequest()));
+        await Assert.ThrowsAsync<InvalidDataException>(() => CreateExecutor(provider, cache).ExecuteAsync(CreateRequest()));
 
         Assert.Equal(0, cache.StoreCount);
     }
@@ -123,7 +122,7 @@ public sealed class Stage5GenerationSegmentExecutorTests
                 "provider.submission.unknown"),
         };
         var cache = new MemorySegmentCache();
-        var executor = new GenerationSegmentExecutor(provider, cache);
+        var executor = CreateExecutor(provider, cache);
 
         var result = await executor.ExecuteAsync(CreateRequest());
 
@@ -137,12 +136,9 @@ public sealed class Stage5GenerationSegmentExecutorTests
     public async Task ReconciliationCanPersistAcceptedMediaWithoutResubmission()
     {
         var media = CreateMinimalWav(4);
-        var provider = new RecordingProvider
-        {
-            ReconcileResponse = Accepted(media),
-        };
+        var provider = new RecordingProvider { ReconcileResponse = Accepted(media) };
         var cache = new MemorySegmentCache();
-        var executor = new GenerationSegmentExecutor(provider, cache);
+        var executor = CreateExecutor(provider, cache);
         var request = CreateRequest();
 
         var reconciled = await executor.ReconcileAsync(request);
@@ -161,31 +157,39 @@ public sealed class Stage5GenerationSegmentExecutorTests
         var provider = new RecordingProvider();
         var request = CreateRequest() with { ProviderStableId = "other-provider" };
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new GenerationSegmentExecutor(provider, new MemorySegmentCache()).ExecuteAsync(request));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            CreateExecutor(provider, new MemorySegmentCache()).ExecuteAsync(request));
 
         Assert.Equal(0, provider.SubmitCount);
     }
 
-    private static GenerationSegmentExecutionRequest CreateRequest() =>
-        new(
-            "fake-provider",
-            "synthesize-speech",
-            "account-1",
-            "voice-a",
-            "compile-v1",
-            "idem-1",
-            new byte[] { 10, 20, 30 },
-            "wav");
+    private static GenerationSegmentExecutor CreateExecutor(IGenerationProvider provider, IGenerationSegmentCache cache) =>
+        new(provider, cache, new DeterministicGenerationPrivateCacheKeyProvider("stage5-executor-tests"));
 
-    private static GenerationProviderResponse Accepted(byte[] media) =>
-        new(
-            SubmissionDisposition.Accepted,
-            "provider-request-1",
-            media,
-            "audio/wav",
-            null,
-            "provider.accepted");
+    private static GenerationSegmentExecutionRequest CreateRequest() => new(
+        "fake-provider",
+        "synthesize-speech",
+        "account-1",
+        "voice-a",
+        "compile-v1",
+        "idem-1",
+        new byte[] { 10, 20, 30 },
+        "wav",
+        CreateTrustContext());
+
+    private static GenerationCacheTrustContext CreateTrustContext() => new(
+        "fake-provider", "account-1", "project-1", "endpoint-1", "local", "synthesize-speech",
+        "model-snapshot-1", "voice-a", "stock-voice-a", "speech-plan-v1", "en-SG", "controls-1", "wav",
+        "pcm16", "adapter-v1", "compile-v1", "ast-v1", "normalize-v1", "pricing-v2.23-test",
+        "capabilities-v1", "governance-v1", "features-v1", "account-capabilities-v1");
+
+    private static GenerationProviderResponse Accepted(byte[] media) => new(
+        SubmissionDisposition.Accepted,
+        "provider-request-1",
+        media,
+        "audio/wav",
+        null,
+        "provider.accepted");
 
     private static byte[] CreateMinimalWav(byte sample)
     {
@@ -211,26 +215,18 @@ public sealed class Stage5GenerationSegmentExecutorTests
     private sealed class RecordingProvider : IGenerationProvider
     {
         public string ProviderStableId => "fake-provider";
-
         public int SubmitCount { get; private set; }
-
         public int ReconcileCount { get; private set; }
-
         public GenerationProviderResponse SubmitResponse { get; init; } = Accepted(CreateMinimalWav(1));
-
         public GenerationProviderResponse? ReconcileResponse { get; init; }
 
-        public Task<GenerationProviderResponse> SubmitAsync(
-            GenerationProviderRequest request,
-            CancellationToken cancellationToken)
+        public Task<GenerationProviderResponse> SubmitAsync(GenerationProviderRequest request, CancellationToken cancellationToken)
         {
             SubmitCount++;
             return Task.FromResult(SubmitResponse);
         }
 
-        public Task<GenerationProviderResponse?> ReconcileAsync(
-            string idempotencyKey,
-            CancellationToken cancellationToken)
+        public Task<GenerationProviderResponse?> ReconcileAsync(string idempotencyKey, CancellationToken cancellationToken)
         {
             ReconcileCount++;
             return Task.FromResult(ReconcileResponse);
@@ -240,22 +236,18 @@ public sealed class Stage5GenerationSegmentExecutorTests
     private sealed class MemorySegmentCache : IGenerationSegmentCache
     {
         private readonly Dictionary<string, byte[]> _items = new(StringComparer.Ordinal);
-
         public int StoreCount { get; private set; }
 
         public Task<bool> ContainsAsync(ContentAddressedSegmentKey key, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_items.ContainsKey(key.Sha256));
+            Task.FromResult(_items.ContainsKey(key.PrivateLookupHmacSha256));
 
         public Task<byte[]?> ReadAsync(ContentAddressedSegmentKey key, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_items.TryGetValue(key.Sha256, out var value) ? value.ToArray() : null);
+            Task.FromResult(_items.TryGetValue(key.PrivateLookupHmacSha256, out var value) ? value.ToArray() : null);
 
-        public Task StoreAsync(
-            ContentAddressedSegmentKey key,
-            ReadOnlyMemory<byte> mediaBytes,
-            CancellationToken cancellationToken = default)
+        public Task StoreAsync(ContentAddressedSegmentKey key, ReadOnlyMemory<byte> mediaBytes, CancellationToken cancellationToken = default)
         {
             StoreCount++;
-            _items[key.Sha256] = mediaBytes.ToArray();
+            _items[key.PrivateLookupHmacSha256] = mediaBytes.ToArray();
             return Task.CompletedTask;
         }
     }
