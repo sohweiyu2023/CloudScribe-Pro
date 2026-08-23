@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using CloudScribe.Application.Generation;
 using CloudScribe.Domain.Generation;
@@ -65,7 +66,6 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
 
             var provider = new DeterministicFakeGenerationProvider();
             var executor = new GenerationSegmentExecutor(provider, new FileGenerationSegmentCache(root));
-            var firstPass = new List<GenerationSegmentExecutionResult>();
             var proofInputs = new List<GenerationProofInput>();
 
             foreach (var segment in segments)
@@ -85,7 +85,6 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
                 Assert.False(result.CacheHit);
                 Assert.Equal(SubmissionDisposition.Accepted, result.Disposition);
                 Assert.NotEmpty(result.MediaBytes.ToArray());
-                firstPass.Add(result);
 
                 proofInputs.Add(new GenerationProofInput(
                     itemEstimates[segment.Index].ItemId,
@@ -202,6 +201,122 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
     }
 
     [Fact]
+    public async Task AssemblyProofAndDurableReleaseFinalizationFormOneVerifiedPath()
+    {
+        var root = CreateScratchDirectory();
+        try
+        {
+            var sourceDirectory = Path.Combine(root, "segments");
+            var outputDirectory = Path.Combine(root, "release");
+            Directory.CreateDirectory(sourceDirectory);
+            Directory.CreateDirectory(outputDirectory);
+
+            var sourcePath = Path.Combine(sourceDirectory, "segment.wav");
+            var sourceBytes = CreateWave();
+            await File.WriteAllBytesAsync(sourcePath, sourceBytes);
+            var sourceSha256 = Convert.ToHexString(SHA256.HashData(sourceBytes)).ToLowerInvariant();
+
+            var collectionId = Guid.NewGuid();
+            var segmentId = Guid.NewGuid();
+            var estimate = new GenerationCollectionEstimate(
+                collectionId,
+                42,
+                DateTimeOffset.UtcNow,
+                "USD",
+                10,
+                2,
+                "pricing/v2.22/test",
+                [new GenerationItemEstimate(segmentId, 0, "USD", 10, 2)]);
+            var approval = new GenerationApproval(
+                collectionId,
+                42,
+                "pricing/v2.22/test",
+                "USD",
+                10,
+                2,
+                DateTimeOffset.UtcNow);
+            var spendAuthorization = new GenerationSpendAuthorization(
+                collectionId,
+                new AuthorizedSpendCeiling("USD", 10, 2),
+                new Dictionary<Guid, AuthorizedSpendCeiling>
+                {
+                    [segmentId] = new AuthorizedSpendCeiling("USD", 10, 2),
+                },
+                "pricing/v2.22/test",
+                42);
+
+            var assemblyPlan = new AudioAssemblyPlan(
+                [new AudioSegmentArtifact(segmentId.ToString("D"), sourcePath, "audio/wav", TimeSpan.FromSeconds(1), sourceSha256)],
+                new GenerationMasteringProfile("spoken", -1m, -16m, 0, 0),
+                ReleaseAudioFormat.Wav,
+                TimeSpan.FromMinutes(10),
+                outputDirectory,
+                "cloudscribe-e2e");
+            var proofInputs = new[]
+            {
+                new GenerationProofInput(
+                    segmentId,
+                    MediaValid: true,
+                    ExpectedDuration: TimeSpan.FromSeconds(1),
+                    ActualDuration: TimeSpan.FromSeconds(1),
+                    RequiredTimingMarksPresent: true,
+                    ProviderDiagnostics: Array.Empty<string>(),
+                    ProvenanceId: sourceSha256),
+            };
+
+            var decision = new GenerationCollectionReleaseCoordinator(
+                    new GenerationSpendGuard(),
+                    new GenerationProofPass(),
+                    new GenerationOutputReservationService(),
+                    TimeProvider.System)
+                .Evaluate(estimate, approval, spendAuthorization, proofInputs, assemblyPlan);
+
+            Assert.True(decision.IsReleaseSafe);
+            Assert.Single(decision.OutputReservations);
+
+            var assembly = await new AudioAssemblyNativeExecutor(new WritingNativeTool(CreateWave())).ExecuteAsync(
+                assemblyPlan,
+                Path.Combine(root, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg"),
+                TimeSpan.FromMinutes(1));
+            var artifact = Assert.Single(assembly.Artifacts);
+            Assert.True(File.Exists(artifact.OutputPath));
+
+            var checkpointDirectory = Path.Combine(root, "release-checkpoints");
+            var finalizer = new DurableGenerationReleaseFinalizer(
+                new GenerationReleasePublisher(),
+                new GenerationReleaseVerifier(),
+                new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory));
+            var finalized = await finalizer.FinalizeAsync(
+                decision,
+                "approval-stage5-e2e",
+                artifact.OutputPath,
+                [new GenerationPublishedSegment(segmentId, sourceSha256, sourceSha256)]);
+
+            Assert.True(finalized.IsFinalized);
+            Assert.True(finalized.Verification.IsValid);
+            Assert.True(finalized.Receipt.Verify());
+
+            var persisted = await new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory).ReadAsync(collectionId);
+            Assert.NotNull(persisted);
+            Assert.Equal(GenerationReleaseCheckpointState.Finalized, persisted!.State);
+
+            var restartedFinalizer = new DurableGenerationReleaseFinalizer(
+                new GenerationReleasePublisher(),
+                new GenerationReleaseVerifier(),
+                new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory));
+            var recovered = await restartedFinalizer.RecoverAsync(finalized.Receipt);
+            Assert.True(recovered.IsFinalized);
+
+            await File.AppendAllTextAsync(artifact.OutputPath, "tampered");
+            await Assert.ThrowsAsync<InvalidDataException>(() => restartedFinalizer.RecoverAsync(finalized.Receipt));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AmbiguousBillableSubmissionReconcilesWithoutSecondPhysicalSubmission()
     {
         var root = CreateScratchDirectory();
@@ -254,10 +369,42 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
             _ => throw new InvalidOperationException($"Unsupported speech node type {node.GetType().Name} in acceptance compiler."),
         }));
 
+    private static byte[] CreateWave()
+    {
+        var bytes = new byte[44];
+        "RIFF"u8.CopyTo(bytes);
+        BitConverter.GetBytes(36).CopyTo(bytes, 4);
+        "WAVE"u8.CopyTo(bytes.AsSpan(8));
+        "fmt "u8.CopyTo(bytes.AsSpan(12));
+        BitConverter.GetBytes(16).CopyTo(bytes, 16);
+        BitConverter.GetBytes((short)1).CopyTo(bytes, 20);
+        BitConverter.GetBytes((short)1).CopyTo(bytes, 22);
+        BitConverter.GetBytes(16_000).CopyTo(bytes, 24);
+        BitConverter.GetBytes(32_000).CopyTo(bytes, 28);
+        BitConverter.GetBytes((short)2).CopyTo(bytes, 32);
+        BitConverter.GetBytes((short)16).CopyTo(bytes, 34);
+        "data"u8.CopyTo(bytes.AsSpan(36));
+        BitConverter.GetBytes(0).CopyTo(bytes, 40);
+        return bytes;
+    }
+
     private static string CreateScratchDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "CloudScribe-Stage5-E2E-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private sealed class WritingNativeTool(byte[] payload) : INativeMediaTool
+    {
+        public async Task<NativeMediaToolResult> RunAsync(
+            NativeMediaToolInvocation invocation,
+            CancellationToken cancellationToken = default)
+        {
+            var output = invocation.Arguments[^1];
+            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+            await File.WriteAllBytesAsync(output, payload, cancellationToken);
+            return new NativeMediaToolResult(0, false, string.Empty, string.Empty, TimeSpan.FromMilliseconds(1));
+        }
     }
 }
