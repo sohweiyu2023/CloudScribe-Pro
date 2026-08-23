@@ -7,7 +7,8 @@ public sealed record GoogleGenerationQueueOutcome(
     GenerationProviderResponse? Response)
 {
     public bool RequiresReconciliation =>
-        string.Equals(Decision.Reason, "google-reconciliation-required", StringComparison.Ordinal);
+        string.Equals(Decision.Reason, "google-reconciliation-required", StringComparison.Ordinal) ||
+        Response?.Disposition == SubmissionDisposition.UnknownRequiresReconciliation;
 }
 
 public sealed class GoogleGenerationQueueCoordinator
@@ -48,7 +49,15 @@ public sealed class GoogleGenerationQueueCoordinator
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var response = await _submit(request, decision, cancellationToken).ConfigureAwait(false);
+        var response = await _submit(request, decision, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Google submit delegate returned no response.");
+
+        if (response.Disposition == SubmissionDisposition.UnknownRequiresReconciliation &&
+            string.IsNullOrWhiteSpace(response.DiagnosticCode))
+        {
+            throw new InvalidOperationException("Ambiguous Google submissions require an explicit reconciliation diagnostic code.");
+        }
+
         return new(decision, response);
     }
 }
