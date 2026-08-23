@@ -26,6 +26,18 @@ public sealed class Stage7MultiSpeakerTurnExecutionCoordinatorTests
         Assert.Equal(new[] { 0, 1 }, executor.ExecutedTurns);
     }
 
+    [Fact]
+    public async Task Contradictory_success_and_reconciliation_outcome_fails_closed()
+    {
+        var coordinator = new MultiSpeakerTurnExecutionCoordinator(new ContradictoryExecutor());
+        var turns = new[] { new MultiSpeakerTurn(0, "a", "first") };
+        var routes = new[] { new SpeakerRoute("a", "provider", "voice", false) };
+        var health = new Dictionary<string, bool> { ["provider"] = true };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            coordinator.ExecuteAsync(turns, routes, health, explicitFallbackAllowed: false));
+    }
+
     private sealed class RecordingExecutor : IMultiSpeakerTurnExecutor
     {
         private readonly int _reconcileAtTurn;
@@ -45,5 +57,17 @@ public sealed class Stage7MultiSpeakerTurnExecutionCoordinatorTests
                 RequiresReconciliation: reconcile,
                 DiagnosticCode: reconcile ? "submission-ambiguous" : "ok"));
         }
+    }
+
+    private sealed class ContradictoryExecutor : IMultiSpeakerTurnExecutor
+    {
+        public Task<MultiSpeakerTurnExecutionOutcome> ExecuteAsync(
+            PlannedSpeakerTurn turn,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MultiSpeakerTurnExecutionOutcome(
+                turn.TurnIndex,
+                Succeeded: true,
+                RequiresReconciliation: true,
+                DiagnosticCode: "invalid-contradiction"));
     }
 }
