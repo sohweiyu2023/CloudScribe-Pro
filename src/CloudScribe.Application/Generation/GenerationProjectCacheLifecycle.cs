@@ -2,6 +2,12 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
+public sealed record GenerationProjectCacheState(
+    bool Active,
+    bool Pinned,
+    bool Referenced,
+    bool UnresolvedSubmission);
+
 public sealed class GenerationProjectCacheLifecycle
 {
     private readonly GenerationSegmentCacheLifecycleCoordinator _coordinator;
@@ -19,19 +25,17 @@ public sealed class GenerationProjectCacheLifecycle
 
     public async Task SetProjectStateAsync(
         ContentAddressedSegmentKey key,
-        bool active,
-        bool pinned,
-        bool referenced,
-        bool unresolvedSubmission,
+        GenerationProjectCacheState state,
         CancellationToken cancellationToken = default)
     {
         key.Validate();
+        ArgumentNullException.ThrowIfNull(state);
         await _coordinator.SetCompositeProtectionAsync(
             key,
-            active,
-            pinned,
-            referenced,
-            unresolvedSubmission,
+            state.Active,
+            state.Pinned,
+            state.Referenced,
+            state.UnresolvedSubmission,
             cancellationToken).ConfigureAwait(false);
     }
 }
