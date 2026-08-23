@@ -26,6 +26,8 @@ public static class RestoreManifestContentBinding
         ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
         ArgumentNullException.ThrowIfNull(bindings);
         var root = Path.GetFullPath(stagingRoot);
+        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Restore staging root cannot be a reparse point.");
         var prefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -40,6 +42,7 @@ public static class RestoreManifestContentBinding
                 throw new InvalidOperationException("Restore manifest file escapes the staging root.");
             if (!File.Exists(path))
                 throw new InvalidOperationException("Restore manifest file is missing from staging.");
+            EnsureNoReparsePoints(root, path);
             var info = new FileInfo(path);
             if (info.Length != binding.LengthBytes)
                 throw new InvalidDataException("Restore manifest file length does not match staged content.");
@@ -48,6 +51,18 @@ public static class RestoreManifestContentBinding
             var expected = Convert.FromHexString(binding.Sha256Hex);
             if (!CryptographicOperations.FixedTimeEquals(observed, expected))
                 throw new InvalidDataException("Restore manifest SHA-256 does not match staged content.");
+        }
+    }
+
+    private static void EnsureNoReparsePoints(string root, string path)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        var current = root;
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Restore manifest content cannot traverse a symbolic link or reparse point.");
         }
     }
 }
