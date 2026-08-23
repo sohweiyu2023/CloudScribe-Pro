@@ -6,5 +6,53 @@
   "runtimePolicyVersion": "1.4",
   "pricingSchemaSeedByteIdentity": "v2.22",
   "stage4PreservedBase": "5935ef2110b76235ef626ac8b3340952d6ec4210",
-  "promotionRequiresFreshWindowsCertification": true
+  "promotionRequiresFreshWindowsCertification": true,
+  "requiredRequirementIds": [
+    "CACHE-001",
+    "CACHE-002",
+    "PRICE-MAINT-001",
+    "TOOL-001"
+  ],
+  "controls": {
+    "pricingSchema": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/02_Pricing/cloudscribe-pricing.schema-1.1.5.json",
+      "sha256": "1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b"
+    },
+    "pricingSeed": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/02_Pricing/cloudscribe-pricing.seed-2026-07-20.schema-1.1.5.json",
+      "sha256": "3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61"
+    },
+    "runtimePolicySchema": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/03_Implementation/cloudscribe-runtime-policy.schema-1.4.json",
+      "sha256": "868c78e02047315ccd9c3f09d2a4263861e2c7702dbc93dce6695e02f923e5c3"
+    },
+    "runtimePolicySeed": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/03_Implementation/cloudscribe-runtime-policy.seed-2026-07-21.schema-1.4.json",
+      "sha256": "f753e09ad53b06a7876b8bb2ea955d3af07a96353752901a1f91338ede7efdb9"
+    },
+    "architectureFitnessSchema": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/03_Implementation/cloudscribe-architecture-fitness-rules.schema-1.0.json",
+      "sha256": "f27e6a98376c2bef6bdc39946dd727d4a8646292c58019dfac735e78c10136fc"
+    },
+    "architectureFitnessSeed": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/03_Implementation/cloudscribe-architecture-fitness-rules.seed-2026-07-20.json",
+      "sha256": "9818a6f705dad027eb598f0f868cf53fb6f666949ac396cf6b1c000d4a185f47"
+    },
+    "agentExecutionPolicySchema": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/03_Implementation/cloudscribe-agent-execution-policy.schema-1.0.json",
+      "sha256": "d89ef3d68da0c6dedfa6f42c7080856e10b7919d2140c3c8920d5fdcfc8a506e"
+    },
+    "agentExecutionPolicySeed": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/03_Implementation/cloudscribe-agent-execution-policy.seed-2026-07-21.json",
+      "sha256": "1f685cec521757c8fa260b4327be5e2fe628d4ec7c167df71283c9fc031379c9"
+    },
+    "requirementIndex": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/04_QA_and_Audit/CloudScribe_Pro_Current_Requirement_Index_v2.23.json",
+      "sha256": "7f33fd8b0f47f0f63adc276819eaf29669b58957c181dcd9e80183151ca05d6b"
+    },
+    "cacheContract": {
+      "member": "CloudScribe_Pro_Master_Package_v2.23/06_Product_and_Distribution/CloudScribe_Pro_Cache_Isolation_Privacy_and_Lifecycle_Contract_v2.23.md",
+      "sha256": "68b7962a771a5b59ca559d6fa35671e103caaf6f084aef000b62dae85431de90"
+    }
+  }
 }
