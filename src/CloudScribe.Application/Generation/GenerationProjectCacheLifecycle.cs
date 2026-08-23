@@ -12,14 +12,10 @@ public sealed class GenerationProjectCacheLifecycle
     }
 
     public Task SetPinnedAsync(ContentAddressedSegmentKey key, bool pinned, CancellationToken cancellationToken = default) =>
-        pinned
-            ? _coordinator.MarkPinnedAsync(key, cancellationToken)
-            : _coordinator.MarkCompletedAsync(key, cancellationToken);
+        throw new InvalidOperationException("A partial project cache lifecycle update is unsafe. Use SetProjectStateAsync with the complete current lifecycle state.");
 
     public Task SetReferencedAsync(ContentAddressedSegmentKey key, bool referenced, CancellationToken cancellationToken = default) =>
-        referenced
-            ? _coordinator.MarkReferencedAsync(key, cancellationToken)
-            : _coordinator.MarkCompletedAsync(key, cancellationToken);
+        throw new InvalidOperationException("A partial project cache lifecycle update is unsafe. Use SetProjectStateAsync with the complete current lifecycle state.");
 
     public async Task SetProjectStateAsync(
         ContentAddressedSegmentKey key,
