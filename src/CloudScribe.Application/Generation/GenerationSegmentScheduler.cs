@@ -101,13 +101,16 @@ public sealed class GenerationSegmentScheduler
             return new GenerationScheduledSegmentResult(progress, null);
         }
 
-        var cacheKey = CreateCacheKey(segment.Request);
-        var cached = await _cache.ReadAsync(cacheKey, cancellationToken).ConfigureAwait(false);
-        if (cached is { Length: > 0 })
+        var cacheKey = await _executor.CreatePrivateCacheKeyAsync(segment.Request, cancellationToken).ConfigureAwait(false);
+        if (!segment.Request.ForceFresh)
         {
-            progress = progress.MarkCompleted(now, cacheKey.Sha256, null, "segment.cache.hit-before-submit");
-            await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
-            return new GenerationScheduledSegmentResult(progress, null);
+            var cached = await _cache.ReadAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+            if (cached is { Length: > 0 })
+            {
+                progress = progress.MarkCompleted(now, cacheKey.PrivateLookupHmacSha256, null, "segment.cache.hit-before-submit");
+                await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
+                return new GenerationScheduledSegmentResult(progress, null);
+            }
         }
 
         progress = progress.MarkSubmissionStarted(now);
@@ -140,7 +143,7 @@ public sealed class GenerationSegmentScheduler
         now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         if (result.Disposition == SubmissionDisposition.Accepted)
         {
-            progress = progress.MarkCompleted(now, result.CacheKey.Sha256, result.ProviderRequestId, result.DiagnosticCode);
+            progress = progress.MarkCompleted(now, result.CacheKey.PrivateLookupHmacSha256, result.ProviderRequestId, result.DiagnosticCode);
         }
         else if (result.RequiresReconciliation)
         {
@@ -179,7 +182,7 @@ public sealed class GenerationSegmentScheduler
 
         if (result.Disposition == SubmissionDisposition.Accepted)
         {
-            progress = progress.MarkCompleted(now, result.CacheKey.Sha256, result.ProviderRequestId, result.DiagnosticCode);
+            progress = progress.MarkCompleted(now, result.CacheKey.PrivateLookupHmacSha256, result.ProviderRequestId, result.DiagnosticCode);
         }
         else
         {
@@ -189,14 +192,6 @@ public sealed class GenerationSegmentScheduler
         await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
         return new GenerationScheduledSegmentResult(progress, result);
     }
-
-    private static ContentAddressedSegmentKey CreateCacheKey(GenerationSegmentExecutionRequest request) =>
-        ContentAddressedSegmentKey.Create(
-            request.CompiledPayload.Span,
-            request.ProviderStableId,
-            request.OperationStableId,
-            request.VoiceStableId,
-            request.CompilationProfileId);
 
     private static ulong DeterministicJitterSeed(GenerationScheduledSegment segment)
     {
