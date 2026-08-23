@@ -3,6 +3,10 @@ namespace CloudScribe.Domain.Generation;
 public sealed record VoiceLabCatalogSelection(
     string VoiceStableId,
     string ProviderStableId,
+    string AccountStableId,
+    string ProjectStableId,
+    string CapabilityEvidenceId,
+    string VoiceFingerprint,
     bool CapabilityCurrent,
     bool VoiceEnabled,
     bool AccountProjectAuthorized)
@@ -11,6 +15,10 @@ public sealed record VoiceLabCatalogSelection(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(VoiceStableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(ProviderStableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(AccountStableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(ProjectStableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(CapabilityEvidenceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(VoiceFingerprint);
         if (!CapabilityCurrent) throw new InvalidOperationException("Voice Lab selection requires current capability evidence.");
         if (!VoiceEnabled) throw new InvalidOperationException("Voice Lab selection references a disabled voice.");
         if (!AccountProjectAuthorized) throw new InvalidOperationException("Voice Lab selection is not authorized for the current account/project boundary.");
