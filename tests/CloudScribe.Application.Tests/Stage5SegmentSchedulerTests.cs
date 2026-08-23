@@ -105,7 +105,7 @@ public sealed class Stage5SegmentSchedulerTests
         IGenerationSegmentCache cache,
         IGenerationSegmentProgressStore progressStore)
     {
-        var executor = new GenerationSegmentExecutor(provider, cache);
+        var executor = new GenerationSegmentExecutor(provider, cache, new DeterministicGenerationPrivateCacheKeyProvider());
         var policy = new GenerationExecutionPolicy(3, TimeSpan.FromMilliseconds(10), TimeSpan.FromSeconds(2), 4);
         return new GenerationSegmentScheduler(executor, cache, progressStore, policy);
     }
@@ -120,9 +120,16 @@ public sealed class Stage5SegmentSchedulerTests
             "profile-1",
             idempotencyKey,
             Encoding.UTF8.GetBytes(text),
-            "wav");
+            "wav",
+            CreateTrustContext());
         return new GenerationScheduledSegment(jobId, segmentId, index, request);
     }
+
+    private static GenerationCacheTrustContext CreateTrustContext() => new(
+        "cloudscribe.fake.deterministic", "account-1", "project-test", "fake-endpoint", "local",
+        "synthesize-speech", "fake-model-v1", "voice-1", "stock-fake-voice", "speech-plan-v1", "en-SG",
+        "controls-default", "wav", "pcm16", "fake-adapter-v1", "compiler-v1", "ast-v1", "normalize-v1",
+        "pricing-v2.23-test", "capabilities-v1", "governance-test", "features-test", "account-capabilities-test");
 
     private sealed class TemporaryDirectory : IDisposable
     {
