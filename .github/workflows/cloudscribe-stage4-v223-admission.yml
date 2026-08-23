@@ -1,4 +1,4 @@
-name: CloudScribe Stage 4 v2.23 Admission
+name: CloudScribe Stage 4 v2.23 Admission and Full Certification
 
 on:
   workflow_dispatch:
@@ -22,48 +22,62 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Require Stage 4 reconciliation branch
         shell: pwsh
         run: |
-          if ('${{ github.ref_name }}' -ne 'agent/stage4-v223-reconciliation') {
-            throw "Stage 4 v2.23 admission must run from agent/stage4-v223-reconciliation; got ${{ github.ref_name }}"
-          }
-          if ($env:GITHUB_SHA -ne (git rev-parse HEAD)) {
-            throw 'Checked-out candidate does not match GITHUB_SHA.'
-          }
-
+          if ('${{ github.ref_name }}' -ne 'agent/stage4-v223-reconciliation') { throw "Unexpected branch: ${{ github.ref_name }}" }
+          if ($env:GITHUB_SHA -ne (git rev-parse HEAD)) { throw 'Checked-out candidate does not match GITHUB_SHA.' }
       - name: Run fail-closed Stage 4 v2.23 certification preparation
-        id: certification
         shell: pwsh
         env:
           CLOUDSCRIBE_V223_MASTER_PACKAGE: ${{ inputs.master_package_path }}
           CLOUDSCRIBE_STAGE4_CANDIDATE_SHA: ${{ github.sha }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:CLOUDSCRIBE_V223_MASTER_PACKAGE)) {
-            throw 'Authenticated v2.23 master package path is required.'
-          }
-          if ([string]::IsNullOrWhiteSpace($env:CLOUDSCRIBE_STAGE4_CANDIDATE_SHA)) {
-            throw 'Stage 4 candidate SHA is required.'
-          }
-          $result = ./tools/Invoke-Stage4V223Certification.ps1 `
-            -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE `
-            -CandidateSha $env:CLOUDSCRIBE_STAGE4_CANDIDATE_SHA | ConvertFrom-Json
-          if (-not $result.AdmissionPassed -or -not $result.CandidateUnchanged) {
-            throw 'Stage 4 v2.23 certification preparation did not complete fail-closed.'
-          }
-
-      - name: Preserve candidate identity for downstream full certification
+          $result = ./tools/Invoke-Stage4V223Certification.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE -CandidateSha $env:CLOUDSCRIBE_STAGE4_CANDIDATE_SHA | ConvertFrom-Json
+          if (-not $result.AdmissionPassed -or -not $result.CandidateUnchanged) { throw 'v2.23 admission failed closed.' }
+      - name: Preserve candidate identity
         id: candidate
         shell: pwsh
         run: |
           $head = (git rev-parse HEAD).Trim()
-          if ($head -ne $env:GITHUB_SHA) {
-            throw 'Candidate identity changed after v2.23 control admission.'
-          }
-          $trackedChanges = @(git status --porcelain=v1 --untracked-files=no)
-          if ($trackedChanges.Count -ne 0) {
-            throw 'Tracked candidate bytes changed before downstream full certification handoff.'
-          }
+          if ($head -ne $env:GITHUB_SHA) { throw 'Candidate identity changed after admission.' }
+          if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Tracked candidate bytes changed after admission.' }
           "candidate_sha=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "v2.23 Stage 4 admitted candidate: $head"
+
+  full-windows-certification:
+    needs: v223-control-admission
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      ADMITTED_SHA: ${{ needs.v223-control-admission.outputs.candidate_sha }}
+    steps:
+      - name: Checkout admitted candidate exactly
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.v223-control-admission.outputs.candidate_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Certify admitted candidate without mutation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:ADMITTED_SHA) { throw 'Full certification is not running the admitted candidate SHA.' }
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1
+          if ($LASTEXITCODE -ne 0) { throw 'Full test suite failed.' }
+          python -m pytest tests/test_verification_tools.py -q
+          if ($LASTEXITCODE -ne 0) { throw 'Verification-tool tests failed.' }
+          if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Certification mutated tracked candidate bytes.' }
+          if ((git rev-parse HEAD).Trim() -ne $env:ADMITTED_SHA) { throw 'Candidate SHA changed during certification.' }
