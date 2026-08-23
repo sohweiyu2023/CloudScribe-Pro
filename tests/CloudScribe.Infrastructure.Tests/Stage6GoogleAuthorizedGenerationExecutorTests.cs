@@ -41,7 +41,13 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
             };
         }));
         var setup = CreateSetup(client, new byte[] { 1, 2, 3 }, resolver);
-        var drifted = setup.Request with { CompiledPayload = new byte[] { 9, 9, 9 } };
+        var drifted = new GenerationProviderRequest(
+            setup.Request.ProviderStableId,
+            setup.Request.OperationStableId,
+            setup.Request.AccountId,
+            setup.Request.IdempotencyKey,
+            new byte[] { 9, 9, 9 },
+            setup.Request.OutputFormat);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => setup.Executor.SubmitAsync(drifted));
 
