@@ -36,4 +36,6 @@ jobs:
           dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
           if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
           dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage6GoogleSpeechPlanCompilerTests|FullyQualifiedName~Stage6GoogleGenerationAccountPolicyTests|FullyQualifiedName~Stage6GoogleSubmissionSafetyTests|FullyQualifiedName~Stage6GoogleGenerationSubmissionEnvelopeTests|FullyQualifiedName~Stage6GoogleGenerationSpendAuthorizationTests|FullyQualifiedName~Stage6GoogleGenerationHttpTransportTests|FullyQualifiedName~Stage6GoogleGenerationResponseParserTests|FullyQualifiedName~Stage6GoogleGenerationProviderTests|FullyQualifiedName~Stage6GoogleCapabilityRefreshPolicyTests"
-          if ($LASTEXITCODE -ne 0) { throw 'Stage 6 focused tests failed.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 6 infrastructure/provider tests failed.' }
+          dotnet test tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj -c Release --no-build --no-restore --filter FullyQualifiedName~Stage6GoogleBillableExecutionGateTests
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 6 billable execution authorization tests failed.' }
