@@ -49,6 +49,29 @@ public sealed class Stage5GenerationReleasePublisherTests
             [new GenerationPublishedSegment(segmentId, "cache:segment", new string('a', 64))]));
     }
 
+    [Fact]
+    public async Task PublishAndProtectMarksReceiptCacheAsReferenced()
+    {
+        using var temp = new TempDirectory();
+        var segmentId = Guid.NewGuid();
+        var lookup = new string('c', 64);
+        var output = Path.Combine(temp.Path, "release.wav");
+        File.WriteAllBytes(output, [1, 2, 3, 4, 5]);
+        var lifecycle = new RecordingLifecycle();
+
+        var receipt = await new GenerationReleasePublisher(1024).PublishAndProtectAsync(
+            SafeDecision(segmentId),
+            "approval:7",
+            output,
+            [new GenerationPublishedSegment(segmentId, lookup, new string('d', 64))],
+            lifecycle);
+
+        Assert.True(receipt.Verify());
+        var protection = Assert.Single(lifecycle.Protections);
+        Assert.Equal(lookup, protection.Lookup);
+        Assert.Equal(GenerationCacheEntryProtection.Referenced, protection.Protection);
+    }
+
     private static GenerationCollectionReleaseDecision SafeDecision(Guid segmentId) => new(
         Guid.NewGuid(),
         7,
@@ -56,6 +79,23 @@ public sealed class Stage5GenerationReleasePublisherTests
         [new GenerationProofResult(segmentId, new OutputQualityAssessment(OutputQualityDisposition.Accepted, []), true, "proof:provider")],
         [],
         DateTimeOffset.UtcNow);
+
+    private sealed class RecordingLifecycle : IGenerationCacheLifecycle
+    {
+        public List<(string Lookup, GenerationCacheEntryProtection Protection)> Protections { get; } = [];
+
+        public Task SetProtectionAsync(ContentAddressedSegmentKey key, GenerationCacheEntryProtection protection, CancellationToken cancellationToken = default)
+        {
+            Protections.Add((key.PrivateLookupHmacSha256, protection));
+            return Task.CompletedTask;
+        }
+
+        public Task<GenerationCacheTrimResult> TrimAsync(long? maximumBytes = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GenerationCacheTrimResult(0, 0, 0, 0));
+
+        public Task<GenerationCacheClearResult> ClearUnprotectedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GenerationCacheClearResult(0, 0, 0));
+    }
 
     private sealed class TempDirectory : IDisposable
     {
