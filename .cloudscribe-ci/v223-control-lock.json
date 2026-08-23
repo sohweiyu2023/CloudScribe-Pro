@@ -1,0 +1,10 @@
+{
+  "controlVersion": "2.23",
+  "masterPackageSha256": "71015a7b242997216d8cbf3d7e6acb574d2792459c39309da97ea91b2ef6a60f",
+  "internalManifestExpected": 628,
+  "internalManifestMatched": 628,
+  "runtimePolicyVersion": "1.4",
+  "pricingSchemaSeedByteIdentity": "v2.22",
+  "stage4PreservedBase": "5935ef2110b76235ef626ac8b3340952d6ec4210",
+  "promotionRequiresFreshWindowsCertification": true
+}
