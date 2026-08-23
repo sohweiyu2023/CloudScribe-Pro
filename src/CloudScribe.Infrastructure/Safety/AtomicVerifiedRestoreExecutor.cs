@@ -41,8 +41,8 @@ public sealed class AtomicVerifiedRestoreExecutor
         var sourceRoot = Path.GetFullPath(backupRoot);
         if (!Path.IsPathFullyQualified(sourceRoot))
             throw new InvalidOperationException("Backup source root must resolve to an absolute path.");
-        EnsureDirectoryIsPhysical(sourceRoot);
-        EnsureDirectoryIsPhysical(plan.RestoreRoot);
+        RequirePhysicalDirectory(sourceRoot, "Backup source root");
+        EnsurePhysicalDirectory(plan.RestoreRoot, "Restore root");
 
         var createdThisRun = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
@@ -134,6 +134,7 @@ public sealed class AtomicVerifiedRestoreExecutor
         EnsureNoReparseDirectoryChain(restoreRoot, parent);
 
         var temporary = destination + ".restore-tmp-" + Guid.NewGuid().ToString("N");
+        var destinationPublished = false;
         try
         {
             await using var input = new FileStream(
@@ -173,7 +174,14 @@ public sealed class AtomicVerifiedRestoreExecutor
                 throw new InvalidDataException($"Backup source digest mismatch for {step.RelativePath}.");
 
             File.Move(temporary, destination, overwrite: false);
+            destinationPublished = true;
             await VerifyDestinationAsync(restoreRoot, step, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (destinationPublished && File.Exists(destination))
+                File.Delete(destination);
+            throw;
         }
         finally
         {
@@ -200,13 +208,22 @@ public sealed class AtomicVerifiedRestoreExecutor
         return fullPath;
     }
 
-    private static void EnsureDirectoryIsPhysical(string directory)
+    private static void RequirePhysicalDirectory(string directory, string description)
+    {
+        var info = new DirectoryInfo(directory);
+        if (!info.Exists)
+            throw new DirectoryNotFoundException($"{description} does not exist: {info.FullName}");
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException($"{description} must not be a symbolic link or reparse point.");
+    }
+
+    private static void EnsurePhysicalDirectory(string directory, string description)
     {
         var info = new DirectoryInfo(directory);
         if (!info.Exists) Directory.CreateDirectory(info.FullName);
         info.Refresh();
         if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidOperationException("Restore roots must not be symbolic links or reparse points.");
+            throw new InvalidOperationException($"{description} must not be a symbolic link or reparse point.");
     }
 
     private static void EnsureNoReparseDirectoryChain(string root, string destinationParent)
