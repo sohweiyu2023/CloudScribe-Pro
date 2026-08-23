@@ -15,7 +15,6 @@ public sealed record GenerationScheduledSegmentResult(
 public sealed class GenerationSegmentScheduler
 {
     private readonly GenerationSegmentExecutor _executor;
-    private readonly IGenerationSegmentCache _cache;
     private readonly IGenerationSegmentProgressStore _progressStore;
     private readonly GenerationExecutionPolicy _policy;
     private readonly TimeProvider _timeProvider;
@@ -29,7 +28,7 @@ public sealed class GenerationSegmentScheduler
         TimeProvider? timeProvider = null)
     {
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
-        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        ArgumentNullException.ThrowIfNull(cache);
         _progressStore = progressStore ?? throw new ArgumentNullException(nameof(progressStore));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -101,18 +100,10 @@ public sealed class GenerationSegmentScheduler
             return new GenerationScheduledSegmentResult(progress, null);
         }
 
-        var cacheKey = await _executor.CreatePrivateCacheKeyAsync(segment.Request, cancellationToken).ConfigureAwait(false);
-        if (!segment.Request.ForceFresh)
-        {
-            var cached = await _cache.ReadAsync(cacheKey, cancellationToken).ConfigureAwait(false);
-            if (cached is { Length: > 0 })
-            {
-                progress = progress.MarkCompleted(now, cacheKey.PrivateLookupHmacSha256, null, "segment.cache.hit-before-submit");
-                await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
-                return new GenerationScheduledSegmentResult(progress, null);
-            }
-        }
-
+        // Cache reuse is intentionally owned only by GenerationSegmentExecutor. The executor
+        // applies the v2.23 private trust namespace, Force Fresh, structural media validation,
+        // and metadata-qualified cache-hit eligibility. A scheduler-level shortcut would bypass
+        // those controls and could incorrectly mark an ineligible cache entry completed.
         progress = progress.MarkSubmissionStarted(now);
         await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
 
