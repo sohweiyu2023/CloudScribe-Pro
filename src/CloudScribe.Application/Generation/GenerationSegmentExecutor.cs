@@ -13,7 +13,8 @@ public sealed record GenerationSegmentExecutionRequest(
     ReadOnlyMemory<byte> CompiledPayload,
     string OutputFormat,
     GenerationCacheTrustContext? CacheTrustContext = null,
-    bool ForceFresh = false);
+    bool ForceFresh = false,
+    CacheReuseMediaMetadata? ExpectedCacheMediaMetadata = null);
 
 public sealed record GenerationSegmentExecutionResult(
     bool CacheHit,
@@ -54,7 +55,7 @@ public sealed class GenerationSegmentExecutor
         if (!request.ForceFresh)
         {
             var cached = await _cache.ReadAsync(key, cancellationToken).ConfigureAwait(false);
-            if (cached is { Length: > 0 } && IsExpectedValidMedia(cached, null, request.OutputFormat))
+            if (cached is { Length: > 0 } && IsEligibleCacheHit(request, cached))
             {
                 return new GenerationSegmentExecutionResult(
                     true,
@@ -131,6 +132,18 @@ public sealed class GenerationSegmentExecutor
         }
 
         await _cache.StoreAsync(key, response.MediaBytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsEligibleCacheHit(GenerationSegmentExecutionRequest request, ReadOnlySpan<byte> cachedMedia)
+    {
+        var expectedMetadata = request.ExpectedCacheMediaMetadata;
+        if (expectedMetadata is null)
+        {
+            // v2.23 CACHE-002: container-only validation is not enough to prove a reusable hit.
+            return false;
+        }
+
+        return CacheHitMediaEligibility.IsEligible(cachedMedia, request.OutputFormat, expectedMetadata);
     }
 
     private static bool IsExpectedValidMedia(ReadOnlySpan<byte> mediaBytes, string? contentType, string outputFormat)
