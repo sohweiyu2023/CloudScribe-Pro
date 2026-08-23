@@ -32,3 +32,31 @@ public interface IGenerationSegmentCache
 
     Task StoreAsync(ContentAddressedSegmentKey key, ReadOnlyMemory<byte> mediaBytes, CancellationToken cancellationToken = default);
 }
+
+[Flags]
+public enum GenerationCacheEntryProtection
+{
+    None = 0,
+    Active = 1,
+    Pinned = 2,
+    Referenced = 4,
+    UnresolvedSubmission = 8,
+}
+
+public sealed record GenerationCacheTrimResult(long BytesBefore, long BytesAfter, int EntriesEvicted, int EntriesProtected);
+
+public sealed record GenerationCacheClearResult(int EntriesRemoved, int EntriesProtected, long BytesRemoved);
+
+public interface IGenerationCacheLifecycle
+{
+    Task SetProtectionAsync(
+        ContentAddressedSegmentKey key,
+        GenerationCacheEntryProtection protection,
+        CancellationToken cancellationToken = default);
+
+    Task<GenerationCacheTrimResult> TrimAsync(
+        long? maximumBytes = null,
+        CancellationToken cancellationToken = default);
+
+    Task<GenerationCacheClearResult> ClearUnprotectedAsync(CancellationToken cancellationToken = default);
+}
