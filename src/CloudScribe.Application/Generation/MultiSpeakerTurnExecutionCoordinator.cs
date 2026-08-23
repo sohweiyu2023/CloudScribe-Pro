@@ -37,11 +37,14 @@ public sealed class MultiSpeakerTurnExecutionCoordinator
         foreach (var turn in planned)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var outcome = await _executor.ExecuteAsync(turn, cancellationToken).ConfigureAwait(false);
+            var outcome = await _executor.ExecuteAsync(turn, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Multi-speaker executor returned no outcome.");
             if (outcome.TurnIndex != turn.TurnIndex)
                 throw new InvalidOperationException("Multi-speaker executor returned an outcome for the wrong turn.");
             if (string.IsNullOrWhiteSpace(outcome.DiagnosticCode))
                 throw new InvalidOperationException("Multi-speaker execution outcomes require an explicit diagnostic code.");
+            if (outcome.Succeeded && outcome.RequiresReconciliation)
+                throw new InvalidOperationException("A multi-speaker turn cannot be both successful and reconciliation-required.");
 
             outcomes.Add(outcome);
             if (outcome.RequiresReconciliation)
