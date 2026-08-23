@@ -132,6 +132,76 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
     }
 
     [Fact]
+    public async Task DurableSchedulerSurvivesRestartWithoutResubmittingCompletedSegments()
+    {
+        var root = CreateScratchDirectory();
+        try
+        {
+            var cacheDirectory = Path.Combine(root, "cache");
+            var progressDirectory = Path.Combine(root, "progress");
+            var jobId = Guid.NewGuid();
+            var provider = new DeterministicFakeGenerationProvider();
+            var policy = new GenerationExecutionPolicy(
+                maximumAttempts: 3,
+                initialBackoff: TimeSpan.FromMilliseconds(10),
+                maximumBackoff: TimeSpan.FromSeconds(1),
+                maximumConcurrentRequests: 3);
+
+            var scheduled = Enumerable.Range(0, 12)
+                .Select(index => new GenerationScheduledSegment(
+                    jobId,
+                    $"segment-{index:D2}",
+                    index,
+                    new GenerationSegmentExecutionRequest(
+                        provider.ProviderStableId,
+                        "synthesize-speech",
+                        "account-test",
+                        "voice/en-SG/A",
+                        "stage5-e2e-v1",
+                        $"job-{jobId:N}-segment-{index}",
+                        Encoding.UTF8.GetBytes($"payload-{index}"),
+                        "wav")))
+                .ToArray();
+
+            var firstCache = new FileGenerationSegmentCache(cacheDirectory);
+            var firstStore = new AtomicJsonGenerationSegmentProgressStore(progressDirectory);
+            var firstScheduler = new GenerationSegmentScheduler(
+                new GenerationSegmentExecutor(provider, firstCache),
+                firstCache,
+                firstStore,
+                policy);
+
+            var firstRun = await firstScheduler.ExecuteReadyAsync(scheduled);
+
+            Assert.Equal(12, firstRun.Count);
+            Assert.All(firstRun, static result => Assert.Equal(GenerationSegmentProgressState.Completed, result.Progress.State));
+            Assert.Equal(12, provider.PhysicalSubmissionCount);
+
+            var restartedCache = new FileGenerationSegmentCache(cacheDirectory);
+            var restartedStore = new AtomicJsonGenerationSegmentProgressStore(progressDirectory);
+            var restartedScheduler = new GenerationSegmentScheduler(
+                new GenerationSegmentExecutor(provider, restartedCache),
+                restartedCache,
+                restartedStore,
+                policy);
+
+            var restartedRun = await restartedScheduler.ExecuteReadyAsync(scheduled);
+            var restoredProgress = await restartedStore.ListForJobAsync(jobId);
+
+            Assert.Equal(12, restartedRun.Count);
+            Assert.All(restartedRun, static result => Assert.Equal(GenerationSegmentProgressState.Completed, result.Progress.State));
+            Assert.All(restartedRun, static result => Assert.Null(result.ExecutionResult));
+            Assert.Equal(12, restoredProgress.Count);
+            Assert.All(restoredProgress, static progress => Assert.Equal(GenerationSegmentProgressState.Completed, progress.State));
+            Assert.Equal(12, provider.PhysicalSubmissionCount);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AmbiguousBillableSubmissionReconcilesWithoutSecondPhysicalSubmission()
     {
         var root = CreateScratchDirectory();
