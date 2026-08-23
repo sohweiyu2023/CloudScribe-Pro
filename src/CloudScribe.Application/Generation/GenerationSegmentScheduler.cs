@@ -15,6 +15,7 @@ public sealed record GenerationScheduledSegmentResult(
 public sealed class GenerationSegmentScheduler
 {
     private readonly GenerationSegmentExecutor _executor;
+    private readonly IGenerationSegmentCache _cache;
     private readonly IGenerationSegmentProgressStore _progressStore;
     private readonly GenerationExecutionPolicy _policy;
     private readonly TimeProvider _timeProvider;
@@ -30,7 +31,7 @@ public sealed class GenerationSegmentScheduler
         GenerationSegmentCacheLifecycleCoordinator? cacheLifecycleCoordinator = null)
     {
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
-        ArgumentNullException.ThrowIfNull(cache);
+        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _progressStore = progressStore ?? throw new ArgumentNullException(nameof(progressStore));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -108,8 +109,7 @@ public sealed class GenerationSegmentScheduler
         // and metadata-qualified cache-hit eligibility. A scheduler-level shortcut would bypass
         // those controls and could incorrectly mark an ineligible cache entry completed.
         var cacheKey = await _executor.CreatePrivateCacheKeyAsync(segment.Request, cancellationToken).ConfigureAwait(false);
-        if (_cacheLifecycleCoordinator is not null)
-            await _cacheLifecycleCoordinator.MarkActiveAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+        await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.Active, cancellationToken).ConfigureAwait(false);
 
         progress = progress.MarkSubmissionStarted(now);
         await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
@@ -126,8 +126,7 @@ public sealed class GenerationSegmentScheduler
                 null,
                 "segment.submission.cancelled-outcome-unknown");
             await _progressStore.SaveAsync(progress, CancellationToken.None).ConfigureAwait(false);
-            if (_cacheLifecycleCoordinator is not null)
-                await _cacheLifecycleCoordinator.MarkUnresolvedSubmissionAsync(cacheKey, CancellationToken.None).ConfigureAwait(false);
+            await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.UnresolvedSubmission, CancellationToken.None).ConfigureAwait(false);
             throw;
         }
         catch (Exception exception)
@@ -137,8 +136,7 @@ public sealed class GenerationSegmentScheduler
                 null,
                 "segment.submission.exception-outcome-unknown:" + exception.GetType().Name);
             await _progressStore.SaveAsync(progress, CancellationToken.None).ConfigureAwait(false);
-            if (_cacheLifecycleCoordinator is not null)
-                await _cacheLifecycleCoordinator.MarkUnresolvedSubmissionAsync(cacheKey, CancellationToken.None).ConfigureAwait(false);
+            await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.UnresolvedSubmission, CancellationToken.None).ConfigureAwait(false);
             return new GenerationScheduledSegmentResult(progress, null);
         }
 
@@ -149,14 +147,12 @@ public sealed class GenerationSegmentScheduler
         if (result.Disposition == SubmissionDisposition.Accepted)
         {
             progress = progress.MarkCompleted(now, result.CacheKey.PrivateLookupHmacSha256, result.ProviderRequestId, result.DiagnosticCode);
-            if (_cacheLifecycleCoordinator is not null)
-                await _cacheLifecycleCoordinator.MarkCompletedAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+            await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.Completed, cancellationToken).ConfigureAwait(false);
         }
         else if (result.RequiresReconciliation)
         {
             progress = progress.MarkSubmissionUnknown(now, result.ProviderRequestId, result.DiagnosticCode);
-            if (_cacheLifecycleCoordinator is not null)
-                await _cacheLifecycleCoordinator.MarkUnresolvedSubmissionAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+            await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.UnresolvedSubmission, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -169,8 +165,7 @@ public sealed class GenerationSegmentScheduler
             progress = decision.MayRetryAutomatically
                 ? progress.MarkRetryWait(now, decision.Delay, result.DiagnosticCode)
                 : progress.MarkFailed(now, result.DiagnosticCode);
-            if (_cacheLifecycleCoordinator is not null)
-                await _cacheLifecycleCoordinator.MarkCompletedAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+            await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.Completed, cancellationToken).ConfigureAwait(false);
         }
 
         await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
@@ -183,8 +178,7 @@ public sealed class GenerationSegmentScheduler
         CancellationToken cancellationToken)
     {
         var cacheKey = await _executor.CreatePrivateCacheKeyAsync(segment.Request, cancellationToken).ConfigureAwait(false);
-        if (_cacheLifecycleCoordinator is not null)
-            await _cacheLifecycleCoordinator.MarkUnresolvedSubmissionAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+        await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.UnresolvedSubmission, cancellationToken).ConfigureAwait(false);
 
         var result = await _executor.ReconcileAsync(segment.Request, cancellationToken).ConfigureAwait(false);
         var now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
@@ -207,11 +201,36 @@ public sealed class GenerationSegmentScheduler
             progress = progress.MarkFailed(now, result.DiagnosticCode);
         }
 
-        if (_cacheLifecycleCoordinator is not null)
-            await _cacheLifecycleCoordinator.MarkCompletedAsync(cacheKey, cancellationToken).ConfigureAwait(false);
-
+        await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.Completed, cancellationToken).ConfigureAwait(false);
         await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
         return new GenerationScheduledSegmentResult(progress, result);
+    }
+
+    private async Task SetProtectionIfMaterializedAsync(
+        ContentAddressedSegmentKey key,
+        GenerationCacheLifecycleState state,
+        CancellationToken cancellationToken)
+    {
+        if (_cacheLifecycleCoordinator is null)
+            return;
+
+        if (!await _cache.ContainsAsync(key, cancellationToken).ConfigureAwait(false))
+            return;
+
+        switch (state)
+        {
+            case GenerationCacheLifecycleState.Active:
+                await _cacheLifecycleCoordinator.MarkActiveAsync(key, cancellationToken).ConfigureAwait(false);
+                break;
+            case GenerationCacheLifecycleState.UnresolvedSubmission:
+                await _cacheLifecycleCoordinator.MarkUnresolvedSubmissionAsync(key, cancellationToken).ConfigureAwait(false);
+                break;
+            case GenerationCacheLifecycleState.Completed:
+                await _cacheLifecycleCoordinator.MarkCompletedAsync(key, cancellationToken).ConfigureAwait(false);
+                break;
+            default:
+                throw new InvalidOperationException($"Scheduler cannot apply unsupported cache lifecycle state {state}.");
+        }
     }
 
     private static ulong DeterministicJitterSeed(GenerationScheduledSegment segment)
