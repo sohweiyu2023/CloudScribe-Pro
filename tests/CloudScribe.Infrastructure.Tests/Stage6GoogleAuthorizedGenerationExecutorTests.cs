@@ -32,28 +32,66 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     {
         var calls = 0;
         var resolver = new CountingCredentialResolver();
-        using var client = new HttpClient(new StubHandler(_ =>
-        {
-            calls++;
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("{\"audioContent\":\"AQID\"}"),
-            };
-        }));
+        using var client = ClientCountingCalls(() => calls++);
         var setup = CreateSetup(client, new byte[] { 1, 2, 3 }, resolver);
-        var drifted = new GenerationProviderRequest(
-            setup.Request.ProviderStableId,
-            setup.Request.OperationStableId,
-            setup.Request.AccountId,
-            setup.Request.IdempotencyKey,
-            new byte[] { 9, 9, 9 },
-            setup.Request.OutputFormat);
+        var drifted = RequestLike(setup.Request, payload: new byte[] { 9, 9, 9 });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => setup.Executor.SubmitAsync(drifted));
 
         Assert.Equal(0, resolver.ResolveCalls);
         Assert.Equal(0, calls);
     }
+
+    [Fact]
+    public async Task SubmitAsync_OperationDriftFailsBeforeCredentialOrHttpUse()
+    {
+        var calls = 0;
+        var resolver = new CountingCredentialResolver();
+        using var client = ClientCountingCalls(() => calls++);
+        var setup = CreateSetup(client, new byte[] { 1, 2, 3 }, resolver);
+        var drifted = RequestLike(setup.Request, operation: "list-voices");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => setup.Executor.SubmitAsync(drifted));
+
+        Assert.Equal(0, resolver.ResolveCalls);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_OutputFormatDriftFailsBeforeCredentialOrHttpUse()
+    {
+        var calls = 0;
+        var resolver = new CountingCredentialResolver();
+        using var client = ClientCountingCalls(() => calls++);
+        var setup = CreateSetup(client, new byte[] { 1, 2, 3 }, resolver);
+        var drifted = RequestLike(setup.Request, outputFormat: "wav");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => setup.Executor.SubmitAsync(drifted));
+
+        Assert.Equal(0, resolver.ResolveCalls);
+        Assert.Equal(0, calls);
+    }
+
+    private static HttpClient ClientCountingCalls(Action onCall) => new(new StubHandler(_ =>
+    {
+        onCall();
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"audioContent\":\"AQID\"}"),
+        };
+    }));
+
+    private static GenerationProviderRequest RequestLike(
+        GenerationProviderRequest source,
+        string? operation = null,
+        ReadOnlyMemory<byte>? payload = null,
+        string? outputFormat = null) => new(
+            source.ProviderStableId,
+            operation ?? source.OperationStableId,
+            source.AccountId,
+            source.IdempotencyKey,
+            payload ?? source.CompiledPayload,
+            outputFormat ?? source.OutputFormat);
 
     private static Setup CreateSetup(
         HttpClient client,
