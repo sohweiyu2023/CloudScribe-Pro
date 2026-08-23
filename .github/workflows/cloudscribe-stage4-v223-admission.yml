@@ -48,6 +48,8 @@ jobs:
     needs: v223-control-admission
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 60
+    outputs:
+      certified_sha: ${{ steps.certified.outputs.certified_sha }}
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
@@ -81,3 +83,39 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Verification-tool tests failed.' }
           if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Certification mutated tracked candidate bytes.' }
           if ((git rev-parse HEAD).Trim() -ne $env:ADMITTED_SHA) { throw 'Candidate SHA changed during certification.' }
+      - name: Publish exact certified candidate identity
+        id: certified
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:ADMITTED_SHA) { throw 'Certified SHA differs from admitted SHA.' }
+          "certified_sha=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+  no-change-promotion-readiness:
+    needs: [v223-control-admission, full-windows-certification]
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+    env:
+      ADMITTED_SHA: ${{ needs.v223-control-admission.outputs.candidate_sha }}
+      CERTIFIED_SHA: ${{ needs.full-windows-certification.outputs.certified_sha }}
+      CLOUDSCRIBE_V223_MASTER_PACKAGE: ${{ inputs.master_package_path }}
+    steps:
+      - name: Require exact admitted and certified identity
+        shell: pwsh
+        run: |
+          if ($env:ADMITTED_SHA -notmatch '^[0-9a-f]{40}$') { throw 'Admitted SHA is invalid.' }
+          if ($env:CERTIFIED_SHA -ne $env:ADMITTED_SHA) { throw 'Promotion readiness requires the exact admitted SHA to be the exact certified SHA.' }
+      - name: Checkout certified SHA only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.full-windows-certification.outputs.certified_sha }}
+          fetch-depth: 0
+      - name: Re-admit unchanged v2.23 controls before promotion handoff
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -ne $env:CERTIFIED_SHA) { throw 'Promotion readiness is not checking the certified SHA.' }
+          ./tools/Test-V223ControlAdmission.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          if ($LASTEXITCODE -ne 0) { throw 'v2.23 controls no longer admit the certified candidate.' }
+          if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Promotion readiness mutated tracked candidate bytes.' }
+          if ((git rev-parse HEAD).Trim() -ne $env:CERTIFIED_SHA) { throw 'Candidate SHA changed during promotion readiness.' }
