@@ -33,23 +33,37 @@ jobs:
             throw 'Checked-out candidate does not match GITHUB_SHA.'
           }
 
-      - name: Admit exact v2.23 control package
+      - name: Run fail-closed Stage 4 v2.23 certification preparation
+        id: certification
         shell: pwsh
         env:
           CLOUDSCRIBE_V223_MASTER_PACKAGE: ${{ inputs.master_package_path }}
+          CLOUDSCRIBE_STAGE4_CANDIDATE_SHA: ${{ github.sha }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CLOUDSCRIBE_V223_MASTER_PACKAGE)) {
             throw 'Authenticated v2.23 master package path is required.'
           }
-          ./tools/Test-V223ControlAdmission.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          if ([string]::IsNullOrWhiteSpace($env:CLOUDSCRIBE_STAGE4_CANDIDATE_SHA)) {
+            throw 'Stage 4 candidate SHA is required.'
+          }
+          $result = ./tools/Invoke-Stage4V223Certification.ps1 `
+            -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE `
+            -CandidateSha $env:CLOUDSCRIBE_STAGE4_CANDIDATE_SHA | ConvertFrom-Json
+          if (-not $result.AdmissionPassed -or -not $result.CandidateUnchanged) {
+            throw 'Stage 4 v2.23 certification preparation did not complete fail-closed.'
+          }
 
       - name: Preserve candidate identity for downstream full certification
         id: candidate
         shell: pwsh
         run: |
-          $head = git rev-parse HEAD
+          $head = (git rev-parse HEAD).Trim()
           if ($head -ne $env:GITHUB_SHA) {
             throw 'Candidate identity changed after v2.23 control admission.'
           }
+          $trackedChanges = @(git status --porcelain=v1 --untracked-files=no)
+          if ($trackedChanges.Count -ne 0) {
+            throw 'Tracked candidate bytes changed before downstream full certification handoff.'
+          }
           "candidate_sha=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "v2.23 Stage 4 control admission candidate: $head"
+          Write-Host "v2.23 Stage 4 admitted candidate: $head"
