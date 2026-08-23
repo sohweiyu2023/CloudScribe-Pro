@@ -21,14 +21,7 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
                 "google-accepted"));
         });
 
-        var request = new GenerationProviderRequest(
-            "google-cloud-tts",
-            "synthesize",
-            "acct",
-            "idem",
-            new byte[] { 1, 2, 3 },
-            "wav");
-
+        var request = Request();
         var outcome = await coordinator.ProcessAsync(
             request,
             admissionCurrent: true,
@@ -40,6 +33,7 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
         Assert.Equal(1, calls);
         Assert.True(outcome.Decision.MaySubmit);
         Assert.NotNull(outcome.Response);
+        Assert.False(outcome.RequiresReconciliation);
     }
 
     [Fact]
@@ -52,16 +46,8 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
             throw new InvalidOperationException("submit must not be called");
         });
 
-        var request = new GenerationProviderRequest(
-            "google-cloud-tts",
-            "synthesize",
-            "acct",
-            "idem",
-            new byte[] { 1 },
-            "wav");
-
         var outcome = await coordinator.ProcessAsync(
-            request,
+            Request(),
             admissionCurrent: true,
             accountCredentialAvailable: true,
             pricingApproved: true,
@@ -72,4 +58,36 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
         Assert.True(outcome.RequiresReconciliation);
         Assert.Null(outcome.Response);
     }
+
+    [Fact]
+    public async Task Ambiguous_submit_response_becomes_reconciliation_required()
+    {
+        var coordinator = new GoogleGenerationQueueCoordinator((request, decision, cancellationToken) =>
+            Task.FromResult(new GenerationProviderResponse(
+                SubmissionDisposition.UnknownRequiresReconciliation,
+                "google-ambiguous-op",
+                ReadOnlyMemory<byte>.Empty,
+                null,
+                null,
+                "google-transport-timeout")));
+
+        var outcome = await coordinator.ProcessAsync(
+            Request(),
+            admissionCurrent: true,
+            accountCredentialAvailable: true,
+            pricingApproved: true,
+            postCompileLimitsSatisfied: true,
+            unresolvedPriorSubmission: false);
+
+        Assert.True(outcome.RequiresReconciliation);
+        Assert.Equal(SubmissionDisposition.UnknownRequiresReconciliation, outcome.Response!.Disposition);
+    }
+
+    private static GenerationProviderRequest Request() => new(
+        "google-cloud-tts",
+        "synthesize",
+        "acct",
+        "idem",
+        new byte[] { 1, 2, 3 },
+        "wav");
 }
