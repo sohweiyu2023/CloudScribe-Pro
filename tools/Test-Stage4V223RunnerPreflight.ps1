@@ -27,6 +27,20 @@ if ($package.Length -le 0) {
     throw 'The authenticated v2.23 master package is empty.'
 }
 
+$controlLockPath = Join-Path $PSScriptRoot '..\.cloudscribe-ci\v223-control-lock.json'
+if (-not (Test-Path -LiteralPath $controlLockPath -PathType Leaf)) {
+    throw 'The repository v2.23 control lock is missing.'
+}
+$controlLock = Get-Content -LiteralPath $controlLockPath -Raw | ConvertFrom-Json
+$expectedPackageSha256 = [string]$controlLock.masterPackageSha256
+if ($expectedPackageSha256 -notmatch '^[0-9a-f]{64}$') {
+    throw 'The repository v2.23 control lock does not contain a valid master package SHA-256.'
+}
+$observedPackageSha256 = (Get-FileHash -LiteralPath $package.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($observedPackageSha256 -ne $expectedPackageSha256.ToLowerInvariant()) {
+    throw "The supplied v2.23 master package SHA-256 does not match the exact repository control lock. Observed: $observedPackageSha256"
+}
+
 $git = Get-Command git -ErrorAction Stop
 $python = Get-Command python -ErrorAction Stop
 if ([string]::IsNullOrWhiteSpace($git.Source) -or [string]::IsNullOrWhiteSpace($python.Source)) {
@@ -43,5 +57,6 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($pythonVersion)) {
     Architecture = 'X64'
     PackagePath = $package.FullName
     PackageLength = $package.Length
+    PackageSha256 = $observedPackageSha256
     PythonVersion = $pythonVersion.Trim()
 } | ConvertTo-Json -Compress
