@@ -48,17 +48,16 @@ public sealed class Stage5DurabilityAndFakeProviderTests
     }
 
     [Fact]
-    public async Task ContentAddressedCacheIsReusableByNewProcessInstance()
+    public async Task PrivateCacheIsReusableByNewProcessInstanceWithSameProtectedKeyNamespace()
     {
         var root = CreateScratchDirectory();
         try
         {
-            var key = ContentAddressedSegmentKey.Create(
-                Encoding.UTF8.GetBytes("compiled segment"),
-                "provider-a",
-                "synthesize",
-                "voice-a",
-                "profile-v1");
+            var hmacKey = Enumerable.Range(0, 32).Select(static value => (byte)value).ToArray();
+            var key = ContentAddressedSegmentKey.FromPrivateLookup(PrivateCacheLookupKey.Derive(
+                hmacKey,
+                CreateTrustContext(),
+                Encoding.UTF8.GetBytes("compiled segment")));
             var expected = Encoding.UTF8.GetBytes("deterministic-media");
 
             var firstProcess = new FileGenerationSegmentCache(root);
@@ -67,6 +66,34 @@ public sealed class Stage5DurabilityAndFakeProviderTests
             var restartedProcess = new FileGenerationSegmentCache(root);
             Assert.True(await restartedProcess.ContainsAsync(key));
             Assert.Equal(expected, await restartedProcess.ReadAsync(key));
+            Assert.DoesNotContain("compiled segment", string.Join('|', Directory.EnumerateFiles(root)), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CorruptedCachedMediaIsQuarantinedAndNeverReused()
+    {
+        var root = CreateScratchDirectory();
+        try
+        {
+            var key = ContentAddressedSegmentKey.FromPrivateLookup(PrivateCacheLookupKey.Derive(
+                Enumerable.Repeat((byte)0x44, 32).ToArray(),
+                CreateTrustContext(),
+                Encoding.UTF8.GetBytes("payload")));
+            var cache = new FileGenerationSegmentCache(root);
+            await cache.StoreAsync(key, Encoding.UTF8.GetBytes("original-media"));
+
+            var mediaPath = Path.Combine(root, key.PrivateLookupHmacSha256 + ".segment");
+            await File.WriteAllBytesAsync(mediaPath, Encoding.UTF8.GetBytes("tampered-media"));
+
+            Assert.Null(await cache.ReadAsync(key));
+            Assert.False(File.Exists(mediaPath));
+            Assert.True(Directory.Exists(Path.Combine(root, "quarantine")));
+            Assert.NotEmpty(Directory.EnumerateFiles(Path.Combine(root, "quarantine")));
         }
         finally
         {
@@ -129,6 +156,12 @@ public sealed class Stage5DurabilityAndFakeProviderTests
         Assert.Equal(GenerationRecoveryKind.Reconcile, recovery.DecideRecovery().Kind);
         Assert.Equal(1, provider.PhysicalSubmissionCount);
     }
+
+    private static GenerationCacheTrustContext CreateTrustContext() => new(
+        "provider-a", "account-a", "project-a", "endpoint-a", "region-a", "synthesize", "model-a",
+        "voice-a", "stock-voice-a", "speech-plan-v1", "en-SG", "controls-a", "wav", "pcm16",
+        "adapter-v1", "compiler-v1", "ast-v1", "normalize-v1", "pricing-v2.23", "capabilities-a",
+        "governance-a", "features-a", "account-capabilities-a");
 
     private static string CreateScratchDirectory()
     {
