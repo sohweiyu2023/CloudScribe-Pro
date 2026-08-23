@@ -1,0 +1,41 @@
+using CloudScribe.Domain.Generation;
+using CloudScribe.Providers.Abstractions;
+
+namespace CloudScribe.Application.Generation;
+
+public sealed class GoogleGenerationBoundQueueCoordinator
+{
+    private readonly GoogleGenerationQueueCoordinator _queueCoordinator;
+
+    public GoogleGenerationBoundQueueCoordinator(GoogleGenerationQueueCoordinator queueCoordinator)
+    {
+        _queueCoordinator = queueCoordinator ?? throw new ArgumentNullException(nameof(queueCoordinator));
+    }
+
+    public Task<GoogleGenerationQueueOutcome> ProcessAsync(
+        GenerationProviderRequest request,
+        GenerationCacheTrustContext admittedTrust,
+        bool admissionCurrent,
+        bool accountCredentialAvailable,
+        bool pricingApproved,
+        bool postCompileLimitsSatisfied,
+        bool unresolvedPriorSubmission,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(admittedTrust);
+
+        GoogleGenerationRequestBindingPolicy.RequireBound(request, admittedTrust);
+        if (!admissionCurrent)
+            throw new InvalidOperationException("Google queue execution requires the same current v2.23 admission used to bind the provider request.");
+
+        return _queueCoordinator.ProcessAsync(
+            request,
+            admissionCurrent,
+            accountCredentialAvailable,
+            pricingApproved,
+            postCompileLimitsSatisfied,
+            unresolvedPriorSubmission,
+            cancellationToken);
+    }
+}
