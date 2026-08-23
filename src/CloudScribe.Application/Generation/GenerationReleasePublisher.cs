@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
@@ -75,5 +76,30 @@ public sealed class GenerationReleasePublisher
             fullPath,
             outputSha256,
             receipts);
+    }
+
+    public async Task<GenerationReleaseReceipt> PublishAndProtectAsync(
+        GenerationCollectionReleaseDecision decision,
+        string approvalId,
+        string outputPath,
+        IEnumerable<GenerationPublishedSegment> publishedSegments,
+        IGenerationCacheLifecycle cacheLifecycle,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(cacheLifecycle);
+        var receipt = Publish(decision, approvalId, outputPath, publishedSegments);
+
+        foreach (var segment in receipt.Segments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var lookup = new PrivateCacheLookupKey(segment.CacheKey).Validate();
+            var key = ContentAddressedSegmentKey.FromPrivateLookup(lookup);
+            await cacheLifecycle.SetProtectionAsync(
+                key,
+                GenerationCacheEntryProtection.Referenced,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return receipt;
     }
 }
