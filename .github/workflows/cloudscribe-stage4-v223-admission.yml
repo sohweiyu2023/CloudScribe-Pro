@@ -27,6 +27,13 @@ jobs:
         run: |
           if ('${{ github.ref_name }}' -ne 'agent/stage4-v223-reconciliation') { throw "Unexpected branch: ${{ github.ref_name }}" }
           if ($env:GITHUB_SHA -ne (git rev-parse HEAD)) { throw 'Checked-out candidate does not match GITHUB_SHA.' }
+      - name: Preflight exact Windows certification runner and package path
+        shell: pwsh
+        env:
+          CLOUDSCRIBE_V223_MASTER_PACKAGE: ${{ inputs.master_package_path }}
+        run: |
+          ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 4 v2.23 runner preflight failed.' }
       - name: Run fail-closed Stage 4 v2.23 certification preparation
         shell: pwsh
         env:
