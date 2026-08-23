@@ -4,6 +4,8 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed class GoogleAuthorizedGenerationExecutor
 {
+    private const string SynthesizeOperation = "synthesize";
+
     private readonly GoogleGenerationProvider _provider;
     private readonly GoogleGenerationAccount _account;
     private readonly GoogleCapabilitySnapshot _capabilities;
@@ -51,10 +53,13 @@ public sealed class GoogleAuthorizedGenerationExecutor
         ArgumentNullException.ThrowIfNull(request);
         if (!string.Equals(request.ProviderStableId, GoogleGenerationProvider.StableProviderId, StringComparison.Ordinal))
             throw new InvalidOperationException("Authorized Google execution received a request for another provider.");
+        if (!string.Equals(request.OperationStableId, SynthesizeOperation, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google synthesis authorization cannot be reused for another provider operation.");
         if (!string.Equals(request.AccountId, _account.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("Authorized Google execution account identity changed after approval.");
 
         var envelope = _authorization.Envelope;
+        EnsureOutputFormatMatchesEncoding(request.OutputFormat, envelope.AudioEncoding);
         envelope.EnsureStillAuthorized(
             _account,
             _capabilities,
@@ -66,5 +71,21 @@ public sealed class GoogleAuthorizedGenerationExecutor
 
         cancellationToken.ThrowIfCancellationRequested();
         return await _provider.SubmitAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void EnsureOutputFormatMatchesEncoding(string outputFormat, string audioEncoding)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputFormat);
+        ArgumentException.ThrowIfNullOrWhiteSpace(audioEncoding);
+        var expected = audioEncoding.Trim().ToUpperInvariant() switch
+        {
+            "MP3" => "mp3",
+            "LINEAR16" => "wav",
+            "FLAC" => "flac",
+            "OGG_OPUS" => "ogg",
+            _ => throw new InvalidOperationException($"Unsupported authorized Google audio encoding: {audioEncoding}"),
+        };
+        if (!string.Equals(outputFormat.Trim(), expected, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Provider-neutral output format changed after Google encoding approval.");
     }
 }
