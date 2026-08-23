@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-
 namespace CloudScribe.Domain.Generation;
 
 public enum SubmissionDisposition
@@ -108,44 +105,33 @@ public sealed class GenerationExecutionPolicy
 
 public sealed record ContentAddressedSegmentKey(string Sha256)
 {
+    public string PrivateLookupHmacSha256 => Sha256;
+
+    public ContentAddressedSegmentKey Validate()
+    {
+        if (Sha256.Length != 64 || Sha256.Any(static character => !Uri.IsHexDigit(character)))
+        {
+            throw new ArgumentException("Segment cache lookup key must be a 64-character private HMAC-SHA-256 hex digest.", nameof(Sha256));
+        }
+
+        return this;
+    }
+
+    public static ContentAddressedSegmentKey FromPrivateLookup(PrivateCacheLookupKey lookup)
+    {
+        ArgumentNullException.ThrowIfNull(lookup);
+        lookup.Validate();
+        return new ContentAddressedSegmentKey(lookup.HmacSha256).Validate();
+    }
+
+    [Obsolete("v2.23 requires an OS-protected private HMAC cache namespace with a complete trust context. Use PrivateCacheLookupKey.Derive and FromPrivateLookup instead.")]
     public static ContentAddressedSegmentKey Create(
         ReadOnlySpan<byte> compiledPayload,
         string providerStableId,
         string operationStableId,
         string voiceStableId,
-        string compilationProfileId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(providerStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(operationStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(voiceStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(compilationProfileId);
-
-        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        AppendUtf8(hasher, "cloudscribe-segment-cache-v1\n");
-        AppendUtf8(hasher, providerStableId);
-        AppendUtf8(hasher, "\n");
-        AppendUtf8(hasher, operationStableId);
-        AppendUtf8(hasher, "\n");
-        AppendUtf8(hasher, voiceStableId);
-        AppendUtf8(hasher, "\n");
-        AppendUtf8(hasher, compilationProfileId);
-        AppendUtf8(hasher, "\n");
-        hasher.AppendData(compiledPayload);
-        return new ContentAddressedSegmentKey(Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant());
-    }
-
-    private static void AppendUtf8(IncrementalHash hasher, string value)
-    {
-        var bytes = Encoding.UTF8.GetBytes(value);
-        try
-        {
-            hasher.AppendData(bytes);
-        }
-        finally
-        {
-            Array.Clear(bytes);
-        }
-    }
+        string compilationProfileId) =>
+        throw new InvalidOperationException("Raw deterministic cache lookup identifiers are prohibited by CloudScribe v2.23 CACHE-001/ARCH-014.");
 }
 
 public sealed class GenerationSubmissionRecord
