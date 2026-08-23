@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
 
@@ -19,7 +21,7 @@ public sealed class Stage5PrivateCacheLifecycleTests
             await cache.StoreAsync(second, new byte[] { 5, 6, 7, 8 });
             await Task.Delay(25);
 
-            Assert.NotNull(await cache.ReadAsync(first)); // first becomes most recently used
+            Assert.NotNull(await cache.ReadAsync(first));
             var result = await cache.TrimAsync(maximumBytes: 4);
 
             Assert.Equal(1, result.EntriesEvicted);
@@ -85,6 +87,58 @@ public sealed class Stage5PrivateCacheLifecycleTests
             Assert.Equal(1, cleared.EntriesRemoved);
             Assert.Equal(4, cleared.BytesRemoved);
             Assert.False(await cache.ContainsAsync(key));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PublishedCachePaths_DoNotExposePayloadOrRawPayloadDigest()
+    {
+        var root = CreateScratchDirectory();
+        try
+        {
+            var payload = Encoding.UTF8.GetBytes("private speech text: customer account 49217");
+            var rawPayloadSha = Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+            var trust = new GenerationCacheTrustContext(
+                "provider/google",
+                "account/test",
+                "project/test",
+                "https://texttospeech.googleapis.com",
+                "global",
+                "synthesize-speech",
+                "model/immutable-test",
+                "voice/en-US/test",
+                "voice-fingerprint/test",
+                "speech-plan/revision-42",
+                "en-US",
+                "controls/default",
+                "wav",
+                "pcm-s16le-16khz-mono",
+                "adapter/v2.23",
+                "compiler/v2.23",
+                "ast/v1",
+                "normalizer/v1",
+                "pricing/v2.23",
+                "capabilities/test",
+                "governance/default",
+                "provider-features/test",
+                "account-capabilities/test");
+            var lookup = PrivateCacheLookupKey.Derive(Enumerable.Repeat((byte)0x5A, 32).ToArray(), trust, payload);
+            var key = ContentAddressedSegmentKey.FromPrivateLookup(lookup);
+            var cache = new FileGenerationSegmentCache(root);
+
+            await cache.StoreAsync(key, new byte[] { 1, 2, 3, 4 });
+
+            var paths = Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories)
+                .Select(path => Path.GetRelativePath(root, path))
+                .ToArray();
+            Assert.NotEmpty(paths);
+            Assert.All(paths, path => Assert.DoesNotContain("private speech text", path, StringComparison.OrdinalIgnoreCase));
+            Assert.All(paths, path => Assert.DoesNotContain(rawPayloadSha, path, StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(paths, path => path.Contains(lookup.HmacSha256, StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
