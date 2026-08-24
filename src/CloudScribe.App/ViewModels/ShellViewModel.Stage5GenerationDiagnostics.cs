@@ -22,6 +22,24 @@ public sealed partial class ShellViewModel
         _generationDiagnosticsPolicyAllowed = currentPolicyAllowsDiagnostics;
         OnPropertyChanged(nameof(CanExportGenerationDiagnostics));
         ExportGenerationDiagnosticsCommand.NotifyCanExecuteChanged();
+        RefreshGenerationDiagnosticsRouteAction();
+    }
+
+    private void RefreshGenerationDiagnosticsRouteAction()
+    {
+        if (!_pages.TryGetValue(AppRoute.Diagnostics, out RoutePageViewModel? page))
+        {
+            return;
+        }
+
+        if (_generationSupportBundleExport is null || !_generationDiagnosticsPolicyAllowed)
+        {
+            return;
+        }
+
+        page.HasPrimaryAction = true;
+        page.PrimaryActionLabel = "Export generation diagnostics";
+        page.PrimaryActionCommand = ExportGenerationDiagnosticsCommand;
     }
 
     [RelayCommand(CanExecute = nameof(CanExportGenerationDiagnostics))]
