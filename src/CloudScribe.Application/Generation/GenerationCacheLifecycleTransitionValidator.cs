@@ -9,6 +9,12 @@ public enum GenerationSubmissionResolutionEvidence
     DurableReceiptReconciled = 2
 }
 
+public enum GenerationReferenceResolutionEvidence
+{
+    None = 0,
+    ReleaseReferenceRemoved = 1
+}
+
 public static class GenerationCacheLifecycleTransitionValidator
 {
     public static GenerationProjectCacheState ValidateTransition(
@@ -16,14 +22,35 @@ public static class GenerationCacheLifecycleTransitionValidator
         GenerationProjectCacheState previous,
         GenerationProjectCacheState next,
         bool cacheEntryMaterialized) =>
-        ValidateTransition(key, previous, next, cacheEntryMaterialized, GenerationSubmissionResolutionEvidence.None);
+        ValidateTransition(
+            key,
+            previous,
+            next,
+            cacheEntryMaterialized,
+            GenerationSubmissionResolutionEvidence.None,
+            GenerationReferenceResolutionEvidence.None);
 
     public static GenerationProjectCacheState ValidateTransition(
         ContentAddressedSegmentKey key,
         GenerationProjectCacheState previous,
         GenerationProjectCacheState next,
         bool cacheEntryMaterialized,
-        GenerationSubmissionResolutionEvidence resolutionEvidence)
+        GenerationSubmissionResolutionEvidence resolutionEvidence) =>
+        ValidateTransition(
+            key,
+            previous,
+            next,
+            cacheEntryMaterialized,
+            resolutionEvidence,
+            GenerationReferenceResolutionEvidence.None);
+
+    public static GenerationProjectCacheState ValidateTransition(
+        ContentAddressedSegmentKey key,
+        GenerationProjectCacheState previous,
+        GenerationProjectCacheState next,
+        bool cacheEntryMaterialized,
+        GenerationSubmissionResolutionEvidence resolutionEvidence,
+        GenerationReferenceResolutionEvidence referenceEvidence)
     {
         key.Validate();
         ArgumentNullException.ThrowIfNull(previous);
@@ -31,6 +58,8 @@ public static class GenerationCacheLifecycleTransitionValidator
 
         if (!Enum.IsDefined(resolutionEvidence))
             throw new ArgumentOutOfRangeException(nameof(resolutionEvidence));
+        if (!Enum.IsDefined(referenceEvidence))
+            throw new ArgumentOutOfRangeException(nameof(referenceEvidence));
 
         if (!cacheEntryMaterialized && (next.Active || next.Pinned || next.Referenced || next.UnresolvedSubmission))
             throw new InvalidOperationException("Cache protection cannot be persisted before the media cache entry is materialized; unresolved generation state must remain in durable job progress instead.");
@@ -47,8 +76,15 @@ public static class GenerationCacheLifecycleTransitionValidator
             throw new InvalidOperationException("Submission resolution evidence is only valid when clearing a previously unresolved submission.");
         }
 
-        if (previous.Referenced && !next.Referenced && next.Pinned)
-            throw new InvalidOperationException("Referenced protection cannot be silently removed by an unrelated pin transition.");
+        if (previous.Referenced && !next.Referenced)
+        {
+            if (referenceEvidence != GenerationReferenceResolutionEvidence.ReleaseReferenceRemoved)
+                throw new InvalidOperationException("Referenced cache protection may be cleared only with explicit evidence that the durable release reference was removed.");
+        }
+        else if (referenceEvidence != GenerationReferenceResolutionEvidence.None)
+        {
+            throw new InvalidOperationException("Reference removal evidence is only valid when clearing previously referenced cache protection.");
+        }
 
         if (previous.Pinned && !next.Pinned && next.Referenced)
             throw new InvalidOperationException("Pinned protection cannot be silently removed by an unrelated reference transition.");
