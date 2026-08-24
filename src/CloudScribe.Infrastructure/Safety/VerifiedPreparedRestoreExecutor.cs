@@ -5,10 +5,14 @@ namespace CloudScribe.Infrastructure.Safety;
 public sealed class VerifiedPreparedRestoreExecutor
 {
     private readonly AtomicVerifiedRestoreExecutor _executor;
+    private readonly TimeProvider _timeProvider;
 
-    public VerifiedPreparedRestoreExecutor(AtomicVerifiedRestoreExecutor executor)
+    public VerifiedPreparedRestoreExecutor(
+        AtomicVerifiedRestoreExecutor executor,
+        TimeProvider? timeProvider = null)
     {
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public Task<RestoreTransactionJournal> ExecuteAsync(
@@ -33,6 +37,8 @@ public sealed class VerifiedPreparedRestoreExecutor
 
         if (journal.State == RestoreTransactionState.RollbackRequired)
             throw new InvalidOperationException("A rollback-required restore transaction must be rolled back before any new execution attempt.");
+        if (journal.State == RestoreTransactionState.RolledBack)
+            throw new InvalidOperationException("A rolled-back restore transaction is terminal; start a new verified restore transaction instead of reusing its journal.");
 
         var plan = RestoreExecutionPlanPolicy.PrepareVerified(
             canonicalStaging,
@@ -44,6 +50,43 @@ public sealed class VerifiedPreparedRestoreExecutor
 
         journal.EnsurePlan(plan);
         return _executor.ExecuteAsync(canonicalStaging, plan, journal, cancellationToken);
+    }
+
+    public async Task<RestoreTransactionJournal> RollbackAsync(
+        string stagingRoot,
+        string restoreRoot,
+        BackupRestoreManifest manifest,
+        IReadOnlyList<RestoreManifestFileBinding> verifiedBindings,
+        RestoreTransactionJournal rollbackJournal,
+        long maximumTotalBytes,
+        int maximumFiles,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(restoreRoot);
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(verifiedBindings);
+        ArgumentNullException.ThrowIfNull(rollbackJournal);
+        if (rollbackJournal.State != RestoreTransactionState.RollbackRequired)
+            throw new InvalidOperationException("Verified restore rollback requires a RollbackRequired journal.");
+
+        var canonicalStaging = Path.GetFullPath(stagingRoot);
+        var canonicalRestore = Path.GetFullPath(restoreRoot);
+        RequireDisjointRoots(canonicalStaging, canonicalRestore);
+
+        var plan = RestoreExecutionPlanPolicy.PrepareVerified(
+            canonicalStaging,
+            canonicalRestore,
+            manifest,
+            verifiedBindings,
+            maximumTotalBytes,
+            maximumFiles);
+        rollbackJournal.EnsurePlan(plan);
+
+        await _executor.RollbackAsync(plan, rollbackJournal, cancellationToken).ConfigureAwait(false);
+        var now = _timeProvider.GetUtcNow().ToUniversalTime();
+        if (now < rollbackJournal.UpdatedAtUtc) now = rollbackJournal.UpdatedAtUtc;
+        return rollbackJournal.CompleteRollback(plan, now);
     }
 
     private static void RequireDisjointRoots(string stagingRoot, string restoreRoot)
