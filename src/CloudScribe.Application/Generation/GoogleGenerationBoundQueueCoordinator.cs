@@ -87,9 +87,36 @@ public sealed class GoogleGenerationBoundQueueCoordinator
         bool accountCredentialAvailable,
         bool pricingApproved,
         bool postCompileLimitsSatisfied,
+        CancellationToken cancellationToken = default) =>
+        ProcessPersistedTransitionAsync(
+            request,
+            admittedTrust,
+            previousState,
+            currentState,
+            GoogleGenerationReconciliationResolutionEvidence.None,
+            admissionCurrent,
+            accountCredentialAvailable,
+            pricingApproved,
+            postCompileLimitsSatisfied,
+            cancellationToken);
+
+    public Task<GoogleGenerationQueueOutcome> ProcessPersistedTransitionAsync(
+        GenerationProviderRequest request,
+        GenerationCacheTrustContext admittedTrust,
+        GoogleGenerationPersistedQueueState previousState,
+        GoogleGenerationPersistedQueueState currentState,
+        GoogleGenerationReconciliationResolutionEvidence resolutionEvidence,
+        bool admissionCurrent,
+        bool accountCredentialAvailable,
+        bool pricingApproved,
+        bool postCompileLimitsSatisfied,
         CancellationToken cancellationToken = default)
     {
-        var validated = GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(previousState, currentState);
+        var validated = GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(
+            previousState,
+            currentState,
+            resolutionEvidence);
+
         return ProcessPersistedAsync(
             request,
             admittedTrust,
