@@ -26,6 +26,26 @@ public sealed partial class ShellViewModel
         _verifyRestoreRecoveryCompletion = verifyCompletedActionAsync ?? throw new ArgumentNullException(nameof(verifyCompletedActionAsync));
         OnPropertyChanged(nameof(CanRecoverInterruptedRestore));
         RecoverInterruptedRestoreCommand.NotifyCanExecuteChanged();
+        RefreshRestoreRecoveryRouteAction();
+    }
+
+    private void RefreshRestoreRecoveryRouteAction()
+    {
+        if (!_pages.TryGetValue(AppRoute.Settings, out RoutePageViewModel? page))
+        {
+            return;
+        }
+
+        if (_restoreRecoveryCoordinator is null ||
+            _captureRestoreRecoveryState is null ||
+            _verifyRestoreRecoveryCompletion is null)
+        {
+            return;
+        }
+
+        page.HasPrimaryAction = true;
+        page.PrimaryActionLabel = "Recover interrupted restore";
+        page.PrimaryActionCommand = RecoverInterruptedRestoreCommand;
     }
 
     [RelayCommand(CanExecute = nameof(CanRecoverInterruptedRestore))]
