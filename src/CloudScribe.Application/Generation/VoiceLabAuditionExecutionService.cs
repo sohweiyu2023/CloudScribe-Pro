@@ -1,28 +1,18 @@
+using CloudScribe.Domain.Generation;
+
 namespace CloudScribe.Application.Generation;
 
 public sealed class VoiceLabAuditionExecutionService
 {
     private readonly VoiceLabAuditionCoordinator _coordinator;
-    private readonly string _providerStableId;
-    private readonly string _accountStableId;
-    private readonly string _projectStableId;
-    private readonly string _voiceStableId;
-    private readonly string _voiceFingerprint;
+    private readonly VoiceLabCatalogSelection _selection;
 
     public VoiceLabAuditionExecutionService(
         VoiceLabAuditionCoordinator coordinator,
-        string providerStableId,
-        string accountStableId,
-        string projectStableId,
-        string voiceStableId,
-        string voiceFingerprint)
+        VoiceLabCatalogSelection selection)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
-        _providerStableId = Require(providerStableId, nameof(providerStableId));
-        _accountStableId = Require(accountStableId, nameof(accountStableId));
-        _projectStableId = Require(projectStableId, nameof(projectStableId));
-        _voiceStableId = Require(voiceStableId, nameof(voiceStableId));
-        _voiceFingerprint = Require(voiceFingerprint, nameof(voiceFingerprint));
+        _selection = (selection ?? throw new ArgumentNullException(nameof(selection))).Validate();
     }
 
     public Task<VoiceLabAuditionOutcome> ExecuteAsync(
@@ -30,19 +20,16 @@ public sealed class VoiceLabAuditionExecutionService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var currentSelection = _selection.Validate();
         return _coordinator.ExecuteBoundAsync(
             request,
-            _providerStableId,
-            _accountStableId,
-            _projectStableId,
-            _voiceStableId,
-            _voiceFingerprint,
+            currentSelection.ProviderStableId,
+            currentSelection.AccountStableId,
+            currentSelection.ProjectStableId,
+            currentSelection.VoiceStableId,
+            currentSelection.VoiceFingerprint,
             cancellationToken);
     }
 
-    private static string Require(string value, string parameterName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(value, parameterName);
-        return value;
-    }
+    public string CapabilityEvidenceId => _selection.CapabilityEvidenceId;
 }
