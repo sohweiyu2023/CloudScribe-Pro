@@ -10,6 +10,7 @@ public enum RestoreTransactionState
     Verifying = 2,
     Committed = 3,
     RollbackRequired = 4,
+    RolledBack = 5,
 }
 
 public sealed record RestoreTransactionJournal(
@@ -84,9 +85,23 @@ public sealed record RestoreTransactionJournal(
     {
         EnsurePlan(plan);
         EnsureForwardTime(nowUtc);
-        if (State is RestoreTransactionState.Committed or RestoreTransactionState.RollbackRequired)
-            throw new InvalidOperationException("Committed or already-failed restore transactions cannot transition to rollback again.");
+        if (State is RestoreTransactionState.Committed or RestoreTransactionState.RollbackRequired or RestoreTransactionState.RolledBack)
+            throw new InvalidOperationException("Committed, already-failed, or rolled-back restore transactions cannot transition to rollback again.");
         return this with { State = RestoreTransactionState.RollbackRequired, UpdatedAtUtc = nowUtc.ToUniversalTime() };
+    }
+
+    public RestoreTransactionJournal CompleteRollback(RestoreExecutionPlan plan, DateTimeOffset nowUtc)
+    {
+        EnsurePlan(plan);
+        EnsureForwardTime(nowUtc);
+        if (State != RestoreTransactionState.RollbackRequired)
+            throw new InvalidOperationException("Restore rollback can complete only from RollbackRequired state.");
+        return this with
+        {
+            State = RestoreTransactionState.RolledBack,
+            CompletedRelativePaths = Array.Empty<string>(),
+            UpdatedAtUtc = nowUtc.ToUniversalTime(),
+        };
     }
 
     public void EnsurePlan(RestoreExecutionPlan plan)
