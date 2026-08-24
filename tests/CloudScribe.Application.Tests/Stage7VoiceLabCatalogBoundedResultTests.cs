@@ -21,6 +21,28 @@ public sealed class Stage7VoiceLabCatalogBoundedResultTests
             privateVoiceAccessAuthorized: false));
     }
 
+    [Fact]
+    public async Task Pre_cancelled_catalog_query_never_reaches_transport()
+    {
+        var transportCalls = 0;
+        var service = new VoiceLabCatalogQueryService((_, _) =>
+        {
+            transportCalls++;
+            return Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>(Array.Empty<VoiceLabCatalogSelection>());
+        });
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.QueryAsync(
+            new VoiceLabCatalogQuery("provider", "account", "project", null, null, false),
+            accountAuthorized: true,
+            projectAuthorized: true,
+            privateVoiceAccessAuthorized: false,
+            cancellation.Token));
+
+        Assert.Equal(0, transportCalls);
+    }
+
     private static VoiceLabCatalogSelection Selection(string voiceId) => new(
         VoiceStableId: voiceId,
         ProviderStableId: "provider",
