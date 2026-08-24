@@ -20,12 +20,14 @@ public sealed class VoiceLabCatalogQueryService
         bool privateVoiceAccessAuthorized,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var admitted = VoiceLabCatalogQueryPolicy.RequireAuthorized(
             query,
             accountAuthorized,
             projectAuthorized,
             privateVoiceAccessAuthorized);
 
+        cancellationToken.ThrowIfCancellationRequested();
         var results = await _queryAsync(admitted, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Voice Lab catalog transport returned no result collection.");
 
