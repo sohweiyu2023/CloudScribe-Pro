@@ -43,20 +43,41 @@ if ($observedPackageSha256 -ne $expectedPackageSha256.ToLowerInvariant()) {
 
 $git = Get-Command git -ErrorAction Stop
 $python = Get-Command python -ErrorAction Stop
-if ([string]::IsNullOrWhiteSpace($git.Source) -or [string]::IsNullOrWhiteSpace($python.Source)) {
+$dotnet = Get-Command dotnet -ErrorAction Stop
+if ([string]::IsNullOrWhiteSpace($git.Source) -or [string]::IsNullOrWhiteSpace($python.Source) -or [string]::IsNullOrWhiteSpace($dotnet.Source)) {
     throw 'Required certification tools are not resolvable on PATH.'
+}
+
+$insideWorkTree = (& git rev-parse --is-inside-work-tree).Trim()
+if ($LASTEXITCODE -ne 0 -or $insideWorkTree -ne 'true') {
+    throw 'Stage 4 certification must execute inside the checked-out Git worktree.'
+}
+$head = (& git rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$') {
+    throw 'Stage 4 certification candidate HEAD is not an exact commit SHA.'
+}
+$dirty = @(& git status --porcelain=v1 --untracked-files=no)
+if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) {
+    throw 'Stage 4 certification preflight requires a clean tracked worktree.'
 }
 
 $pythonVersion = & python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))"
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($pythonVersion)) {
     throw 'Python preflight failed.'
 }
+$dotnetVersion = & dotnet --version
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($dotnetVersion)) {
+    throw 'dotnet preflight failed.'
+}
 
 [pscustomobject]@{
     Windows = $true
     Architecture = 'X64'
+    CandidateSha = $head
+    TrackedWorktreeClean = $true
     PackagePath = $package.FullName
     PackageLength = $package.Length
     PackageSha256 = $observedPackageSha256
     PythonVersion = $pythonVersion.Trim()
+    DotnetVersion = $dotnetVersion.Trim()
 } | ConvertTo-Json -Compress
