@@ -29,6 +29,27 @@ public sealed class VoiceLabAuditionCoordinator
         _submitProvider = submitProvider ?? throw new ArgumentNullException(nameof(submitProvider));
     }
 
+    public Task<VoiceLabAuditionOutcome> ExecuteBoundAsync(
+        VoiceLabAuditionRequest request,
+        string providerStableId,
+        string accountStableId,
+        string projectStableId,
+        string voiceStableId,
+        string voiceFingerprint,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        VoiceLabAuditionRequestBindingPolicy.RequireBoundSelection(
+            request.Selection,
+            providerStableId,
+            accountStableId,
+            projectStableId,
+            voiceStableId,
+            voiceFingerprint);
+
+        return ExecuteAsync(request, cancellationToken);
+    }
+
     public async Task<VoiceLabAuditionOutcome> ExecuteAsync(
         VoiceLabAuditionRequest request,
         CancellationToken cancellationToken = default)
