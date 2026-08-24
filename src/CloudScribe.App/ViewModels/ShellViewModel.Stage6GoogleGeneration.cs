@@ -40,6 +40,24 @@ public sealed partial class ShellViewModel
         _captureGoogleGenerationState = captureCurrentState ?? throw new ArgumentNullException(nameof(captureCurrentState));
         OnPropertyChanged(nameof(CanGenerateWithGoogle));
         GenerateWithGoogleCommand.NotifyCanExecuteChanged();
+        RefreshGoogleGenerationRouteAction();
+    }
+
+    private void RefreshGoogleGenerationRouteAction()
+    {
+        if (!_pages.TryGetValue(AppRoute.Studio, out RoutePageViewModel? page))
+        {
+            return;
+        }
+
+        if (_googleGenerationUiQueue is null || _captureGoogleGenerationState is null)
+        {
+            return;
+        }
+
+        page.HasPrimaryAction = true;
+        page.PrimaryActionLabel = "Generate with Google";
+        page.PrimaryActionCommand = GenerateWithGoogleCommand;
     }
 
     [RelayCommand(CanExecute = nameof(CanGenerateWithGoogle))]
