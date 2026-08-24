@@ -34,6 +34,8 @@ public sealed class VerifiedPreparedRestoreExecutor
         var canonicalStaging = Path.GetFullPath(stagingRoot);
         var canonicalRestore = Path.GetFullPath(restoreRoot);
         RequireDisjointRoots(canonicalStaging, canonicalRestore);
+        RequireNonReparsePathChain(canonicalStaging, "restore staging");
+        RequireNonReparsePathChain(canonicalRestore, "restore destination");
 
         if (journal.State == RestoreTransactionState.RollbackRequired)
             throw new InvalidOperationException("A rollback-required restore transaction must be rolled back before any new execution attempt.");
@@ -73,6 +75,8 @@ public sealed class VerifiedPreparedRestoreExecutor
         var canonicalStaging = Path.GetFullPath(stagingRoot);
         var canonicalRestore = Path.GetFullPath(restoreRoot);
         RequireDisjointRoots(canonicalStaging, canonicalRestore);
+        RequireNonReparsePathChain(canonicalStaging, "restore staging");
+        RequireNonReparsePathChain(canonicalRestore, "restore destination");
 
         var plan = RestoreExecutionPlanPolicy.PrepareVerified(
             canonicalStaging,
@@ -98,5 +102,16 @@ public sealed class VerifiedPreparedRestoreExecutor
             stagingRoot.StartsWith(restorePrefix, StringComparison.OrdinalIgnoreCase) ||
             restoreRoot.StartsWith(stagingPrefix, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Restore staging and destination roots must be disjoint physical namespaces.");
+    }
+
+    private static void RequireNonReparsePathChain(string path, string label)
+    {
+        var current = new DirectoryInfo(path);
+        while (current is not null)
+        {
+            if (current.Exists && (current.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"The {label} path may not traverse a symbolic link or reparse-point directory: {current.FullName}");
+            current = current.Parent;
+        }
     }
 }
