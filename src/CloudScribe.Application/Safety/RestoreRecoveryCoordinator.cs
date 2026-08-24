@@ -14,11 +14,6 @@ public sealed class RestoreRecoveryCoordinator
         _resumeVerifiedApplyAsync = resumeVerifiedApplyAsync ?? throw new ArgumentNullException(nameof(resumeVerifiedApplyAsync));
     }
 
-    public Task<string> RecoverAsync(
-        RestoreRecoveryState state,
-        CancellationToken cancellationToken = default) =>
-        RecoverVerifiedAsync(state, static (_, _) => Task.FromResult(true), cancellationToken);
-
     public async Task<string> RecoverVerifiedAsync(
         RestoreRecoveryState state,
         Func<string, CancellationToken, Task<bool>> verifyCompletedActionAsync,
