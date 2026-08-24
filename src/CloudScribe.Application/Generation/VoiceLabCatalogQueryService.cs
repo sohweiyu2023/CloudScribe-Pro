@@ -1,3 +1,5 @@
+using CloudScribe.Domain.Generation;
+
 namespace CloudScribe.Application.Generation;
 
 public sealed class VoiceLabCatalogQueryService
@@ -28,10 +30,10 @@ public sealed class VoiceLabCatalogQueryService
 
         foreach (var selection in results)
         {
-            ArgumentNullException.ThrowIfNull(selection);
-            if (!string.Equals(selection.ProviderId, admitted.ProviderId, StringComparison.Ordinal) ||
-                !string.Equals(selection.AccountId, admitted.AccountId, StringComparison.Ordinal) ||
-                !string.Equals(selection.ProjectId, admitted.ProjectId, StringComparison.Ordinal))
+            VoiceLabCatalogSelectionPolicy.RequireEligible(selection);
+            if (!string.Equals(selection.ProviderStableId, admitted.ProviderId, StringComparison.Ordinal) ||
+                !string.Equals(selection.AccountStableId, admitted.AccountId, StringComparison.Ordinal) ||
+                !string.Equals(selection.ProjectStableId, admitted.ProjectId, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("Voice Lab catalog transport returned a selection outside the admitted provider/account/project trust boundary.");
             }
