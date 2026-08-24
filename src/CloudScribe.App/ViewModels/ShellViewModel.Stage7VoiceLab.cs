@@ -32,6 +32,24 @@ public sealed partial class ShellViewModel
         _captureVoiceLabCatalogState = captureCurrentState ?? throw new ArgumentNullException(nameof(captureCurrentState));
         OnPropertyChanged(nameof(CanRefreshVoiceLabCatalog));
         RefreshVoiceLabCatalogCommand.NotifyCanExecuteChanged();
+        RefreshVoiceLabRouteAction();
+    }
+
+    private void RefreshVoiceLabRouteAction()
+    {
+        if (!_pages.TryGetValue(AppRoute.Audio, out RoutePageViewModel? page))
+        {
+            return;
+        }
+
+        if (_voiceLabCatalog is null || _captureVoiceLabCatalogState is null)
+        {
+            return;
+        }
+
+        page.HasPrimaryAction = true;
+        page.PrimaryActionLabel = "Refresh Voice Lab";
+        page.PrimaryActionCommand = RefreshVoiceLabCatalogCommand;
     }
 
     [RelayCommand(CanExecute = nameof(CanRefreshVoiceLabCatalog))]
