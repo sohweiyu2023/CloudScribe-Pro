@@ -8,11 +8,13 @@ public sealed partial class ShellViewModel
     private RestoreRecoveryCoordinator? _restoreRecoveryCoordinator;
     private Func<RestoreRecoveryState>? _captureRestoreRecoveryState;
     private Func<string, CancellationToken, Task<bool>>? _verifyRestoreRecoveryCompletion;
+    private int _restoreRecoveryInFlight;
 
     public bool CanRecoverInterruptedRestore =>
         _restoreRecoveryCoordinator is not null &&
         _captureRestoreRecoveryState is not null &&
-        _verifyRestoreRecoveryCompletion is not null;
+        _verifyRestoreRecoveryCompletion is not null &&
+        Volatile.Read(ref _restoreRecoveryInFlight) == 0;
 
     public void ConfigureStage8RestoreRecovery(
         RestoreRecoveryCoordinator coordinator,
@@ -29,24 +31,41 @@ public sealed partial class ShellViewModel
     [RelayCommand(CanExecute = nameof(CanRecoverInterruptedRestore))]
     private async Task RecoverInterruptedRestoreAsync(CancellationToken cancellationToken)
     {
-        var coordinator = _restoreRecoveryCoordinator
-            ?? throw new InvalidOperationException("Restore recovery is not configured.");
-        var capture = _captureRestoreRecoveryState
-            ?? throw new InvalidOperationException("Restore recovery state capture is not configured.");
-        var verify = _verifyRestoreRecoveryCompletion
-            ?? throw new InvalidOperationException("Restore recovery completion verification is not configured.");
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var state = capture() ?? throw new InvalidOperationException("Restore recovery state is unavailable.");
-        StatusMessage = "Restore recovery · verifying journal and filesystem state";
-
-        var outcome = await coordinator.RecoverVerifiedAsync(state, verify, cancellationToken).ConfigureAwait(true);
-        StatusMessage = outcome switch
+        if (Interlocked.CompareExchange(ref _restoreRecoveryInFlight, 1, 0) != 0)
         {
-            "rollback-completed" => "Restore recovery · rollback verified",
-            "verified-apply-resumed" => "Restore recovery · verified apply resumed",
-            "no-op-terminal-rolled-back" => "Restore recovery · already rolled back and verified",
-            _ => throw new InvalidOperationException("Restore recovery returned an unknown verified outcome."),
-        };
+            throw new InvalidOperationException("Restore recovery is already in progress.");
+        }
+
+        OnPropertyChanged(nameof(CanRecoverInterruptedRestore));
+        RecoverInterruptedRestoreCommand.NotifyCanExecuteChanged();
+
+        try
+        {
+            var coordinator = _restoreRecoveryCoordinator
+                ?? throw new InvalidOperationException("Restore recovery is not configured.");
+            var capture = _captureRestoreRecoveryState
+                ?? throw new InvalidOperationException("Restore recovery state capture is not configured.");
+            var verify = _verifyRestoreRecoveryCompletion
+                ?? throw new InvalidOperationException("Restore recovery completion verification is not configured.");
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var state = capture() ?? throw new InvalidOperationException("Restore recovery state is unavailable.");
+            StatusMessage = "Restore recovery · verifying journal and filesystem state";
+
+            var outcome = await coordinator.RecoverVerifiedAsync(state, verify, cancellationToken).ConfigureAwait(true);
+            StatusMessage = outcome switch
+            {
+                "rollback-completed" => "Restore recovery · rollback verified",
+                "verified-apply-resumed" => "Restore recovery · verified apply resumed",
+                "no-op-terminal-rolled-back" => "Restore recovery · already rolled back and verified",
+                _ => throw new InvalidOperationException("Restore recovery returned an unknown verified outcome."),
+            };
+        }
+        finally
+        {
+            Volatile.Write(ref _restoreRecoveryInFlight, 0);
+            OnPropertyChanged(nameof(CanRecoverInterruptedRestore));
+            RecoverInterruptedRestoreCommand.NotifyCanExecuteChanged();
+        }
     }
 }
