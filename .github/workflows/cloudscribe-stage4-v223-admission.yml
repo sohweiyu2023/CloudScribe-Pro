@@ -45,6 +45,13 @@ jobs:
           git merge-base --is-ancestor $head refs/remotes/origin/agent/stage4-v223-reconciliation
           if ($LASTEXITCODE -ne 0) { throw 'Explicit candidate SHA is not reachable from the current authoritative Stage 4 reconciliation branch.' }
           if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Authoritative ancestry verification changed tracked candidate bytes.' }
+      - name: Verify exact repository object integrity
+        shell: pwsh
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ inputs.expected_candidate_sha }}
+        run: |
+          ./tools/Test-Stage4V223RepositoryIntegrity.ps1 -ExpectedCandidateSha $env:EXPECTED_CANDIDATE_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 4 repository object integrity gate failed.' }
       - name: Preflight exact Windows certification runner and package path
         shell: pwsh
         env:
@@ -88,6 +95,11 @@ jobs:
         with:
           ref: ${{ needs.v223-control-admission.outputs.candidate_sha }}
           fetch-depth: 0
+      - name: Reverify admitted repository object integrity
+        shell: pwsh
+        run: |
+          ./tools/Test-Stage4V223RepositoryIntegrity.ps1 -ExpectedCandidateSha $env:ADMITTED_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Admitted candidate repository integrity failed before full certification.' }
       - name: Re-preflight certification runner and authenticated package
         shell: pwsh
         run: |
@@ -143,6 +155,11 @@ jobs:
         with:
           ref: ${{ needs.full-windows-certification.outputs.certified_sha }}
           fetch-depth: 0
+      - name: Reverify certified repository object integrity
+        shell: pwsh
+        run: |
+          ./tools/Test-Stage4V223RepositoryIntegrity.ps1 -ExpectedCandidateSha $env:CERTIFIED_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Certified candidate repository integrity failed before promotion readiness.' }
       - name: Re-preflight promotion runner and authenticated package
         shell: pwsh
         run: |
