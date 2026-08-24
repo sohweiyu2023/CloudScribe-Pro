@@ -26,18 +26,18 @@ try {
     $treeBefore = (git rev-parse "$CandidateSha`^{tree}").Trim()
     if ($LASTEXITCODE -ne 0 -or $treeBefore -notmatch '^[0-9a-f]{40}$') { throw 'Unable to resolve candidate source tree identity.' }
 
-    $trackedChangesBefore = @(git status --porcelain=v1 --untracked-files=no)
+    $worktreeBefore = @(git status --porcelain=v1 --untracked-files=all)
     if ($LASTEXITCODE -ne 0) { throw 'Unable to verify initial candidate worktree state.' }
-    if ($trackedChangesBefore.Count -ne 0) { throw 'Stage 4 certification requires a clean tracked candidate before admission.' }
+    if ($worktreeBefore.Count -ne 0) { throw 'Stage 4 certification requires a completely clean candidate worktree, including no untracked files, before admission.' }
 
     if (-not (Test-Path -LiteralPath $MasterPackagePath -PathType Leaf)) { throw 'Authenticated v2.23 master package is unavailable.' }
 
     & (Join-Path $PSScriptRoot 'Test-V223ControlAdmission.ps1') -MasterPackagePath $MasterPackagePath
     if ($LASTEXITCODE -ne 0) { throw 'v2.23 control admission failed.' }
 
-    $trackedChanges = @(git status --porcelain=v1 --untracked-files=no)
+    $worktreeAfter = @(git status --porcelain=v1 --untracked-files=all)
     if ($LASTEXITCODE -ne 0) { throw 'Unable to verify candidate worktree state.' }
-    if ($trackedChanges.Count -ne 0) { throw 'Tracked candidate bytes changed during Stage 4 certification preparation.' }
+    if ($worktreeAfter.Count -ne 0) { throw 'Candidate worktree changed during Stage 4 certification preparation, including tracked or untracked content.' }
 
     $headAfter = (git rev-parse HEAD).Trim()
     if ($headAfter -ne $CandidateSha) { throw 'Candidate identity changed after v2.23 control admission.' }
@@ -51,6 +51,7 @@ try {
         ControlVersion = 'v2.23'
         AdmissionPassed = $true
         CandidateUnchanged = $true
+        WorktreeCompletelyClean = $true
     } | ConvertTo-Json -Depth 3
 }
 finally {
