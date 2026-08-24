@@ -1,11 +1,16 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$MasterPackagePath
+    [string]$MasterPackagePath,
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedCandidateSha
 )
 
 $ErrorActionPreference = 'Stop'
 
+if ($ExpectedCandidateSha -notmatch '^[0-9a-f]{40}$') {
+    throw 'Expected Stage 4 candidate SHA must be exact lowercase 40-character hex.'
+}
 if (-not $IsWindows) {
     throw 'Stage 4 v2.23 certification requires a Windows runner.'
 }
@@ -56,6 +61,9 @@ $head = (& git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$') {
     throw 'Stage 4 certification candidate HEAD is not an exact commit SHA.'
 }
+if ($head -ne $ExpectedCandidateSha) {
+    throw 'Stage 4 certification runner is not on the explicitly admitted candidate SHA.'
+}
 $dirty = @(& git status --porcelain=v1 --untracked-files=no)
 if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) {
     throw 'Stage 4 certification preflight requires a clean tracked worktree.'
@@ -74,6 +82,8 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($dotnetVersion)) {
     Windows = $true
     Architecture = 'X64'
     CandidateSha = $head
+    ExpectedCandidateSha = $ExpectedCandidateSha
+    CandidateMatchesAdmission = $true
     TrackedWorktreeClean = $true
     PackagePath = $package.FullName
     PackageLength = $package.Length
