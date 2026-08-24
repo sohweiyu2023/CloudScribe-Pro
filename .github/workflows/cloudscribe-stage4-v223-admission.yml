@@ -56,8 +56,9 @@ jobs:
         shell: pwsh
         env:
           CLOUDSCRIBE_V223_MASTER_PACKAGE: ${{ inputs.master_package_path }}
+          EXPECTED_CANDIDATE_SHA: ${{ inputs.expected_candidate_sha }}
         run: |
-          ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE -ExpectedCandidateSha $env:EXPECTED_CANDIDATE_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Stage 4 v2.23 runner preflight failed.' }
       - name: Run fail-closed Stage 4 v2.23 certification preparation
         shell: pwsh
@@ -103,7 +104,7 @@ jobs:
       - name: Re-preflight certification runner and authenticated package
         shell: pwsh
         run: |
-          ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE -ExpectedCandidateSha $env:ADMITTED_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Full certification runner/package preflight failed.' }
       - uses: actions/setup-dotnet@v4
         with:
@@ -168,7 +169,7 @@ jobs:
       - name: Re-preflight promotion runner and authenticated package
         shell: pwsh
         run: |
-          ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE -ExpectedCandidateSha $env:CERTIFIED_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Promotion readiness runner/package preflight failed.' }
       - name: Re-admit unchanged v2.23 controls before promotion handoff
         shell: pwsh
