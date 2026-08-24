@@ -18,20 +18,16 @@ public sealed class GenerationProjectCacheLifecycle
     }
 
     public Task SetPinnedAsync(ContentAddressedSegmentKey key, bool pinned, CancellationToken cancellationToken = default) =>
-        throw new InvalidOperationException("A partial project cache lifecycle update is unsafe. Use SetProjectStateAsync with the complete current lifecycle state.");
+        throw new InvalidOperationException("A partial project cache lifecycle update is unsafe. Use SetValidatedTransitionAsync with the complete previous and next lifecycle state.");
 
     public Task SetReferencedAsync(ContentAddressedSegmentKey key, bool referenced, CancellationToken cancellationToken = default) =>
-        throw new InvalidOperationException("A partial project cache lifecycle update is unsafe. Use SetProjectStateAsync with the complete current lifecycle state.");
+        throw new InvalidOperationException("A partial project cache lifecycle update is unsafe. Use SetValidatedTransitionAsync with the complete previous and next lifecycle state.");
 
-    public async Task SetProjectStateAsync(
+    public Task SetProjectStateAsync(
         ContentAddressedSegmentKey key,
         GenerationProjectCacheState state,
-        CancellationToken cancellationToken = default)
-    {
-        key.Validate();
-        ArgumentNullException.ThrowIfNull(state);
-        await ApplyStateAsync(key, state, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException("An unvalidated project cache lifecycle write is unsafe. Use SetValidatedTransitionAsync with materialization evidence.");
 
     public async Task SetValidatedTransitionAsync(
         ContentAddressedSegmentKey key,
