@@ -4,6 +4,7 @@ public sealed class GenerationSupportBundleExportCoordinator
 {
     private readonly GenerationSupportBundleService _service;
     private readonly Func<GenerationSupportBundle, CancellationToken, Task> _persistMetadataOnlyAsync;
+    private int _exportInFlight;
 
     public GenerationSupportBundleExportCoordinator(
         GenerationSupportBundleService service,
@@ -19,25 +20,32 @@ public sealed class GenerationSupportBundleExportCoordinator
         GenerationSupportBundleMetadata metadata,
         CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var bundle = _service.CreateMetadataOnly(
-            userExplicitlyRequestedDiagnosticBundle,
-            currentPolicyAllowsDiagnostics,
-            metadata);
+        if (Interlocked.CompareExchange(ref _exportInFlight, 1, 0) != 0)
+            throw new InvalidOperationException("A generation support-bundle export is already in progress.");
 
-        if (bundle.PrivacyDecision.IncludeCacheMedia ||
-            bundle.PrivacyDecision.IncludeCompiledPayload ||
-            bundle.PrivacyDecision.IncludeSourceText ||
-            bundle.PrivacyDecision.IncludePrivateCacheLookupKey)
+        try
         {
-            throw new InvalidOperationException("Generation support bundle export attempted to persist sensitive generation material.");
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            var bundle = _service.CreateMetadataOnly(
+                userExplicitlyRequestedDiagnosticBundle,
+                currentPolicyAllowsDiagnostics,
+                metadata);
 
-        // Re-check cancellation immediately before the persistence boundary so a user
-        // cancellation that arrives during metadata construction/privacy validation
-        // cannot still create a diagnostic artifact on disk.
-        cancellationToken.ThrowIfCancellationRequested();
-        await _persistMetadataOnlyAsync(bundle, cancellationToken).ConfigureAwait(false);
-        return bundle;
+            if (bundle.PrivacyDecision.IncludeCacheMedia ||
+                bundle.PrivacyDecision.IncludeCompiledPayload ||
+                bundle.PrivacyDecision.IncludeSourceText ||
+                bundle.PrivacyDecision.IncludePrivateCacheLookupKey)
+            {
+                throw new InvalidOperationException("Generation support bundle export attempted to persist sensitive generation material.");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await _persistMetadataOnlyAsync(bundle, cancellationToken).ConfigureAwait(false);
+            return bundle;
+        }
+        finally
+        {
+            Volatile.Write(ref _exportInFlight, 0);
+        }
     }
 }
