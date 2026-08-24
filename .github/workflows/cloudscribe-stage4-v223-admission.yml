@@ -1,0 +1,27 @@
+name: CloudScribe Stage 4 v2.23 Admission and Full Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      master_package_path:
+        description: Absolute path to the authenticated CloudScribe Pro v2.23 master ZIP on the Windows runner
+        required: true
+        type: string
+      expected_candidate_sha:
+        description: Exact 40-character Stage 4 candidate commit SHA intended for certification
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  default-branch-dispatch-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require Stage 4 reconciliation ref
+        shell: bash
+        run: |
+          echo "This default-branch file exists only so GitHub can expose workflow_dispatch."
+          echo "Use Run workflow and select branch agent/stage4-v223-reconciliation."
+          exit 1
