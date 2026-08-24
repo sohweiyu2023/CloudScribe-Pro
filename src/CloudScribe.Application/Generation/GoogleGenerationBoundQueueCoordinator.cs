@@ -44,4 +44,37 @@ public sealed class GoogleGenerationBoundQueueCoordinator
             unresolvedPriorSubmission,
             cancellationToken);
     }
+
+    public Task<GoogleGenerationQueueOutcome> ProcessPersistedAsync(
+        GenerationProviderRequest request,
+        GenerationCacheTrustContext admittedTrust,
+        GoogleGenerationPersistedQueueState persistedState,
+        bool admissionCurrent,
+        bool accountCredentialAvailable,
+        bool pricingApproved,
+        bool postCompileLimitsSatisfied,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(admittedTrust);
+        ArgumentNullException.ThrowIfNull(persistedState);
+
+        GoogleGenerationRequestBindingPolicy.RequireBound(request, admittedTrust);
+        GoogleGenerationPersistedQueueStatePolicy.RequireCompatible(
+            persistedState,
+            request.AccountId,
+            request.OperationStableId,
+            request.IdempotencyKey);
+
+        return ProcessAsync(
+            request,
+            admittedTrust,
+            admissionCurrent,
+            accountCredentialAvailable,
+            pricingApproved,
+            postCompileLimitsSatisfied,
+            persistedState.UnresolvedSubmission,
+            persistedState.IdempotencyKey,
+            cancellationToken);
+    }
 }
