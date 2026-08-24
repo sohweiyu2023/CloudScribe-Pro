@@ -64,9 +64,13 @@ if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$') {
 if ($head -ne $ExpectedCandidateSha) {
     throw 'Stage 4 certification runner is not on the explicitly admitted candidate SHA.'
 }
-$dirty = @(& git status --porcelain=v1 --untracked-files=no)
+
+# Self-hosted runners can retain untracked files from prior jobs. Those files can
+# influence restore/build/test discovery, so certification requires a completely
+# clean workspace, not merely clean tracked bytes.
+$dirty = @(& git status --porcelain=v1)
 if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) {
-    throw 'Stage 4 certification preflight requires a clean tracked worktree.'
+    throw 'Stage 4 certification preflight requires a completely clean worktree, including no untracked files.'
 }
 
 $pythonVersion = & python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))"
@@ -84,7 +88,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($dotnetVersion)) {
     CandidateSha = $head
     ExpectedCandidateSha = $ExpectedCandidateSha
     CandidateMatchesAdmission = $true
-    TrackedWorktreeClean = $true
+    WorktreeCompletelyClean = $true
     PackagePath = $package.FullName
     PackageLength = $package.Length
     PackageSha256 = $observedPackageSha256
