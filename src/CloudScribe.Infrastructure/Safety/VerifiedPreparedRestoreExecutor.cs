@@ -27,15 +27,33 @@ public sealed class VerifiedPreparedRestoreExecutor
         ArgumentNullException.ThrowIfNull(verifiedBindings);
         ArgumentNullException.ThrowIfNull(journal);
 
+        var canonicalStaging = Path.GetFullPath(stagingRoot);
+        var canonicalRestore = Path.GetFullPath(restoreRoot);
+        RequireDisjointRoots(canonicalStaging, canonicalRestore);
+
+        if (journal.State == RestoreTransactionState.RollbackRequired)
+            throw new InvalidOperationException("A rollback-required restore transaction must be rolled back before any new execution attempt.");
+
         var plan = RestoreExecutionPlanPolicy.PrepareVerified(
-            stagingRoot,
-            restoreRoot,
+            canonicalStaging,
+            canonicalRestore,
             manifest,
             verifiedBindings,
             maximumTotalBytes,
             maximumFiles);
 
         journal.EnsurePlan(plan);
-        return _executor.ExecuteAsync(stagingRoot, plan, journal, cancellationToken);
+        return _executor.ExecuteAsync(canonicalStaging, plan, journal, cancellationToken);
+    }
+
+    private static void RequireDisjointRoots(string stagingRoot, string restoreRoot)
+    {
+        var stagingPrefix = stagingRoot.EndsWith(Path.DirectorySeparatorChar) ? stagingRoot : stagingRoot + Path.DirectorySeparatorChar;
+        var restorePrefix = restoreRoot.EndsWith(Path.DirectorySeparatorChar) ? restoreRoot : restoreRoot + Path.DirectorySeparatorChar;
+
+        if (string.Equals(stagingRoot, restoreRoot, StringComparison.OrdinalIgnoreCase) ||
+            stagingRoot.StartsWith(restorePrefix, StringComparison.OrdinalIgnoreCase) ||
+            restoreRoot.StartsWith(stagingPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Restore staging and destination roots must be disjoint physical namespaces.");
     }
 }
