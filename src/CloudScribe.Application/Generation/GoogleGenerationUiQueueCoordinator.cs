@@ -31,6 +31,7 @@ public sealed class GoogleGenerationUiQueueCoordinator
         bool postCompileLimitsSatisfied,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var currentSelection = GoogleGenerationUiAdmission.RequireCurrent(
             uiSelection,
             accountAuthorized,
@@ -56,6 +57,7 @@ public sealed class GoogleGenerationUiQueueCoordinator
         if (!string.Equals(currentSelection.OutputFormat, request.OutputFormat, StringComparison.Ordinal))
             throw new InvalidOperationException("Google UI output format differs from the bound provider request.");
 
+        cancellationToken.ThrowIfCancellationRequested();
         return _boundQueue.ProcessPersistedTransitionAsync(
             request,
             admittedTrust,
