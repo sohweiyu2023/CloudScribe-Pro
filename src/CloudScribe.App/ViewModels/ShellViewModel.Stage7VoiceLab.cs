@@ -15,11 +15,14 @@ public sealed partial class ShellViewModel
 {
     private VoiceLabCatalogQueryService? _voiceLabCatalog;
     private Func<VoiceLabCatalogUiState>? _captureVoiceLabCatalogState;
+    private int _voiceLabCatalogRefreshInFlight;
 
     public ObservableCollection<VoiceLabCatalogSelection> VoiceLabCatalogResults { get; } = [];
 
     public bool CanRefreshVoiceLabCatalog =>
-        _voiceLabCatalog is not null && _captureVoiceLabCatalogState is not null;
+        _voiceLabCatalog is not null &&
+        _captureVoiceLabCatalogState is not null &&
+        Volatile.Read(ref _voiceLabCatalogRefreshInFlight) == 0;
 
     public void ConfigureStage7VoiceLabCatalog(
         VoiceLabCatalogQueryService catalogService,
@@ -34,28 +37,45 @@ public sealed partial class ShellViewModel
     [RelayCommand(CanExecute = nameof(CanRefreshVoiceLabCatalog))]
     private async Task RefreshVoiceLabCatalogAsync(CancellationToken cancellationToken)
     {
-        var catalog = _voiceLabCatalog
-            ?? throw new InvalidOperationException("Voice Lab catalog is not configured.");
-        var capture = _captureVoiceLabCatalogState
-            ?? throw new InvalidOperationException("Voice Lab catalog UI state capture is not configured.");
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var state = capture() ?? throw new InvalidOperationException("Voice Lab catalog UI state is unavailable.");
-        var results = await catalog.QueryAsync(
-            state.Query,
-            state.AccountAuthorized,
-            state.ProjectAuthorized,
-            state.PrivateVoiceAccessAuthorized,
-            cancellationToken).ConfigureAwait(true);
-
-        cancellationToken.ThrowIfCancellationRequested();
-        VoiceLabCatalogResults.Clear();
-        foreach (var selection in results)
+        if (Interlocked.CompareExchange(ref _voiceLabCatalogRefreshInFlight, 1, 0) != 0)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            VoiceLabCatalogResults.Add(selection);
+            throw new InvalidOperationException("A Voice Lab catalog refresh is already in progress.");
         }
 
-        StatusMessage = $"Voice Lab · {VoiceLabCatalogResults.Count} trusted voices";
+        OnPropertyChanged(nameof(CanRefreshVoiceLabCatalog));
+        RefreshVoiceLabCatalogCommand.NotifyCanExecuteChanged();
+
+        try
+        {
+            var catalog = _voiceLabCatalog
+                ?? throw new InvalidOperationException("Voice Lab catalog is not configured.");
+            var capture = _captureVoiceLabCatalogState
+                ?? throw new InvalidOperationException("Voice Lab catalog UI state capture is not configured.");
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var state = capture() ?? throw new InvalidOperationException("Voice Lab catalog UI state is unavailable.");
+            var results = await catalog.QueryAsync(
+                state.Query,
+                state.AccountAuthorized,
+                state.ProjectAuthorized,
+                state.PrivateVoiceAccessAuthorized,
+                cancellationToken).ConfigureAwait(true);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            VoiceLabCatalogResults.Clear();
+            foreach (var selection in results)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                VoiceLabCatalogResults.Add(selection);
+            }
+
+            StatusMessage = $"Voice Lab · {VoiceLabCatalogResults.Count} trusted voices";
+        }
+        finally
+        {
+            Volatile.Write(ref _voiceLabCatalogRefreshInFlight, 0);
+            OnPropertyChanged(nameof(CanRefreshVoiceLabCatalog));
+            RefreshVoiceLabCatalogCommand.NotifyCanExecuteChanged();
+        }
     }
 }
