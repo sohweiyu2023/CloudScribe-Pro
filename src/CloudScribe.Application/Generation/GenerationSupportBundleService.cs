@@ -12,18 +12,22 @@ public sealed record GenerationSupportBundle(
 
 public sealed class GenerationSupportBundleService
 {
+    private const int MaxApplicationVersionLength = 64;
+    private const int MaxPlatformLength = 64;
+    private const int MaxDiagnosticCodeLength = 80;
+
     public GenerationSupportBundle CreateMetadataOnly(
         bool userExplicitlyRequestedDiagnosticBundle,
         bool currentPolicyAllowsDiagnostics,
         GenerationSupportBundleMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(metadata);
-        if (string.IsNullOrWhiteSpace(metadata.ApplicationVersion) ||
-            string.IsNullOrWhiteSpace(metadata.Platform) ||
-            string.IsNullOrWhiteSpace(metadata.DiagnosticCode))
-        {
-            throw new InvalidOperationException("Generation support-bundle metadata must be complete.");
-        }
+        RequireSafeMetadataToken(metadata.ApplicationVersion, nameof(metadata.ApplicationVersion), MaxApplicationVersionLength, allowDot: true);
+        RequireSafeMetadataToken(metadata.Platform, nameof(metadata.Platform), MaxPlatformLength, allowDot: true);
+        RequireSafeMetadataToken(metadata.DiagnosticCode, nameof(metadata.DiagnosticCode), MaxDiagnosticCodeLength, allowDot: false);
+
+        if (metadata.CreatedAtUtc.Offset != TimeSpan.Zero)
+            throw new InvalidOperationException("Generation support-bundle timestamp must be normalized to UTC.");
 
         var decision = GenerationSupportBundlePrivacyPolicy.Evaluate(
             userExplicitlyRequestedDiagnosticBundle,
@@ -34,5 +38,18 @@ public sealed class GenerationSupportBundleService
             throw new InvalidOperationException($"Generation support bundle is not authorized: {decision.Reason}");
 
         return new GenerationSupportBundle(metadata, decision);
+    }
+
+    private static void RequireSafeMetadataToken(string value, string name, int maxLength, bool allowDot)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > maxLength || value != value.Trim())
+            throw new InvalidOperationException($"Generation support-bundle {name} is not a canonical bounded metadata token.");
+
+        foreach (var c in value)
+        {
+            var allowed = char.IsAsciiLetterOrDigit(c) || c is '-' or '_' || (allowDot && c == '.');
+            if (!allowed)
+                throw new InvalidOperationException($"Generation support-bundle {name} contains unsafe free-form content.");
+        }
     }
 }
