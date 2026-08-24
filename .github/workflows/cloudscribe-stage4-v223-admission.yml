@@ -61,6 +61,14 @@ jobs:
         run: |
           ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE -ExpectedCandidateSha $env:EXPECTED_CANDIDATE_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Stage 4 v2.23 runner preflight failed.' }
+      - name: Admit exact certification environment
+        shell: pwsh
+        env:
+          CLOUDSCRIBE_V223_MASTER_PACKAGE: ${{ inputs.master_package_path }}
+          EXPECTED_CANDIDATE_SHA: ${{ inputs.expected_candidate_sha }}
+        run: |
+          ./scripts/Test-Stage4V223CertificationEnvironment.ps1 -ExpectedCandidateSha $env:EXPECTED_CANDIDATE_SHA -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 4 v2.23 certification environment gate failed.' }
       - name: Run fail-closed Stage 4 v2.23 certification preparation
         shell: pwsh
         env:
@@ -108,6 +116,11 @@ jobs:
         run: |
           ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE -ExpectedCandidateSha $env:ADMITTED_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Full certification runner/package preflight failed.' }
+      - name: Re-admit exact certification environment
+        shell: pwsh
+        run: |
+          ./scripts/Test-Stage4V223CertificationEnvironment.ps1 -ExpectedCandidateSha $env:ADMITTED_SHA -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          if ($LASTEXITCODE -ne 0) { throw 'Full certification environment gate failed.' }
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.400'
@@ -174,6 +187,11 @@ jobs:
         run: |
           ./tools/Test-Stage4V223RunnerPreflight.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE -ExpectedCandidateSha $env:CERTIFIED_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Promotion readiness runner/package preflight failed.' }
+      - name: Re-admit promotion certification environment
+        shell: pwsh
+        run: |
+          ./scripts/Test-Stage4V223CertificationEnvironment.ps1 -ExpectedCandidateSha $env:CERTIFIED_SHA -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
+          if ($LASTEXITCODE -ne 0) { throw 'Promotion readiness certification environment gate failed.' }
       - name: Re-admit unchanged v2.23 controls before promotion handoff
         shell: pwsh
         run: |
