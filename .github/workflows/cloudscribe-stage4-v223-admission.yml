@@ -31,6 +31,7 @@ jobs:
         with:
           ref: ${{ inputs.expected_candidate_sha }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Require exact Stage 4 candidate identity
         shell: pwsh
         env:
@@ -39,12 +40,12 @@ jobs:
           if ($env:EXPECTED_CANDIDATE_SHA -notmatch '^[0-9a-f]{40}$') { throw 'Expected candidate SHA must be exact lowercase 40-character hex.' }
           $head = (git rev-parse HEAD).Trim()
           if ($head -ne $env:EXPECTED_CANDIDATE_SHA) { throw 'Checked-out candidate does not match the explicitly dispatched SHA.' }
-          if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Exact candidate checkout is not clean before authoritative ancestry verification.' }
+          if (@(git status --porcelain=v1).Count -ne 0) { throw 'Exact candidate checkout is not completely clean before authoritative ancestry verification.' }
           git fetch --no-tags origin refs/heads/agent/stage4-v223-reconciliation:refs/remotes/origin/agent/stage4-v223-reconciliation
           if ($LASTEXITCODE -ne 0) { throw 'Unable to refresh the authoritative Stage 4 reconciliation branch ref.' }
           git merge-base --is-ancestor $head refs/remotes/origin/agent/stage4-v223-reconciliation
           if ($LASTEXITCODE -ne 0) { throw 'Explicit candidate SHA is not reachable from the current authoritative Stage 4 reconciliation branch.' }
-          if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Authoritative ancestry verification changed tracked candidate bytes.' }
+          if (@(git status --porcelain=v1).Count -ne 0) { throw 'Authoritative ancestry verification changed or introduced candidate files.' }
       - name: Verify exact repository object integrity
         shell: pwsh
         env:
@@ -76,7 +77,7 @@ jobs:
         run: |
           $head = (git rev-parse HEAD).Trim()
           if ($head -ne $env:EXPECTED_CANDIDATE_SHA) { throw 'Candidate identity changed after admission.' }
-          if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Tracked candidate bytes changed after admission.' }
+          if (@(git status --porcelain=v1).Count -ne 0) { throw 'Candidate worktree changed or gained untracked files after admission.' }
           "candidate_sha=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
   full-windows-certification:
@@ -96,6 +97,7 @@ jobs:
         with:
           ref: ${{ needs.v223-control-admission.outputs.candidate_sha }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Reverify admitted repository object integrity
         shell: pwsh
         run: |
@@ -127,7 +129,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Full test suite failed.' }
           python -m pytest tests/test_verification_tools.py -q
           if ($LASTEXITCODE -ne 0) { throw 'Verification-tool tests failed.' }
-          if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Certification mutated tracked candidate bytes.' }
+          if (@(git status --porcelain=v1).Count -ne 0) { throw 'Certification changed or introduced candidate files.' }
           if ((git rev-parse HEAD).Trim() -ne $env:ADMITTED_SHA) { throw 'Candidate SHA changed during certification.' }
       - name: Reverify repository integrity after full certification
         shell: pwsh
@@ -161,6 +163,7 @@ jobs:
         with:
           ref: ${{ needs.full-windows-certification.outputs.certified_sha }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Reverify certified repository object integrity
         shell: pwsh
         run: |
@@ -178,7 +181,7 @@ jobs:
           if ((git rev-parse HEAD).Trim() -ne $env:CERTIFIED_SHA) { throw 'Promotion readiness is not checking the certified SHA.' }
           ./tools/Test-V223ControlAdmission.ps1 -MasterPackagePath $env:CLOUDSCRIBE_V223_MASTER_PACKAGE
           if ($LASTEXITCODE -ne 0) { throw 'v2.23 controls no longer admit the certified candidate.' }
-          if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Promotion readiness mutated tracked candidate bytes.' }
+          if (@(git status --porcelain=v1).Count -ne 0) { throw 'Promotion readiness changed or introduced candidate files.' }
           if ((git rev-parse HEAD).Trim() -ne $env:CERTIFIED_SHA) { throw 'Candidate SHA changed during promotion readiness.' }
       - name: Final repository integrity recheck before promotion handoff
         shell: pwsh
