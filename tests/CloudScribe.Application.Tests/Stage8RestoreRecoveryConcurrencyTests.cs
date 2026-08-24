@@ -86,4 +86,21 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
         Assert.Equal(0, resumeCalls);
         Assert.Equal(1, verificationCalls);
     }
+
+    [Fact]
+    public async Task Cancellation_during_terminal_verification_cannot_return_success()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var coordinator = new RestoreRecoveryCoordinator(_ => Task.CompletedTask, _ => Task.CompletedTask);
+        var terminalState = new RestoreRecoveryState(true, true, true, true, false, true);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.RecoverVerifiedAsync(
+            terminalState,
+            (_, _) =>
+            {
+                cancellation.Cancel();
+                return Task.FromResult(true);
+            },
+            cancellation.Token));
+    }
 }
