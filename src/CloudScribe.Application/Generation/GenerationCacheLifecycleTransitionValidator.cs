@@ -15,6 +15,13 @@ public static class GenerationCacheLifecycleTransitionValidator
         ContentAddressedSegmentKey key,
         GenerationProjectCacheState previous,
         GenerationProjectCacheState next,
+        bool cacheEntryMaterialized) =>
+        ValidateTransition(key, previous, next, cacheEntryMaterialized, GenerationSubmissionResolutionEvidence.None);
+
+    public static GenerationProjectCacheState ValidateTransition(
+        ContentAddressedSegmentKey key,
+        GenerationProjectCacheState previous,
+        GenerationProjectCacheState next,
         bool cacheEntryMaterialized,
         GenerationSubmissionResolutionEvidence resolutionEvidence)
     {
