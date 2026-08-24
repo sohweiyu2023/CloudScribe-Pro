@@ -53,4 +53,37 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
             rollbackState,
             static (_, _) => Task.FromResult(false)));
     }
+
+    [Fact]
+    public async Task Already_rolled_back_no_op_still_requires_terminal_filesystem_verification()
+    {
+        var rollbackCalls = 0;
+        var resumeCalls = 0;
+        var verificationCalls = 0;
+        var coordinator = new RestoreRecoveryCoordinator(
+            _ =>
+            {
+                rollbackCalls++;
+                return Task.CompletedTask;
+            },
+            _ =>
+            {
+                resumeCalls++;
+                return Task.CompletedTask;
+            });
+        var terminalState = new RestoreRecoveryState(true, true, true, true, false, true);
+
+        var outcome = await coordinator.RecoverVerifiedAsync(
+            terminalState,
+            (candidate, _) =>
+            {
+                verificationCalls++;
+                return Task.FromResult(candidate == "no-op-terminal-rolled-back");
+            });
+
+        Assert.Equal("no-op-terminal-rolled-back", outcome);
+        Assert.Equal(0, rollbackCalls);
+        Assert.Equal(0, resumeCalls);
+        Assert.Equal(1, verificationCalls);
+    }
 }
