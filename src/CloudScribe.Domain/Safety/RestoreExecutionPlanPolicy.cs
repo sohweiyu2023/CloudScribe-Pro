@@ -1,31 +1,41 @@
 namespace CloudScribe.Domain.Safety;
 
-public sealed record RestoreExecutionPlan(
-    string StagingRoot,
-    IReadOnlyList<RestoreManifestFileBinding> Bindings)
-{
-    public RestoreExecutionPlan Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(StagingRoot);
-        ArgumentNullException.ThrowIfNull(Bindings);
-        if (Bindings.Count == 0)
-            throw new InvalidOperationException("Restore execution plan must contain at least one verified file binding.");
-        foreach (var binding in Bindings)
-            binding.Validate();
-        return this;
-    }
-}
-
 public static class RestoreExecutionPlanPolicy
 {
     public static RestoreExecutionPlan PrepareVerified(
         string stagingRoot,
-        IReadOnlyList<RestoreManifestFileBinding> bindings)
+        string restoreRoot,
+        BackupRestoreManifest manifest,
+        IReadOnlyList<RestoreManifestFileBinding> bindings,
+        long maximumTotalBytes,
+        int maximumFiles)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(restoreRoot);
+        ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(bindings);
-        var plan = new RestoreExecutionPlan(Path.GetFullPath(stagingRoot), bindings).Validate();
-        RestoreManifestContentBinding.Verify(plan.StagingRoot, plan.Bindings);
+        if (bindings.Count == 0)
+            throw new InvalidOperationException("Restore execution requires at least one verified staged file binding.");
+
+        var canonicalStagingRoot = Path.GetFullPath(stagingRoot);
+        RestoreManifestContentBinding.Verify(canonicalStagingRoot, bindings);
+
+        var plan = RestoreExecutionPlan.Create(restoreRoot, manifest, maximumTotalBytes, maximumFiles);
+        if (plan.Steps.Count != bindings.Count)
+            throw new InvalidOperationException("Restore plan file count differs from the verified staged-content binding set.");
+
+        var bindingByPath = bindings.ToDictionary(
+            static x => x.RelativePath,
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var step in plan.Steps)
+        {
+            if (!bindingByPath.TryGetValue(step.RelativePath, out var binding))
+                throw new InvalidOperationException("Restore plan contains a file that was not verified in staged content.");
+            if (binding.Length != step.Length || !string.Equals(binding.Sha256, step.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Restore plan metadata differs from the verified staged-content binding.");
+        }
+
         return plan;
     }
 }
