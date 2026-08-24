@@ -1,15 +1,31 @@
 namespace CloudScribe.Application.Generation;
 
+public enum GoogleGenerationReconciliationResolutionEvidence
+{
+    None = 0,
+    ProviderConfirmedTerminal = 1,
+    DurableProviderReceiptReconciled = 2
+}
+
 public static class GoogleGenerationPersistedQueueTransitionPolicy
 {
     public static GoogleGenerationPersistedQueueState ValidateTransition(
         GoogleGenerationPersistedQueueState previous,
-        GoogleGenerationPersistedQueueState next)
+        GoogleGenerationPersistedQueueState next) =>
+        ValidateTransition(previous, next, GoogleGenerationReconciliationResolutionEvidence.None);
+
+    public static GoogleGenerationPersistedQueueState ValidateTransition(
+        GoogleGenerationPersistedQueueState previous,
+        GoogleGenerationPersistedQueueState next,
+        GoogleGenerationReconciliationResolutionEvidence resolutionEvidence)
     {
         ArgumentNullException.ThrowIfNull(previous);
         ArgumentNullException.ThrowIfNull(next);
         previous.Validate();
         next.Validate();
+
+        if (!Enum.IsDefined(resolutionEvidence))
+            throw new ArgumentOutOfRangeException(nameof(resolutionEvidence));
 
         if (!string.Equals(previous.AccountId, next.AccountId, StringComparison.Ordinal) ||
             !string.Equals(previous.OperationStableId, next.OperationStableId, StringComparison.Ordinal) ||
@@ -28,12 +44,26 @@ public static class GoogleGenerationPersistedQueueTransitionPolicy
             if (previousProviderRequestId is null)
                 throw new InvalidOperationException("Unresolved persisted Google state is missing provider reconciliation identity.");
 
-            if (!next.UnresolvedSubmission && nextProviderRequestId is null)
-                throw new InvalidOperationException("Resolving an ambiguous Google submission cannot discard the provider request identity.");
+            if (!next.UnresolvedSubmission)
+            {
+                if (nextProviderRequestId is null)
+                    throw new InvalidOperationException("Resolving an ambiguous Google submission cannot discard the provider request identity.");
+                if (resolutionEvidence == GoogleGenerationReconciliationResolutionEvidence.None)
+                    throw new InvalidOperationException("Resolving an ambiguous Google submission requires explicit provider-terminal or durable-receipt reconciliation evidence.");
+            }
+            else if (resolutionEvidence != GoogleGenerationReconciliationResolutionEvidence.None)
+            {
+                throw new InvalidOperationException("Google reconciliation resolution evidence is only valid when clearing an unresolved submission.");
+            }
         }
+        else
+        {
+            if (resolutionEvidence != GoogleGenerationReconciliationResolutionEvidence.None)
+                throw new InvalidOperationException("Google reconciliation resolution evidence is only valid when clearing an unresolved submission.");
 
-        if (!previous.UnresolvedSubmission && next.UnresolvedSubmission && nextProviderRequestId is null)
-            throw new InvalidOperationException("Entering unresolved submission state requires the persisted provider request identity.");
+            if (next.UnresolvedSubmission && nextProviderRequestId is null)
+                throw new InvalidOperationException("Entering unresolved submission state requires the persisted provider request identity.");
+        }
 
         return next;
     }
