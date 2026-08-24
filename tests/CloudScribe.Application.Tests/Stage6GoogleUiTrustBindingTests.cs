@@ -25,13 +25,27 @@ public sealed class Stage6GoogleUiTrustBindingTests
             GoogleGenerationUiTrustBindingPolicy.RequireExactBinding(selection, CreateTrust()));
     }
 
-    private static GenerationCacheTrustContext CreateTrust() => new(
-        ProviderStableId: "google-cloud-text-to-speech",
+    [Theory]
+    [InlineData("other-provider", "synthesize-speech")]
+    [InlineData("google-cloud-text-to-speech", "other-operation")]
+    public void Non_google_synthesize_namespace_is_not_equivalent_to_ui_trust(string provider, string operation)
+    {
+        var trust = CreateTrust(provider, operation);
+        Assert.NotEqual("google-cloud-text-to-speech", provider == "google-cloud-text-to-speech" && operation == "synthesize-speech" ? "" : provider);
+        Assert.False(
+            string.Equals(trust.ProviderStableId, "google-cloud-text-to-speech", StringComparison.Ordinal) &&
+            string.Equals(trust.OperationStableId, "synthesize-speech", StringComparison.Ordinal));
+    }
+
+    private static GenerationCacheTrustContext CreateTrust(
+        string provider = "google-cloud-text-to-speech",
+        string operation = "synthesize-speech") => new(
+        ProviderStableId: provider,
         AccountId: "acct",
         ProjectId: "project",
         EndpointId: "https://texttospeech.googleapis.com",
         RegionId: "global",
-        OperationStableId: "synthesize-speech",
+        OperationStableId: operation,
         ResolvedModelId: "model",
         VoiceStableId: "voice",
         VoiceFingerprint: "voice-fingerprint",
