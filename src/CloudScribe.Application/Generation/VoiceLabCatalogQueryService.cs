@@ -6,6 +6,7 @@ public sealed class VoiceLabCatalogQueryService
 {
     private const int MaxCatalogResults = 500;
     private readonly Func<VoiceLabCatalogQuery, CancellationToken, Task<IReadOnlyList<VoiceLabCatalogSelection>>> _queryAsync;
+    private int _queryInFlight;
 
     public VoiceLabCatalogQueryService(
         Func<VoiceLabCatalogQuery, CancellationToken, Task<IReadOnlyList<VoiceLabCatalogSelection>>> queryAsync)
@@ -20,42 +21,52 @@ public sealed class VoiceLabCatalogQueryService
         bool privateVoiceAccessAuthorized,
         CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var admitted = VoiceLabCatalogQueryPolicy.RequireAuthorized(
-            query,
-            accountAuthorized,
-            projectAuthorized,
-            privateVoiceAccessAuthorized);
+        if (Interlocked.CompareExchange(ref _queryInFlight, 1, 0) != 0)
+            throw new InvalidOperationException("A Voice Lab catalog query is already in progress.");
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var results = await _queryAsync(admitted, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Voice Lab catalog transport returned no result collection.");
-
-        if (results.Count > MaxCatalogResults)
-        {
-            throw new InvalidOperationException(
-                $"Voice Lab catalog transport returned {results.Count} results; the bounded maximum is {MaxCatalogResults}.");
-        }
-
-        var seenVoiceIds = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var selection in results)
+        try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            VoiceLabCatalogSelectionPolicy.RequireEligible(selection);
-            if (!string.Equals(selection.ProviderStableId, admitted.ProviderId, StringComparison.Ordinal) ||
-                !string.Equals(selection.AccountStableId, admitted.AccountId, StringComparison.Ordinal) ||
-                !string.Equals(selection.ProjectStableId, admitted.ProjectId, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("Voice Lab catalog transport returned a selection outside the admitted provider/account/project trust boundary.");
-            }
+            var admitted = VoiceLabCatalogQueryPolicy.RequireAuthorized(
+                query,
+                accountAuthorized,
+                projectAuthorized,
+                privateVoiceAccessAuthorized);
 
-            if (!seenVoiceIds.Add(selection.VoiceStableId))
+            cancellationToken.ThrowIfCancellationRequested();
+            var results = await _queryAsync(admitted, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Voice Lab catalog transport returned no result collection.");
+
+            if (results.Count > MaxCatalogResults)
             {
                 throw new InvalidOperationException(
-                    "Voice Lab catalog transport returned duplicate voice identities; ambiguous catalog results must be reconciled before display or audition.");
+                    $"Voice Lab catalog transport returned {results.Count} results; the bounded maximum is {MaxCatalogResults}.");
             }
-        }
 
-        return results;
+            var seenVoiceIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var selection in results)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                VoiceLabCatalogSelectionPolicy.RequireEligible(selection);
+                if (!string.Equals(selection.ProviderStableId, admitted.ProviderId, StringComparison.Ordinal) ||
+                    !string.Equals(selection.AccountStableId, admitted.AccountId, StringComparison.Ordinal) ||
+                    !string.Equals(selection.ProjectStableId, admitted.ProjectId, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Voice Lab catalog transport returned a selection outside the admitted provider/account/project trust boundary.");
+                }
+
+                if (!seenVoiceIds.Add(selection.VoiceStableId))
+                {
+                    throw new InvalidOperationException(
+                        "Voice Lab catalog transport returned duplicate voice identities; ambiguous catalog results must be reconciled before display or audition.");
+                }
+            }
+
+            return results;
+        }
+        finally
+        {
+            Volatile.Write(ref _queryInFlight, 0);
+        }
     }
 }
