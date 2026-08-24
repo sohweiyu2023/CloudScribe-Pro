@@ -16,17 +16,47 @@ if (@(git status --porcelain=v1).Count -ne 0) {
     throw 'Repository integrity gate requires a completely clean worktree, including no untracked files.'
 }
 
-$objectType = (git cat-file -t $ExpectedCandidateSha).Trim()
+# Git replace refs can make an apparently exact commit/tree resolve to substituted objects.
+# Certification must operate on the repository's real object graph only.
+$replaceRefs = @(git for-each-ref --format='%(refname)' refs/replace)
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to inspect Git replace refs.'
+}
+if ($replaceRefs.Count -ne 0) {
+    throw 'Repository integrity gate forbids Git replace refs during certification.'
+}
+
+$gitDir = (git rev-parse --git-dir).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitDir)) {
+    throw 'Unable to resolve Git metadata directory.'
+}
+if (-not [System.IO.Path]::IsPathRooted($gitDir)) {
+    $gitDir = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $gitDir))
+}
+$graftsPath = Join-Path $gitDir 'info/grafts'
+if (Test-Path -LiteralPath $graftsPath -PathType Leaf) {
+    throw 'Repository integrity gate forbids legacy Git grafts during certification.'
+}
+
+$isShallow = (git rev-parse --is-shallow-repository).Trim()
+if ($LASTEXITCODE -ne 0 -or $isShallow -notin @('true', 'false')) {
+    throw 'Unable to determine whether the repository is shallow.'
+}
+if ($isShallow -ne 'false') {
+    throw 'Repository integrity gate requires a complete non-shallow repository.'
+}
+
+$objectType = (git --no-replace-objects cat-file -t $ExpectedCandidateSha).Trim()
 if ($LASTEXITCODE -ne 0 -or $objectType -ne 'commit') {
     throw 'Expected candidate does not resolve to a Git commit object.'
 }
 
-$tree = (git rev-parse "$ExpectedCandidateSha^{tree}").Trim()
+$tree = (git --no-replace-objects rev-parse "$ExpectedCandidateSha^{tree}").Trim()
 if ($LASTEXITCODE -ne 0 -or $tree -notmatch '^[0-9a-f]{40}$') {
     throw 'Expected candidate tree object could not be resolved.'
 }
 
-& git fsck --strict --no-reflogs --no-progress
+& git --no-replace-objects fsck --strict --no-reflogs --no-progress
 if ($LASTEXITCODE -ne 0) {
     throw 'Git object integrity verification failed.'
 }
@@ -39,10 +69,10 @@ if (-not $controlLockResult) {
     throw 'v2.23 control-lock provenance gate returned no evidence.'
 }
 
-if ((git rev-parse HEAD).Trim() -ne $ExpectedCandidateSha) {
+if ((git --no-replace-objects rev-parse HEAD).Trim() -ne $ExpectedCandidateSha) {
     throw 'Repository identity changed during integrity verification.'
 }
-if ((git rev-parse 'HEAD^{tree}').Trim() -ne $tree) {
+if ((git --no-replace-objects rev-parse 'HEAD^{tree}').Trim() -ne $tree) {
     throw 'Repository tree identity changed during integrity verification.'
 }
 if (@(git status --porcelain=v1).Count -ne 0) {
@@ -54,5 +84,8 @@ if (@(git status --porcelain=v1).Count -ne 0) {
     TreeSha = $tree
     ControlLockProvenancePassed = $true
     WorktreeCompletelyClean = $true
+    ReplaceRefsAbsent = $true
+    LegacyGraftsAbsent = $true
+    RepositoryComplete = $true
     IntegrityPassed = $true
 } | ConvertTo-Json -Compress
