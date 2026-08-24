@@ -41,6 +41,23 @@ public sealed class GenerationProjectCacheLifecycle
             next,
             cacheEntryMaterialized,
             GenerationSubmissionResolutionEvidence.None,
+            GenerationReferenceResolutionEvidence.None,
+            cancellationToken);
+
+    public Task SetValidatedTransitionAsync(
+        ContentAddressedSegmentKey key,
+        GenerationProjectCacheState previous,
+        GenerationProjectCacheState next,
+        bool cacheEntryMaterialized,
+        GenerationSubmissionResolutionEvidence resolutionEvidence,
+        CancellationToken cancellationToken = default) =>
+        SetValidatedTransitionAsync(
+            key,
+            previous,
+            next,
+            cacheEntryMaterialized,
+            resolutionEvidence,
+            GenerationReferenceResolutionEvidence.None,
             cancellationToken);
 
     public async Task SetValidatedTransitionAsync(
@@ -49,6 +66,7 @@ public sealed class GenerationProjectCacheLifecycle
         GenerationProjectCacheState next,
         bool cacheEntryMaterialized,
         GenerationSubmissionResolutionEvidence resolutionEvidence,
+        GenerationReferenceResolutionEvidence referenceEvidence,
         CancellationToken cancellationToken = default)
     {
         var validated = GenerationCacheLifecycleTransitionValidator.ValidateTransition(
@@ -56,7 +74,8 @@ public sealed class GenerationProjectCacheLifecycle
             previous,
             next,
             cacheEntryMaterialized,
-            resolutionEvidence);
+            resolutionEvidence,
+            referenceEvidence);
 
         await ApplyStateAsync(key, validated, cancellationToken).ConfigureAwait(false);
     }
