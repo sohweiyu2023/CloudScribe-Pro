@@ -7,9 +7,12 @@ public sealed partial class ShellViewModel
 {
     private GenerationSupportBundleExportCoordinator? _generationSupportBundleExport;
     private bool _generationDiagnosticsPolicyAllowed;
+    private int _generationDiagnosticsExportInFlight;
 
     public bool CanExportGenerationDiagnostics =>
-        _generationSupportBundleExport is not null && _generationDiagnosticsPolicyAllowed;
+        _generationSupportBundleExport is not null &&
+        _generationDiagnosticsPolicyAllowed &&
+        Volatile.Read(ref _generationDiagnosticsExportInFlight) == 0;
 
     public void ConfigureStage5GenerationDiagnostics(
         GenerationSupportBundleExportCoordinator exportCoordinator,
@@ -24,30 +27,47 @@ public sealed partial class ShellViewModel
     [RelayCommand(CanExecute = nameof(CanExportGenerationDiagnostics))]
     private async Task ExportGenerationDiagnosticsAsync(CancellationToken cancellationToken)
     {
-        var exportCoordinator = _generationSupportBundleExport
-            ?? throw new InvalidOperationException("Generation diagnostic export is not configured.");
+        if (Interlocked.CompareExchange(ref _generationDiagnosticsExportInFlight, 1, 0) != 0)
+        {
+            throw new InvalidOperationException("A generation diagnostic export is already in progress.");
+        }
 
-        var applicationVersion = typeof(ShellViewModel).Assembly.GetName().Version?.ToString() ?? "unknown";
-        var platform = OperatingSystem.IsWindows()
-            ? "windows"
-            : OperatingSystem.IsMacOS()
-                ? "macos"
-                : OperatingSystem.IsLinux()
-                    ? "linux"
-                    : "unknown";
+        OnPropertyChanged(nameof(CanExportGenerationDiagnostics));
+        ExportGenerationDiagnosticsCommand.NotifyCanExecuteChanged();
 
-        var metadata = new GenerationSupportBundleMetadata(
-            applicationVersion,
-            platform,
-            "generation-support",
-            DateTimeOffset.UtcNow);
+        try
+        {
+            var exportCoordinator = _generationSupportBundleExport
+                ?? throw new InvalidOperationException("Generation diagnostic export is not configured.");
 
-        await exportCoordinator.ExportAsync(
-            userExplicitlyRequestedDiagnosticBundle: true,
-            currentPolicyAllowsDiagnostics: _generationDiagnosticsPolicyAllowed,
-            metadata,
-            cancellationToken).ConfigureAwait(true);
+            var applicationVersion = typeof(ShellViewModel).Assembly.GetName().Version?.ToString() ?? "unknown";
+            var platform = OperatingSystem.IsWindows()
+                ? "windows"
+                : OperatingSystem.IsMacOS()
+                    ? "macos"
+                    : OperatingSystem.IsLinux()
+                        ? "linux"
+                        : "unknown";
 
-        StatusMessage = "Generation diagnostics exported · metadata only";
+            var metadata = new GenerationSupportBundleMetadata(
+                applicationVersion,
+                platform,
+                "generation-support",
+                DateTimeOffset.UtcNow);
+
+            await exportCoordinator.ExportAsync(
+                userExplicitlyRequestedDiagnosticBundle: true,
+                currentPolicyAllowsDiagnostics: _generationDiagnosticsPolicyAllowed,
+                metadata,
+                cancellationToken).ConfigureAwait(true);
+
+            StatusMessage = "Generation diagnostics exported · metadata only";
+        }
+        finally
+        {
+            Volatile.Write(ref _generationDiagnosticsExportInFlight, 0);
+            OnPropertyChanged(nameof(CanExportGenerationDiagnostics));
+            ExportGenerationDiagnosticsCommand.NotifyCanExecuteChanged();
+        }
     }
 }
