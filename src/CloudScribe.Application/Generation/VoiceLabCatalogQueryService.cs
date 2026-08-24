@@ -4,6 +4,7 @@ namespace CloudScribe.Application.Generation;
 
 public sealed class VoiceLabCatalogQueryService
 {
+    private const int MaxCatalogResults = 500;
     private readonly Func<VoiceLabCatalogQuery, CancellationToken, Task<IReadOnlyList<VoiceLabCatalogSelection>>> _queryAsync;
 
     public VoiceLabCatalogQueryService(
@@ -28,9 +29,16 @@ public sealed class VoiceLabCatalogQueryService
         var results = await _queryAsync(admitted, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Voice Lab catalog transport returned no result collection.");
 
+        if (results.Count > MaxCatalogResults)
+        {
+            throw new InvalidOperationException(
+                $"Voice Lab catalog transport returned {results.Count} results; the bounded maximum is {MaxCatalogResults}.");
+        }
+
         var seenVoiceIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var selection in results)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             VoiceLabCatalogSelectionPolicy.RequireEligible(selection);
             if (!string.Equals(selection.ProviderStableId, admitted.ProviderId, StringComparison.Ordinal) ||
                 !string.Equals(selection.AccountStableId, admitted.AccountId, StringComparison.Ordinal) ||
