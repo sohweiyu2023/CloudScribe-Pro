@@ -77,4 +77,27 @@ public sealed class GoogleGenerationBoundQueueCoordinator
             persistedState.IdempotencyKey,
             cancellationToken);
     }
+
+    public Task<GoogleGenerationQueueOutcome> ProcessPersistedTransitionAsync(
+        GenerationProviderRequest request,
+        GenerationCacheTrustContext admittedTrust,
+        GoogleGenerationPersistedQueueState previousState,
+        GoogleGenerationPersistedQueueState currentState,
+        bool admissionCurrent,
+        bool accountCredentialAvailable,
+        bool pricingApproved,
+        bool postCompileLimitsSatisfied,
+        CancellationToken cancellationToken = default)
+    {
+        var validated = GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(previousState, currentState);
+        return ProcessPersistedAsync(
+            request,
+            admittedTrust,
+            validated,
+            admissionCurrent,
+            accountCredentialAvailable,
+            pricingApproved,
+            postCompileLimitsSatisfied,
+            cancellationToken);
+    }
 }
