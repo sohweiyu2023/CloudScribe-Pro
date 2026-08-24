@@ -45,12 +45,13 @@ public sealed class RestoreRecoveryCoordinator
                     throw new InvalidOperationException($"Unknown admitted restore recovery action: {action}");
             }
 
-            // Even a terminal no-op must be verified against the actual reconciled
-            // filesystem/journal state; authenticated intent alone is not completion evidence.
             cancellationToken.ThrowIfCancellationRequested();
             if (!await verifyCompletedActionAsync(outcome, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException("Restore recovery action completed without verifiable terminal/reconciled state.");
 
+            // A cancellation arriving during terminal verification must not be converted
+            // into a successful recovery result after the caller has abandoned the action.
+            cancellationToken.ThrowIfCancellationRequested();
             return outcome;
         }
         finally
