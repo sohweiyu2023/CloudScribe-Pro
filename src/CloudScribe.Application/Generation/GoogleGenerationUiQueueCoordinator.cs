@@ -5,6 +5,8 @@ namespace CloudScribe.Application.Generation;
 
 public sealed class GoogleGenerationUiQueueCoordinator
 {
+    private const string GoogleProviderStableId = "google-cloud-text-to-speech";
+    private const string GoogleOperationStableId = "synthesize-speech";
     private readonly GoogleGenerationBoundQueueCoordinator _boundQueue;
 
     public GoogleGenerationUiQueueCoordinator(GoogleGenerationBoundQueueCoordinator boundQueue)
@@ -38,6 +40,12 @@ public sealed class GoogleGenerationUiQueueCoordinator
 
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(admittedTrust);
+
+        if (!string.Equals(admittedTrust.ProviderStableId, GoogleProviderStableId, StringComparison.Ordinal) ||
+            !string.Equals(admittedTrust.OperationStableId, GoogleOperationStableId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Google UI queue admission requires the exact Google synthesize-speech trust namespace.");
+        }
 
         // The UI selection is not merely advisory: every load-bearing selection identity
         // must still be exactly the one admitted into the current v2.23 trust context.
