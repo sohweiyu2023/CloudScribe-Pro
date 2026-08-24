@@ -37,6 +37,12 @@ public sealed class GoogleGenerationUiQueueCoordinator
             pricingCurrent);
 
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(admittedTrust);
+
+        // The UI selection is not merely advisory: every load-bearing selection identity
+        // must still be exactly the one admitted into the current v2.23 trust context.
+        GoogleGenerationUiTrustBindingPolicy.RequireExactBinding(currentSelection, admittedTrust);
+
         if (!string.Equals(currentSelection.AccountId, request.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("Google UI account identity differs from the bound provider request.");
         if (!string.Equals(currentSelection.OutputFormat, request.OutputFormat, StringComparison.Ordinal))
