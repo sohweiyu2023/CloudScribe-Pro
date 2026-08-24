@@ -30,12 +30,34 @@ public sealed class GenerationProjectCacheLifecycle
     {
         key.Validate();
         ArgumentNullException.ThrowIfNull(state);
-        await _coordinator.SetCompositeProtectionAsync(
+        await ApplyStateAsync(key, state, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task SetValidatedTransitionAsync(
+        ContentAddressedSegmentKey key,
+        GenerationProjectCacheState previous,
+        GenerationProjectCacheState next,
+        bool cacheEntryMaterialized,
+        CancellationToken cancellationToken = default)
+    {
+        var validated = GenerationCacheLifecycleTransitionValidator.ValidateTransition(
+            key,
+            previous,
+            next,
+            cacheEntryMaterialized);
+
+        await ApplyStateAsync(key, validated, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task ApplyStateAsync(
+        ContentAddressedSegmentKey key,
+        GenerationProjectCacheState state,
+        CancellationToken cancellationToken) =>
+        _coordinator.SetCompositeProtectionAsync(
             key,
             state.Active,
             state.Pinned,
             state.Referenced,
             state.UnresolvedSubmission,
-            cancellationToken).ConfigureAwait(false);
-    }
+            cancellationToken);
 }
