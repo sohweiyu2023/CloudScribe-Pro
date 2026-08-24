@@ -29,6 +29,20 @@ public sealed class GenerationProjectCacheLifecycle
         CancellationToken cancellationToken = default) =>
         throw new InvalidOperationException("An unvalidated project cache lifecycle write is unsafe. Use SetValidatedTransitionAsync with materialization and reconciliation evidence.");
 
+    public Task SetValidatedTransitionAsync(
+        ContentAddressedSegmentKey key,
+        GenerationProjectCacheState previous,
+        GenerationProjectCacheState next,
+        bool cacheEntryMaterialized,
+        CancellationToken cancellationToken = default) =>
+        SetValidatedTransitionAsync(
+            key,
+            previous,
+            next,
+            cacheEntryMaterialized,
+            GenerationSubmissionResolutionEvidence.None,
+            cancellationToken);
+
     public async Task SetValidatedTransitionAsync(
         ContentAddressedSegmentKey key,
         GenerationProjectCacheState previous,
