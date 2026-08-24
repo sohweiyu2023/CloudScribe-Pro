@@ -33,7 +33,7 @@ public sealed class VoiceLabAuditionExecutionService
         currentSelection = (currentSelection ?? throw new ArgumentNullException(nameof(currentSelection))).Validate();
 
         if (!SameVoiceTrustIdentity(_selection, currentSelection))
-            throw new InvalidOperationException("Voice Lab catalog trust identity changed after selection; the user must reselect the voice before auditioning.");
+            throw new InvalidOperationException("Voice Lab catalog trust identity or capability evidence changed after selection; the user must reselect the voice before auditioning.");
 
         return ExecuteValidatedAsync(request, currentSelection, cancellationToken);
     }
@@ -58,5 +58,6 @@ public sealed class VoiceLabAuditionExecutionService
         string.Equals(selected.AccountStableId, current.AccountStableId, StringComparison.Ordinal) &&
         string.Equals(selected.ProjectStableId, current.ProjectStableId, StringComparison.Ordinal) &&
         string.Equals(selected.VoiceStableId, current.VoiceStableId, StringComparison.Ordinal) &&
-        string.Equals(selected.VoiceFingerprint, current.VoiceFingerprint, StringComparison.Ordinal);
+        string.Equals(selected.VoiceFingerprint, current.VoiceFingerprint, StringComparison.Ordinal) &&
+        string.Equals(selected.CapabilityEvidenceId, current.CapabilityEvidenceId, StringComparison.Ordinal);
 }
