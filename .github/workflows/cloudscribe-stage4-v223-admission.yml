@@ -128,6 +128,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Verification-tool tests failed.' }
           if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Certification mutated tracked candidate bytes.' }
           if ((git rev-parse HEAD).Trim() -ne $env:ADMITTED_SHA) { throw 'Candidate SHA changed during certification.' }
+      - name: Reverify repository integrity after full certification
+        shell: pwsh
+        run: |
+          ./tools/Test-Stage4V223RepositoryIntegrity.ps1 -ExpectedCandidateSha $env:ADMITTED_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Repository integrity failed after full certification.' }
       - name: Publish exact certified candidate identity
         id: certified
         shell: pwsh
@@ -174,3 +179,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'v2.23 controls no longer admit the certified candidate.' }
           if (@(git status --porcelain=v1 --untracked-files=no).Count -ne 0) { throw 'Promotion readiness mutated tracked candidate bytes.' }
           if ((git rev-parse HEAD).Trim() -ne $env:CERTIFIED_SHA) { throw 'Candidate SHA changed during promotion readiness.' }
+      - name: Final repository integrity recheck before promotion handoff
+        shell: pwsh
+        run: |
+          ./tools/Test-Stage4V223RepositoryIntegrity.ps1 -ExpectedCandidateSha $env:CERTIFIED_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Repository integrity failed at final no-change promotion handoff.' }
