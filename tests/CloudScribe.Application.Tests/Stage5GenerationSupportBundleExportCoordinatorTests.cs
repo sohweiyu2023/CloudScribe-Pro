@@ -64,4 +64,31 @@ public sealed class Stage5GenerationSupportBundleExportCoordinatorTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.ExportAsync(true, true, metadata, cancellation.Token));
         Assert.Equal(0, persistCalls);
     }
+
+    [Fact]
+    public async Task Concurrent_export_is_rejected_before_second_persistence()
+    {
+        var persistCalls = 0;
+        var persistenceEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePersistence = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = new GenerationSupportBundleExportCoordinator(
+            new GenerationSupportBundleService(),
+            async (_, cancellationToken) =>
+            {
+                Interlocked.Increment(ref persistCalls);
+                persistenceEntered.TrySetResult();
+                await releasePersistence.Task.WaitAsync(cancellationToken);
+            });
+        var metadata = new GenerationSupportBundleMetadata("1.0.0", "windows-x64", "GEN-001", DateTimeOffset.UtcNow);
+
+        var first = coordinator.ExportAsync(true, true, metadata);
+        await persistenceEntered.Task;
+
+        var second = await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.ExportAsync(true, true, metadata));
+        Assert.Contains("already in progress", second.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, Volatile.Read(ref persistCalls));
+
+        releasePersistence.TrySetResult();
+        await first;
+    }
 }
