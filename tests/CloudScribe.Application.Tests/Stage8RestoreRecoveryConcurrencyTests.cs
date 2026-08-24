@@ -5,10 +5,11 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage8RestoreRecoveryConcurrencyTests
 {
     [Fact]
-    public async Task Concurrent_recovery_attempt_is_rejected()
+    public async Task Concurrent_recovery_attempt_is_rejected_and_success_is_verified()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var verificationCalls = 0;
 
         var coordinator = new RestoreRecoveryCoordinator(
             async _ =>
@@ -26,12 +27,30 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
             RollbackRequired: true,
             AlreadyRolledBack: false);
 
-        var first = coordinator.RecoverAsync(rollbackState);
+        Task<bool> VerifyAsync(string outcome, CancellationToken _)
+        {
+            verificationCalls++;
+            return Task.FromResult(outcome == "rollback-completed");
+        }
+
+        var first = coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync);
         await entered.Task.ConfigureAwait(false);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.RecoverAsync(rollbackState));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync));
 
         release.SetResult();
         Assert.Equal("rollback-completed", await first.ConfigureAwait(false));
+        Assert.Equal(1, verificationCalls);
+    }
+
+    [Fact]
+    public async Task Recovery_action_cannot_report_success_when_terminal_verification_fails()
+    {
+        var coordinator = new RestoreRecoveryCoordinator(_ => Task.CompletedTask, _ => Task.CompletedTask);
+        var rollbackState = new RestoreRecoveryState(true, true, true, true, true, false);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.RecoverVerifiedAsync(
+            rollbackState,
+            static (_, _) => Task.FromResult(false)));
     }
 }
