@@ -28,6 +28,7 @@ public sealed class VoiceLabCatalogQueryService
         var results = await _queryAsync(admitted, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Voice Lab catalog transport returned no result collection.");
 
+        var seenVoiceIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var selection in results)
         {
             VoiceLabCatalogSelectionPolicy.RequireEligible(selection);
@@ -36,6 +37,12 @@ public sealed class VoiceLabCatalogQueryService
                 !string.Equals(selection.ProjectStableId, admitted.ProjectId, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("Voice Lab catalog transport returned a selection outside the admitted provider/account/project trust boundary.");
+            }
+
+            if (!seenVoiceIds.Add(selection.VoiceStableId))
+            {
+                throw new InvalidOperationException(
+                    "Voice Lab catalog transport returned duplicate voice identities; ambiguous catalog results must be reconciled before display or audition.");
             }
         }
 
