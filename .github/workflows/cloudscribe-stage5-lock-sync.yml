@@ -1,0 +1,48 @@
+name: CloudScribe Stage 5 Locked Restore Sync
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cloudscribe-stage5-lock-sync.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cloudscribe-stage5-lock-sync
+  cancel-in-progress: false
+
+jobs:
+  refresh-stage5-test-lock:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/stage5-fast-track
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+      - name: Deterministically refresh lock after project-reference change
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore tests/CloudScribe.Application.Tests/CloudScribe.Application.Tests.csproj --force-evaluate --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Stage5 lock refresh restore failed.' }
+          $changed = @(git status --porcelain=v1 --untracked-files=all)
+          if ($changed.Count -eq 0) { exit 0 }
+          $allowed = ' M tests/CloudScribe.Application.Tests/packages.lock.json'
+          if ($changed.Count -ne 1 -or $changed[0] -ne $allowed) {
+            Write-Host 'Unexpected lock refresh mutations:'
+            $changed | ForEach-Object { Write-Host $_ }
+            throw 'Stage5 lock refresh changed files outside the exact packages.lock.json.'
+          }
+          git diff --exit-code -- . ':!tests/CloudScribe.Application.Tests/packages.lock.json'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- tests/CloudScribe.Application.Tests/packages.lock.json
+          git commit -m 'chore(stage5): refresh locked restore after infrastructure test reference'
+          git push origin HEAD:refs/heads/agent/stage5-fast-track
