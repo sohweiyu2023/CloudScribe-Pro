@@ -36,7 +36,7 @@ public sealed class Stage7ReleaseProviderSetManifestTests
             "provider-a",
             "Provider A",
             new string('b', 64),
-            new HashSet<string> { "tts.generate" });
+            new HashSet<string>(StringComparer.Ordinal) { "tts.generate" });
 
         Assert.Throws<ArgumentException>(() => new ReleaseProviderSetManifest(
             new string('a', 64),
