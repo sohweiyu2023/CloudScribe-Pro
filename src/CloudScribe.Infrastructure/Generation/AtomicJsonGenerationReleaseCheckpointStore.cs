@@ -43,13 +43,14 @@ public sealed class AtomicJsonGenerationReleaseCheckpointStore
             var temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
             try
             {
-                await using (var stream = new FileStream(
+                FileStream stream = new(
                     temporary,
                     FileMode.CreateNew,
                     FileAccess.Write,
                     FileShare.None,
                     4096,
-                    FileOptions.Asynchronous | FileOptions.WriteThrough))
+                    FileOptions.Asynchronous | FileOptions.WriteThrough);
+                await using (stream.ConfigureAwait(false))
                 {
                     await JsonSerializer.SerializeAsync(stream, checkpoint, JsonOptions, cancellationToken).ConfigureAwait(false);
                     await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -81,17 +82,20 @@ public sealed class AtomicJsonGenerationReleaseCheckpointStore
         if (!File.Exists(path))
             return null;
 
-        await using var stream = new FileStream(
+        FileStream stream = new(
             path,
             FileMode.Open,
             FileAccess.Read,
             FileShare.Read,
             4096,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var checkpoint = await JsonSerializer.DeserializeAsync<GenerationReleaseCheckpoint>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidDataException($"Release checkpoint '{path}' was empty or invalid.");
-        Validate(checkpoint);
-        return checkpoint;
+        await using (stream.ConfigureAwait(false))
+        {
+            var checkpoint = await JsonSerializer.DeserializeAsync<GenerationReleaseCheckpoint>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidDataException($"Release checkpoint '{path}' was empty or invalid.");
+            Validate(checkpoint);
+            return checkpoint;
+        }
     }
 
     private string PathFor(Guid collectionId) =>
