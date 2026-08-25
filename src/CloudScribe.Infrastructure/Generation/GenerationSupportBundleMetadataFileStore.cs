@@ -75,16 +75,19 @@ internal sealed class GenerationSupportBundleMetadataFileStore(AppPaths paths)
         byte[] payload,
         CancellationToken cancellationToken)
     {
-        await using FileStream stream = new(
+        FileStream stream = new(
             stagingPath,
             FileMode.CreateNew,
             FileAccess.Write,
             FileShare.None,
             bufferSize: 16 * 1024,
             FileOptions.Asynchronous | FileOptions.WriteThrough);
-        await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
-        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-        stream.Flush(flushToDisk: true);
+        await using (stream.ConfigureAwait(false))
+        {
+            await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            stream.Flush(flushToDisk: true);
+        }
     }
 
     private static void DeleteStagingFile(string stagingPath)
