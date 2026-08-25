@@ -103,7 +103,7 @@ public sealed class RestoreRecoveryTerminalVerifier
         var current = new DirectoryInfo(Path.GetFullPath(restoreRoot));
         while (current is not null)
         {
-            if (current.Exists && (current.Attributes & FileAttributes.ReparsePoint) != 0)
+            if (current.Exists && current.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 throw new InvalidOperationException($"Restore recovery verification may not traverse a reparse-point directory: {current.FullName}");
             current = current.Parent;
         }
