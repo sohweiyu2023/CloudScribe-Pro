@@ -1,27 +1,5 @@
 namespace CloudScribe.Domain.Accessibility;
 
-public sealed record AccessiblePlaybackSnapshot(
-    bool IsPlaying,
-    bool IsMuted,
-    double Volume,
-    double Speed,
-    TimeSpan Position,
-    TimeSpan Duration,
-    string? CurrentChapter,
-    string? CurrentSegmentLabel)
-{
-    public AccessiblePlaybackSnapshot Validate()
-    {
-        if (Volume is < 0 or > 1) throw new ArgumentOutOfRangeException(nameof(Volume));
-        if (Speed is < 0.5 or > 3.0) throw new ArgumentOutOfRangeException(nameof(Speed));
-        if (Position < TimeSpan.Zero || Duration < TimeSpan.Zero || Position > Duration)
-            throw new ArgumentOutOfRangeException(nameof(Position));
-        return this;
-    }
-}
-
-public sealed record AccessiblePlaybackAnnouncement(string PoliteText, string AssertiveText);
-
 public static class AccessiblePlaybackAnnouncer
 {
     public static AccessiblePlaybackAnnouncement DescribeTransition(
