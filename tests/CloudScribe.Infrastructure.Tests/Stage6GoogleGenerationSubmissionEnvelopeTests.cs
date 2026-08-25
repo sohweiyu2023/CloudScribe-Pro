@@ -1,3 +1,4 @@
+using System.Globalization;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.Infrastructure.Tests;
@@ -7,7 +8,7 @@ public sealed class Stage6GoogleGenerationSubmissionEnvelopeTests
     [Fact]
     public void ExactApprovedIdentityRemainsAuthorized()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var account = Account();
         var capabilities = Capabilities(now);
         var payload = new byte[] { 1, 2, 3, 4 };
@@ -23,7 +24,7 @@ public sealed class Stage6GoogleGenerationSubmissionEnvelopeTests
     [Fact]
     public void PricingOrPayloadDriftInvalidatesBillableSubmission()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var envelope = GoogleGenerationSubmissionEnvelope.Create(Account(), Capabilities(now), "pricing-v1", 7, "voice-a", "LINEAR16", new byte[] { 1, 2, 3 }, now);
 
         Assert.Throws<InvalidOperationException>(() => envelope.EnsureStillAuthorized(Account(), Capabilities(now), "pricing-v2", 7, new byte[] { 1, 2, 3 }, now));
@@ -33,7 +34,7 @@ public sealed class Stage6GoogleGenerationSubmissionEnvelopeTests
     [Fact]
     public void StaleCapabilitiesBlockEnvelopeCreation()
     {
-        var observed = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var observed = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var staleNow = observed.AddHours(2);
 
         Assert.Throws<InvalidOperationException>(() => GoogleGenerationSubmissionEnvelope.Create(
