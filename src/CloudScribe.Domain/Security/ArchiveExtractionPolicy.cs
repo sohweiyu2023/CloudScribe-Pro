@@ -48,7 +48,10 @@ public sealed class ArchiveExtractionPolicy
 
         foreach (var entry in entries)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(entry.RelativePath);
+            if (string.IsNullOrWhiteSpace(entry.RelativePath))
+            {
+                throw new InvalidOperationException("Archive entry relative path is required.");
+            }
             if (entry.IsSymbolicLink)
             {
                 throw new InvalidOperationException("Symbolic-link archive entries are not permitted.");
