@@ -48,9 +48,13 @@ public sealed record BackupRestoreManifest(
         var info = new FileInfo(fullPath);
         if (!info.Exists) throw new FileNotFoundException("Backup restore file is missing.", fullPath);
         if (info.Length != entry.Length) throw new InvalidDataException($"Backup restore length mismatch for {entry.RelativePath}.");
-        await using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
-        if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(hash), Convert.FromHexString(entry.Sha256)))
-            throw new InvalidDataException($"Backup restore digest mismatch for {entry.RelativePath}.");
+
+        var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using (stream.ConfigureAwait(false))
+        {
+            var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false)).ToLowerInvariant();
+            if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(hash), Convert.FromHexString(entry.Sha256)))
+                throw new InvalidDataException($"Backup restore digest mismatch for {entry.RelativePath}.");
+        }
     }
 }
