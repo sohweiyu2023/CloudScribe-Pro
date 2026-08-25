@@ -28,7 +28,8 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
             accountCredentialAvailable: true,
             pricingApproved: true,
             postCompileLimitsSatisfied: true,
-            unresolvedPriorSubmission: false);
+            unresolvedPriorSubmission: false,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal(1, calls);
         Assert.True(outcome.Decision.MaySubmit);
@@ -52,7 +53,8 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
             accountCredentialAvailable: true,
             pricingApproved: true,
             postCompileLimitsSatisfied: true,
-            unresolvedPriorSubmission: true);
+            unresolvedPriorSubmission: true,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal(0, calls);
         Assert.True(outcome.RequiresReconciliation);
@@ -77,7 +79,8 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
             accountCredentialAvailable: true,
             pricingApproved: true,
             postCompileLimitsSatisfied: true,
-            unresolvedPriorSubmission: false);
+            unresolvedPriorSubmission: false,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.True(outcome.RequiresReconciliation);
         Assert.Equal(SubmissionDisposition.UnknownRequiresReconciliation, outcome.Response!.Disposition);
