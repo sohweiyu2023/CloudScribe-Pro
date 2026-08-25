@@ -88,6 +88,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
         services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
         services.AddSingleton<IGenerationPrivateCacheKeyProvider, VaultBackedGenerationPrivateCacheKeyProvider>();
+
+        services.AddSingleton<GenerationSupportBundleService>();
+        services.AddSingleton<GenerationSupportBundleMetadataFileStore>();
+        services.AddSingleton(serviceProvider =>
+            new GenerationSupportBundleExportCoordinator(
+                serviceProvider.GetRequiredService<GenerationSupportBundleService>(),
+                serviceProvider.GetRequiredService<GenerationSupportBundleMetadataFileStore>().PersistAsync));
+
         return services;
     }
 }
