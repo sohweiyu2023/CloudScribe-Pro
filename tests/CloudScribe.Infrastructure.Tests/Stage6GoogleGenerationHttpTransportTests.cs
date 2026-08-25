@@ -19,8 +19,12 @@ public sealed class Stage6GoogleGenerationHttpTransportTests
         var resolver = new FixedCredentialResolver("token-value");
         var transport = new GoogleGenerationHttpTransport(client, resolver, new Uri("https://texttospeech.googleapis.com/"));
 
-        var result = await transport.SendAsync(new GoogleHttpTransportRequest(
-            new Uri("https://texttospeech.googleapis.com/v1/text:synthesize"), "cred-ref-1", new byte[] { 9 }));
+        var result = await transport.SendAsync(
+            new GoogleHttpTransportRequest(
+                new Uri("https://texttospeech.googleapis.com/v1/text:synthesize"),
+                "cred-ref-1",
+                new byte[] { 9 }),
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal((HttpStatusCode)429, result.StatusCode);
         Assert.Equal(TimeSpan.FromSeconds(7), result.RetryAfter);
@@ -36,8 +40,12 @@ public sealed class Stage6GoogleGenerationHttpTransportTests
         using var client = new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
         var transport = new GoogleGenerationHttpTransport(client, resolver, new Uri("https://texttospeech.googleapis.com/"));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => transport.SendAsync(new GoogleHttpTransportRequest(
-            new Uri("https://evil.example/v1/text:synthesize"), "cred", new byte[] { 1 })));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => transport.SendAsync(
+            new GoogleHttpTransportRequest(
+                new Uri("https://evil.example/v1/text:synthesize"),
+                "cred",
+                new byte[] { 1 }),
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
         Assert.Null(resolver.LastReference);
     }
 
@@ -50,8 +58,13 @@ public sealed class Stage6GoogleGenerationHttpTransportTests
         }));
         var transport = new GoogleGenerationHttpTransport(client, new FixedCredentialResolver("token"), new Uri("https://texttospeech.googleapis.com/"));
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => transport.SendAsync(new GoogleHttpTransportRequest(
-            new Uri("https://texttospeech.googleapis.com/v1/text:synthesize"), "cred", new byte[] { 1 }, MaximumResponseBytes: 8)));
+        await Assert.ThrowsAsync<InvalidDataException>(() => transport.SendAsync(
+            new GoogleHttpTransportRequest(
+                new Uri("https://texttospeech.googleapis.com/v1/text:synthesize"),
+                "cred",
+                new byte[] { 1 },
+                MaximumResponseBytes: 8),
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
     }
 
     private sealed class FixedCredentialResolver(string token) : ITransientCredentialResolver
