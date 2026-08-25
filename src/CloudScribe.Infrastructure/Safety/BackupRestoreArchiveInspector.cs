@@ -73,7 +73,7 @@ public static class BackupRestoreArchiveInspector
                     traversalSafe = false;
 
                 var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                if (segments.Any(static segment => segment == ".."))
+                if (segments.Any(static segment => string.Equals(segment, "..", StringComparison.Ordinal)))
                     traversalSafe = false;
 
                 var fileName = Path.GetFileName(normalized);
