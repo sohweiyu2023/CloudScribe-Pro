@@ -29,7 +29,11 @@ public sealed class Stage8DatabaseMigrationPlanTests
         var hashes = new Dictionary<string, string>(StringComparer.Ordinal) { [step.StableId] = step.ScriptSha256 };
 
         Assert.Throws<InvalidOperationException>(() => plan.ValidateExecutionPreconditions(4, backupVerified: false, transactionalExecutionAvailable: true, hashes));
-        Assert.Throws<InvalidOperationException>(() => plan.ValidateExecutionPreconditions(4, backupVerified: true, transactionalExecutionAvailable: true, new Dictionary<string, string> { [step.StableId] = new string('0', 64) }));
+        Assert.Throws<InvalidOperationException>(() => plan.ValidateExecutionPreconditions(
+            4,
+            backupVerified: true,
+            transactionalExecutionAvailable: true,
+            new Dictionary<string, string>(StringComparer.Ordinal) { [step.StableId] = new string('0', 64) }));
     }
 
     [Fact]
