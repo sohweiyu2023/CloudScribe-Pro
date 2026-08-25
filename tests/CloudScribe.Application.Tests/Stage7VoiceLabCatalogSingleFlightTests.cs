@@ -18,15 +18,17 @@ public sealed class Stage7VoiceLabCatalogSingleFlightTests
             return Array.Empty<CloudScribe.Domain.Generation.VoiceLabCatalogSelection>();
         });
         var query = new VoiceLabCatalogQuery("provider", "acct", "project", null, null, false);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        var first = service.QueryAsync(query, true, true, false);
-        await entered.Task.ConfigureAwait(false);
+        var first = service.QueryAsync(query, true, true, false, cancellationToken);
+        await entered.Task.ConfigureAwait(true);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.QueryAsync(query, true, true, false));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.QueryAsync(query, true, true, false, cancellationToken)).ConfigureAwait(true);
         Assert.Equal(1, Volatile.Read(ref transportCalls));
 
         release.TrySetResult();
-        await first.ConfigureAwait(false);
+        await first.ConfigureAwait(true);
         Assert.Equal(1, transportCalls);
     }
 }
