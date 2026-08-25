@@ -48,7 +48,7 @@ public sealed class GoogleGenerationHttpTransport
 
         using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         var retryAfter = ParseRetryAfter(response.Headers.RetryAfter);
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
         var rented = new byte[81920];
         while (true)
