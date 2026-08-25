@@ -52,6 +52,7 @@ public sealed class Stage5GenerationReleasePublisherTests
     [Fact]
     public async Task PublishAndProtectMarksReceiptCacheAsReferenced()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var temp = new TempDirectory();
         var segmentId = Guid.NewGuid();
         var lookup = new string('c', 64);
@@ -64,7 +65,8 @@ public sealed class Stage5GenerationReleasePublisherTests
             "approval:7",
             output,
             [new GenerationPublishedSegment(segmentId, lookup, new string('d', 64))],
-            lifecycle);
+            lifecycle,
+            cancellationToken).ConfigureAwait(true);
 
         Assert.True(receipt.Verify());
         var protection = Assert.Single(lifecycle.Protections);
