@@ -31,7 +31,8 @@ public sealed class AtomicJsonGenerationSegmentProgressStore : IGenerationSegmen
             var temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
             try
             {
-                await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough))
+                var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough);
+                await using (stream.ConfigureAwait(false))
                 {
                     await JsonSerializer.SerializeAsync(stream, progress, JsonOptions, cancellationToken).ConfigureAwait(false);
                     await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -62,9 +63,12 @@ public sealed class AtomicJsonGenerationSegmentProgressStore : IGenerationSegmen
             return null;
         }
 
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        return await JsonSerializer.DeserializeAsync<GenerationSegmentProgress>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidDataException($"Segment progress '{path}' was empty or invalid.");
+        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using (stream.ConfigureAwait(false))
+        {
+            return await JsonSerializer.DeserializeAsync<GenerationSegmentProgress>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidDataException($"Segment progress '{path}' was empty or invalid.");
+        }
     }
 
     public async Task<IReadOnlyList<GenerationSegmentProgress>> ListForJobAsync(Guid jobId, CancellationToken cancellationToken = default)
@@ -79,9 +83,12 @@ public sealed class AtomicJsonGenerationSegmentProgressStore : IGenerationSegmen
         foreach (var path in Directory.EnumerateFiles(_directory, prefix + "*.segment.json", SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            items.Add(await JsonSerializer.DeserializeAsync<GenerationSegmentProgress>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidDataException($"Segment progress '{path}' was empty or invalid."));
+            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using (stream.ConfigureAwait(false))
+            {
+                items.Add(await JsonSerializer.DeserializeAsync<GenerationSegmentProgress>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
+                    ?? throw new InvalidDataException($"Segment progress '{path}' was empty or invalid."));
+            }
         }
 
         return items.OrderBy(static item => item.SegmentIndex).ThenBy(static item => item.SegmentId, StringComparer.Ordinal).ToArray();
