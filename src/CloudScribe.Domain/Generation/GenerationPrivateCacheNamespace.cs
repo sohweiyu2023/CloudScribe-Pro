@@ -34,7 +34,7 @@ public sealed record GenerationCacheTrustContext(
         {
             if (string.IsNullOrWhiteSpace(value))
             {
-                throw new ArgumentException("Every cache trust-namespace field must be explicit. Use a stable 'none' token when a field is not applicable.");
+                throw new InvalidOperationException("Every cache trust-namespace field must be explicit. Use a stable 'none' token when a field is not applicable.");
             }
         }
 
@@ -75,7 +75,7 @@ public sealed record PrivateCacheLookupKey(string HmacSha256)
     {
         if (HmacSha256.Length != 64 || HmacSha256.Any(static character => !Uri.IsHexDigit(character)))
         {
-            throw new ArgumentException("Private cache lookup identifiers must be 64-character HMAC-SHA-256 hex digests.", nameof(HmacSha256));
+            throw new InvalidOperationException("Private cache lookup identifiers must be 64-character HMAC-SHA-256 hex digests.");
         }
 
         return this;
