@@ -1,20 +1,6 @@
-using System.Net;
 using System.Net.Http.Headers;
 
 namespace CloudScribe.Infrastructure.Generation;
-
-public interface ITransientCredentialResolver
-{
-    ValueTask<string> ResolveAccessTokenAsync(string credentialReferenceId, CancellationToken cancellationToken);
-}
-
-public sealed record GoogleHttpTransportRequest(
-    Uri Endpoint,
-    string CredentialReferenceId,
-    ReadOnlyMemory<byte> Payload,
-    int MaximumResponseBytes = 16 * 1024 * 1024);
-
-public sealed record GoogleHttpTransportResponse(HttpStatusCode StatusCode, ReadOnlyMemory<byte> Body, TimeSpan? RetryAfter);
 
 public sealed class GoogleGenerationHttpTransport
 {
