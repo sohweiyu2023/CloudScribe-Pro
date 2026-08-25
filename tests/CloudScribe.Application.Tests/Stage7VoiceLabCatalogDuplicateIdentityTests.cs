@@ -21,7 +21,8 @@ public sealed class Stage7VoiceLabCatalogDuplicateIdentityTests
             query,
             accountAuthorized: true,
             projectAuthorized: true,
-            privateVoiceAccessAuthorized: false));
+            privateVoiceAccessAuthorized: false,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
     }
 
     private static VoiceLabCatalogSelection Selection(string voiceId, string fingerprint) => new(
