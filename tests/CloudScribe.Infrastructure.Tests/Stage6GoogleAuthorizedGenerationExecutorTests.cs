@@ -72,6 +72,13 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
         Assert.Equal(0, calls);
     }
 
+    [Fact]
+    public void ProviderIdentityConstants_MatchV223TrustNamespace()
+    {
+        Assert.Equal("google-cloud-text-to-speech", GoogleGenerationProvider.StableProviderId);
+        Assert.Equal("synthesize-speech", GoogleGenerationProvider.SynthesizeOperationStableId);
+    }
+
     private static HttpClient ClientCountingCalls(Action onCall) => new(new StubHandler(_ =>
     {
         onCall();
@@ -144,7 +151,7 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
             125);
         var request = new GenerationProviderRequest(
             GoogleGenerationProvider.StableProviderId,
-            "synthesize",
+            GoogleGenerationProvider.SynthesizeOperationStableId,
             "acct",
             "idem-1",
             payload,
