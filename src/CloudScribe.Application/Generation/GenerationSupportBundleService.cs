@@ -34,7 +34,7 @@ public sealed class GenerationSupportBundleService
             currentPolicyAllowsDiagnostics);
         GenerationSupportBundlePrivacyPolicy.RequireSafe(decision);
 
-        if (decision.Reason != "support-bundle-metadata-only")
+        if (!string.Equals(decision.Reason, "support-bundle-metadata-only", StringComparison.Ordinal))
             throw new InvalidOperationException($"Generation support bundle is not authorized: {decision.Reason}");
 
         return new GenerationSupportBundle(metadata, decision);
@@ -42,8 +42,12 @@ public sealed class GenerationSupportBundleService
 
     private static void RequireSafeMetadataToken(string value, string name, int maxLength, bool allowDot)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > maxLength || value != value.Trim())
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Length > maxLength
+            || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+        {
             throw new InvalidOperationException($"Generation support-bundle {name} is not a canonical bounded metadata token.");
+        }
 
         foreach (var c in value)
         {
