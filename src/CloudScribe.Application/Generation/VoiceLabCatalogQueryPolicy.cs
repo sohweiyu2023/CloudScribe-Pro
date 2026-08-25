@@ -19,9 +19,14 @@ public static class VoiceLabCatalogQueryPolicy
         ArgumentNullException.ThrowIfNull(query);
         foreach (var value in new[] { query.ProviderId, query.AccountId, query.ProjectId })
         {
-            if (string.IsNullOrWhiteSpace(value) || value != value.Trim() || value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            if (string.IsNullOrWhiteSpace(value) ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            {
                 throw new InvalidOperationException("Voice Lab catalog query contains a non-canonical trust identity.");
+            }
         }
+
         if (!accountAuthorized || !projectAuthorized)
             throw new InvalidOperationException("Voice Lab catalog query is not authorized for the current account/project.");
         if (query.IncludePrivateVoices && !privateVoiceAccessAuthorized)
