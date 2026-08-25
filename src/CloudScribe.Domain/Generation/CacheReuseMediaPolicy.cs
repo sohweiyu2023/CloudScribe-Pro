@@ -1,23 +1,5 @@
 namespace CloudScribe.Domain.Generation;
 
-public sealed record CacheReuseMediaMetadata(
-    GenerationAudioFormat Format,
-    int SampleRateHz,
-    int ChannelCount,
-    long DurationMilliseconds)
-{
-    public CacheReuseMediaMetadata Validate()
-    {
-        if (SampleRateHz is < 8000 or > 384000)
-            throw new ArgumentOutOfRangeException(nameof(SampleRateHz));
-        if (ChannelCount is < 1 or > 32)
-            throw new ArgumentOutOfRangeException(nameof(ChannelCount));
-        if (DurationMilliseconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(DurationMilliseconds));
-        return this;
-    }
-}
-
 public static class CacheReuseMediaPolicy
 {
     public static bool IsEligible(
