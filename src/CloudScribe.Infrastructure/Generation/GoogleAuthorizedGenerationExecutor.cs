@@ -4,8 +4,6 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed class GoogleAuthorizedGenerationExecutor
 {
-    private const string SynthesizeOperation = "synthesize";
-
     private readonly GoogleGenerationProvider _provider;
     private readonly GoogleGenerationAccount _account;
     private readonly GoogleCapabilitySnapshot _capabilities;
@@ -53,7 +51,7 @@ public sealed class GoogleAuthorizedGenerationExecutor
         ArgumentNullException.ThrowIfNull(request);
         if (!string.Equals(request.ProviderStableId, GoogleGenerationProvider.StableProviderId, StringComparison.Ordinal))
             throw new InvalidOperationException("Authorized Google execution received a request for another provider.");
-        if (!string.Equals(request.OperationStableId, SynthesizeOperation, StringComparison.Ordinal))
+        if (!string.Equals(request.OperationStableId, GoogleGenerationProvider.SynthesizeOperationStableId, StringComparison.Ordinal))
             throw new InvalidOperationException("Google synthesis authorization cannot be reused for another provider operation.");
         if (!string.Equals(request.AccountId, _account.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("Authorized Google execution account identity changed after approval.");
