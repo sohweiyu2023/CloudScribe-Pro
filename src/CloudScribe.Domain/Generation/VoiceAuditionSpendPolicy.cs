@@ -1,10 +1,5 @@
 namespace CloudScribe.Domain.Generation;
 
-public sealed record VoiceAuditionSpendDecision(
-    bool MaySubmitBillableRequest,
-    bool MayReuseCache,
-    string Reason);
-
 public static class VoiceAuditionSpendPolicy
 {
     public static VoiceAuditionSpendDecision Evaluate(
