@@ -109,7 +109,7 @@ public sealed class VerifiedPreparedRestoreExecutor
         var current = new DirectoryInfo(path);
         while (current is not null)
         {
-            if (current.Exists && (current.Attributes & FileAttributes.ReparsePoint) != 0)
+            if (current.Exists && current.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 throw new InvalidOperationException($"The {label} path may not traverse a symbolic link or reparse-point directory: {current.FullName}");
             current = current.Parent;
         }
