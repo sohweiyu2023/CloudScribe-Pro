@@ -140,7 +140,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
           dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1
           if ($LASTEXITCODE -ne 0) { throw 'Full test suite failed.' }
-          python -m pytest tests/test_verification_tools.py -q
+          python -B -m unittest discover -s tests -p test_verification_tools.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Verification-tool tests failed.' }
           if (@(git status --porcelain=v1).Count -ne 0) { throw 'Certification changed or introduced candidate files.' }
           if ((git rev-parse HEAD).Trim() -ne $env:ADMITTED_SHA) { throw 'Candidate SHA changed during certification.' }
