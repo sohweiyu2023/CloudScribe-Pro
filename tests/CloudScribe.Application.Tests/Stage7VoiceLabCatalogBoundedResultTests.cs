@@ -18,7 +18,8 @@ public sealed class Stage7VoiceLabCatalogBoundedResultTests
             query,
             accountAuthorized: true,
             projectAuthorized: true,
-            privateVoiceAccessAuthorized: false));
+            privateVoiceAccessAuthorized: false,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
     }
 
     [Fact]
@@ -38,7 +39,7 @@ public sealed class Stage7VoiceLabCatalogBoundedResultTests
             accountAuthorized: true,
             projectAuthorized: true,
             privateVoiceAccessAuthorized: false,
-            cancellation.Token));
+            cancellation.Token)).ConfigureAwait(true);
 
         Assert.Equal(0, transportCalls);
     }
