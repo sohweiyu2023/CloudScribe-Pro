@@ -1,6 +1,11 @@
 name: CloudScribe Stage 4 v2.23 Autopilot
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/cloudscribe-stage4-v223-autopilot.yml'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
