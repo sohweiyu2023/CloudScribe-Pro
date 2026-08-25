@@ -1,7 +1,5 @@
 namespace CloudScribe.Domain.Security;
 
-public sealed record ArchiveEntryDescriptor(string RelativePath, long UncompressedLength, bool IsSymbolicLink);
-
 public sealed class ArchiveExtractionPolicy
 {
     public ArchiveExtractionPolicy(long maximumEntryBytes, long maximumTotalBytes, int maximumEntries)
