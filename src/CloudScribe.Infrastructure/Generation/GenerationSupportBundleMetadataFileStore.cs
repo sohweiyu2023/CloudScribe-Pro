@@ -18,6 +18,30 @@ internal sealed class GenerationSupportBundleMetadataFileStore(AppPaths paths)
         GenerationSupportBundle bundle,
         CancellationToken cancellationToken = default)
     {
+        RequireMetadataOnly(bundle);
+        cancellationToken.ThrowIfCancellationRequested();
+        paths.EnsureSupportBundleStagingDirectory();
+
+        byte[] payload = BuildPayload(bundle);
+        string baseName = $"generation-metadata-{bundle.Metadata.CreatedAtUtc:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.json";
+        string finalPath = Path.Combine(paths.SupportBundleStagingDirectory, baseName);
+        string stagingPath = finalPath + ".partial";
+
+        try
+        {
+            await WriteStagingFileAsync(stagingPath, payload, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(stagingPath, finalPath, overwrite: false);
+        }
+        catch
+        {
+            DeleteStagingFile(stagingPath);
+            throw;
+        }
+    }
+
+    private static void RequireMetadataOnly(GenerationSupportBundle bundle)
+    {
         ArgumentNullException.ThrowIfNull(bundle);
         GenerationSupportBundlePrivacyPolicy.RequireSafe(bundle.PrivacyDecision);
         if (!string.Equals(
@@ -28,11 +52,10 @@ internal sealed class GenerationSupportBundleMetadataFileStore(AppPaths paths)
             throw new InvalidOperationException(
                 "Generation diagnostic persistence accepts only the v2.23 metadata-only privacy decision.");
         }
+    }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        paths.EnsureSupportBundleStagingDirectory();
-
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
+    private static byte[] BuildPayload(GenerationSupportBundle bundle) =>
+        JsonSerializer.SerializeToUtf8Bytes(new
         {
             schemaVersion = 1,
             metadata = bundle.Metadata,
@@ -47,42 +70,34 @@ internal sealed class GenerationSupportBundleMetadataFileStore(AppPaths paths)
             exclusions = ExplicitExclusions,
         });
 
-        string baseName = $"generation-metadata-{bundle.Metadata.CreatedAtUtc:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.json";
-        string finalPath = Path.Combine(paths.SupportBundleStagingDirectory, baseName);
-        string stagingPath = finalPath + ".partial";
+    private static async Task WriteStagingFileAsync(
+        string stagingPath,
+        byte[] payload,
+        CancellationToken cancellationToken)
+    {
+        await using FileStream stream = new(
+            stagingPath,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 16 * 1024,
+            FileOptions.Asynchronous | FileOptions.WriteThrough);
+        await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        stream.Flush(flushToDisk: true);
+    }
 
+    private static void DeleteStagingFile(string stagingPath)
+    {
         try
         {
-            await using (FileStream stream = new(
-                stagingPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 16 * 1024,
-                FileOptions.Asynchronous | FileOptions.WriteThrough))
-            {
-                await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                stream.Flush(flushToDisk: true);
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Move(stagingPath, finalPath, overwrite: false);
+            File.Delete(stagingPath);
         }
-        catch
+        catch (IOException)
         {
-            try
-            {
-                File.Delete(stagingPath);
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-
-            throw;
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 }
