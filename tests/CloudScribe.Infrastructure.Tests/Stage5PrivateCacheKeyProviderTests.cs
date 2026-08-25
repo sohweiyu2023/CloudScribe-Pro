@@ -10,15 +10,22 @@ public sealed class Stage5PrivateCacheKeyProviderTests
     [Fact]
     public async Task VaultBackedKeySurvivesProviderRecreation()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var vault = new MemoryCredentialVault();
         byte[] first;
-        await using (var scope = new AsyncKeyScope(await new VaultBackedGenerationPrivateCacheKeyProvider(vault).GetOrCreateAsync()))
+        await using (var scope = new AsyncKeyScope(
+            await new VaultBackedGenerationPrivateCacheKeyProvider(vault)
+                .GetOrCreateAsync(cancellationToken)
+                .ConfigureAwait(true)))
         {
             first = scope.Material.Span.ToArray();
         }
 
         byte[] second;
-        await using (var scope = new AsyncKeyScope(await new VaultBackedGenerationPrivateCacheKeyProvider(vault).GetOrCreateAsync()))
+        await using (var scope = new AsyncKeyScope(
+            await new VaultBackedGenerationPrivateCacheKeyProvider(vault)
+                .GetOrCreateAsync(cancellationToken)
+                .ConfigureAwait(true)))
         {
             second = scope.Material.Span.ToArray();
         }
@@ -31,13 +38,19 @@ public sealed class Stage5PrivateCacheKeyProviderTests
     [Fact]
     public async Task InvalidVaultMaterialFailsClosedInsteadOfRotatingSilently()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var vault = new MemoryCredentialVault();
-        await vault.StoreAsync(new CredentialReference("cache-private-hmac-v2-23"), "not-valid-base64".AsMemory());
+        await vault.StoreAsync(
+            new CredentialReference("cache-private-hmac-v2-23"),
+            "not-valid-base64".AsMemory(),
+            cancellationToken).ConfigureAwait(true);
 
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
         {
-            using var material = await new VaultBackedGenerationPrivateCacheKeyProvider(vault).GetOrCreateAsync();
-        });
+            using var material = await new VaultBackedGenerationPrivateCacheKeyProvider(vault)
+                .GetOrCreateAsync(cancellationToken)
+                .ConfigureAwait(true);
+        }).ConfigureAwait(true);
     }
 
     private sealed class MemoryCredentialVault : ICredentialVault
