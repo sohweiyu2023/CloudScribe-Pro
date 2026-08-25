@@ -34,8 +34,7 @@ public sealed class GoogleGenerationHttpTransport
         ArgumentNullException.ThrowIfNull(request);
         ValidateEndpoint(request.Endpoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.CredentialReferenceId);
-        if (request.Payload.IsEmpty) throw new ArgumentException("Compiled request payload is required.", nameof(request));
-        if (request.MaximumResponseBytes is <= 0 or > 64 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(request));
+        ValidateBoundedRequest(request.Payload, request.MaximumResponseBytes);
 
         var token = await _credentialResolver.ResolveAccessTokenAsync(request.CredentialReferenceId, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("Credential resolver returned an empty access token.");
@@ -61,6 +60,14 @@ public sealed class GoogleGenerationHttpTransport
         }
 
         return new GoogleHttpTransportResponse(response.StatusCode, buffer.ToArray(), retryAfter);
+    }
+
+    private static void ValidateBoundedRequest(ReadOnlyMemory<byte> payload, int maximumResponseBytes)
+    {
+        if (payload.IsEmpty)
+            throw new ArgumentException("Compiled request payload is required.", nameof(payload));
+        if (maximumResponseBytes is <= 0 or > 64 * 1024 * 1024)
+            throw new ArgumentOutOfRangeException(nameof(maximumResponseBytes));
     }
 
     private void ValidateEndpoint(Uri endpoint)
