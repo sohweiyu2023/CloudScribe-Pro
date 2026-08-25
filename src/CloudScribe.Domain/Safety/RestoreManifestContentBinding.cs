@@ -26,7 +26,7 @@ public static class RestoreManifestContentBinding
         ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
         ArgumentNullException.ThrowIfNull(bindings);
         var root = Path.GetFullPath(stagingRoot);
-        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+        if (File.GetAttributes(root).HasFlag(FileAttributes.ReparsePoint))
             throw new InvalidOperationException("Restore staging root cannot be a reparse point.");
         var prefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -61,7 +61,7 @@ public static class RestoreManifestContentBinding
         foreach (var segment in relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, segment);
-            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            if (File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
                 throw new InvalidOperationException("Restore manifest content cannot traverse a symbolic link or reparse point.");
         }
     }
