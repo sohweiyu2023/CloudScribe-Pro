@@ -115,10 +115,19 @@ public sealed class FileGenerationSegmentCache : IGenerationSegmentCache
             var temporaryMetadata = metadataPath + ".tmp-" + token;
             try
             {
-                await using (var stream = new FileStream(temporaryMedia, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous | FileOptions.WriteThrough))
-                { await stream.WriteAsync(mediaBytes, cancellationToken).ConfigureAwait(false); await stream.FlushAsync(cancellationToken).ConfigureAwait(false); }
-                await using (var metadataStream = new FileStream(temporaryMetadata, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough))
-                { await JsonSerializer.SerializeAsync(metadataStream, metadata, cancellationToken: cancellationToken).ConfigureAwait(false); await metadataStream.FlushAsync(cancellationToken).ConfigureAwait(false); }
+                FileStream stream = new(temporaryMedia, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous | FileOptions.WriteThrough);
+                await using (stream.ConfigureAwait(false))
+                {
+                    await stream.WriteAsync(mediaBytes, cancellationToken).ConfigureAwait(false);
+                    await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                FileStream metadataStream = new(temporaryMetadata, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough);
+                await using (metadataStream.ConfigureAwait(false))
+                {
+                    await JsonSerializer.SerializeAsync(metadataStream, metadata, cancellationToken: cancellationToken).ConfigureAwait(false);
+                    await metadataStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
                 File.Move(temporaryMedia, mediaPath, overwrite: false);
                 File.Move(temporaryMetadata, metadataPath, overwrite: false);
             }
@@ -145,7 +154,7 @@ public sealed class FileGenerationSegmentCache : IGenerationSegmentCache
     {
         key.Validate();
         if ((protection & ~(GenerationCacheEntryProtection.Active | GenerationCacheEntryProtection.Pinned |
-            GenerationCacheEntryProtection.Referenced | GenerationCacheEntryProtection.UnresolvedSubmission)) != 0)
+            GenerationCacheEntryProtection.Referenced | GenerationCacheEntryProtection.UnresolvedSubmission)) != GenerationCacheEntryProtection.None)
             throw new ArgumentOutOfRangeException(nameof(protection));
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -271,8 +280,11 @@ public sealed class FileGenerationSegmentCache : IGenerationSegmentCache
         {
             var metadataInfo = new FileInfo(metadataPath);
             if (metadataInfo.Length is <= 0 or > MaximumMetadataBytes) return null;
-            await using var metadataStream = new FileStream(metadataPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            return await JsonSerializer.DeserializeAsync<CacheMetadata>(metadataStream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            FileStream metadataStream = new(metadataPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using (metadataStream.ConfigureAwait(false))
+            {
+                return await JsonSerializer.DeserializeAsync<CacheMetadata>(metadataStream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (Exception exception) when (exception is JsonException or InvalidDataException or IOException or UnauthorizedAccessException)
         { return null; }
@@ -283,7 +295,8 @@ public sealed class FileGenerationSegmentCache : IGenerationSegmentCache
         var temporary = metadataPath + ".tmp-" + Guid.NewGuid().ToString("N");
         try
         {
-            await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough);
+            await using (stream.ConfigureAwait(false))
             {
                 await JsonSerializer.SerializeAsync(stream, metadata, cancellationToken: cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
