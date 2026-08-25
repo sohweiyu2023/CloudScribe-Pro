@@ -1,34 +1,14 @@
 namespace CloudScribe.Domain.Generation;
 
-public sealed record SpeakerVoiceBinding(
-    string SpeakerRole,
-    string ProviderStableId,
-    string AccountId,
-    string VoiceStableId,
-    string PricingProvenanceId,
-    string CapabilityProvenanceId)
-{
-    public SpeakerVoiceBinding Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(SpeakerRole);
-        ArgumentException.ThrowIfNullOrWhiteSpace(ProviderStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(AccountId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(VoiceStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(PricingProvenanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(CapabilityProvenanceId);
-        return this;
-    }
-
-    public string RouteIdentity => string.Join("/", ProviderStableId, AccountId, VoiceStableId);
-}
-
 public sealed record MultiSpeakerVoiceMap(IReadOnlyList<SpeakerVoiceBinding> Bindings)
 {
-    public MultiSpeakerVoiceMap Validate()
+    public MultiSpeakerVoiceMap Validate() => ValidateCore(Bindings);
+
+    private MultiSpeakerVoiceMap ValidateCore(IReadOnlyList<SpeakerVoiceBinding> bindings)
     {
-        ArgumentNullException.ThrowIfNull(Bindings);
-        if (Bindings.Count == 0) throw new InvalidOperationException("At least one speaker voice binding is required.");
-        var validated = Bindings.Select(static binding => binding.Validate()).ToArray();
+        ArgumentNullException.ThrowIfNull(bindings);
+        if (bindings.Count == 0) throw new InvalidOperationException("At least one speaker voice binding is required.");
+        var validated = bindings.Select(static binding => binding.Validate()).ToArray();
         var duplicateRole = validated.GroupBy(static binding => binding.SpeakerRole, StringComparer.Ordinal)
             .FirstOrDefault(static group => group.Count() > 1);
         if (duplicateRole is not null) throw new InvalidOperationException($"Speaker role is mapped more than once: {duplicateRole.Key}");
