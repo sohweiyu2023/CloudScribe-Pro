@@ -10,6 +10,7 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     [Fact]
     public async Task SubmitAsync_ExactAuthorizedIdentityReachesProvider()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var calls = 0;
         using var client = new HttpClient(new StubHandler(_ =>
         {
@@ -21,7 +22,7 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
         }));
         var setup = CreateSetup(client, new byte[] { 1, 2, 3 });
 
-        var response = await setup.Executor.SubmitAsync(setup.Request);
+        var response = await setup.Executor.SubmitAsync(setup.Request, cancellationToken).ConfigureAwait(true);
 
         Assert.Equal(1, calls);
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
@@ -30,13 +31,15 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     [Fact]
     public async Task SubmitAsync_PayloadDriftFailsBeforeCredentialOrHttpUse()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var calls = 0;
         var resolver = new CountingCredentialResolver();
         using var client = ClientCountingCalls(() => calls++);
         var setup = CreateSetup(client, new byte[] { 1, 2, 3 }, resolver);
         var drifted = RequestLike(setup.Request, payload: new byte[] { 9, 9, 9 });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => setup.Executor.SubmitAsync(drifted));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => setup.Executor.SubmitAsync(drifted, cancellationToken)).ConfigureAwait(true);
 
         Assert.Equal(0, resolver.ResolveCalls);
         Assert.Equal(0, calls);
@@ -45,13 +48,15 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     [Fact]
     public async Task SubmitAsync_OperationDriftFailsBeforeCredentialOrHttpUse()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var calls = 0;
         var resolver = new CountingCredentialResolver();
         using var client = ClientCountingCalls(() => calls++);
         var setup = CreateSetup(client, new byte[] { 1, 2, 3 }, resolver);
         var drifted = RequestLike(setup.Request, operation: "list-voices");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => setup.Executor.SubmitAsync(drifted));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => setup.Executor.SubmitAsync(drifted, cancellationToken)).ConfigureAwait(true);
 
         Assert.Equal(0, resolver.ResolveCalls);
         Assert.Equal(0, calls);
@@ -60,13 +65,15 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     [Fact]
     public async Task SubmitAsync_OutputFormatDriftFailsBeforeCredentialOrHttpUse()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var calls = 0;
         var resolver = new CountingCredentialResolver();
         using var client = ClientCountingCalls(() => calls++);
         var setup = CreateSetup(client, new byte[] { 1, 2, 3 }, resolver);
         var drifted = RequestLike(setup.Request, outputFormat: "wav");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => setup.Executor.SubmitAsync(drifted));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => setup.Executor.SubmitAsync(drifted, cancellationToken)).ConfigureAwait(true);
 
         Assert.Equal(0, resolver.ResolveCalls);
         Assert.Equal(0, calls);
