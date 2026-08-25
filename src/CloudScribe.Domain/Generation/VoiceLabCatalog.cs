@@ -9,7 +9,10 @@ public static class VoiceLabCatalog
     {
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(query);
-        ArgumentNullException.ThrowIfNull(query.RequiredCapabilities);
+        if (query.RequiredCapabilities is null)
+        {
+            throw new InvalidOperationException("Voice Lab query capability requirements are missing.");
+        }
 
         var validated = entries.Select(entry => entry.Validate(nowUtc)).ToArray();
         var duplicate = validated.GroupBy(entry => entry.StableIdentity, StringComparer.Ordinal)
