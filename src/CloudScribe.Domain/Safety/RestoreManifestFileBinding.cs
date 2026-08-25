@@ -4,15 +4,20 @@ public sealed record RestoreManifestFileBinding(string RelativePath, long Length
 {
     public RestoreManifestFileBinding Validate()
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(RelativePath);
-        if (Path.IsPathRooted(RelativePath))
+        ValidateBinding(RelativePath, LengthBytes, Sha256Hex);
+        return this;
+    }
+
+    private static void ValidateBinding(string relativePath, long lengthBytes, string sha256Hex)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+        if (Path.IsPathRooted(relativePath))
             throw new InvalidOperationException("Restore manifest path is not a safe relative path.");
-        var segments = RelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var segments = relativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length == 0 || segments.Any(static segment => segment is "." or ".."))
             throw new InvalidOperationException("Restore manifest path contains an unsafe traversal segment.");
-        if (LengthBytes < 0) throw new ArgumentOutOfRangeException(nameof(LengthBytes));
-        if (Sha256Hex.Length != 64 || Sha256Hex.Any(static c => !Uri.IsHexDigit(c)))
+        if (lengthBytes < 0) throw new ArgumentOutOfRangeException(nameof(lengthBytes));
+        if (sha256Hex.Length != 64 || sha256Hex.Any(static c => !Uri.IsHexDigit(c)))
             throw new InvalidOperationException("Restore manifest SHA-256 must be 64 hexadecimal characters.");
-        return this;
     }
 }
