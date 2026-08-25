@@ -1,3 +1,4 @@
+using System.Globalization;
 using CloudScribe.Application.Generation;
 
 namespace CloudScribe.Application.Tests;
@@ -7,7 +8,7 @@ public sealed class Stage5GenerationReleaseCheckpointTests
     [Fact]
     public void MatchingVerifiedReceiptCanAdvanceToFinalized()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var receipt = Receipt();
         var checkpoint = GenerationReleaseCheckpoint.FromReceipt(receipt, GenerationReleaseCheckpointState.PublishedPendingVerification, now);
 
@@ -20,7 +21,7 @@ public sealed class Stage5GenerationReleaseCheckpointTests
     [Fact]
     public void ReceiptDriftAndFailedVerificationCannotFinalize()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var receipt = Receipt();
         var checkpoint = GenerationReleaseCheckpoint.FromReceipt(receipt, GenerationReleaseCheckpointState.PublishedPendingVerification, now);
         var drifted = receipt with { Revision = receipt.Revision + 1 };
