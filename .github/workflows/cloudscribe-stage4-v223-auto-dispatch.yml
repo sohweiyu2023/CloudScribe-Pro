@@ -1,0 +1,43 @@
+name: CloudScribe Stage 4 v2.23 Auto Dispatch
+
+on:
+  push:
+    branches:
+      - agent/stage4-v223-reconciliation
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: cloudscribe-stage4-v223-auto-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch-authoritative-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require exact Stage 4 push identity
+        shell: bash
+        env:
+          EXPECTED_REF: refs/heads/agent/stage4-v223-reconciliation
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "${EXPECTED_REF}"
+          [[ "${EXPECTED_SHA}" =~ ^[0-9a-f]{40}$ ]]
+      - name: Dispatch authoritative Windows certification for exact pushed SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          MASTER_PACKAGE_PATH: 'C:\CloudScribe-Control\v2.23\CloudScribe_Pro_Master_v2.23.zip'
+        run: |
+          set -euo pipefail
+          gh workflow run cloudscribe-stage4-v223-admission.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref agent/stage4-v223-reconciliation \
+            -f master_package_path="${MASTER_PACKAGE_PATH}" \
+            -f expected_candidate_sha="${CANDIDATE_SHA}"
+          echo "Dispatched authoritative Stage 4 v2.23 certification for ${CANDIDATE_SHA}."
