@@ -55,9 +55,11 @@ public sealed class VoiceLabAuditionCoordinator
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.Selection);
+        if (request.Selection is null)
+            throw new ArgumentException("Voice audition requests require a catalog selection.", nameof(request));
         request.Selection.Validate();
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.OutputFormat);
+        if (string.IsNullOrWhiteSpace(request.OutputFormat))
+            throw new ArgumentException("Voice audition requests require an output format.", nameof(request));
 
         ReadOnlyMemory<byte>? cached = null;
         var cacheHitEligible = false;
