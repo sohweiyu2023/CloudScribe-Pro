@@ -1,3 +1,4 @@
+using System.Globalization;
 using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Domain.Tests;
@@ -7,7 +8,7 @@ public sealed class Stage7VoiceLabCatalogTests
     [Fact]
     public void Search_ExcludesStaleAndFiltersCapabilitiesDeterministically()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var entries = new[]
         {
             Entry("p2", "voice-b", "English B", now.AddHours(1), true, "marks"),
@@ -30,24 +31,24 @@ public sealed class Stage7VoiceLabCatalogTests
     [Fact]
     public void Search_RejectsDuplicateStableIdentity()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var duplicate = Entry("p1", "voice-a", "A", now.AddHours(1), true, "marks");
 
         Assert.Throws<InvalidOperationException>(() => VoiceLabCatalog.Search(
             new[] { duplicate, duplicate with { DisplayName = "Duplicate" } },
-            new VoiceLabQuery(null, null, null, new HashSet<string>(), false),
+            new VoiceLabQuery(null, null, null, new HashSet<string>(StringComparer.Ordinal), false),
             now));
     }
 
     [Fact]
     public void Search_PreservesProviderAndCapabilityProvenance()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var entry = Entry("p1", "voice-a", "Narrator", now.AddHours(1), false, "marks");
 
         var result = Assert.Single(VoiceLabCatalog.Search(
             new[] { entry },
-            new VoiceLabQuery("narr", "p1", null, new HashSet<string>(), false),
+            new VoiceLabQuery("narr", "p1", null, new HashSet<string>(StringComparer.Ordinal), false),
             now));
 
         Assert.Equal("pricing-v1", result.PricingProvenanceId);
@@ -71,7 +72,7 @@ public sealed class Stage7VoiceLabCatalogTests
             new HashSet<string>(capabilities, StringComparer.Ordinal),
             "pricing-v1",
             "cap-v1",
-            DateTimeOffset.Parse("2026-08-22T23:00:00Z"),
+            DateTimeOffset.Parse("2026-08-22T23:00:00Z", CultureInfo.InvariantCulture),
             expires,
             audition);
 }
