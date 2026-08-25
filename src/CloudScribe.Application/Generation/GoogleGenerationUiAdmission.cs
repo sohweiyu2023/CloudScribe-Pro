@@ -20,8 +20,12 @@ public static class GoogleGenerationUiAdmission
         ArgumentNullException.ThrowIfNull(selection);
         foreach (var value in new[] { selection.AccountId, selection.ProjectId, selection.VoiceId, selection.ModelId, selection.CapabilityEvidenceId, selection.OutputFormat })
         {
-            if (string.IsNullOrWhiteSpace(value) || value != value.Trim() || value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            if (string.IsNullOrWhiteSpace(value)
+                || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
+                || value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            {
                 throw new InvalidOperationException("Google generation UI selection contains a non-canonical identity.");
+            }
         }
         if (!accountAuthorized || !projectAuthorized)
             throw new InvalidOperationException("Google generation UI selection is not authorized for the current account/project.");
