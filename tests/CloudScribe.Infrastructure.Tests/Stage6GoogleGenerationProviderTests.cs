@@ -21,7 +21,7 @@ public sealed class Stage6GoogleGenerationProviderTests
         var provider = new GoogleGenerationProvider(account, transport);
         var request = new GenerationProviderRequest(
             GoogleGenerationProvider.StableProviderId,
-            "synthesize",
+            GoogleGenerationProvider.SynthesizeOperationStableId,
             "acct",
             "idem-1",
             new byte[] { 1 },
@@ -33,6 +33,30 @@ public sealed class Stage6GoogleGenerationProviderTests
         Assert.Equal("op-1", response.ProviderRequestId);
         Assert.Equal(new byte[] { 1, 2, 3 }, response.MediaBytes.ToArray());
         Assert.Equal("audio/mpeg", response.MediaContentType);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_RejectsNonCanonicalOperationBeforeHttp()
+    {
+        var calls = 0;
+        using var client = new HttpClient(new StubHandler(_ =>
+        {
+            calls++;
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }));
+        var account = new GoogleGenerationAccount("acct", "cred-ref", new Uri("https://texttospeech.googleapis.com/v1/text:synthesize"), "global");
+        var transport = new GoogleGenerationHttpTransport(client, new StubCredentialResolver(), new Uri("https://texttospeech.googleapis.com"));
+        var provider = new GoogleGenerationProvider(account, transport);
+        var request = new GenerationProviderRequest(
+            GoogleGenerationProvider.StableProviderId,
+            "synthesize",
+            "acct",
+            "idem-drift",
+            new byte[] { 1 },
+            "mp3");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.SubmitAsync(request, CancellationToken.None));
+        Assert.Equal(0, calls);
     }
 
     [Fact]
