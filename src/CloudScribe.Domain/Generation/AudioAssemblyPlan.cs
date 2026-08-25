@@ -1,43 +1,5 @@
 namespace CloudScribe.Domain.Generation;
 
-public enum ReleaseAudioFormat
-{
-    Wav,
-    Mp3,
-    Flac,
-    M4a,
-}
-
-public sealed record AudioSegmentArtifact(
-    string SegmentId,
-    string SourcePath,
-    string MediaType,
-    TimeSpan MeasuredDuration,
-    string ContentSha256)
-{
-    public AudioSegmentArtifact Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(SegmentId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(SourcePath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(MediaType);
-        if (!Path.IsPathFullyQualified(SourcePath))
-        {
-            throw new ArgumentException("Audio segment source path must be fully qualified.", nameof(SourcePath));
-        }
-        if (MeasuredDuration <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MeasuredDuration));
-        }
-        if (ContentSha256.Length != 64 || ContentSha256.Any(static character => !Uri.IsHexDigit(character)))
-        {
-            throw new ArgumentException("Audio segment content identity must be a SHA-256 hex digest.", nameof(ContentSha256));
-        }
-        return this;
-    }
-}
-
-public sealed record AudioAssemblyPart(int PartNumber, IReadOnlyList<AudioSegmentArtifact> Segments, TimeSpan MeasuredDuration);
-
 public sealed class AudioAssemblyPlan
 {
     public AudioAssemblyPlan(
