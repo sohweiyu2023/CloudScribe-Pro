@@ -1,0 +1,42 @@
+name: CloudScribe Stage 4 v2.23 Manifest Render
+
+on:
+  push:
+    branches:
+      - agent/stage4-v223-reconciliation
+
+permissions:
+  contents: read
+
+override: false
+
+jobs:
+  render-source-manifest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact pushed candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Render deterministic source SHA-256 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B tools/update_sha256_manifest.py
+          changed="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ "${changed}" != " M SHA256SUMS.txt" ]; then
+            echo "Expected only SHA256SUMS.txt to differ after rendering, got:" >&2
+            printf '%s\n' "${changed}" >&2
+            exit 1
+          fi
+          python -B tools/update_sha256_manifest.py --check
+      - name: Upload rendered manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage4-v223-rendered-sha256-manifest-${{ github.sha }}
+          path: SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 1
