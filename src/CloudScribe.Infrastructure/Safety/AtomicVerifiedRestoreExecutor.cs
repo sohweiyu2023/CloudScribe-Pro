@@ -116,7 +116,7 @@ public sealed class AtomicVerifiedRestoreExecutor
         var source = ResolveContained(sourceRoot, step.RelativePath, "Backup source path escapes the backup root.");
         var sourceInfo = new FileInfo(source);
         if (!sourceInfo.Exists) throw new FileNotFoundException("Backup source file is missing.", source);
-        if ((sourceInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+        if (sourceInfo.Attributes.HasFlag(FileAttributes.ReparsePoint))
             throw new InvalidOperationException("Backup source files must not be symbolic links or reparse points.");
         if (sourceInfo.Length != step.Length)
             throw new InvalidDataException($"Backup source length mismatch for {step.RelativePath}.");
@@ -137,35 +137,37 @@ public sealed class AtomicVerifiedRestoreExecutor
         var destinationPublished = false;
         try
         {
-            await using var input = new FileStream(
+            await using var inputStream = new FileStream(
                 source,
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.Read,
                 BufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await using var output = new FileStream(
+            await using var input = inputStream.ConfigureAwait(false);
+            await using var outputStream = new FileStream(
                 temporary,
                 FileMode.CreateNew,
                 FileAccess.Write,
                 FileShare.None,
                 BufferSize,
                 FileOptions.Asynchronous | FileOptions.WriteThrough);
+            await using var output = outputStream.ConfigureAwait(false);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
             var buffer = new byte[BufferSize];
             long written = 0;
             while (true)
             {
-                var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
+                var read = await inputStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
                 if (read == 0) break;
                 written = checked(written + read);
                 if (written > step.Length)
                     throw new InvalidDataException($"Backup source grew beyond the planned length for {step.RelativePath}.");
                 hash.AppendData(buffer, 0, read);
-                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                await outputStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             }
-            await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await outputStream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
             if (written != step.Length)
                 throw new InvalidDataException($"Backup source length changed while restoring {step.RelativePath}.");
@@ -213,7 +215,7 @@ public sealed class AtomicVerifiedRestoreExecutor
         var info = new DirectoryInfo(directory);
         if (!info.Exists)
             throw new DirectoryNotFoundException($"{description} does not exist: {info.FullName}");
-        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+        if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
             throw new InvalidOperationException($"{description} must not be a symbolic link or reparse point.");
     }
 
@@ -222,7 +224,7 @@ public sealed class AtomicVerifiedRestoreExecutor
         var info = new DirectoryInfo(directory);
         if (!info.Exists) Directory.CreateDirectory(info.FullName);
         info.Refresh();
-        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+        if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
             throw new InvalidOperationException($"{description} must not be a symbolic link or reparse point.");
     }
 
@@ -232,7 +234,7 @@ public sealed class AtomicVerifiedRestoreExecutor
         var current = new DirectoryInfo(Path.GetFullPath(destinationParent));
         while (true)
         {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
+            if (current.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 throw new InvalidOperationException("Restore destination directory chain contains a symbolic link or reparse point.");
             if (string.Equals(current.FullName, fullRoot, StringComparison.OrdinalIgnoreCase)) break;
             current = current.Parent ?? throw new InvalidOperationException("Restore destination parent escaped the restore root.");
