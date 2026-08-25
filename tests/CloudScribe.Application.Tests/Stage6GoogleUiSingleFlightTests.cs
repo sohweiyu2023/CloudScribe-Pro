@@ -9,14 +9,15 @@ public sealed class Stage6GoogleUiSingleFlightTests
     [Fact]
     public async Task Concurrent_ui_generation_is_rejected_before_second_submit()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var firstSubmitEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseFirstSubmit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var submitCalls = 0;
-        var queue = new GoogleGenerationQueueCoordinator(async (_, _, _) =>
+        var queue = new GoogleGenerationQueueCoordinator(async (_, _, submitCancellationToken) =>
         {
             Interlocked.Increment(ref submitCalls);
             firstSubmitEntered.TrySetResult();
-            await releaseFirstSubmit.Task.ConfigureAwait(false);
+            await releaseFirstSubmit.Task.WaitAsync(submitCancellationToken).ConfigureAwait(false);
             return "provider-job-1";
         });
         var coordinator = new GoogleGenerationUiQueueCoordinator(new GoogleGenerationBoundQueueCoordinator(queue));
@@ -34,18 +35,20 @@ public sealed class Stage6GoogleUiSingleFlightTests
             selection, true, true, true, true,
             request, trust, previous, current,
             GoogleGenerationReconciliationResolutionEvidence.None,
-            true, true, true, true);
-        await firstSubmitEntered.Task.ConfigureAwait(false);
+            true, true, true, true,
+            cancellationToken);
+        await firstSubmitEntered.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.ProcessPersistedTransitionAsync(
             selection, true, true, true, true,
             request, trust, previous, current,
             GoogleGenerationReconciliationResolutionEvidence.None,
-            true, true, true, true));
+            true, true, true, true,
+            cancellationToken)).ConfigureAwait(true);
         Assert.Equal(1, Volatile.Read(ref submitCalls));
 
         releaseFirstSubmit.TrySetResult();
-        await first.ConfigureAwait(false);
+        await first.ConfigureAwait(true);
         Assert.Equal(1, submitCalls);
     }
 }
