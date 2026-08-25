@@ -1,31 +1,5 @@
 namespace CloudScribe.Domain.Generation;
 
-public sealed record ProviderRouteHealthKey(
-    string ProviderStableId,
-    string AccountId,
-    string OperationStableId,
-    string VoiceStableId)
-{
-    public ProviderRouteHealthKey Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ProviderStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(AccountId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(OperationStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(VoiceStableId);
-        return this;
-    }
-
-    public string StableIdentity => string.Join("/", ProviderStableId, AccountId, OperationStableId, VoiceStableId);
-}
-
-public enum ProviderRouteHealthState
-{
-    Healthy = 0,
-    Degraded = 1,
-    RateLimited = 2,
-    CircuitOpen = 3,
-}
-
 public sealed record ProviderRouteHealthCircuit(
     ProviderRouteHealthKey Route,
     ProviderRouteHealthState State,
@@ -63,7 +37,9 @@ public sealed record ProviderRouteHealthCircuit(
     {
         EnsureRoute(route);
         if (!CanAttempt(nowUtc))
+        {
             throw new InvalidOperationException($"Provider route '{Route.StableIdentity}' is circuit-blocked until {RetryNotBeforeUtc:O}.");
+        }
     }
 
     public ProviderRouteHealthCircuit RecordSuccess(ProviderRouteHealthKey route, DateTimeOffset nowUtc)
@@ -87,7 +63,10 @@ public sealed record ProviderRouteHealthCircuit(
     {
         EnsureRoute(route);
         EnsureForwardTime(nowUtc);
-        if (failureThreshold <= 0) throw new ArgumentOutOfRangeException(nameof(failureThreshold));
+        if (failureThreshold <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(failureThreshold));
+        }
         ValidateDelay(circuitOpenDuration, nameof(circuitOpenDuration));
 
         var failures = checked(ConsecutiveFailures + 1);
@@ -122,7 +101,9 @@ public sealed record ProviderRouteHealthCircuit(
         ArgumentNullException.ThrowIfNull(route);
         route.Validate();
         if (route != Route)
+        {
             throw new InvalidOperationException("Provider route health cannot be applied to a different provider/account/operation/voice identity.");
+        }
     }
 
     private void EnsureTime(DateTimeOffset nowUtc) => RequireTimestamp(nowUtc, nameof(nowUtc));
@@ -131,17 +112,24 @@ public sealed record ProviderRouteHealthCircuit(
     {
         RequireTimestamp(nowUtc, nameof(nowUtc));
         if (nowUtc.ToUniversalTime() < UpdatedAtUtc)
+        {
             throw new InvalidOperationException("Provider route health time cannot move backwards.");
+        }
     }
 
     private static void RequireTimestamp(DateTimeOffset value, string name)
     {
-        if (value == default) throw new ArgumentException("Timestamp is required.", name);
+        if (value == default)
+        {
+            throw new ArgumentException("Timestamp is required.", name);
+        }
     }
 
     private static void ValidateDelay(TimeSpan value, string name)
     {
         if (value <= TimeSpan.Zero || value > TimeSpan.FromHours(24))
+        {
             throw new ArgumentOutOfRangeException(name, "Provider retry/circuit delay must be positive and no greater than 24 hours.");
+        }
     }
 }
