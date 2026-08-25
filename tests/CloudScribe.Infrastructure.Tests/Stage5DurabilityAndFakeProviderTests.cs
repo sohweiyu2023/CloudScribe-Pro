@@ -11,6 +11,7 @@ public sealed class Stage5DurabilityAndFakeProviderTests
     public async Task RecoverySnapshotsSurviveStoreRecreationAndPreserveAmbiguousSubmission()
     {
         var root = CreateScratchDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
         try
         {
             var jobId = Guid.NewGuid();
@@ -29,11 +30,11 @@ public sealed class Stage5DurabilityAndFakeProviderTests
                 2000);
 
             var firstProcess = new AtomicJsonGenerationRecoveryStore(root);
-            await firstProcess.SaveAsync(snapshot);
+            await firstProcess.SaveAsync(snapshot, cancellationToken).ConfigureAwait(true);
 
             var restartedProcess = new AtomicJsonGenerationRecoveryStore(root);
-            var restored = await restartedProcess.ReadAsync(jobId);
-            var recoverable = await restartedProcess.ListRecoverableAsync();
+            var restored = await restartedProcess.ReadAsync(jobId, cancellationToken).ConfigureAwait(true);
+            var recoverable = await restartedProcess.ListRecoverableAsync(cancellationToken).ConfigureAwait(true);
 
             Assert.NotNull(restored);
             Assert.Equal(GenerationRecoveryKind.Reconcile, restored!.DecideRecovery().Kind);
@@ -51,6 +52,7 @@ public sealed class Stage5DurabilityAndFakeProviderTests
     public async Task PrivateCacheIsReusableByNewProcessInstanceWithSameProtectedKeyNamespace()
     {
         var root = CreateScratchDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
         try
         {
             var hmacKey = Enumerable.Range(0, 32).Select(static value => (byte)value).ToArray();
@@ -61,11 +63,11 @@ public sealed class Stage5DurabilityAndFakeProviderTests
             var expected = Encoding.UTF8.GetBytes("deterministic-media");
 
             var firstProcess = new FileGenerationSegmentCache(root);
-            await firstProcess.StoreAsync(key, expected);
+            await firstProcess.StoreAsync(key, expected, cancellationToken).ConfigureAwait(true);
 
             var restartedProcess = new FileGenerationSegmentCache(root);
-            Assert.True(await restartedProcess.ContainsAsync(key));
-            Assert.Equal(expected, await restartedProcess.ReadAsync(key));
+            Assert.True(await restartedProcess.ContainsAsync(key, cancellationToken).ConfigureAwait(true));
+            Assert.Equal(expected, await restartedProcess.ReadAsync(key, cancellationToken).ConfigureAwait(true));
             Assert.DoesNotContain("compiled segment", string.Join('|', Directory.EnumerateFiles(root)), StringComparison.Ordinal);
         }
         finally
@@ -78,6 +80,7 @@ public sealed class Stage5DurabilityAndFakeProviderTests
     public async Task CorruptedCachedMediaIsQuarantinedAndNeverReused()
     {
         var root = CreateScratchDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
         try
         {
             var key = ContentAddressedSegmentKey.FromPrivateLookup(PrivateCacheLookupKey.Derive(
@@ -85,12 +88,12 @@ public sealed class Stage5DurabilityAndFakeProviderTests
                 CreateTrustContext(),
                 Encoding.UTF8.GetBytes("payload")));
             var cache = new FileGenerationSegmentCache(root);
-            await cache.StoreAsync(key, Encoding.UTF8.GetBytes("original-media"));
+            await cache.StoreAsync(key, Encoding.UTF8.GetBytes("original-media"), cancellationToken).ConfigureAwait(true);
 
             var mediaPath = Path.Combine(root, key.PrivateLookupHmacSha256 + ".segment");
-            await File.WriteAllBytesAsync(mediaPath, Encoding.UTF8.GetBytes("tampered-media"));
+            await File.WriteAllBytesAsync(mediaPath, Encoding.UTF8.GetBytes("tampered-media"), cancellationToken).ConfigureAwait(true);
 
-            Assert.Null(await cache.ReadAsync(key));
+            Assert.Null(await cache.ReadAsync(key, cancellationToken).ConfigureAwait(true));
             Assert.False(File.Exists(mediaPath));
             Assert.True(Directory.Exists(Path.Combine(root, "quarantine")));
             Assert.NotEmpty(Directory.EnumerateFiles(Path.Combine(root, "quarantine")));
@@ -104,6 +107,7 @@ public sealed class Stage5DurabilityAndFakeProviderTests
     [Fact]
     public async Task FakeProviderDeduplicatesSameIdempotencyKeyAndReconcilesSameResult()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var provider = new DeterministicFakeGenerationProvider();
         var request = new GenerationProviderRequest(
             provider.ProviderStableId,
@@ -113,9 +117,9 @@ public sealed class Stage5DurabilityAndFakeProviderTests
             Encoding.UTF8.GetBytes("payload"),
             "wav");
 
-        var first = await provider.SubmitAsync(request, CancellationToken.None);
-        var duplicate = await provider.SubmitAsync(request, CancellationToken.None);
-        var reconciled = await provider.ReconcileAsync("idem-1", CancellationToken.None);
+        var first = await provider.SubmitAsync(request, cancellationToken).ConfigureAwait(true);
+        var duplicate = await provider.SubmitAsync(request, cancellationToken).ConfigureAwait(true);
+        var reconciled = await provider.ReconcileAsync("idem-1", cancellationToken).ConfigureAwait(true);
 
         Assert.True(first.IsAccepted);
         Assert.Equal(first.ProviderRequestId, duplicate.ProviderRequestId);
@@ -128,6 +132,7 @@ public sealed class Stage5DurabilityAndFakeProviderTests
     [Fact]
     public async Task FakeUnknownSubmissionRemainsUnknownUntilExplicitReconciliation()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var provider = new DeterministicFakeGenerationProvider(FakeGenerationOutcome.SubmissionUnknown);
         var request = new GenerationProviderRequest(
             provider.ProviderStableId,
@@ -137,7 +142,7 @@ public sealed class Stage5DurabilityAndFakeProviderTests
             Encoding.UTF8.GetBytes("payload"),
             "wav");
 
-        var response = await provider.SubmitAsync(request, CancellationToken.None);
+        var response = await provider.SubmitAsync(request, cancellationToken).ConfigureAwait(true);
         var record = new GenerationSubmissionRecord(
             request.IdempotencyKey,
             response.Disposition,
