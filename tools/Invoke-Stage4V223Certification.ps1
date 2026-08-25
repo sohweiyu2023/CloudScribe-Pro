@@ -11,15 +11,21 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $expectedBranch = 'agent/stage4-v223-reconciliation'
+$expectedRemoteRef = "refs/remotes/origin/$expectedBranch"
 $resolvedRoot = (Resolve-Path $RepositoryRoot).Path
 Push-Location $resolvedRoot
 try {
     $head = (git rev-parse HEAD).Trim()
-    $branch = (git branch --show-current).Trim()
-    if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve Git candidate identity.' }
-    if ($branch -ne $expectedBranch) { throw "Stage 4 certification must run on $expectedBranch; got '$branch'." }
+    if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$') { throw 'Unable to resolve Git candidate identity.' }
     if ($CandidateSha -notmatch '^[0-9a-f]{40}$') { throw 'CandidateSha must be a lowercase 40-character Git SHA.' }
     if ($head -ne $CandidateSha) { throw "Candidate SHA mismatch. Expected $CandidateSha, checked out $head." }
+
+    git fetch --no-tags origin "refs/heads/$expectedBranch`:$expectedRemoteRef"
+    if ($LASTEXITCODE -ne 0) { throw "Unable to refresh authoritative Stage 4 branch '$expectedBranch'." }
+    git show-ref --verify --quiet $expectedRemoteRef
+    if ($LASTEXITCODE -ne 0) { throw "Authoritative Stage 4 remote ref '$expectedRemoteRef' is unavailable." }
+    git merge-base --is-ancestor $CandidateSha $expectedRemoteRef
+    if ($LASTEXITCODE -ne 0) { throw "Candidate SHA is not reachable from authoritative Stage 4 branch '$expectedBranch'." }
 
     git cat-file -e "$CandidateSha`^{commit}"
     if ($LASTEXITCODE -ne 0) { throw 'Candidate SHA does not resolve to a local Git commit object.' }
@@ -47,7 +53,8 @@ try {
     [pscustomobject]@{
         CandidateSha = $CandidateSha
         CandidateTreeSha = $treeBefore
-        Branch = $branch
+        AuthoritativeBranch = $expectedBranch
+        AuthoritativeRemoteRef = $expectedRemoteRef
         ControlVersion = 'v2.23'
         AdmissionPassed = $true
         CandidateUnchanged = $true
