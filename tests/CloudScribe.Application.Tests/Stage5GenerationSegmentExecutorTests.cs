@@ -10,14 +10,15 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task CacheHitBypassesProviderSubmission()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var provider = new RecordingProvider();
         var cache = new MemorySegmentCache();
         var request = CreateRequest();
         var executor = CreateExecutor(provider, cache);
-        var key = await executor.CreatePrivateCacheKeyAsync(request);
-        await cache.StoreAsync(key, CreateMinimalWav(1));
+        var key = await executor.CreatePrivateCacheKeyAsync(request, cancellationToken).ConfigureAwait(true);
+        await cache.StoreAsync(key, CreateMinimalWav(1), cancellationToken).ConfigureAwait(true);
 
-        var result = await executor.ExecuteAsync(request);
+        var result = await executor.ExecuteAsync(request, cancellationToken).ConfigureAwait(true);
 
         Assert.True(result.CacheHit);
         Assert.Equal(0, provider.SubmitCount);
@@ -27,14 +28,15 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task ForceFreshBypassesReusableEntryAndSubmitsAgain()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var provider = new RecordingProvider { SubmitResponse = Accepted(CreateMinimalWav(7)) };
         var cache = new MemorySegmentCache();
         var executor = CreateExecutor(provider, cache);
         var request = CreateRequest();
-        var key = await executor.CreatePrivateCacheKeyAsync(request);
-        await cache.StoreAsync(key, CreateMinimalWav(1));
+        var key = await executor.CreatePrivateCacheKeyAsync(request, cancellationToken).ConfigureAwait(true);
+        await cache.StoreAsync(key, CreateMinimalWav(1), cancellationToken).ConfigureAwait(true);
 
-        var result = await executor.ExecuteAsync(request with { ForceFresh = true });
+        var result = await executor.ExecuteAsync(request with { ForceFresh = true }, cancellationToken).ConfigureAwait(true);
 
         Assert.False(result.CacheHit);
         Assert.Equal(1, provider.SubmitCount);
@@ -44,14 +46,15 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task CorruptCacheEntryIsIgnoredAndProviderRefreshesIt()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var provider = new RecordingProvider { SubmitResponse = Accepted(CreateMinimalWav(7)) };
         var cache = new MemorySegmentCache();
         var request = CreateRequest();
         var executor = CreateExecutor(provider, cache);
-        var key = await executor.CreatePrivateCacheKeyAsync(request);
-        await cache.StoreAsync(key, new byte[] { 1, 2, 3 });
+        var key = await executor.CreatePrivateCacheKeyAsync(request, cancellationToken).ConfigureAwait(true);
+        await cache.StoreAsync(key, new byte[] { 1, 2, 3 }, cancellationToken).ConfigureAwait(true);
 
-        var result = await executor.ExecuteAsync(request);
+        var result = await executor.ExecuteAsync(request, cancellationToken).ConfigureAwait(true);
 
         Assert.False(result.CacheHit);
         Assert.Equal(1, provider.SubmitCount);
@@ -61,14 +64,15 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task AcceptedProviderMediaIsStoredAndSecondExecutionReusesIt()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var media = CreateMinimalWav(7);
         var provider = new RecordingProvider { SubmitResponse = Accepted(media) };
         var cache = new MemorySegmentCache();
         var executor = CreateExecutor(provider, cache);
         var request = CreateRequest();
 
-        var first = await executor.ExecuteAsync(request);
-        var second = await executor.ExecuteAsync(request);
+        var first = await executor.ExecuteAsync(request, cancellationToken).ConfigureAwait(true);
+        var second = await executor.ExecuteAsync(request, cancellationToken).ConfigureAwait(true);
 
         Assert.False(first.CacheHit);
         Assert.True(second.CacheHit);
@@ -79,10 +83,12 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task AcceptedCorruptProviderMediaFailsClosedAndIsNeverCached()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var provider = new RecordingProvider { SubmitResponse = Accepted(new byte[] { 7, 8, 9 }) };
         var cache = new MemorySegmentCache();
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => CreateExecutor(provider, cache).ExecuteAsync(CreateRequest()));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            CreateExecutor(provider, cache).ExecuteAsync(CreateRequest(), cancellationToken)).ConfigureAwait(true);
 
         Assert.Equal(1, provider.SubmitCount);
         Assert.Equal(0, cache.StoreCount);
@@ -91,6 +97,7 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task AcceptedWrongFormatProviderMediaFailsClosedAndIsNeverCached()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var provider = new RecordingProvider
         {
             SubmitResponse = new GenerationProviderResponse(
@@ -103,7 +110,8 @@ public sealed class Stage5GenerationSegmentExecutorTests
         };
         var cache = new MemorySegmentCache();
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => CreateExecutor(provider, cache).ExecuteAsync(CreateRequest()));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            CreateExecutor(provider, cache).ExecuteAsync(CreateRequest(), cancellationToken)).ConfigureAwait(true);
 
         Assert.Equal(0, cache.StoreCount);
     }
@@ -111,6 +119,7 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task AmbiguousSubmissionIsNeverCachedOrPretendedSuccessful()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var provider = new RecordingProvider
         {
             SubmitResponse = new GenerationProviderResponse(
@@ -124,7 +133,7 @@ public sealed class Stage5GenerationSegmentExecutorTests
         var cache = new MemorySegmentCache();
         var executor = CreateExecutor(provider, cache);
 
-        var result = await executor.ExecuteAsync(CreateRequest());
+        var result = await executor.ExecuteAsync(CreateRequest(), cancellationToken).ConfigureAwait(true);
 
         Assert.True(result.RequiresReconciliation);
         Assert.False(result.CacheHit);
@@ -135,14 +144,15 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task ReconciliationCanPersistAcceptedMediaWithoutResubmission()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var media = CreateMinimalWav(4);
         var provider = new RecordingProvider { ReconcileResponse = Accepted(media) };
         var cache = new MemorySegmentCache();
         var executor = CreateExecutor(provider, cache);
         var request = CreateRequest();
 
-        var reconciled = await executor.ReconcileAsync(request);
-        var cached = await executor.ExecuteAsync(request);
+        var reconciled = await executor.ReconcileAsync(request, cancellationToken).ConfigureAwait(true);
+        var cached = await executor.ExecuteAsync(request, cancellationToken).ConfigureAwait(true);
 
         Assert.NotNull(reconciled);
         Assert.Equal(0, provider.SubmitCount);
@@ -154,11 +164,12 @@ public sealed class Stage5GenerationSegmentExecutorTests
     [Fact]
     public async Task ProviderBindingMismatchFailsBeforeAnyBillableCall()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var provider = new RecordingProvider();
         var request = CreateRequest() with { ProviderStableId = "other-provider" };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            CreateExecutor(provider, new MemorySegmentCache()).ExecuteAsync(request));
+            CreateExecutor(provider, new MemorySegmentCache()).ExecuteAsync(request, cancellationToken)).ConfigureAwait(true);
 
         Assert.Equal(0, provider.SubmitCount);
     }
