@@ -43,14 +43,14 @@ public sealed class FileGenerationCacheLifecycleAdapter : IGenerationCacheLifecy
             ApplicationProtection.Referenced |
             ApplicationProtection.UnresolvedSubmission;
 
-        if ((protection & ~allowed) != 0)
+        if ((protection & ~allowed) != ApplicationProtection.None)
             throw new ArgumentOutOfRangeException(nameof(protection));
 
         var mapped = InfrastructureProtection.None;
-        if ((protection & ApplicationProtection.Active) != 0) mapped |= InfrastructureProtection.Active;
-        if ((protection & ApplicationProtection.Pinned) != 0) mapped |= InfrastructureProtection.Pinned;
-        if ((protection & ApplicationProtection.Referenced) != 0) mapped |= InfrastructureProtection.Referenced;
-        if ((protection & ApplicationProtection.UnresolvedSubmission) != 0) mapped |= InfrastructureProtection.UnresolvedSubmission;
+        if ((protection & ApplicationProtection.Active) != ApplicationProtection.None) mapped |= InfrastructureProtection.Active;
+        if ((protection & ApplicationProtection.Pinned) != ApplicationProtection.None) mapped |= InfrastructureProtection.Pinned;
+        if ((protection & ApplicationProtection.Referenced) != ApplicationProtection.None) mapped |= InfrastructureProtection.Referenced;
+        if ((protection & ApplicationProtection.UnresolvedSubmission) != ApplicationProtection.None) mapped |= InfrastructureProtection.UnresolvedSubmission;
         return mapped;
     }
 }
