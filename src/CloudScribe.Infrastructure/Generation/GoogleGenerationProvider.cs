@@ -6,7 +6,8 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed class GoogleGenerationProvider : IGenerationProvider
 {
-    public const string StableProviderId = "google-cloud-tts";
+    public const string StableProviderId = "google-cloud-text-to-speech";
+    public const string SynthesizeOperationStableId = "synthesize-speech";
 
     private readonly GoogleGenerationAccount _account;
     private readonly GoogleGenerationHttpTransport _transport;
@@ -33,6 +34,8 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         ArgumentNullException.ThrowIfNull(request);
         if (!string.Equals(request.ProviderStableId, StableProviderId, StringComparison.Ordinal))
             throw new InvalidOperationException("Generation request provider identity does not match the Google adapter.");
+        if (!string.Equals(request.OperationStableId, SynthesizeOperationStableId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Generation request operation identity does not match Google synthesize-speech.");
         if (!string.Equals(request.AccountId, _account.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("Generation request account identity does not match the pinned Google account.");
 
