@@ -1,3 +1,4 @@
+using System.Globalization;
 using CloudScribe.Domain.Safety;
 
 namespace CloudScribe.Domain.Tests;
@@ -8,7 +9,7 @@ public sealed class Stage8RestoreTransactionJournalTests
     public void RestoreCannotVerifyUntilEveryBoundFileWasCopied()
     {
         var plan = Plan("a.db", "b.db");
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var journal = RestoreTransactionJournal.Start(plan, now).BeginCopy(plan, now.AddSeconds(1));
         journal = journal.MarkCopied(plan, "a.db", now.AddSeconds(2));
 
@@ -26,7 +27,7 @@ public sealed class Stage8RestoreTransactionJournalTests
     {
         var plan = Plan("a.db");
         var changed = Plan("a.db", "extra.db");
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var journal = RestoreTransactionJournal.Start(plan, now).BeginCopy(plan, now.AddSeconds(1));
 
         Assert.Throws<InvalidOperationException>(() => journal.MarkCopied(changed, "a.db", now.AddSeconds(2)));
@@ -37,7 +38,7 @@ public sealed class Stage8RestoreTransactionJournalTests
     public void FailureBeforeCommitRequiresExplicitRollbackState()
     {
         var plan = Plan("a.db");
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var journal = RestoreTransactionJournal.Start(plan, now)
             .BeginCopy(plan, now.AddSeconds(1))
             .RequireRollback(plan, now.AddSeconds(2));
