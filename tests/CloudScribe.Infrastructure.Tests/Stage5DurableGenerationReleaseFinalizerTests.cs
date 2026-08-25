@@ -9,26 +9,29 @@ public sealed class Stage5DurableGenerationReleaseFinalizerTests
     [Fact]
     public async Task RecoverAsync_FinalizesPendingCheckpointAfterDiskVerification()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = NewTempDirectory();
         try
         {
             var output = Path.Combine(root, "release.wav");
-            await File.WriteAllBytesAsync(output, new byte[] { 1, 2, 3, 4 });
+            await File.WriteAllBytesAsync(output, new byte[] { 1, 2, 3, 4 }, cancellationToken).ConfigureAwait(true);
             var receipt = CreateReceipt(output);
             var store = new AtomicJsonGenerationReleaseCheckpointStore(Path.Combine(root, "checkpoints"));
-            await store.SaveAsync(GenerationReleaseCheckpoint.FromReceipt(
-                receipt,
-                GenerationReleaseCheckpointState.PublishedPendingVerification,
-                DateTimeOffset.UtcNow.AddSeconds(-1)));
+            await store.SaveAsync(
+                GenerationReleaseCheckpoint.FromReceipt(
+                    receipt,
+                    GenerationReleaseCheckpointState.PublishedPendingVerification,
+                    DateTimeOffset.UtcNow.AddSeconds(-1)),
+                cancellationToken).ConfigureAwait(true);
             var service = new DurableGenerationReleaseFinalizer(
                 new GenerationReleasePublisher(),
                 new GenerationReleaseVerifier(),
                 store);
 
-            var result = await service.RecoverAsync(receipt);
+            var result = await service.RecoverAsync(receipt, cancellationToken).ConfigureAwait(true);
 
             Assert.True(result.IsFinalized);
-            var persisted = await store.ReadAsync(receipt.CollectionId);
+            var persisted = await store.ReadAsync(receipt.CollectionId, cancellationToken).ConfigureAwait(true);
             Assert.NotNull(persisted);
             Assert.Equal(GenerationReleaseCheckpointState.Finalized, persisted!.State);
         }
@@ -41,26 +44,29 @@ public sealed class Stage5DurableGenerationReleaseFinalizerTests
     [Fact]
     public async Task RecoverAsync_TamperedOutputRemainsPendingAndFailsClosed()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = NewTempDirectory();
         try
         {
             var output = Path.Combine(root, "release.wav");
-            await File.WriteAllBytesAsync(output, new byte[] { 5, 6, 7, 8 });
+            await File.WriteAllBytesAsync(output, new byte[] { 5, 6, 7, 8 }, cancellationToken).ConfigureAwait(true);
             var receipt = CreateReceipt(output);
             var store = new AtomicJsonGenerationReleaseCheckpointStore(Path.Combine(root, "checkpoints"));
-            await store.SaveAsync(GenerationReleaseCheckpoint.FromReceipt(
-                receipt,
-                GenerationReleaseCheckpointState.PublishedPendingVerification,
-                DateTimeOffset.UtcNow.AddSeconds(-1)));
-            await File.WriteAllBytesAsync(output, new byte[] { 9, 9, 9, 9 });
+            await store.SaveAsync(
+                GenerationReleaseCheckpoint.FromReceipt(
+                    receipt,
+                    GenerationReleaseCheckpointState.PublishedPendingVerification,
+                    DateTimeOffset.UtcNow.AddSeconds(-1)),
+                cancellationToken).ConfigureAwait(true);
+            await File.WriteAllBytesAsync(output, new byte[] { 9, 9, 9, 9 }, cancellationToken).ConfigureAwait(true);
             var service = new DurableGenerationReleaseFinalizer(
                 new GenerationReleasePublisher(),
                 new GenerationReleaseVerifier(),
                 store);
 
-            await Assert.ThrowsAsync<InvalidDataException>(() => service.RecoverAsync(receipt));
+            await Assert.ThrowsAsync<InvalidDataException>(() => service.RecoverAsync(receipt, cancellationToken)).ConfigureAwait(true);
 
-            var persisted = await store.ReadAsync(receipt.CollectionId);
+            var persisted = await store.ReadAsync(receipt.CollectionId, cancellationToken).ConfigureAwait(true);
             Assert.NotNull(persisted);
             Assert.Equal(GenerationReleaseCheckpointState.PublishedPendingVerification, persisted!.State);
         }
