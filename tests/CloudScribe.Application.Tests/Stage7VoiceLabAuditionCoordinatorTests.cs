@@ -21,7 +21,14 @@ public sealed class Stage7VoiceLabAuditionCoordinatorTests
                 return Task.FromResult(Accepted(wav));
             });
 
-        var outcome = await coordinator.ExecuteAsync(new VoiceLabAuditionRequest(true, false, false, true, true, "wav"));
+        var request = new VoiceLabAuditionRequest(
+            CurrentSelection(),
+            CachePolicyEligible: true,
+            ForceFresh: false,
+            ExplicitSpendApproved: false,
+            PricingCurrent: true,
+            OutputFormat: "wav");
+        var outcome = await coordinator.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
         Assert.True(outcome.CacheHit);
         Assert.Equal(0, submitCalls);
@@ -40,11 +47,29 @@ public sealed class Stage7VoiceLabAuditionCoordinatorTests
                 return Task.FromResult(Accepted(wav));
             });
 
-        var outcome = await coordinator.ExecuteAsync(new VoiceLabAuditionRequest(true, true, true, true, true, "wav"));
+        var request = new VoiceLabAuditionRequest(
+            CurrentSelection(),
+            CachePolicyEligible: true,
+            ForceFresh: true,
+            ExplicitSpendApproved: true,
+            PricingCurrent: true,
+            OutputFormat: "wav");
+        var outcome = await coordinator.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
         Assert.False(outcome.CacheHit);
         Assert.Equal(1, submitCalls);
     }
+
+    private static VoiceLabCatalogSelection CurrentSelection() => new(
+        VoiceStableId: "voice-a",
+        ProviderStableId: "google-cloud-text-to-speech",
+        AccountStableId: "account-a",
+        ProjectStableId: "project-a",
+        CapabilityEvidenceId: "capability-a",
+        VoiceFingerprint: "fingerprint-a",
+        CapabilityCurrent: true,
+        VoiceEnabled: true,
+        AccountProjectAuthorized: true);
 
     private static GenerationProviderResponse Accepted(byte[] wav) => new(
         SubmissionDisposition.Accepted,
