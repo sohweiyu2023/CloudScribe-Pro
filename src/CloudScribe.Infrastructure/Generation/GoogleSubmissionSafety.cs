@@ -1,36 +1,5 @@
 namespace CloudScribe.Infrastructure.Generation;
 
-public enum GoogleSubmissionDisposition
-{
-    Submit,
-    RetrySafe,
-    ReconcileRequired,
-    Fail,
-}
-
-public sealed record GoogleSubmissionAttempt(
-    string RequestIdentity,
-    string IdempotencyKey,
-    bool ProviderAccepted,
-    bool ResponseObserved,
-    bool ProviderSupportsSafeIdempotency,
-    int? HttpStatusCode,
-    TimeSpan? RetryAfter)
-{
-    public GoogleSubmissionAttempt Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(RequestIdentity);
-        ArgumentException.ThrowIfNullOrWhiteSpace(IdempotencyKey);
-        if (RetryAfter < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(RetryAfter));
-        return this;
-    }
-}
-
-public sealed record GoogleSubmissionDecision(
-    GoogleSubmissionDisposition Disposition,
-    TimeSpan? Delay,
-    string Reason);
-
 public static class GoogleSubmissionSafety
 {
     public static GoogleSubmissionDecision Decide(GoogleSubmissionAttempt attempt)
