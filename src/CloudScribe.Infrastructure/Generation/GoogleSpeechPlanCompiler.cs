@@ -4,30 +4,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed record GoogleSpeechCompilationOptions(
-    string LanguageCode,
-    string VoiceName,
-    string AudioEncoding,
-    int MaximumPayloadBytes)
-{
-    public GoogleSpeechCompilationOptions Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(LanguageCode);
-        ArgumentException.ThrowIfNullOrWhiteSpace(VoiceName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(AudioEncoding);
-        if (MaximumPayloadBytes is < 256 or > 1_000_000)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaximumPayloadBytes));
-        }
-        return this;
-    }
-}
-
-public sealed record GoogleSpeechCompilation(
-    ReadOnlyMemory<byte> Payload,
-    IReadOnlyList<SpeechDegradation> Degradations,
-    string PayloadSha256);
-
 public static class GoogleSpeechPlanCompiler
 {
     public static GoogleSpeechCompilation Compile(SpeechPlan plan, GoogleSpeechCompilationOptions options)
