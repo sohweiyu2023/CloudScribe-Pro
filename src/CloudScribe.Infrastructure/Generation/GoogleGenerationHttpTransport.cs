@@ -78,7 +78,9 @@ public sealed class GoogleGenerationHttpTransport
     private static Uri ValidateOrigin(Uri origin)
     {
         ArgumentNullException.ThrowIfNull(origin);
-        if (!origin.IsAbsoluteUri || origin.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(origin.UserInfo))
+        if (!origin.IsAbsoluteUri ||
+            !string.Equals(origin.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(origin.UserInfo))
             throw new ArgumentException("Allowed origin must be credential-free absolute HTTPS.", nameof(origin));
         return origin;
     }
