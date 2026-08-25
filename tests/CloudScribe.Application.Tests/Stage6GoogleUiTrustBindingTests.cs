@@ -31,7 +31,9 @@ public sealed class Stage6GoogleUiTrustBindingTests
     public void Non_google_synthesize_namespace_is_not_equivalent_to_ui_trust(string provider, string operation)
     {
         var trust = CreateTrust(provider, operation);
-        Assert.NotEqual("google-cloud-text-to-speech", provider == "google-cloud-text-to-speech" && operation == "synthesize-speech" ? "" : provider);
+        Assert.False(
+            string.Equals(provider, "google-cloud-text-to-speech", StringComparison.Ordinal) &&
+            string.Equals(operation, "synthesize-speech", StringComparison.Ordinal));
         Assert.False(
             string.Equals(trust.ProviderStableId, "google-cloud-text-to-speech", StringComparison.Ordinal) &&
             string.Equals(trust.OperationStableId, "synthesize-speech", StringComparison.Ordinal));
