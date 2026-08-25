@@ -9,17 +9,19 @@ public sealed class Stage5AudioAssemblyNativeExecutorTests
     public async Task ExecuteAsync_RejectsCollisionWithoutExplicitOverwrite()
     {
         var root = CreateRoot();
+        var cancellationToken = TestContext.Current.CancellationToken;
         try
         {
             var plan = CreatePlan(root);
             Directory.CreateDirectory(root);
-            await File.WriteAllTextAsync(plan.OutputPaths[0], "existing");
+            await File.WriteAllTextAsync(plan.OutputPaths[0], "existing", cancellationToken).ConfigureAwait(true);
             var executor = new AudioAssemblyNativeExecutor(new WritingNativeTool(CreateWave()));
 
             await Assert.ThrowsAsync<IOException>(() => executor.ExecuteAsync(
                 plan,
                 Path.Combine(root, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg"),
-                TimeSpan.FromMinutes(1)));
+                TimeSpan.FromMinutes(1),
+                cancellationToken: cancellationToken)).ConfigureAwait(true);
         }
         finally
         {
@@ -31,6 +33,7 @@ public sealed class Stage5AudioAssemblyNativeExecutorTests
     public async Task ExecuteAsync_RejectsSuccessWithWrongContainer()
     {
         var root = CreateRoot();
+        var cancellationToken = TestContext.Current.CancellationToken;
         try
         {
             var plan = CreatePlan(root);
@@ -39,7 +42,8 @@ public sealed class Stage5AudioAssemblyNativeExecutorTests
             await Assert.ThrowsAsync<InvalidDataException>(() => executor.ExecuteAsync(
                 plan,
                 Path.Combine(root, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg"),
-                TimeSpan.FromMinutes(1)));
+                TimeSpan.FromMinutes(1),
+                cancellationToken: cancellationToken)).ConfigureAwait(true);
         }
         finally
         {
@@ -54,6 +58,7 @@ public sealed class Stage5AudioAssemblyNativeExecutorTests
     public async Task ExecuteAsync_AcceptsExpectedBoundedContainer()
     {
         var root = CreateRoot();
+        var cancellationToken = TestContext.Current.CancellationToken;
         try
         {
             var plan = CreatePlan(root);
@@ -62,7 +67,8 @@ public sealed class Stage5AudioAssemblyNativeExecutorTests
             var result = await executor.ExecuteAsync(
                 plan,
                 Path.Combine(root, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg"),
-                TimeSpan.FromMinutes(1));
+                TimeSpan.FromMinutes(1),
+                cancellationToken: cancellationToken).ConfigureAwait(true);
 
             var artifact = Assert.Single(result.Artifacts);
             Assert.Equal(ReleaseAudioFormat.Wav, artifact.Format);
@@ -117,7 +123,7 @@ public sealed class Stage5AudioAssemblyNativeExecutorTests
         {
             var output = invocation.Arguments[^1];
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-            await File.WriteAllBytesAsync(output, payload, cancellationToken);
+            await File.WriteAllBytesAsync(output, payload, cancellationToken).ConfigureAwait(false);
             return new NativeMediaToolResult(0, false, string.Empty, string.Empty, TimeSpan.FromMilliseconds(1));
         }
     }
