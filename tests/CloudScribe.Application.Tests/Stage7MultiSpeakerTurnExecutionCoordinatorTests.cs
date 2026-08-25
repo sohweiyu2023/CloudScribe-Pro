@@ -17,9 +17,14 @@ public sealed class Stage7MultiSpeakerTurnExecutionCoordinatorTests
             new MultiSpeakerTurn(2, "a", "third"),
         };
         var routes = new[] { new SpeakerRoute("a", "provider", "voice", false) };
-        var health = new Dictionary<string, bool> { ["provider"] = true };
+        var health = new Dictionary<string, bool>(StringComparer.Ordinal) { ["provider"] = true };
 
-        var outcomes = await coordinator.ExecuteAsync(turns, routes, health, explicitFallbackAllowed: false);
+        var outcomes = await coordinator.ExecuteAsync(
+            turns,
+            routes,
+            health,
+            explicitFallbackAllowed: false,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal(2, outcomes.Count);
         Assert.True(outcomes[1].RequiresReconciliation);
@@ -32,10 +37,15 @@ public sealed class Stage7MultiSpeakerTurnExecutionCoordinatorTests
         var coordinator = new MultiSpeakerTurnExecutionCoordinator(new ContradictoryExecutor());
         var turns = new[] { new MultiSpeakerTurn(0, "a", "first") };
         var routes = new[] { new SpeakerRoute("a", "provider", "voice", false) };
-        var health = new Dictionary<string, bool> { ["provider"] = true };
+        var health = new Dictionary<string, bool>(StringComparer.Ordinal) { ["provider"] = true };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            coordinator.ExecuteAsync(turns, routes, health, explicitFallbackAllowed: false));
+            coordinator.ExecuteAsync(
+                turns,
+                routes,
+                health,
+                explicitFallbackAllowed: false,
+                TestContext.Current.CancellationToken)).ConfigureAwait(true);
     }
 
     private sealed class RecordingExecutor : IMultiSpeakerTurnExecutor
