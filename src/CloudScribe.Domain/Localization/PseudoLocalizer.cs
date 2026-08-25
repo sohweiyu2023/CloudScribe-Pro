@@ -7,9 +7,22 @@ public static class PseudoLocalizer
 {
     private static readonly IReadOnlyDictionary<char, char> Accents = new Dictionary<char, char>
     {
-        ['a'] = 'á', ['A'] = 'Á', ['e'] = 'ë', ['E'] = 'Ë', ['i'] = 'ï', ['I'] = 'Ï',
-        ['o'] = 'ô', ['O'] = 'Ô', ['u'] = 'ü', ['U'] = 'Ü', ['c'] = 'ç', ['C'] = 'Ç',
-        ['n'] = 'ñ', ['N'] = 'Ñ', ['y'] = 'ý', ['Y'] = 'Ý',
+        ['a'] = 'á',
+        ['A'] = 'Á',
+        ['e'] = 'ë',
+        ['E'] = 'Ë',
+        ['i'] = 'ï',
+        ['I'] = 'Ï',
+        ['o'] = 'ô',
+        ['O'] = 'Ô',
+        ['u'] = 'ü',
+        ['U'] = 'Ü',
+        ['c'] = 'ç',
+        ['C'] = 'Ç',
+        ['n'] = 'ñ',
+        ['N'] = 'Ñ',
+        ['y'] = 'ý',
+        ['Y'] = 'Ý',
     };
 
     public static string Transform(string value, double expansionRatio = 0.35)
