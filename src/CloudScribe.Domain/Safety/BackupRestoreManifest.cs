@@ -7,12 +7,14 @@ public sealed record BackupRestoreManifest(
     DateTimeOffset CreatedAtUtc,
     IReadOnlyList<BackupFileEntry> Files)
 {
-    public BackupRestoreManifest Validate()
+    public BackupRestoreManifest Validate() => ValidateCore(SchemaVersion, Files);
+
+    private BackupRestoreManifest ValidateCore(int schemaVersion, IReadOnlyList<BackupFileEntry> files)
     {
-        if (SchemaVersion != 1) throw new InvalidOperationException($"Unsupported backup manifest schema version: {SchemaVersion}");
-        ArgumentNullException.ThrowIfNull(Files);
-        if (Files.Count == 0) throw new InvalidOperationException("Backup manifest must contain at least one file.");
-        var validated = Files.Select(static file => file.Validate()).ToArray();
+        if (schemaVersion != 1) throw new InvalidOperationException($"Unsupported backup manifest schema version: {schemaVersion}");
+        ArgumentNullException.ThrowIfNull(files);
+        if (files.Count == 0) throw new InvalidOperationException("Backup manifest must contain at least one file.");
+        var validated = files.Select(static file => file.Validate()).ToArray();
         var duplicate = validated.GroupBy(static file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(static group => group.Count() > 1);
         if (duplicate is not null) throw new InvalidOperationException($"Backup manifest contains colliding output path: {duplicate.Key}");
