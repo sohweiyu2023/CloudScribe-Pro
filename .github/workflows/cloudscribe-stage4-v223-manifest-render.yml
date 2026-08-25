@@ -8,8 +8,6 @@ on:
 permissions:
   contents: read
 
-override: false
-
 jobs:
   render-source-manifest:
     runs-on: ubuntu-latest
