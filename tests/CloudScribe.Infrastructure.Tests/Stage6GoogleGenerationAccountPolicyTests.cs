@@ -1,3 +1,4 @@
+using System.Globalization;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.Infrastructure.Tests;
@@ -16,7 +17,7 @@ public sealed class Stage6GoogleGenerationAccountPolicyTests
     [Fact]
     public void CapabilitySnapshot_RejectsStaleOrUnsupportedSubmission()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var snapshot = new GoogleCapabilitySnapshot(
             "acct",
             "capability-source-v1",
@@ -33,7 +34,7 @@ public sealed class Stage6GoogleGenerationAccountPolicyTests
     [Fact]
     public void CapabilitySnapshot_RequiresVoiceEncodingAndPostCompileLimit()
     {
-        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var snapshot = new GoogleCapabilitySnapshot(
             "acct",
             "capability-source-v1",
