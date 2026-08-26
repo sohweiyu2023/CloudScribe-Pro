@@ -5,13 +5,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
-public enum TimedTextExportFormat
-{
-    Json,
-    WebVtt,
-    SubRip,
-}
-
 public static class TimedTextExporter
 {
     public static string Export(TimedTextTrack track, TimedTextExportFormat format)

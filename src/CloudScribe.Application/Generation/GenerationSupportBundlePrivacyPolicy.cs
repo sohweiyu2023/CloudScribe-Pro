@@ -1,12 +1,5 @@
 namespace CloudScribe.Application.Generation;
 
-public sealed record GenerationSupportBundlePrivacyDecision(
-    bool IncludeCacheMedia,
-    bool IncludeCompiledPayload,
-    bool IncludeSourceText,
-    bool IncludePrivateCacheLookupKey,
-    string Reason);
-
 public static class GenerationSupportBundlePrivacyPolicy
 {
     public static GenerationSupportBundlePrivacyDecision Evaluate(

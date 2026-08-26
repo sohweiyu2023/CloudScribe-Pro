@@ -2,16 +2,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record AudioAssemblyExecutionArtifact(
-    int PartNumber,
-    string OutputPath,
-    long LengthBytes,
-    ReleaseAudioFormat Format);
-
-public sealed record AudioAssemblyExecutionResult(
-    IReadOnlyList<AudioAssemblyExecutionArtifact> Artifacts,
-    IReadOnlyList<NativeMediaToolResult> NativeResults);
-
 public sealed class AudioAssemblyNativeExecutor
 {
     private readonly INativeMediaTool _nativeMediaTool;

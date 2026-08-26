@@ -2,25 +2,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
-public enum GenerationSubmissionResolutionEvidence
-{
-    None = 0,
-    ProviderConfirmedTerminal = 1,
-    DurableReceiptReconciled = 2
-}
-
-public enum GenerationReferenceResolutionEvidence
-{
-    None = 0,
-    ReleaseReferenceRemoved = 1
-}
-
-public enum GenerationPinResolutionEvidence
-{
-    None = 0,
-    UserExplicitlyUnpinned = 1
-}
-
 public static class GenerationCacheLifecycleTransitionValidator
 {
     public static GenerationProjectCacheState ValidateTransition(

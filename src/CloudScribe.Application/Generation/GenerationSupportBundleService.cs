@@ -1,15 +1,5 @@
 namespace CloudScribe.Application.Generation;
 
-public sealed record GenerationSupportBundleMetadata(
-    string ApplicationVersion,
-    string Platform,
-    string DiagnosticCode,
-    DateTimeOffset CreatedAtUtc);
-
-public sealed record GenerationSupportBundle(
-    GenerationSupportBundleMetadata Metadata,
-    GenerationSupportBundlePrivacyDecision PrivacyDecision);
-
 public sealed class GenerationSupportBundleService
 {
     private const int MaxApplicationVersionLength = 64;

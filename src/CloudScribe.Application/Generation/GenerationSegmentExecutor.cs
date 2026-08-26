@@ -3,31 +3,6 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record GenerationSegmentExecutionRequest(
-    string ProviderStableId,
-    string OperationStableId,
-    string AccountId,
-    string VoiceStableId,
-    string CompilationProfileId,
-    string IdempotencyKey,
-    ReadOnlyMemory<byte> CompiledPayload,
-    string OutputFormat,
-    GenerationCacheTrustContext? CacheTrustContext = null,
-    bool ForceFresh = false,
-    CacheReuseMediaMetadata? ExpectedCacheMediaMetadata = null);
-
-public sealed record GenerationSegmentExecutionResult(
-    bool CacheHit,
-    SubmissionDisposition Disposition,
-    string? ProviderRequestId,
-    ReadOnlyMemory<byte> MediaBytes,
-    string DiagnosticCode,
-    TimeSpan? RetryAfter,
-    ContentAddressedSegmentKey CacheKey)
-{
-    public bool RequiresReconciliation => Disposition == SubmissionDisposition.UnknownRequiresReconciliation;
-}
-
 public sealed class GenerationSegmentExecutor
 {
     private readonly IGenerationProvider _provider;
