@@ -70,7 +70,7 @@ public static class SpeechPlanSegmenter
         return new ReadOnlyCollection<SpeechPlanSegment>(result);
     }
 
-    private static IReadOnlyList<SpeechPlanNode> ExpandTextNodes(
+    private static List<SpeechPlanNode> ExpandTextNodes(
         IReadOnlyList<SpeechPlanNode> nodes,
         int maximumTextElements)
     {
@@ -138,7 +138,7 @@ public static class SpeechPlanSegmenter
 
     private static bool IsSentenceTerminal(char value) => value is '.' or '!' or '?' or ';' or ':' or '\u3002' or '\uff01' or '\uff1f';
 
-    private static IReadOnlyList<string> EnumerateTextElements(string text)
+    private static List<string> EnumerateTextElements(string text)
     {
         var result = new List<string>();
         var enumerator = StringInfo.GetTextElementEnumerator(text);
