@@ -2,8 +2,6 @@ using System.Text.Json;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed record GoogleGenerationParsedResponse(ReadOnlyMemory<byte> AudioBytes, string? ProviderOperationId);
-
 public static class GoogleGenerationResponseParser
 {
     public static GoogleGenerationParsedResponse Parse(ReadOnlyMemory<byte> body, int maximumAudioBytes = 64 * 1024 * 1024)

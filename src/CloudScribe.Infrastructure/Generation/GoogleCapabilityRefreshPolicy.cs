@@ -1,10 +1,5 @@
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed record GoogleCapabilityRefreshDecision(
-    bool Accepted,
-    string DiagnosticCode,
-    GoogleCapabilitySnapshot? Snapshot);
-
 public static class GoogleCapabilityRefreshPolicy
 {
     public static GoogleCapabilityRefreshDecision Evaluate(
