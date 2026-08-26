@@ -117,7 +117,7 @@ public static class SpeechPlanSegmenter
         }
     }
 
-    private static int FindPreferredBreak(IReadOnlyList<string> elements, int start, int count)
+    private static int FindPreferredBreak(List<string> elements, int start, int count)
     {
         if (start + count >= elements.Count)
         {
