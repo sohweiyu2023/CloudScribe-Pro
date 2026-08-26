@@ -11,8 +11,7 @@ public static class CacheReuseMediaPolicy
         ArgumentNullException.ThrowIfNull(expected);
         cached.Validate();
         expected.Validate();
-        if (durationToleranceMilliseconds < 0)
-            throw new ArgumentOutOfRangeException(nameof(durationToleranceMilliseconds));
+        ArgumentOutOfRangeException.ThrowIfNegative(durationToleranceMilliseconds);
 
         return cached.Format == expected.Format &&
             cached.SampleRateHz == expected.SampleRateHz &&
