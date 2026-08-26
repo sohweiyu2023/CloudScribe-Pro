@@ -15,7 +15,7 @@ public sealed class Stage8RestoreRecoveryTerminalVerifierTests
         string relative = "library/item.bin";
         string destination = Path.Combine(temp.Path, "library", "item.bin");
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        await File.WriteAllBytesAsync(destination, payload, cancellationToken).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(destination, payload, cancellationToken);
 
         var plan = CreatePlan(temp.Path, relative, destination, payload);
         var now = DateTimeOffset.UtcNow;
@@ -26,10 +26,10 @@ public sealed class Stage8RestoreRecoveryTerminalVerifierTests
             .Commit(plan, now);
         var verifier = new RestoreRecoveryTerminalVerifier();
 
-        Assert.True(await verifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken).ConfigureAwait(false));
+        Assert.True(await verifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
 
-        await File.WriteAllBytesAsync(destination, [9, 9, 9, 9], cancellationToken).ConfigureAwait(false);
-        Assert.False(await verifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken).ConfigureAwait(false));
+        await File.WriteAllBytesAsync(destination, [9, 9, 9, 9], cancellationToken);
+        Assert.False(await verifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
     }
 
     [Fact]
@@ -49,10 +49,10 @@ public sealed class Stage8RestoreRecoveryTerminalVerifierTests
             .CompleteRollback(plan, now);
         var verifier = new RestoreRecoveryTerminalVerifier();
 
-        Assert.True(await verifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken).ConfigureAwait(false));
+        Assert.True(await verifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken));
 
-        await File.WriteAllBytesAsync(destination, payload, cancellationToken).ConfigureAwait(false);
-        Assert.False(await verifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken).ConfigureAwait(false));
+        await File.WriteAllBytesAsync(destination, payload, cancellationToken);
+        Assert.False(await verifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken));
     }
 
     private static RestoreExecutionPlan CreatePlan(
