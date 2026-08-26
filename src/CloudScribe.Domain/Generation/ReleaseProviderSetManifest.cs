@@ -22,10 +22,13 @@ public sealed class ReleaseProviderSetManifest
 
         foreach (var item in items)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(item.ProviderStableId);
-            ArgumentException.ThrowIfNullOrWhiteSpace(item.DisplayName);
+            if (string.IsNullOrWhiteSpace(item.ProviderStableId))
+                throw new ArgumentException("Release provider stable identity is required.", nameof(providers));
+            if (string.IsNullOrWhiteSpace(item.DisplayName))
+                throw new ArgumentException("Release provider display name is required.", nameof(providers));
             RequireSha256(item.ControlMemberSha256, nameof(providers));
-            ArgumentNullException.ThrowIfNull(item.OperationStableIds);
+            if (item.OperationStableIds is null)
+                throw new ArgumentException("Release provider operation identities are required.", nameof(providers));
             if (item.OperationStableIds.Count == 0 || item.OperationStableIds.Any(string.IsNullOrWhiteSpace))
                 throw new ArgumentException("Every release provider requires at least one stable operation identity.", nameof(providers));
         }
