@@ -6,16 +6,10 @@ public sealed class SpeechPlanSegment
 {
     public SpeechPlanSegment(int index, IEnumerable<SpeechPlanNode> nodes, int textElementCount)
     {
-        if (index < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
 
         ArgumentNullException.ThrowIfNull(nodes);
-        if (textElementCount < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(textElementCount));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(textElementCount);
 
         var materialized = nodes.ToArray();
         if (materialized.Length == 0)
