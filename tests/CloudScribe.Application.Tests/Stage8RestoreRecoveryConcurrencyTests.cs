@@ -16,7 +16,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
             async _ =>
             {
                 entered.SetResult();
-                await release.Task.ConfigureAwait(true);
+                await release.Task.ConfigureAwait(false);
             },
             _ => Task.CompletedTask);
 
@@ -35,13 +35,13 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
         }
 
         var first = coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync, cancellationToken);
-        await entered.Task.ConfigureAwait(true);
+        await entered.Task.ConfigureAwait(false);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync, cancellationToken));
+            coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync, cancellationToken)).ConfigureAwait(false);
 
         release.SetResult();
-        Assert.Equal("rollback-completed", await first.ConfigureAwait(true));
+        Assert.Equal("rollback-completed", await first.ConfigureAwait(false));
         Assert.Equal(1, verificationCalls);
     }
 
@@ -54,7 +54,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.RecoverVerifiedAsync(
             rollbackState,
             static (_, _) => Task.FromResult(false),
-            TestContext.Current.CancellationToken));
+            TestContext.Current.CancellationToken)).ConfigureAwait(false);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
                 verificationCalls++;
                 return Task.FromResult(string.Equals(candidate, "no-op-terminal-rolled-back", StringComparison.Ordinal));
             },
-            TestContext.Current.CancellationToken).ConfigureAwait(true);
+            TestContext.Current.CancellationToken).ConfigureAwait(false);
 
         Assert.Equal("no-op-terminal-rolled-back", outcome);
         Assert.Equal(0, rollbackCalls);
@@ -105,6 +105,6 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
                 cancellation.Cancel();
                 return Task.FromResult(true);
             },
-            cancellation.Token));
+            cancellation.Token)).ConfigureAwait(false);
     }
 }
