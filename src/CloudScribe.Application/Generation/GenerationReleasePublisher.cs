@@ -9,7 +9,7 @@ public sealed class GenerationReleasePublisher
 
     public GenerationReleasePublisher(long maximumOutputBytes = 2L * 1024 * 1024 * 1024)
     {
-        if (maximumOutputBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumOutputBytes));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumOutputBytes);
         _maximumOutputBytes = maximumOutputBytes;
     }
 
