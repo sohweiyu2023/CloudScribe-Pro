@@ -5,7 +5,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage5SupportBundleSingleFlightTests
 {
     [Fact]
-    public async Task Concurrent_export_is_rejected_before_second_persistence()
+    public async Task ConcurrentExportIsRejectedBeforeSecondPersistence()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
