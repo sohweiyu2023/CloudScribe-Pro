@@ -3,11 +3,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record GenerationPublishedSegment(
-    Guid SegmentId,
-    string CacheKey,
-    string MediaSha256);
-
 public sealed class GenerationReleasePublisher
 {
     private readonly long _maximumOutputBytes;
@@ -41,7 +36,7 @@ public sealed class GenerationReleasePublisher
         if (file.Length <= 0 || file.Length > _maximumOutputBytes)
             throw new InvalidDataException("Published release output size is outside the allowed bounds.");
 
-        var segments = publishedSegments.ToArray();
+        var segments = publishedSegments.Select(static segment => segment.Validate()).ToArray();
         if (segments.Length == 0) throw new ArgumentException("At least one published segment is required.", nameof(publishedSegments));
         if (segments.Select(static x => x.SegmentId).Distinct().Count() != segments.Length)
             throw new ArgumentException("Published segment identities must be unique.", nameof(publishedSegments));
@@ -52,8 +47,6 @@ public sealed class GenerationReleasePublisher
 
         var receipts = segments.Select(segment =>
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(segment.CacheKey);
-            ArgumentException.ThrowIfNullOrWhiteSpace(segment.MediaSha256);
             var proof = proofs[segment.SegmentId];
             if (!proof.IsReleaseSafe)
                 throw new InvalidOperationException("A quarantined segment cannot be published.");
