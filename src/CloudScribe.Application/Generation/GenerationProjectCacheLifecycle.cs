@@ -12,16 +12,16 @@ public sealed class GenerationProjectCacheLifecycle
     }
 
     public Task SetPinnedAsync(ContentAddressedSegmentKey key, bool pinned, CancellationToken cancellationToken = default) =>
-        RejectUnsafePartialUpdate(key, cancellationToken, nameof(SetPinnedAsync), pinned.ToString());
+        RejectUnsafePartialUpdate(key, nameof(SetPinnedAsync), pinned.ToString(), cancellationToken);
 
     public Task SetReferencedAsync(ContentAddressedSegmentKey key, bool referenced, CancellationToken cancellationToken = default) =>
-        RejectUnsafePartialUpdate(key, cancellationToken, nameof(SetReferencedAsync), referenced.ToString());
+        RejectUnsafePartialUpdate(key, nameof(SetReferencedAsync), referenced.ToString(), cancellationToken);
 
     public Task SetProjectStateAsync(
         ContentAddressedSegmentKey key,
         GenerationProjectCacheState state,
         CancellationToken cancellationToken = default) =>
-        RejectUnsafePartialUpdate(key, cancellationToken, nameof(SetProjectStateAsync), state.ToString());
+        RejectUnsafePartialUpdate(key, nameof(SetProjectStateAsync), state.ToString(), cancellationToken);
 
     public Task SetValidatedTransitionAsync(
         ContentAddressedSegmentKey key,
@@ -89,9 +89,9 @@ public sealed class GenerationProjectCacheLifecycle
 
     private Task RejectUnsafePartialUpdate(
         ContentAddressedSegmentKey key,
-        CancellationToken cancellationToken,
         string operationName,
-        string requestedState)
+        string requestedState,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         key.Validate();
