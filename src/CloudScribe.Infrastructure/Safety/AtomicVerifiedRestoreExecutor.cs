@@ -123,7 +123,7 @@ public sealed class AtomicVerifiedRestoreExecutor
         var destinationPublished = false;
         try
         {
-            await using var inputStream = new FileStream(
+            var inputStream = new FileStream(
                 source,
                 FileMode.Open,
                 FileAccess.Read,
@@ -131,7 +131,7 @@ public sealed class AtomicVerifiedRestoreExecutor
                 BufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             await using var input = inputStream.ConfigureAwait(false);
-            await using var outputStream = new FileStream(
+            var outputStream = new FileStream(
                 temporary,
                 FileMode.CreateNew,
                 FileAccess.Write,
