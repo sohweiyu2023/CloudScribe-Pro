@@ -6,11 +6,7 @@ public sealed class PlaybackSession
 
     public PlaybackSession(TimeSpan duration)
     {
-        if (duration <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(duration));
-        }
-
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
         Duration = duration;
     }
 
