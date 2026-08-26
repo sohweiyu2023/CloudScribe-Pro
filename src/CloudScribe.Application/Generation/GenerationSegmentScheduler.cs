@@ -63,51 +63,67 @@ public sealed class GenerationSegmentScheduler
         CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-        var progress = await _progressStore.ReadAsync(segment.JobId, segment.SegmentId, cancellationToken).ConfigureAwait(false)
-            ?? new GenerationSegmentProgress(
-                segment.JobId,
-                segment.SegmentId,
-                segment.SegmentIndex,
-                segment.Request.IdempotencyKey,
-                GenerationSegmentProgressState.Pending,
-                0,
-                now);
-
-        if (!string.Equals(progress.IdempotencyKey, segment.Request.IdempotencyKey, StringComparison.Ordinal) || progress.SegmentIndex != segment.SegmentIndex)
-        {
-            throw new InvalidOperationException("Persisted segment progress does not match the immutable scheduled segment identity.");
-        }
-
+        var progress = await LoadProgressAsync(segment, now, cancellationToken).ConfigureAwait(false);
+        EnsureProgressIdentity(segment, progress);
         if (progress.IsTerminal)
-        {
             return new GenerationScheduledSegmentResult(progress, null);
-        }
-
         if (progress.RequiresReconciliation)
-        {
             return await ReconcileOnlyAsync(segment, progress, cancellationToken).ConfigureAwait(false);
-        }
-
         if (progress.State == GenerationSegmentProgressState.RetryWait &&
             progress.NotBeforeUnixMilliseconds is { } notBefore && now < notBefore)
-        {
             return new GenerationScheduledSegmentResult(progress, null);
-        }
 
-        // Cache reuse is intentionally owned only by GenerationSegmentExecutor. The executor
-        // applies the v2.23 private trust namespace, Force Fresh, structural media validation,
-        // and metadata-qualified cache-hit eligibility. A scheduler-level shortcut would bypass
-        // those controls and could incorrectly mark an ineligible cache entry completed.
+        // Cache reuse stays solely in GenerationSegmentExecutor so private trust, Force Fresh,
+        // structural validation, and metadata-qualified eligibility cannot be bypassed here.
         var cacheKey = await _executor.CreatePrivateCacheKeyAsync(segment.Request, cancellationToken).ConfigureAwait(false);
         await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.Active, cancellationToken).ConfigureAwait(false);
-
         progress = progress.MarkSubmissionStarted(now);
         await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
 
-        GenerationSegmentExecutionResult result;
+        var submission = await SubmitWithUnknownOutcomeProtectionAsync(
+            segment, cacheKey, progress, cancellationToken).ConfigureAwait(false);
+        if (submission.Result is null)
+            return new GenerationScheduledSegmentResult(submission.Progress, null);
+
+        return await ApplySubmissionResultAsync(
+            segment, cacheKey, submission.Progress, submission.Result, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<GenerationSegmentProgress> LoadProgressAsync(
+        GenerationScheduledSegment segment,
+        long now,
+        CancellationToken cancellationToken) =>
+        await _progressStore.ReadAsync(segment.JobId, segment.SegmentId, cancellationToken).ConfigureAwait(false)
+        ?? new GenerationSegmentProgress(
+            segment.JobId,
+            segment.SegmentId,
+            segment.SegmentIndex,
+            segment.Request.IdempotencyKey,
+            GenerationSegmentProgressState.Pending,
+            0,
+            now);
+
+    private static void EnsureProgressIdentity(
+        GenerationScheduledSegment segment,
+        GenerationSegmentProgress progress)
+    {
+        if (!string.Equals(progress.IdempotencyKey, segment.Request.IdempotencyKey, StringComparison.Ordinal) ||
+            progress.SegmentIndex != segment.SegmentIndex)
+        {
+            throw new InvalidOperationException("Persisted segment progress does not match the immutable scheduled segment identity.");
+        }
+    }
+
+    private async Task<(GenerationSegmentProgress Progress, GenerationSegmentExecutionResult? Result)> SubmitWithUnknownOutcomeProtectionAsync(
+        GenerationScheduledSegment segment,
+        ContentAddressedSegmentKey cacheKey,
+        GenerationSegmentProgress progress,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            result = await _executor.ExecuteAsync(segment.Request, cancellationToken).ConfigureAwait(false);
+            var result = await _executor.ExecuteAsync(segment.Request, cancellationToken).ConfigureAwait(false);
+            return (progress, result);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -115,8 +131,7 @@ public sealed class GenerationSegmentScheduler
                 _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 null,
                 "segment.submission.cancelled-outcome-unknown");
-            await _progressStore.SaveAsync(progress, CancellationToken.None).ConfigureAwait(false);
-            await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.UnresolvedSubmission, CancellationToken.None).ConfigureAwait(false);
+            await PersistUnknownOutcomeAsync(cacheKey, progress).ConfigureAwait(false);
             throw;
         }
         catch (Exception exception)
@@ -125,15 +140,31 @@ public sealed class GenerationSegmentScheduler
                 _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 null,
                 "segment.submission.exception-outcome-unknown:" + exception.GetType().Name);
-            await _progressStore.SaveAsync(progress, CancellationToken.None).ConfigureAwait(false);
-            await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.UnresolvedSubmission, CancellationToken.None).ConfigureAwait(false);
-            return new GenerationScheduledSegmentResult(progress, null);
+            await PersistUnknownOutcomeAsync(cacheKey, progress).ConfigureAwait(false);
+            return (progress, null);
         }
+    }
 
-        if (!string.Equals(result.CacheKey.PrivateLookupHmacSha256, cacheKey.PrivateLookupHmacSha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Executor returned a cache identity different from the lifecycle-bound segment identity.");
+    private async Task PersistUnknownOutcomeAsync(
+        ContentAddressedSegmentKey cacheKey,
+        GenerationSegmentProgress progress)
+    {
+        await _progressStore.SaveAsync(progress, CancellationToken.None).ConfigureAwait(false);
+        await SetProtectionIfMaterializedAsync(
+            cacheKey,
+            GenerationCacheLifecycleState.UnresolvedSubmission,
+            CancellationToken.None).ConfigureAwait(false);
+    }
 
-        now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+    private async Task<GenerationScheduledSegmentResult> ApplySubmissionResultAsync(
+        GenerationScheduledSegment segment,
+        ContentAddressedSegmentKey cacheKey,
+        GenerationSegmentProgress progress,
+        GenerationSegmentExecutionResult result,
+        CancellationToken cancellationToken)
+    {
+        EnsureCacheIdentity(result.CacheKey, cacheKey, "Executor");
+        var now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         if (result.Disposition == SubmissionDisposition.Accepted)
         {
             progress = progress.MarkCompleted(now, result.CacheKey.PrivateLookupHmacSha256, result.ProviderRequestId, result.DiagnosticCode);
@@ -174,26 +205,35 @@ public sealed class GenerationSegmentScheduler
         var now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         if (result is null || result.RequiresReconciliation)
         {
-            progress = progress.MarkSubmissionUnknown(now, result?.ProviderRequestId ?? progress.ProviderRequestId, result?.DiagnosticCode ?? "segment.reconciliation.pending");
+            progress = progress.MarkSubmissionUnknown(
+                now,
+                result?.ProviderRequestId ?? progress.ProviderRequestId,
+                result?.DiagnosticCode ?? "segment.reconciliation.pending");
             await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
             return new GenerationScheduledSegmentResult(progress, result);
         }
 
-        if (!string.Equals(result.CacheKey.PrivateLookupHmacSha256, cacheKey.PrivateLookupHmacSha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Reconciliation returned a cache identity different from the lifecycle-bound segment identity.");
-
-        if (result.Disposition == SubmissionDisposition.Accepted)
-        {
-            progress = progress.MarkCompleted(now, result.CacheKey.PrivateLookupHmacSha256, result.ProviderRequestId, result.DiagnosticCode);
-        }
-        else
-        {
-            progress = progress.MarkFailed(now, result.DiagnosticCode);
-        }
-
+        EnsureCacheIdentity(result.CacheKey, cacheKey, "Reconciliation");
+        progress = result.Disposition == SubmissionDisposition.Accepted
+            ? progress.MarkCompleted(now, result.CacheKey.PrivateLookupHmacSha256, result.ProviderRequestId, result.DiagnosticCode)
+            : progress.MarkFailed(now, result.DiagnosticCode);
         await SetProtectionIfMaterializedAsync(cacheKey, GenerationCacheLifecycleState.Completed, cancellationToken).ConfigureAwait(false);
         await _progressStore.SaveAsync(progress, cancellationToken).ConfigureAwait(false);
         return new GenerationScheduledSegmentResult(progress, result);
+    }
+
+    private static void EnsureCacheIdentity(
+        ContentAddressedSegmentKey observed,
+        ContentAddressedSegmentKey expected,
+        string operation)
+    {
+        if (!string.Equals(
+            observed.PrivateLookupHmacSha256,
+            expected.PrivateLookupHmacSha256,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"{operation} returned a cache identity different from the lifecycle-bound segment identity.");
+        }
     }
 
     private async Task SetProtectionIfMaterializedAsync(
@@ -203,7 +243,6 @@ public sealed class GenerationSegmentScheduler
     {
         if (_cacheLifecycleCoordinator is null)
             return;
-
         if (!await _cache.ContainsAsync(key, cancellationToken).ConfigureAwait(false))
             return;
 
@@ -225,24 +264,28 @@ public sealed class GenerationSegmentScheduler
 
     private static ulong DeterministicJitterSeed(GenerationScheduledSegment segment)
     {
-        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(segment.JobId.ToString("N") + "\n" + segment.SegmentId));
+        var bytes = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(segment.JobId.ToString("N") + "\n" + segment.SegmentId));
         return BitConverter.ToUInt64(bytes, 0);
     }
 
     private static void Validate(GenerationScheduledSegment segment)
     {
         ArgumentNullException.ThrowIfNull(segment);
-        if (segment.JobId == Guid.Empty)
-        {
-            throw new ArgumentException("Job id is required.", nameof(segment));
-        }
+        ValidateIdentity(segment.JobId, segment.SegmentId, segment.SegmentIndex, segment.Request);
+    }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(segment.SegmentId);
-        if (segment.SegmentIndex < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(segment));
-        }
-
-        ArgumentNullException.ThrowIfNull(segment.Request);
+    private static void ValidateIdentity(
+        Guid jobId,
+        string segmentId,
+        int segmentIndex,
+        GenerationSegmentExecutionRequest request)
+    {
+        if (jobId == Guid.Empty)
+            throw new ArgumentException("Job id is required.", nameof(jobId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);
+        if (segmentIndex < 0)
+            throw new ArgumentOutOfRangeException(nameof(segmentIndex));
+        ArgumentNullException.ThrowIfNull(request);
     }
 }
