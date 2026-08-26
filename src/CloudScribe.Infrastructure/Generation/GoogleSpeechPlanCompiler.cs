@@ -14,45 +14,11 @@ public static class GoogleSpeechPlanCompiler
 
         var text = new StringBuilder();
         var degradations = new List<SpeechDegradation>();
-        var rate = 1m;
-        var pitch = 0m;
-        var volume = 0m;
+        var prosody = new GoogleProsodyState(1m, 0m, 0m);
 
         for (var i = 0; i < plan.Nodes.Count; i++)
         {
-            switch (plan.Nodes[i])
-            {
-                case SpeechText node:
-                    text.Append(node.Text);
-                    break;
-                case SpeechPronunciation node:
-                    text.Append(node.Text);
-                    degradations.Add(new SpeechDegradation(i, SpeechDegradationKind.Approximated,
-                        "Provider request compiler preserves pronunciation text but cannot guarantee the requested phoneme alphabet in the plain-text request shape.", null));
-                    break;
-                case SpeechPause node when node.Duration > TimeSpan.Zero:
-                    text.Append(' ');
-                    degradations.Add(new SpeechDegradation(i, SpeechDegradationKind.Approximated,
-                        "Pause is approximated as whitespace in the deterministic plain-text Google request compiler.", null));
-                    break;
-                case SpeechProsody node:
-                    rate = node.Rate;
-                    pitch = node.PitchSemitones;
-                    volume = node.VolumeDb;
-                    break;
-                case SpeechVoice:
-                    degradations.Add(new SpeechDegradation(i, SpeechDegradationKind.Omitted,
-                        "Per-node voice changes require a multi-request split and are not silently applied by this compiler.", null));
-                    break;
-                case SpeechEmphasis:
-                case SpeechMark:
-                case SpeechTimestampRequest:
-                case SpeechChapter:
-                case SpeechSpeakerChange:
-                    degradations.Add(new SpeechDegradation(i, SpeechDegradationKind.Omitted,
-                        "Canonical feature is not represented by the deterministic plain-text Google request shape.", null));
-                    break;
-            }
+            ProcessNode(plan.Nodes[i], i, text, degradations, ref prosody);
         }
 
         if (text.Length == 0)
@@ -60,19 +26,7 @@ public static class GoogleSpeechPlanCompiler
             throw new InvalidOperationException("Google compilation produced no speakable text.");
         }
 
-        var payload = JsonSerializer.SerializeToUtf8Bytes(new
-        {
-            input = new { text = text.ToString() },
-            voice = new { languageCode = options.LanguageCode, name = options.VoiceName },
-            audioConfig = new
-            {
-                audioEncoding = options.AudioEncoding,
-                speakingRate = rate,
-                pitch,
-                volumeGainDb = volume,
-            },
-        });
-
+        var payload = BuildPayload(text, options, prosody);
         if (payload.Length > options.MaximumPayloadBytes)
         {
             throw new InvalidOperationException($"Compiled Google request is {payload.Length} bytes, exceeding the admitted post-compile limit of {options.MaximumPayloadBytes} bytes.");
@@ -81,4 +35,60 @@ public static class GoogleSpeechPlanCompiler
         var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)).ToLowerInvariant();
         return new GoogleSpeechCompilation(payload, degradations.ToArray(), hash);
     }
+
+    private static void ProcessNode(
+        SpeechPlanNode node,
+        int index,
+        StringBuilder text,
+        List<SpeechDegradation> degradations,
+        ref GoogleProsodyState prosody)
+    {
+        switch (node)
+        {
+            case SpeechText speechText:
+                text.Append(speechText.Text);
+                break;
+            case SpeechPronunciation pronunciation:
+                text.Append(pronunciation.Text);
+                degradations.Add(new SpeechDegradation(index, SpeechDegradationKind.Approximated,
+                    "Provider request compiler preserves pronunciation text but cannot guarantee the requested phoneme alphabet in the plain-text request shape.", null));
+                break;
+            case SpeechPause pause when pause.Duration > TimeSpan.Zero:
+                text.Append(' ');
+                degradations.Add(new SpeechDegradation(index, SpeechDegradationKind.Approximated,
+                    "Pause is approximated as whitespace in the deterministic plain-text Google request compiler.", null));
+                break;
+            case SpeechProsody speechProsody:
+                prosody = new GoogleProsodyState(speechProsody.Rate, speechProsody.PitchSemitones, speechProsody.VolumeDb);
+                break;
+            case SpeechVoice:
+                degradations.Add(new SpeechDegradation(index, SpeechDegradationKind.Omitted,
+                    "Per-node voice changes require a multi-request split and are not silently applied by this compiler.", null));
+                break;
+            case SpeechEmphasis:
+            case SpeechMark:
+            case SpeechTimestampRequest:
+            case SpeechChapter:
+            case SpeechSpeakerChange:
+                degradations.Add(new SpeechDegradation(index, SpeechDegradationKind.Omitted,
+                    "Canonical feature is not represented by the deterministic plain-text Google request shape.", null));
+                break;
+        }
+    }
+
+    private static byte[] BuildPayload(StringBuilder text, GoogleSpeechCompilationOptions options, GoogleProsodyState prosody) =>
+        JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            input = new { text = text.ToString() },
+            voice = new { languageCode = options.LanguageCode, name = options.VoiceName },
+            audioConfig = new
+            {
+                audioEncoding = options.AudioEncoding,
+                speakingRate = prosody.Rate,
+                pitch = prosody.Pitch,
+                volumeGainDb = prosody.Volume,
+            },
+        });
+
+    private readonly record struct GoogleProsodyState(decimal Rate, decimal Pitch, decimal Volume);
 }
