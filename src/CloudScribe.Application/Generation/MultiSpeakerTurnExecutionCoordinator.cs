@@ -2,19 +2,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record MultiSpeakerTurnExecutionOutcome(
-    int TurnIndex,
-    bool Succeeded,
-    bool RequiresReconciliation,
-    string DiagnosticCode);
-
-public interface IMultiSpeakerTurnExecutor
-{
-    Task<MultiSpeakerTurnExecutionOutcome> ExecuteAsync(
-        PlannedSpeakerTurn turn,
-        CancellationToken cancellationToken = default);
-}
-
 public sealed class MultiSpeakerTurnExecutionCoordinator
 {
     private readonly IMultiSpeakerTurnExecutor _executor;
