@@ -16,6 +16,7 @@ using CloudScribe.Infrastructure.Persistence;
 using CloudScribe.Infrastructure.Pricing;
 using CloudScribe.Infrastructure.Providers;
 using CloudScribe.Infrastructure.Security;
+using CloudScribe.Providers.Abstractions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
