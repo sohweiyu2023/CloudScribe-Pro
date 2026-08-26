@@ -186,7 +186,12 @@ public sealed class Stage5GenerationSegmentExecutorTests
         "idem-1",
         new byte[] { 10, 20, 30 },
         "wav",
-        CreateTrustContext());
+        CreateTrustContext(),
+        ExpectedCacheMediaMetadata: new CacheReuseMediaMetadata(
+            GenerationAudioFormat.Wav,
+            SampleRateHz: 8000,
+            ChannelCount: 1,
+            DurationMilliseconds: 10));
 
     private static GenerationCacheTrustContext CreateTrustContext() => new(
         "fake-provider", "account-1", "project-1", "endpoint-1", "local", "synthesize-speech",
@@ -204,22 +209,23 @@ public sealed class Stage5GenerationSegmentExecutorTests
 
     private static byte[] CreateMinimalWav(byte sample)
     {
-        var bytes = new byte[46];
+        const int sampleRate = 8000;
+        const int dataLength = 80;
+        var bytes = new byte[44 + dataLength];
         "RIFF"u8.CopyTo(bytes);
-        BitConverter.GetBytes((uint)38).CopyTo(bytes, 4);
+        BitConverter.GetBytes((uint)(36 + dataLength)).CopyTo(bytes, 4);
         "WAVE"u8.CopyTo(bytes.AsSpan(8));
         "fmt "u8.CopyTo(bytes.AsSpan(12));
         BitConverter.GetBytes((uint)16).CopyTo(bytes, 16);
         BitConverter.GetBytes((ushort)1).CopyTo(bytes, 20);
         BitConverter.GetBytes((ushort)1).CopyTo(bytes, 22);
-        BitConverter.GetBytes((uint)8000).CopyTo(bytes, 24);
-        BitConverter.GetBytes((uint)8000).CopyTo(bytes, 28);
+        BitConverter.GetBytes((uint)sampleRate).CopyTo(bytes, 24);
+        BitConverter.GetBytes((uint)sampleRate).CopyTo(bytes, 28);
         BitConverter.GetBytes((ushort)1).CopyTo(bytes, 32);
         BitConverter.GetBytes((ushort)8).CopyTo(bytes, 34);
         "data"u8.CopyTo(bytes.AsSpan(36));
-        BitConverter.GetBytes((uint)2).CopyTo(bytes, 40);
-        bytes[44] = sample;
-        bytes[45] = sample;
+        BitConverter.GetBytes((uint)dataLength).CopyTo(bytes, 40);
+        bytes.AsSpan(44, dataLength).Fill(sample);
         return bytes;
     }
 
