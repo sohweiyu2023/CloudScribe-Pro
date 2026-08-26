@@ -9,17 +9,33 @@ public sealed record ProviderRoute(
     long EstimatedMinorUnits,
     string Currency)
 {
-    public ProviderRoute Validate()
+    public ProviderRoute Validate() => Validate(
+        ProviderStableId,
+        AccountId,
+        OperationStableId,
+        VoiceStableId,
+        PricingProvenanceId,
+        EstimatedMinorUnits,
+        Currency);
+
+    private ProviderRoute Validate(
+        string providerStableId,
+        string accountId,
+        string operationStableId,
+        string voiceStableId,
+        string pricingProvenanceId,
+        long estimatedMinorUnits,
+        string currency)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ProviderStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(AccountId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(OperationStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(VoiceStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(PricingProvenanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(Currency);
-        if (EstimatedMinorUnits < 0)
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerStableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationStableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(voiceStableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(currency);
+        if (estimatedMinorUnits < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(EstimatedMinorUnits));
+            throw new ArgumentOutOfRangeException(nameof(estimatedMinorUnits));
         }
         return this;
     }
