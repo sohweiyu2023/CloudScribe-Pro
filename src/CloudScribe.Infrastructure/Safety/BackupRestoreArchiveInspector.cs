@@ -26,73 +26,30 @@ public static class BackupRestoreArchiveInspector
         int maximumCompressionRatio = 1000)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
-        if (maximumEntries <= 0) throw new ArgumentOutOfRangeException(nameof(maximumEntries));
-        if (maximumSingleEntryBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumSingleEntryBytes));
-        if (maximumDeclaredUncompressedBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumDeclaredUncompressedBytes));
-        if (maximumCompressionRatio <= 0) throw new ArgumentOutOfRangeException(nameof(maximumCompressionRatio));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumEntries);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumSingleEntryBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumDeclaredUncompressedBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCompressionRatio);
         if (!File.Exists(archivePath))
-            return new(false, false, false, false, 0);
+            return Invalid();
 
         try
         {
             using var archive = ZipFile.OpenRead(archivePath);
-            if (archive.Entries.Count == 0 || archive.Entries.Count > maximumEntries)
-                return new(false, false, false, false, archive.Entries.Count);
-
-            var secretsExcluded = true;
-            var nativeAllowed = true;
-            var traversalSafe = true;
-            long declaredUncompressedBytes = 0;
-            foreach (var entry in archive.Entries)
-            {
-                if (entry.Length < 0 || entry.Length > maximumSingleEntryBytes)
-                    return new(false, false, false, false, archive.Entries.Count);
-
-                if (entry.Length > 0)
-                {
-                    if (entry.CompressedLength <= 0)
-                        return new(false, false, false, false, archive.Entries.Count);
-                    var ratio = (double)entry.Length / entry.CompressedLength;
-                    if (ratio > maximumCompressionRatio)
-                        return new(false, false, false, false, archive.Entries.Count);
-                }
-
-                try
-                {
-                    declaredUncompressedBytes = checked(declaredUncompressedBytes + entry.Length);
-                }
-                catch (OverflowException)
-                {
-                    return new(false, false, false, false, archive.Entries.Count);
-                }
-                if (declaredUncompressedBytes > maximumDeclaredUncompressedBytes)
-                    return new(false, false, false, false, archive.Entries.Count);
-
-                var normalized = entry.FullName.Replace('\\', '/');
-                if (string.IsNullOrWhiteSpace(normalized) || normalized.StartsWith('/') || normalized.Contains(':'))
-                    traversalSafe = false;
-
-                var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                if (segments.Any(static segment => string.Equals(segment, "..", StringComparison.Ordinal)))
-                    traversalSafe = false;
-
-                var fileName = Path.GetFileName(normalized);
-                var lower = fileName.ToLowerInvariant();
-                if (SecretNameTokens.Any(lower.Contains))
-                    secretsExcluded = false;
-                if (NativeExtensions.Contains(Path.GetExtension(fileName)))
-                    nativeAllowed = false;
-            }
-
-            return new(true, secretsExcluded, nativeAllowed, traversalSafe, archive.Entries.Count);
+            return InspectArchive(
+                archive,
+                maximumEntries,
+                maximumSingleEntryBytes,
+                maximumDeclaredUncompressedBytes,
+                maximumCompressionRatio);
         }
         catch (InvalidDataException)
         {
-            return new(false, false, false, false, 0);
+            return Invalid();
         }
         catch (IOException)
         {
-            return new(false, false, false, false, 0);
+            return Invalid();
         }
     }
 
@@ -110,4 +67,84 @@ public static class BackupRestoreArchiveInspector
             inspection.NativePayloadsAllowed,
             inspection.PathTraversalSafe);
     }
+
+    private static BackupRestoreArchiveInspection InspectArchive(
+        ZipArchive archive,
+        int maximumEntries,
+        long maximumSingleEntryBytes,
+        long maximumDeclaredUncompressedBytes,
+        int maximumCompressionRatio)
+    {
+        if (archive.Entries.Count == 0 || archive.Entries.Count > maximumEntries)
+            return Invalid(archive.Entries.Count);
+
+        var secretsExcluded = true;
+        var nativeAllowed = true;
+        var traversalSafe = true;
+        long declaredUncompressedBytes = 0;
+        foreach (var entry in archive.Entries)
+        {
+            if (!TryValidateEntryBounds(
+                    entry,
+                    maximumSingleEntryBytes,
+                    maximumDeclaredUncompressedBytes,
+                    maximumCompressionRatio,
+                    ref declaredUncompressedBytes))
+                return Invalid(archive.Entries.Count);
+
+            InspectEntryName(entry.FullName, ref secretsExcluded, ref nativeAllowed, ref traversalSafe);
+        }
+
+        return new(true, secretsExcluded, nativeAllowed, traversalSafe, archive.Entries.Count);
+    }
+
+    private static bool TryValidateEntryBounds(
+        ZipArchiveEntry entry,
+        long maximumSingleEntryBytes,
+        long maximumDeclaredUncompressedBytes,
+        int maximumCompressionRatio,
+        ref long declaredUncompressedBytes)
+    {
+        if (entry.Length < 0 || entry.Length > maximumSingleEntryBytes)
+            return false;
+        if (entry.Length > 0 &&
+            (entry.CompressedLength <= 0 || (double)entry.Length / entry.CompressedLength > maximumCompressionRatio))
+            return false;
+
+        try
+        {
+            declaredUncompressedBytes = checked(declaredUncompressedBytes + entry.Length);
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+
+        return declaredUncompressedBytes <= maximumDeclaredUncompressedBytes;
+    }
+
+    private static void InspectEntryName(
+        string entryName,
+        ref bool secretsExcluded,
+        ref bool nativeAllowed,
+        ref bool traversalSafe)
+    {
+        var normalized = entryName.Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.StartsWith('/') || normalized.Contains(':'))
+            traversalSafe = false;
+
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(static segment => string.Equals(segment, "..", StringComparison.Ordinal)))
+            traversalSafe = false;
+
+        var fileName = Path.GetFileName(normalized);
+        var lower = fileName.ToLowerInvariant();
+        if (SecretNameTokens.Any(lower.Contains))
+            secretsExcluded = false;
+        if (NativeExtensions.Contains(Path.GetExtension(fileName)))
+            nativeAllowed = false;
+    }
+
+    private static BackupRestoreArchiveInspection Invalid(int entryCount = 0) =>
+        new(false, false, false, false, entryCount);
 }
