@@ -17,10 +17,7 @@ public sealed class AudioAssemblyPlan
         {
             throw new ArgumentOutOfRangeException(nameof(outputFormat));
         }
-        if (targetPartDuration <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(targetPartDuration));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(targetPartDuration, TimeSpan.Zero);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputStem);
         if (!Path.IsPathFullyQualified(outputDirectory))
@@ -73,7 +70,7 @@ public sealed class AudioAssemblyPlan
 
     public TimeSpan TotalMeasuredDuration => TimeSpan.FromTicks(Segments.Sum(static segment => segment.MeasuredDuration.Ticks));
 
-    private static IReadOnlyList<AudioAssemblyPart> BuildParts(IReadOnlyList<AudioSegmentArtifact> segments, TimeSpan targetPartDuration)
+    private static List<AudioAssemblyPart> BuildParts(IReadOnlyList<AudioSegmentArtifact> segments, TimeSpan targetPartDuration)
     {
         var parts = new List<AudioAssemblyPart>();
         var current = new List<AudioSegmentArtifact>();
