@@ -9,10 +9,7 @@ public static class ReturnedMediaValidator
         string? contentType,
         int maximumMediaBytes = DefaultMaximumMediaBytes)
     {
-        if (maximumMediaBytes < 64)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumMediaBytes));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumMediaBytes, 64);
 
         if (mediaBytes.IsEmpty)
         {
