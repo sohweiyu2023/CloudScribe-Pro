@@ -3,29 +3,6 @@ using System.Text;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record GenerationReleaseSegmentReceipt(
-    Guid SegmentId,
-    string CacheKey,
-    string MediaSha256,
-    string ProofProvenanceId,
-    bool ProofAccepted)
-{
-    public GenerationReleaseSegmentReceipt Validate()
-    {
-        if (SegmentId == Guid.Empty) throw new ArgumentException("Segment id is required.", nameof(SegmentId));
-        ArgumentException.ThrowIfNullOrWhiteSpace(CacheKey);
-        ValidateSha256(MediaSha256, nameof(MediaSha256));
-        ArgumentException.ThrowIfNullOrWhiteSpace(ProofProvenanceId);
-        return this;
-    }
-
-    private static void ValidateSha256(string value, string name)
-    {
-        if (value.Length != 64 || value.Any(static c => !Uri.IsHexDigit(c)))
-            throw new ArgumentException("Expected lowercase or uppercase SHA-256 hex.", name);
-    }
-}
-
 public sealed record GenerationReleaseReceipt(
     Guid CollectionId,
     long Revision,
