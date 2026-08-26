@@ -4,6 +4,13 @@ namespace CloudScribe.Application.Generation;
 
 public sealed class GenerationSpendGuard
 {
+    private readonly StringComparer _provenanceComparer;
+
+    public GenerationSpendGuard(StringComparer? provenanceComparer = null)
+    {
+        _provenanceComparer = provenanceComparer ?? StringComparer.Ordinal;
+    }
+
     public void EnsureCollectionAuthorized(
         GenerationSpendAuthorization authorization,
         AuthorizedSpendCeiling projectedSpend,
@@ -15,7 +22,9 @@ public sealed class GenerationSpendGuard
         authorization.Validate();
         projectedSpend.Validate();
 
-        if (!authorization.AllowsCollectionSpend(projectedSpend, currentRevision, pricingProvenanceId))
+        if (currentRevision != authorization.ApprovedRevision ||
+            !_provenanceComparer.Equals(pricingProvenanceId, authorization.PricingProvenanceId) ||
+            !authorization.AllowsCollectionSpend(projectedSpend, currentRevision, pricingProvenanceId))
         {
             throw new InvalidOperationException("Projected collection spend is not covered by the exact current authorization.");
         }
@@ -38,7 +47,7 @@ public sealed class GenerationSpendGuard
         projectedSpend.Validate();
 
         if (currentRevision != authorization.ApprovedRevision ||
-            !string.Equals(pricingProvenanceId, authorization.PricingProvenanceId, StringComparison.Ordinal) ||
+            !_provenanceComparer.Equals(pricingProvenanceId, authorization.PricingProvenanceId) ||
             !authorization.ItemCeilings.TryGetValue(itemId, out var ceiling) ||
             !ceiling.Allows(projectedSpend))
         {
