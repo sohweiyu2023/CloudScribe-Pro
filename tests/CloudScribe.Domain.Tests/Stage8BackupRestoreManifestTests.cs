@@ -8,20 +8,22 @@ public sealed class Stage8BackupRestoreManifestTests
     [Fact]
     public async Task RestoreVerificationRequiresExactLengthAndDigest()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var root = Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-backup-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
             var bytes = "backup-payload"u8.ToArray();
             var path = Path.Combine(root, "db.bin");
-            await File.WriteAllBytesAsync(path, bytes);
+            await File.WriteAllBytesAsync(path, bytes, cancellationToken).ConfigureAwait(false);
             var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             var entry = new BackupFileEntry("db.bin", bytes.Length, hash).Validate();
 
-            await BackupRestoreManifest.VerifyFileAsync(root, entry);
+            await BackupRestoreManifest.VerifyFileAsync(root, entry, cancellationToken).ConfigureAwait(false);
 
-            await File.AppendAllTextAsync(path, "tamper");
-            await Assert.ThrowsAsync<InvalidDataException>(() => BackupRestoreManifest.VerifyFileAsync(root, entry));
+            await File.AppendAllTextAsync(path, "tamper", cancellationToken).ConfigureAwait(false);
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => BackupRestoreManifest.VerifyFileAsync(root, entry, cancellationToken)).ConfigureAwait(false);
         }
         finally
         {
