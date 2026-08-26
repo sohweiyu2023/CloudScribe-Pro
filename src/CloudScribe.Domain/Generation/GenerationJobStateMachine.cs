@@ -2,8 +2,8 @@ namespace CloudScribe.Domain.Generation;
 
 public static class GenerationJobStateMachine
 {
-    private static readonly IReadOnlyDictionary<GenerationJobState, HashSet<GenerationJobState>> Allowed =
-        new Dictionary<GenerationJobState, HashSet<GenerationJobState>>
+    private static readonly Dictionary<GenerationJobState, HashSet<GenerationJobState>> Allowed =
+        new()
         {
             [GenerationJobState.Draft] = [GenerationJobState.Validating, GenerationJobState.Failed],
             [GenerationJobState.Validating] = [GenerationJobState.Estimating, GenerationJobState.Failed],
