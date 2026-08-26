@@ -6,7 +6,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage5ReturnedMediaMetadataInspectorTests
 {
     [Fact]
-    public void Pcm_wav_metadata_is_derived_for_cache_reuse()
+    public void PcmWavMetadataIsDerivedForCacheReuse()
     {
         var wav = BuildPcmWav(sampleRate: 24000, channels: 1, bitsPerSample: 16, dataBytes: 48000);
         Assert.True(ReturnedMediaMetadataInspector.TryInspectWav(wav, out var metadata));
@@ -18,7 +18,7 @@ public sealed class Stage5ReturnedMediaMetadataInspectorTests
     }
 
     [Fact]
-    public void Non_pcm_or_truncated_wav_fails_closed()
+    public void NonPcmOrTruncatedWavFailsClosed()
     {
         Assert.False(ReturnedMediaMetadataInspector.TryInspectWav(new byte[12], out _));
         var wav = BuildPcmWav(24000, 1, 16, 48000);
