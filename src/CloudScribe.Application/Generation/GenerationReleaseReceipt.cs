@@ -23,7 +23,7 @@ public sealed record GenerationReleaseReceipt(
         IEnumerable<GenerationReleaseSegmentReceipt> segments)
     {
         if (collectionId == Guid.Empty) throw new ArgumentException("Collection id is required.", nameof(collectionId));
-        if (revision <= 0) throw new ArgumentOutOfRangeException(nameof(revision));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(revision);
         ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(approvalId);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
