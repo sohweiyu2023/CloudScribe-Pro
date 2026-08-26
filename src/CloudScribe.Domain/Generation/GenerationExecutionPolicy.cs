@@ -8,20 +8,14 @@ public sealed class GenerationExecutionPolicy
         TimeSpan maximumBackoff,
         int maximumConcurrentRequests)
     {
-        if (maximumAttempts < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumAttempts));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumAttempts, 1);
 
         if (initialBackoff <= TimeSpan.Zero || maximumBackoff < initialBackoff)
         {
             throw new ArgumentOutOfRangeException(nameof(initialBackoff));
         }
 
-        if (maximumConcurrentRequests < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumConcurrentRequests));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumConcurrentRequests, 1);
 
         MaximumAttempts = maximumAttempts;
         InitialBackoff = initialBackoff;
@@ -44,10 +38,7 @@ public sealed class GenerationExecutionPolicy
         TimeSpan? retryAfter,
         ulong deterministicJitterSeed)
     {
-        if (completedAttempts < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(completedAttempts));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(completedAttempts);
 
         if (GenerationJobStateMachine.RequiresReconciliationBeforeAutomaticRetry(state) ||
             disposition == SubmissionDisposition.UnknownRequiresReconciliation)
