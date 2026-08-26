@@ -3,7 +3,7 @@ using CloudScribe.Application.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class AtomicJsonGenerationReleaseCheckpointStore
+public sealed class AtomicJsonGenerationReleaseCheckpointStore : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -77,7 +77,13 @@ public sealed class AtomicJsonGenerationReleaseCheckpointStore
         return ReadCoreAsync(PathFor(collectionId), cancellationToken);
     }
 
-    private async Task<GenerationReleaseCheckpoint?> ReadCoreAsync(string path, CancellationToken cancellationToken)
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    private static async Task<GenerationReleaseCheckpoint?> ReadCoreAsync(string path, CancellationToken cancellationToken)
     {
         if (!File.Exists(path))
             return null;
