@@ -27,10 +27,7 @@ public sealed record GenerationSpendAuthorization(
         collectionCeiling.Validate();
         ArgumentNullException.ThrowIfNull(itemCeilings);
         ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
-        if (approvedRevision < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(approvedRevision));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(approvedRevision);
 
         foreach (var pair in itemCeilings)
         {
