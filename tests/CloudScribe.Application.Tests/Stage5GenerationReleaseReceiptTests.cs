@@ -8,7 +8,7 @@ public sealed class Stage5GenerationReleaseReceiptTests
     private const string ShaB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     [Fact]
-    public void Create_IsDeterministicAcrossInputOrder_AndVerifies()
+    public void CreateIsDeterministicAcrossInputOrderAndVerifies()
     {
         var collection = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var a = new GenerationReleaseSegmentReceipt(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "cache-a", ShaA, "proof-a", true);
@@ -22,14 +22,14 @@ public sealed class Stage5GenerationReleaseReceiptTests
     }
 
     [Fact]
-    public void Create_RejectsQuarantinedSegment()
+    public void CreateRejectsQuarantinedSegment()
     {
         var item = new GenerationReleaseSegmentReceipt(Guid.NewGuid(), "cache", ShaA, "proof", false);
         Assert.Throws<InvalidOperationException>(() => GenerationReleaseReceipt.Create(Guid.NewGuid(), 1, "pricing", "approval", @"C:\x.wav", ShaB, new[] { item }));
     }
 
     [Fact]
-    public void Verify_FailsAfterReceiptIdentityTamper()
+    public void VerifyFailsAfterReceiptIdentityTamper()
     {
         var item = new GenerationReleaseSegmentReceipt(Guid.NewGuid(), "cache", ShaA, "proof", true);
         var receipt = GenerationReleaseReceipt.Create(Guid.NewGuid(), 1, "pricing", "approval", @"C:\x.wav", ShaB, new[] { item });

@@ -6,7 +6,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage5AudioAssemblyNativeExecutorTests
 {
     [Fact]
-    public async Task ExecuteAsync_RejectsCollisionWithoutExplicitOverwrite()
+    public async Task ExecuteAsyncRejectsCollisionWithoutExplicitOverwrite()
     {
         var root = CreateRoot();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -30,7 +30,7 @@ public sealed class Stage5AudioAssemblyNativeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_RejectsSuccessWithWrongContainer()
+    public async Task ExecuteAsyncRejectsSuccessWithWrongContainer()
     {
         var root = CreateRoot();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -55,7 +55,7 @@ public sealed class Stage5AudioAssemblyNativeExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AcceptsExpectedBoundedContainer()
+    public async Task ExecuteAsyncAcceptsExpectedBoundedContainer()
     {
         var root = CreateRoot();
         var cancellationToken = TestContext.Current.CancellationToken;

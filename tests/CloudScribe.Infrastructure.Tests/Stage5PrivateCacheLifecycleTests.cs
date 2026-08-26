@@ -8,7 +8,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage5PrivateCacheLifecycleTests
 {
     [Fact]
-    public async Task TrimAsync_EvictsLeastRecentlyUsedUnprotectedEntry()
+    public async Task TrimAsyncEvictsLeastRecentlyUsedUnprotectedEntry()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = CreateScratchDirectory();
@@ -41,7 +41,7 @@ public sealed class Stage5PrivateCacheLifecycleTests
     [InlineData(GenerationCacheEntryProtection.Pinned)]
     [InlineData(GenerationCacheEntryProtection.Referenced)]
     [InlineData(GenerationCacheEntryProtection.UnresolvedSubmission)]
-    public async Task TrimAndClear_PreserveProtectedEntries(GenerationCacheEntryProtection protection)
+    public async Task TrimAndClearPreserveProtectedEntries(GenerationCacheEntryProtection protection)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = CreateScratchDirectory();
@@ -72,7 +72,7 @@ public sealed class Stage5PrivateCacheLifecycleTests
     }
 
     [Fact]
-    public async Task ClearingProtection_MakesEntryEligibleForExplicitClear()
+    public async Task ClearingProtectionMakesEntryEligibleForExplicitClear()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = CreateScratchDirectory();
@@ -98,7 +98,7 @@ public sealed class Stage5PrivateCacheLifecycleTests
     }
 
     [Fact]
-    public async Task PublishedCachePaths_DoNotExposePayloadOrRawPayloadDigest()
+    public async Task PublishedCachePathsDoNotExposePayloadOrRawPayloadDigest()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = CreateScratchDirectory();

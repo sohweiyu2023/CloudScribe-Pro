@@ -5,7 +5,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage5GenerationSupportBundlePrivacyTests
 {
     [Fact]
-    public void Metadata_only_bundle_never_exposes_generation_payload_or_cache_material()
+    public void MetadataOnlyBundleNeverExposesGenerationPayloadOrCacheMaterial()
     {
         var service = new GenerationSupportBundleService();
         var bundle = service.CreateMetadataOnly(
@@ -21,7 +21,7 @@ public sealed class Stage5GenerationSupportBundlePrivacyTests
     }
 
     [Fact]
-    public void Bundle_creation_fails_closed_without_explicit_request_or_policy_authorization()
+    public void BundleCreationFailsClosedWithoutExplicitRequestOrPolicyAuthorization()
     {
         var service = new GenerationSupportBundleService();
         var metadata = new GenerationSupportBundleMetadata("1.0.0", "windows-x64", "GEN-001", DateTimeOffset.UtcNow);

@@ -5,7 +5,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage5GenerationSupportBundleExportCoordinatorTests
 {
     [Fact]
-    public async Task Export_persists_only_policy_admitted_metadata_bundle()
+    public async Task ExportPersistsOnlyPolicyAdmittedMetadataBundle()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         GenerationSupportBundle? persisted = null;
@@ -31,7 +31,7 @@ public sealed class Stage5GenerationSupportBundleExportCoordinatorTests
     }
 
     [Fact]
-    public async Task Export_never_invokes_persistence_when_request_is_not_authorized()
+    public async Task ExportNeverInvokesPersistenceWhenRequestIsNotAuthorized()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var persistCalls = 0;
@@ -50,7 +50,7 @@ public sealed class Stage5GenerationSupportBundleExportCoordinatorTests
     }
 
     [Fact]
-    public async Task Cancellation_before_export_never_invokes_persistence()
+    public async Task CancellationBeforeExportNeverInvokesPersistence()
     {
         var persistCalls = 0;
         var coordinator = new GenerationSupportBundleExportCoordinator(
@@ -69,7 +69,7 @@ public sealed class Stage5GenerationSupportBundleExportCoordinatorTests
     }
 
     [Fact]
-    public async Task Concurrent_export_is_rejected_before_second_persistence()
+    public async Task ConcurrentExportIsRejectedBeforeSecondPersistence()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var persistCalls = 0;

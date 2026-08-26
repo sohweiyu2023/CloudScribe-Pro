@@ -7,7 +7,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage5DurableGenerationReleaseFinalizerTests
 {
     [Fact]
-    public async Task RecoverAsync_FinalizesPendingCheckpointAfterDiskVerification()
+    public async Task RecoverAsyncFinalizesPendingCheckpointAfterDiskVerification()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = NewTempDirectory();
@@ -42,7 +42,7 @@ public sealed class Stage5DurableGenerationReleaseFinalizerTests
     }
 
     [Fact]
-    public async Task RecoverAsync_TamperedOutputRemainsPendingAndFailsClosed()
+    public async Task RecoverAsyncTamperedOutputRemainsPendingAndFailsClosed()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = NewTempDirectory();

@@ -6,7 +6,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage5AudioAssemblyNativePlannerTests
 {
     [Fact]
-    public void Plan_UsesDiscreteAbsoluteArguments_AndMasteringFilter()
+    public void PlanUsesDiscreteAbsoluteArgumentsAndMasteringFilter()
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cloudscribe-stage5-native"));
         var source1 = Path.Combine(root, "input one.wav");

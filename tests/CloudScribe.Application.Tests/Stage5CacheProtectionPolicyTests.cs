@@ -5,7 +5,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage5CacheProtectionPolicyTests
 {
     [Fact]
-    public void Combined_lifecycle_protection_is_not_evictable()
+    public void CombinedLifecycleProtectionIsNotEvictable()
     {
         var protection = GenerationCacheProtectionPolicy.Combine(
             active: true,
@@ -20,7 +20,7 @@ public sealed class Stage5CacheProtectionPolicyTests
     }
 
     [Fact]
-    public void Completed_entries_become_evictable_only_when_no_other_protection_remains()
+    public void CompletedEntriesBecomeEvictableOnlyWhenNoOtherProtectionRemains()
     {
         var completed = GenerationCacheProtectionPolicy.ForState(GenerationCacheLifecycleState.Completed);
         Assert.Equal(GenerationCacheEntryProtection.None, completed);

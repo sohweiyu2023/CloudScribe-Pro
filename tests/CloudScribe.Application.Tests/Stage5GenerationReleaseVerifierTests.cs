@@ -6,7 +6,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage5GenerationReleaseVerifierTests
 {
     [Fact]
-    public void Verify_AcceptsExactBytes_AndRejectsTampering()
+    public void VerifyAcceptsExactBytesAndRejectsTampering()
     {
         var root = Path.Combine(Path.GetTempPath(), "cloudscribe-stage5-release-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
