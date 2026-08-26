@@ -20,7 +20,7 @@ public static class MultiSpeakerTurnPlanner
         {
             if (turn.TurnIndex < 0 || !seenIndexes.Add(turn.TurnIndex))
                 throw new InvalidOperationException("Multi-speaker turn indexes must be unique non-negative values.");
-            ArgumentException.ThrowIfNullOrWhiteSpace(turn.SpeakerId);
+            ValidateSpeakerId(turn.SpeakerId);
             if (string.IsNullOrWhiteSpace(turn.Text))
                 throw new InvalidOperationException("A multi-speaker turn cannot contain empty speech text.");
 
@@ -39,4 +39,7 @@ public static class MultiSpeakerTurnPlanner
 
         return planned;
     }
+
+    private static void ValidateSpeakerId(string speakerId) =>
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
 }
