@@ -232,7 +232,7 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
         GenerationSegmentExecutor executor,
         IReadOnlyList<SpeechPlanSegment> segments,
         Guid collectionId,
-        IReadOnlyList<GenerationItemEstimate> itemEstimates,
+        GenerationItemEstimate[] itemEstimates,
         CancellationToken cancellationToken)
     {
         var proofInputs = new List<GenerationProofInput>();
