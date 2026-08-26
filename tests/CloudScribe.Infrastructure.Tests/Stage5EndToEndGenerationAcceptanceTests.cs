@@ -15,105 +15,28 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
         var root = CreateScratchDirectory();
         try
         {
-            var plan = new SpeechPlan(
-                "en-SG",
-                [
-                    new SpeechChapter("chapter-1", "Opening"),
-                    new SpeechVoice("narrator", "voice/en-SG/A"),
-                    new SpeechText("Hello 👨‍👩‍👧‍👦 Singapore. This is CloudScribe."),
-                    new SpeechPause(TimeSpan.FromMilliseconds(150)),
-                    new SpeechPronunciation("CloudScribe", "ipa", "klaʊd skraɪb"),
-                    new SpeechMark("end"),
-                    new SpeechTimestampRequest("end"),
-                ],
-                "document/revision/42");
-
-            var segments = SpeechPlanSegmenter.Segment(
-                plan,
-                new SpeechSegmentationLimits(18, 512),
-                static nodes => Encoding.UTF8.GetByteCount(Compile(nodes)));
-
-            Assert.NotEmpty(segments);
-            Assert.Equal(
-                "Hello 👨‍👩‍👧‍👦 Singapore. This is CloudScribe.",
-                string.Concat(segments.SelectMany(static segment => segment.Nodes)
-                    .OfType<SpeechText>()
-                    .Select(static text => text.Text)));
-
-            var collectionId = Guid.NewGuid();
-            var itemEstimates = segments
-                .Select((_, index) => new GenerationItemEstimate(Guid.NewGuid(), index, "USD", 10, 2))
-                .ToArray();
-            var estimate = new GenerationCollectionEstimate(
-                collectionId,
-                42,
-                DateTimeOffset.UtcNow,
-                "USD",
-                itemEstimates.Sum(static item => item.ScaledAmount),
-                2,
-                "pricing/v2.23/test",
-                itemEstimates);
-            var approval = new GenerationApproval(
-                collectionId,
-                42,
-                "pricing/v2.23/test",
-                "USD",
-                estimate.ScaledTotal,
-                2,
-                DateTimeOffset.UtcNow);
-
-            Assert.True(approval.Authorizes(estimate));
-
+            var segments = CreateCanonicalSegments();
+            var (collectionId, itemEstimates) = CreateApprovedEstimate(segments);
             var provider = new DeterministicFakeGenerationProvider();
-            var cache = new FileGenerationSegmentCache(root);
-            var executor = CreateExecutor(provider, cache);
-            var proofInputs = new List<GenerationProofInput>();
+            var executor = CreateExecutor(provider, new FileGenerationSegmentCache(root));
 
-            foreach (var segment in segments)
-            {
-                var payload = Encoding.UTF8.GetBytes(Compile(segment.Nodes));
-                var request = CreateRequest(
-                    provider.ProviderStableId,
-                    $"collection-{collectionId:N}-segment-{segment.Index}",
-                    payload);
-
-                var result = await executor.ExecuteAsync(request);
-                Assert.False(result.CacheHit);
-                Assert.Equal(SubmissionDisposition.Accepted, result.Disposition);
-                Assert.NotEmpty(result.MediaBytes.ToArray());
-
-                proofInputs.Add(new GenerationProofInput(
-                    itemEstimates[segment.Index].ItemId,
-                    MediaValid: true,
-                    ExpectedDuration: TimeSpan.FromSeconds(1),
-                    ActualDuration: TimeSpan.FromSeconds(1),
-                    RequiredTimingMarksPresent: true,
-                    ProviderDiagnostics: Array.Empty<string>(),
-                    ProvenanceId: result.CacheKey.PrivateLookupHmacSha256));
-            }
+            var proofInputs = await GenerateSegmentsAsync(
+                provider,
+                executor,
+                segments,
+                collectionId,
+                itemEstimates,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             Assert.Equal(segments.Count, provider.PhysicalSubmissionCount);
-
-            foreach (var segment in segments)
-            {
-                var payload = Encoding.UTF8.GetBytes(Compile(segment.Nodes));
-                var cached = await executor.ExecuteAsync(CreateRequest(
-                    provider.ProviderStableId,
-                    $"collection-{collectionId:N}-segment-{segment.Index}",
-                    payload));
-
-                Assert.True(cached.CacheHit);
-                Assert.Equal(SubmissionDisposition.Accepted, cached.Disposition);
-            }
-
+            await VerifyCachedSegmentsAsync(
+                provider,
+                executor,
+                segments,
+                collectionId,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
             Assert.Equal(segments.Count, provider.PhysicalSubmissionCount);
-
-            var proofPass = new GenerationProofPass();
-            var proofResults = proofPass.EvaluateCollection(proofInputs);
-            proofPass.EnsureReleaseSafe(proofResults);
-
-            Assert.Equal(segments.Count, proofResults.Count);
-            Assert.All(proofResults, static result => Assert.True(result.IsReleaseSafe));
+            AssertProofPass(proofInputs, segments.Count);
         }
         finally
         {
@@ -136,27 +59,15 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
                 initialBackoff: TimeSpan.FromMilliseconds(10),
                 maximumBackoff: TimeSpan.FromSeconds(1),
                 maximumConcurrentRequests: 3);
-
-            var scheduled = Enumerable.Range(0, 12)
-                .Select(index => new GenerationScheduledSegment(
-                    jobId,
-                    $"segment-{index:D2}",
-                    index,
-                    CreateRequest(
-                        provider.ProviderStableId,
-                        $"job-{jobId:N}-segment-{index}",
-                        Encoding.UTF8.GetBytes($"payload-{index}"))))
-                .ToArray();
+            var scheduled = CreateScheduledSegments(jobId, provider.ProviderStableId);
 
             var firstCache = new FileGenerationSegmentCache(cacheDirectory);
             var firstStore = new AtomicJsonGenerationSegmentProgressStore(progressDirectory);
             var firstScheduler = new GenerationSegmentScheduler(
-                CreateExecutor(provider, firstCache),
-                firstCache,
-                firstStore,
-                policy);
-
-            var firstRun = await firstScheduler.ExecuteReadyAsync(scheduled);
+                CreateExecutor(provider, firstCache), firstCache, firstStore, policy);
+            var firstRun = await firstScheduler.ExecuteReadyAsync(
+                scheduled,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             Assert.Equal(12, firstRun.Count);
             Assert.All(firstRun, static result => Assert.Equal(GenerationSegmentProgressState.Completed, result.Progress.State));
@@ -165,13 +76,13 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
             var restartedCache = new FileGenerationSegmentCache(cacheDirectory);
             var restartedStore = new AtomicJsonGenerationSegmentProgressStore(progressDirectory);
             var restartedScheduler = new GenerationSegmentScheduler(
-                CreateExecutor(provider, restartedCache),
-                restartedCache,
-                restartedStore,
-                policy);
-
-            var restartedRun = await restartedScheduler.ExecuteReadyAsync(scheduled);
-            var restoredProgress = await restartedStore.ListForJobAsync(jobId);
+                CreateExecutor(provider, restartedCache), restartedCache, restartedStore, policy);
+            var restartedRun = await restartedScheduler.ExecuteReadyAsync(
+                scheduled,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            var restoredProgress = await restartedStore.ListForJobAsync(
+                jobId,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             Assert.Equal(12, restartedRun.Count);
             Assert.All(restartedRun, static result => Assert.Equal(GenerationSegmentProgressState.Completed, result.Progress.State));
@@ -192,109 +103,28 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
         var root = CreateScratchDirectory();
         try
         {
-            var sourceDirectory = Path.Combine(root, "segments");
-            var outputDirectory = Path.Combine(root, "release");
-            Directory.CreateDirectory(sourceDirectory);
-            Directory.CreateDirectory(outputDirectory);
-
-            var sourcePath = Path.Combine(sourceDirectory, "segment.wav");
-            var sourceBytes = CreateWave();
-            await File.WriteAllBytesAsync(sourcePath, sourceBytes);
-            var sourceSha256 = Convert.ToHexString(SHA256.HashData(sourceBytes)).ToLowerInvariant();
-
-            var collectionId = Guid.NewGuid();
-            var segmentId = Guid.NewGuid();
-            var estimate = new GenerationCollectionEstimate(
-                collectionId,
-                42,
-                DateTimeOffset.UtcNow,
-                "USD",
-                10,
-                2,
-                "pricing/v2.23/test",
-                [new GenerationItemEstimate(segmentId, 0, "USD", 10, 2)]);
-            var approval = new GenerationApproval(
-                collectionId,
-                42,
-                "pricing/v2.23/test",
-                "USD",
-                10,
-                2,
-                DateTimeOffset.UtcNow);
-            var spendAuthorization = new GenerationSpendAuthorization(
-                collectionId,
-                new AuthorizedSpendCeiling("USD", 10, 2),
-                new Dictionary<Guid, AuthorizedSpendCeiling>
-                {
-                    [segmentId] = new AuthorizedSpendCeiling("USD", 10, 2),
-                },
-                "pricing/v2.23/test",
-                42);
-
-            var assemblyPlan = new AudioAssemblyPlan(
-                [new AudioSegmentArtifact(segmentId.ToString("D"), sourcePath, "audio/wav", TimeSpan.FromSeconds(1), sourceSha256)],
-                new GenerationMasteringProfile("spoken", -1m, -16m, 0, 0),
-                ReleaseAudioFormat.Wav,
-                TimeSpan.FromMinutes(10),
-                outputDirectory,
-                "cloudscribe-e2e");
-            var proofInputs = new[]
-            {
-                new GenerationProofInput(
-                    segmentId,
-                    MediaValid: true,
-                    ExpectedDuration: TimeSpan.FromSeconds(1),
-                    ActualDuration: TimeSpan.FromSeconds(1),
-                    RequiredTimingMarksPresent: true,
-                    ProviderDiagnostics: Array.Empty<string>(),
-                    ProvenanceId: sourceSha256),
-            };
-
-            var decision = new GenerationCollectionReleaseCoordinator(
-                    new GenerationSpendGuard(),
-                    new GenerationProofPass(),
-                    new GenerationOutputReservationService(),
-                    TimeProvider.System)
-                .Evaluate(estimate, approval, spendAuthorization, proofInputs, assemblyPlan);
-
-            Assert.True(decision.IsReleaseSafe);
-            Assert.Single(decision.OutputReservations);
-
-            var assembly = await new AudioAssemblyNativeExecutor(new WritingNativeTool(CreateWave())).ExecuteAsync(
+            var (sourcePath, sourceSha256) = await CreateReleaseSourceAsync(
+                root,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            var (decision, assemblyPlan, collectionId, segmentId) = CreateReleaseDecision(root, sourcePath, sourceSha256);
+            var artifact = await ExecuteAssemblyAsync(
+                root,
                 assemblyPlan,
-                Path.Combine(root, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg"),
-                TimeSpan.FromMinutes(1));
-            var artifact = Assert.Single(assembly.Artifacts);
-            Assert.True(File.Exists(artifact.OutputPath));
-
-            var checkpointDirectory = Path.Combine(root, "release-checkpoints");
-            var finalizer = new DurableGenerationReleaseFinalizer(
-                new GenerationReleasePublisher(),
-                new GenerationReleaseVerifier(),
-                new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory));
-            var finalized = await finalizer.FinalizeAsync(
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            var (finalized, checkpointDirectory) = await FinalizeAndAssertReleaseAsync(
                 decision,
-                "approval-stage5-e2e",
                 artifact.OutputPath,
-                [new GenerationPublishedSegment(segmentId, sourceSha256, sourceSha256)]);
+                segmentId,
+                sourceSha256,
+                root,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            Assert.True(finalized.IsFinalized);
-            Assert.True(finalized.Verification.IsValid);
-            Assert.True(finalized.Receipt.Verify());
-
-            var persisted = await new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory).ReadAsync(collectionId);
-            Assert.NotNull(persisted);
-            Assert.Equal(GenerationReleaseCheckpointState.Finalized, persisted!.State);
-
-            var restartedFinalizer = new DurableGenerationReleaseFinalizer(
-                new GenerationReleasePublisher(),
-                new GenerationReleaseVerifier(),
-                new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory));
-            var recovered = await restartedFinalizer.RecoverAsync(finalized.Receipt);
-            Assert.True(recovered.IsFinalized);
-
-            await File.AppendAllTextAsync(artifact.OutputPath, "tampered");
-            await Assert.ThrowsAsync<InvalidDataException>(() => restartedFinalizer.RecoverAsync(finalized.Receipt));
+            await AssertRecoveryAndTamperDetectionAsync(
+                finalized,
+                checkpointDirectory,
+                collectionId,
+                artifact.OutputPath,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
         finally
         {
@@ -315,15 +145,21 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
                 "ambiguous-idempotency-key",
                 Encoding.UTF8.GetBytes("ambiguous payload"));
 
-            var submitted = await executor.ExecuteAsync(request);
+            var submitted = await executor.ExecuteAsync(
+                request,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
             Assert.True(submitted.RequiresReconciliation);
             Assert.Equal(1, provider.PhysicalSubmissionCount);
 
-            var reconciled = await executor.ReconcileAsync(request);
+            var reconciled = await executor.ReconcileAsync(
+                request,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
             Assert.NotNull(reconciled);
             Assert.True(reconciled!.RequiresReconciliation);
             Assert.Equal(1, provider.PhysicalSubmissionCount);
-            Assert.False(await new FileGenerationSegmentCache(root).ContainsAsync(submitted.CacheKey));
+            Assert.False(await new FileGenerationSegmentCache(root).ContainsAsync(
+                submitted.CacheKey,
+                TestContext.Current.CancellationToken).ConfigureAwait(true));
 
             Assert.True(GenerationJobStateMachine.RequiresReconciliationBeforeAutomaticRetry(GenerationJobState.SubmissionUnknown));
             Assert.False(GenerationJobStateMachine.CanTransition(GenerationJobState.SubmissionUnknown, GenerationJobState.Submitting));
@@ -332,6 +168,267 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    private static IReadOnlyList<SpeechPlanSegment> CreateCanonicalSegments()
+    {
+        var plan = new SpeechPlan(
+            "en-SG",
+            [
+                new SpeechChapter("chapter-1", "Opening"),
+                new SpeechVoice("narrator", "voice/en-SG/A"),
+                new SpeechText("Hello 👨‍👩‍👧‍👦 Singapore. This is CloudScribe."),
+                new SpeechPause(TimeSpan.FromMilliseconds(150)),
+                new SpeechPronunciation("CloudScribe", "ipa", "klaʊd skraɪb"),
+                new SpeechMark("end"),
+                new SpeechTimestampRequest("end"),
+            ],
+            "document/revision/42");
+        var segments = SpeechPlanSegmenter.Segment(
+            plan,
+            new SpeechSegmentationLimits(18, 512),
+            static nodes => Encoding.UTF8.GetByteCount(Compile(nodes)));
+
+        Assert.NotEmpty(segments);
+        Assert.Equal(
+            "Hello 👨‍👩‍👧‍👦 Singapore. This is CloudScribe.",
+            string.Concat(segments.SelectMany(static segment => segment.Nodes)
+                .OfType<SpeechText>()
+                .Select(static text => text.Text)));
+        return segments;
+    }
+
+    private static (Guid CollectionId, GenerationItemEstimate[] ItemEstimates) CreateApprovedEstimate(
+        IReadOnlyList<SpeechPlanSegment> segments)
+    {
+        var collectionId = Guid.NewGuid();
+        var itemEstimates = segments
+            .Select((_, index) => new GenerationItemEstimate(Guid.NewGuid(), index, "USD", 10, 2))
+            .ToArray();
+        var estimate = new GenerationCollectionEstimate(
+            collectionId,
+            42,
+            DateTimeOffset.UtcNow,
+            "USD",
+            itemEstimates.Sum(static item => item.ScaledAmount),
+            2,
+            "pricing/v2.23/test",
+            itemEstimates);
+        var approval = new GenerationApproval(
+            collectionId,
+            42,
+            "pricing/v2.23/test",
+            "USD",
+            estimate.ScaledTotal,
+            2,
+            DateTimeOffset.UtcNow);
+
+        Assert.True(approval.Authorizes(estimate));
+        return (collectionId, itemEstimates);
+    }
+
+    private static async Task<IReadOnlyList<GenerationProofInput>> GenerateSegmentsAsync(
+        DeterministicFakeGenerationProvider provider,
+        GenerationSegmentExecutor executor,
+        IReadOnlyList<SpeechPlanSegment> segments,
+        Guid collectionId,
+        IReadOnlyList<GenerationItemEstimate> itemEstimates,
+        CancellationToken cancellationToken)
+    {
+        var proofInputs = new List<GenerationProofInput>();
+        foreach (var segment in segments)
+        {
+            var payload = Encoding.UTF8.GetBytes(Compile(segment.Nodes));
+            var request = CreateRequest(
+                provider.ProviderStableId,
+                $"collection-{collectionId:N}-segment-{segment.Index}",
+                payload);
+            var result = await executor.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
+
+            Assert.False(result.CacheHit);
+            Assert.Equal(SubmissionDisposition.Accepted, result.Disposition);
+            Assert.NotEmpty(result.MediaBytes.ToArray());
+            proofInputs.Add(new GenerationProofInput(
+                itemEstimates[segment.Index].ItemId,
+                MediaValid: true,
+                ExpectedDuration: TimeSpan.FromSeconds(1),
+                ActualDuration: TimeSpan.FromSeconds(1),
+                RequiredTimingMarksPresent: true,
+                ProviderDiagnostics: Array.Empty<string>(),
+                ProvenanceId: result.CacheKey.PrivateLookupHmacSha256));
+        }
+
+        return proofInputs;
+    }
+
+    private static async Task VerifyCachedSegmentsAsync(
+        DeterministicFakeGenerationProvider provider,
+        GenerationSegmentExecutor executor,
+        IReadOnlyList<SpeechPlanSegment> segments,
+        Guid collectionId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var segment in segments)
+        {
+            var payload = Encoding.UTF8.GetBytes(Compile(segment.Nodes));
+            var cached = await executor.ExecuteAsync(
+                CreateRequest(
+                    provider.ProviderStableId,
+                    $"collection-{collectionId:N}-segment-{segment.Index}",
+                    payload),
+                cancellationToken).ConfigureAwait(false);
+
+            Assert.True(cached.CacheHit);
+            Assert.Equal(SubmissionDisposition.Accepted, cached.Disposition);
+        }
+    }
+
+    private static void AssertProofPass(IReadOnlyList<GenerationProofInput> proofInputs, int expectedCount)
+    {
+        var proofPass = new GenerationProofPass();
+        var proofResults = proofPass.EvaluateCollection(proofInputs);
+        proofPass.EnsureReleaseSafe(proofResults);
+        Assert.Equal(expectedCount, proofResults.Count);
+        Assert.All(proofResults, static result => Assert.True(result.IsReleaseSafe));
+    }
+
+    private static GenerationScheduledSegment[] CreateScheduledSegments(Guid jobId, string providerStableId) =>
+        Enumerable.Range(0, 12)
+            .Select(index => new GenerationScheduledSegment(
+                jobId,
+                $"segment-{index:D2}",
+                index,
+                CreateRequest(
+                    providerStableId,
+                    $"job-{jobId:N}-segment-{index}",
+                    Encoding.UTF8.GetBytes($"payload-{index}"))))
+            .ToArray();
+
+    private static async Task<(string SourcePath, string SourceSha256)> CreateReleaseSourceAsync(
+        string root,
+        CancellationToken cancellationToken)
+    {
+        var sourceDirectory = Path.Combine(root, "segments");
+        Directory.CreateDirectory(sourceDirectory);
+        var sourcePath = Path.Combine(sourceDirectory, "segment.wav");
+        var sourceBytes = CreateWave();
+        await File.WriteAllBytesAsync(sourcePath, sourceBytes, cancellationToken).ConfigureAwait(false);
+        return (sourcePath, Convert.ToHexString(SHA256.HashData(sourceBytes)).ToLowerInvariant());
+    }
+
+    private static (
+        GenerationCollectionReleaseDecision Decision,
+        AudioAssemblyPlan AssemblyPlan,
+        Guid CollectionId,
+        Guid SegmentId) CreateReleaseDecision(string root, string sourcePath, string sourceSha256)
+    {
+        var collectionId = Guid.NewGuid();
+        var segmentId = Guid.NewGuid();
+        var estimate = new GenerationCollectionEstimate(
+            collectionId, 42, DateTimeOffset.UtcNow, "USD", 10, 2, "pricing/v2.23/test",
+            [new GenerationItemEstimate(segmentId, 0, "USD", 10, 2)]);
+        var approval = new GenerationApproval(
+            collectionId, 42, "pricing/v2.23/test", "USD", 10, 2, DateTimeOffset.UtcNow);
+        var spendAuthorization = new GenerationSpendAuthorization(
+            collectionId,
+            new AuthorizedSpendCeiling("USD", 10, 2),
+            new Dictionary<Guid, AuthorizedSpendCeiling>
+            {
+                [segmentId] = new AuthorizedSpendCeiling("USD", 10, 2),
+            },
+            "pricing/v2.23/test",
+            42);
+        var assemblyPlan = new AudioAssemblyPlan(
+            [new AudioSegmentArtifact(segmentId.ToString("D"), sourcePath, "audio/wav", TimeSpan.FromSeconds(1), sourceSha256)],
+            new GenerationMasteringProfile("spoken", -1m, -16m, 0, 0),
+            ReleaseAudioFormat.Wav,
+            TimeSpan.FromMinutes(10),
+            Path.Combine(root, "release"),
+            "cloudscribe-e2e");
+        var proofInputs = new[]
+        {
+            new GenerationProofInput(
+                segmentId, true, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), true,
+                Array.Empty<string>(), sourceSha256),
+        };
+        var decision = new GenerationCollectionReleaseCoordinator(
+                new GenerationSpendGuard(),
+                new GenerationProofPass(),
+                new GenerationOutputReservationService(),
+                TimeProvider.System)
+            .Evaluate(estimate, approval, spendAuthorization, proofInputs, assemblyPlan);
+
+        Assert.True(decision.IsReleaseSafe);
+        Assert.Single(decision.OutputReservations);
+        return (decision, assemblyPlan, collectionId, segmentId);
+    }
+
+    private static async Task<AudioAssemblyExecutionArtifact> ExecuteAssemblyAsync(
+        string root,
+        AudioAssemblyPlan assemblyPlan,
+        CancellationToken cancellationToken)
+    {
+        var assembly = await new AudioAssemblyNativeExecutor(new WritingNativeTool(CreateWave())).ExecuteAsync(
+            assemblyPlan,
+            Path.Combine(root, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg"),
+            TimeSpan.FromMinutes(1),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var artifact = Assert.Single(assembly.Artifacts);
+        Assert.True(File.Exists(artifact.OutputPath));
+        return artifact;
+    }
+
+    private static async Task<(GenerationReleaseFinalizationResult Finalized, string CheckpointDirectory)> FinalizeAndAssertReleaseAsync(
+        GenerationCollectionReleaseDecision decision,
+        string outputPath,
+        Guid segmentId,
+        string sourceSha256,
+        string root,
+        CancellationToken cancellationToken)
+    {
+        var checkpointDirectory = Path.Combine(root, "release-checkpoints");
+        var finalizer = new DurableGenerationReleaseFinalizer(
+            new GenerationReleasePublisher(),
+            new GenerationReleaseVerifier(),
+            new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory));
+        var finalized = await finalizer.FinalizeAsync(
+            decision,
+            "approval-stage5-e2e",
+            outputPath,
+            [new GenerationPublishedSegment(segmentId, sourceSha256, sourceSha256)],
+            cancellationToken).ConfigureAwait(false);
+
+        Assert.True(finalized.IsFinalized);
+        Assert.True(finalized.Verification.IsValid);
+        Assert.True(finalized.Receipt.Verify());
+        return (finalized, checkpointDirectory);
+    }
+
+    private static async Task AssertRecoveryAndTamperDetectionAsync(
+        GenerationReleaseFinalizationResult finalized,
+        string checkpointDirectory,
+        Guid collectionId,
+        string outputPath,
+        CancellationToken cancellationToken)
+    {
+        var persisted = await new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory).ReadAsync(
+            collectionId,
+            cancellationToken).ConfigureAwait(false);
+        Assert.NotNull(persisted);
+        Assert.Equal(GenerationReleaseCheckpointState.Finalized, persisted!.State);
+
+        var restartedFinalizer = new DurableGenerationReleaseFinalizer(
+            new GenerationReleasePublisher(),
+            new GenerationReleaseVerifier(),
+            new AtomicJsonGenerationReleaseCheckpointStore(checkpointDirectory));
+        var recovered = await restartedFinalizer.RecoverAsync(
+            finalized.Receipt,
+            cancellationToken).ConfigureAwait(false);
+        Assert.True(recovered.IsFinalized);
+
+        await File.AppendAllTextAsync(outputPath, "tampered", cancellationToken).ConfigureAwait(false);
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => restartedFinalizer.RecoverAsync(finalized.Receipt, cancellationToken)).ConfigureAwait(false);
     }
 
     private static GenerationSegmentExecutor CreateExecutor(IGenerationProvider provider, IGenerationSegmentCache cache) =>
@@ -408,7 +505,7 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
         {
             var output = invocation.Arguments[^1];
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-            await File.WriteAllBytesAsync(output, payload, cancellationToken);
+            await File.WriteAllBytesAsync(output, payload, cancellationToken).ConfigureAwait(false);
             return new NativeMediaToolResult(0, false, string.Empty, string.Empty, TimeSpan.FromMilliseconds(1));
         }
     }
