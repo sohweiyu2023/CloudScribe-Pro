@@ -26,10 +26,7 @@ public sealed class GenerationJobSnapshot
             throw new ArgumentException("Collection id cannot be empty.", nameof(collectionId));
         }
 
-        if (revision < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(revision));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(revision);
 
         SpeechPlan = speechPlan ?? throw new ArgumentNullException(nameof(speechPlan));
         ProviderAccountId = Require(providerAccountId, nameof(providerAccountId));
