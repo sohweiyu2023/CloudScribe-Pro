@@ -26,14 +26,8 @@ public sealed record GenerationProofInput(
         {
             throw new ArgumentException("Segment id is required.", nameof(segmentId));
         }
-        if (expectedDuration <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(expectedDuration));
-        }
-        if (actualDuration <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(actualDuration));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(expectedDuration, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(actualDuration, TimeSpan.Zero);
         ArgumentNullException.ThrowIfNull(providerDiagnostics);
         ArgumentException.ThrowIfNullOrWhiteSpace(provenanceId);
     }
