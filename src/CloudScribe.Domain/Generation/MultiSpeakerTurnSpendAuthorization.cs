@@ -10,12 +10,7 @@ public sealed record MultiSpeakerTurnSpendAuthorization(
 {
     public MultiSpeakerTurnSpendAuthorization Validate()
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(SpeakerRole);
-        ArgumentException.ThrowIfNullOrWhiteSpace(RouteIdentity);
-        ArgumentException.ThrowIfNullOrWhiteSpace(PricingProvenanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(Currency);
-        if (Scale is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(Scale));
-        if (MaximumScaledAmount < 0) throw new ArgumentOutOfRangeException(nameof(MaximumScaledAmount));
+        ValidateFields(SpeakerRole, RouteIdentity, PricingProvenanceId, Currency, Scale, MaximumScaledAmount);
         return this;
     }
 
@@ -32,5 +27,21 @@ public sealed record MultiSpeakerTurnSpendAuthorization(
             throw new InvalidOperationException("Projected multi-speaker spend uses a different provider-billed currency or scale.");
         if (projectedScaledAmount < 0 || projectedScaledAmount > MaximumScaledAmount)
             throw new InvalidOperationException("Projected multi-speaker turn spend exceeds its explicit authorization ceiling.");
+    }
+
+    private static void ValidateFields(
+        string speakerRole,
+        string routeIdentity,
+        string pricingProvenanceId,
+        string currency,
+        int scale,
+        long maximumScaledAmount)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerRole);
+        ArgumentException.ThrowIfNullOrWhiteSpace(routeIdentity);
+        ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(currency);
+        if (scale is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(scale));
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumScaledAmount);
     }
 }
