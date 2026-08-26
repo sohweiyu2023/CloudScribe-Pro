@@ -28,10 +28,7 @@ public sealed record AudioSegmentArtifact(
         {
             throw new ArgumentException("Audio segment source path must be fully qualified.", nameof(sourcePath));
         }
-        if (measuredDuration <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(measuredDuration));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(measuredDuration, TimeSpan.Zero);
         if (contentSha256.Length != 64 || contentSha256.Any(static character => !Uri.IsHexDigit(character)))
         {
             throw new ArgumentException("Audio segment content identity must be a SHA-256 hex digest.", nameof(contentSha256));
