@@ -5,7 +5,7 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class FileGenerationSegmentCache : IGenerationSegmentCache
+public sealed class FileGenerationSegmentCache : IGenerationSegmentCache, IDisposable
 {
     private const string MetadataSchema = "cloudscribe.private-segment-cache.v2.23";
     private const int MaximumMetadataBytes = 4096;
@@ -190,6 +190,12 @@ public sealed class FileGenerationSegmentCache : IGenerationSegmentCache
         finally { _gate.Release(); }
     }
 
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
     private GenerationCacheTrimResult TrimCore(long targetBytes)
     {
         var entries = EnumerateValidEntries().ToArray();
@@ -259,7 +265,7 @@ public sealed class FileGenerationSegmentCache : IGenerationSegmentCache
         { return false; }
     }
 
-    private async Task<CacheMetadata?> ReadMetadataAsync(string metadataPath, CancellationToken cancellationToken)
+    private static async Task<CacheMetadata?> ReadMetadataAsync(string metadataPath, CancellationToken cancellationToken)
     {
         if (!File.Exists(metadataPath)) return null;
         try
