@@ -32,75 +32,17 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!string.Equals(request.ProviderStableId, StableProviderId, StringComparison.Ordinal))
-            throw new InvalidOperationException("Generation request provider identity does not match the Google adapter.");
-        if (!string.Equals(request.OperationStableId, SynthesizeOperationStableId, StringComparison.Ordinal))
-            throw new InvalidOperationException("Generation request operation identity does not match Google synthesize-speech.");
-        if (!string.Equals(request.AccountId, _account.AccountId, StringComparison.Ordinal))
-            throw new InvalidOperationException("Generation request account identity does not match the pinned Google account.");
+        ValidateRequestIdentity(request);
 
-        GoogleHttpTransportResponse response;
-        try
-        {
-            response = await _transport.SendAsync(
-                new GoogleHttpTransportRequest(
-                    _account.Endpoint,
-                    _account.CredentialReferenceId,
-                    request.CompiledPayload),
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
+        var response = await SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response is null)
+            return Unknown("google-transport-unknown");
+        if (response.Value.TimedOut)
             return Unknown("google-transport-timeout");
-        }
-        catch (HttpRequestException)
-        {
-            return Unknown("google-transport-unknown");
-        }
-        catch (IOException)
-        {
-            return Unknown("google-transport-unknown");
-        }
 
-        if (response.StatusCode == HttpStatusCode.OK)
-        {
-            GoogleGenerationParsedResponse parsed;
-            try
-            {
-                parsed = GoogleGenerationResponseParser.Parse(response.Body, _maximumAudioBytes);
-            }
-            catch (InvalidDataException)
-            {
-                return new GenerationProviderResponse(
-                    SubmissionDisposition.Accepted,
-                    "google-response-unusable",
-                    ReadOnlyMemory<byte>.Empty,
-                    null,
-                    null,
-                    "google-accepted-invalid-media");
-            }
-
-            return new GenerationProviderResponse(
-                SubmissionDisposition.Accepted,
-                parsed.ProviderOperationId ?? "google-sync-response",
-                parsed.AudioBytes,
-                ContentTypeFor(request.OutputFormat),
-                null,
-                "google-accepted");
-        }
-
-        var classification = GoogleProviderResponsePolicy.Classify((int)response.StatusCode, response.RetryAfter, false);
-        var disposition = classification.Disposition is GoogleRetryDisposition.RetryAfter or GoogleRetryDisposition.Backoff
-            ? SubmissionDisposition.RejectedSafeToRetry
-            : SubmissionDisposition.NotSubmitted;
-
-        return new GenerationProviderResponse(
-            disposition,
-            null,
-            ReadOnlyMemory<byte>.Empty,
-            null,
-            response.RetryAfter,
-            $"google-http-{(int)response.StatusCode}");
+        return response.Value.Response.StatusCode == HttpStatusCode.OK
+            ? CreateAcceptedResponse(response.Value.Response, request.OutputFormat)
+            : CreateRejectedResponse(response.Value.Response);
     }
 
     public Task<GenerationProviderResponse?> ReconcileAsync(string idempotencyKey, CancellationToken cancellationToken)
@@ -113,6 +55,87 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         // callers must keep ambiguous submissions reconciliation-gated and must never
         // reinterpret "not found" as permission to duplicate a billable request.
         return Task.FromResult<GenerationProviderResponse?>(null);
+    }
+
+    private void ValidateRequestIdentity(GenerationProviderRequest request)
+    {
+        if (!string.Equals(request.ProviderStableId, StableProviderId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Generation request provider identity does not match the Google adapter.");
+        if (!string.Equals(request.OperationStableId, SynthesizeOperationStableId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Generation request operation identity does not match Google synthesize-speech.");
+        if (!string.Equals(request.AccountId, _account.AccountId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Generation request account identity does not match the pinned Google account.");
+    }
+
+    private async Task<(GoogleHttpTransportResponse Response, bool TimedOut)?> SendAsync(
+        GenerationProviderRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _transport.SendAsync(
+                new GoogleHttpTransportRequest(
+                    _account.Endpoint,
+                    _account.CredentialReferenceId,
+                    request.CompiledPayload),
+                cancellationToken).ConfigureAwait(false);
+            return (response, false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return (default, true);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private GenerationProviderResponse CreateAcceptedResponse(GoogleHttpTransportResponse response, string outputFormat)
+    {
+        GoogleGenerationParsedResponse parsed;
+        try
+        {
+            parsed = GoogleGenerationResponseParser.Parse(response.Body, _maximumAudioBytes);
+        }
+        catch (InvalidDataException)
+        {
+            return new GenerationProviderResponse(
+                SubmissionDisposition.Accepted,
+                "google-response-unusable",
+                ReadOnlyMemory<byte>.Empty,
+                null,
+                null,
+                "google-accepted-invalid-media");
+        }
+
+        return new GenerationProviderResponse(
+            SubmissionDisposition.Accepted,
+            parsed.ProviderOperationId ?? "google-sync-response",
+            parsed.AudioBytes,
+            ContentTypeFor(outputFormat),
+            null,
+            "google-accepted");
+    }
+
+    private static GenerationProviderResponse CreateRejectedResponse(GoogleHttpTransportResponse response)
+    {
+        var classification = GoogleProviderResponsePolicy.Classify((int)response.StatusCode, response.RetryAfter, false);
+        var disposition = classification.Disposition is GoogleRetryDisposition.RetryAfter or GoogleRetryDisposition.Backoff
+            ? SubmissionDisposition.RejectedSafeToRetry
+            : SubmissionDisposition.NotSubmitted;
+
+        return new GenerationProviderResponse(
+            disposition,
+            null,
+            ReadOnlyMemory<byte>.Empty,
+            null,
+            response.RetryAfter,
+            $"google-http-{(int)response.StatusCode}");
     }
 
     private static GenerationProviderResponse Unknown(string diagnosticCode) => new(
