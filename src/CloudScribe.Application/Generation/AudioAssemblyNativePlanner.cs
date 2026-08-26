@@ -40,7 +40,7 @@ public static class AudioAssemblyNativePlanner
         return invocations;
     }
 
-    private static IReadOnlyList<string> BuildArguments(
+    private static List<string> BuildArguments(
         AudioAssemblyPart part,
         GenerationMasteringProfile masteringProfile,
         ReleaseAudioFormat outputFormat,
