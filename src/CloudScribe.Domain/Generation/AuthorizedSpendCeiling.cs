@@ -15,10 +15,7 @@ public readonly record struct AuthorizedSpendCeiling(string CurrencyCode, long U
             throw new ArgumentException("Spend ceiling currency must be a three-letter uppercase code.", nameof(currencyCode));
         }
 
-        if (units < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(units));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(units);
 
         if (scale is < 0 or > 9)
         {
