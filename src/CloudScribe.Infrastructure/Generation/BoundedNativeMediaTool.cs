@@ -12,11 +12,33 @@ public sealed class BoundedNativeMediaTool : INativeMediaTool
         ArgumentNullException.ThrowIfNull(invocation);
         invocation.Validate();
         if (!File.Exists(invocation.ExecutablePath))
-        {
             throw new FileNotFoundException("Native media executable not found.", invocation.ExecutablePath);
-        }
 
         Directory.CreateDirectory(invocation.WorkingDirectory);
+        using var process = new Process { StartInfo = CreateStartInfo(invocation), EnableRaisingEvents = true };
+        var stopwatch = Stopwatch.StartNew();
+        if (!process.Start())
+            throw new InvalidOperationException("Native media process could not be started.");
+
+        var stdoutTask = ReadBoundedButDrainAsync(process.StandardOutput, invocation.MaximumCapturedOutputCharacters);
+        var stderrTask = ReadBoundedButDrainAsync(process.StandardError, invocation.MaximumCapturedOutputCharacters);
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(invocation.Timeout);
+        var timedOut = await WaitForExitAsync(process, timeoutCts.Token, cancellationToken).ConfigureAwait(false);
+
+        stopwatch.Stop();
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
+        return new NativeMediaToolResult(
+            timedOut ? -1 : process.ExitCode,
+            timedOut,
+            stdout,
+            stderr,
+            stopwatch.Elapsed);
+    }
+
+    private static ProcessStartInfo CreateStartInfo(NativeMediaToolInvocation invocation)
+    {
         var startInfo = new ProcessStartInfo
         {
             FileName = invocation.ExecutablePath,
@@ -27,32 +49,25 @@ public sealed class BoundedNativeMediaTool : INativeMediaTool
             CreateNoWindow = true,
         };
         foreach (var argument in invocation.Arguments)
-        {
             startInfo.ArgumentList.Add(argument);
-        }
+        return startInfo;
+    }
 
-        using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        var stopwatch = Stopwatch.StartNew();
-        if (!process.Start())
-        {
-            throw new InvalidOperationException("Native media process could not be started.");
-        }
-
-        var stdoutTask = ReadBoundedButDrainAsync(process.StandardOutput, invocation.MaximumCapturedOutputCharacters);
-        var stderrTask = ReadBoundedButDrainAsync(process.StandardError, invocation.MaximumCapturedOutputCharacters);
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(invocation.Timeout);
-
-        var timedOut = false;
+    private static async Task<bool> WaitForExitAsync(
+        Process process,
+        CancellationToken timeoutToken,
+        CancellationToken callerToken)
+    {
         try
         {
-            await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+            await process.WaitForExitAsync(timeoutToken).ConfigureAwait(false);
+            return false;
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
         {
-            timedOut = true;
             TryKill(process);
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            return true;
         }
         catch (OperationCanceledException)
         {
@@ -60,17 +75,6 @@ public sealed class BoundedNativeMediaTool : INativeMediaTool
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             throw;
         }
-
-        stopwatch.Stop();
-        var stdout = await stdoutTask.ConfigureAwait(false);
-        var stderr = await stderrTask.ConfigureAwait(false);
-
-        return new NativeMediaToolResult(
-            timedOut ? -1 : process.ExitCode,
-            timedOut,
-            stdout,
-            stderr,
-            stopwatch.Elapsed);
     }
 
     private static async Task<string> ReadBoundedButDrainAsync(StreamReader reader, int maximumCharacters)
@@ -81,15 +85,11 @@ public sealed class BoundedNativeMediaTool : INativeMediaTool
         {
             var read = await reader.ReadAsync(buffer.AsMemory()).ConfigureAwait(false);
             if (read == 0)
-            {
                 break;
-            }
 
             var remaining = maximumCharacters - output.Length;
             if (remaining > 0)
-            {
                 output.Append(buffer, 0, Math.Min(read, remaining));
-            }
         }
 
         return output.ToString();
@@ -100,9 +100,7 @@ public sealed class BoundedNativeMediaTool : INativeMediaTool
         try
         {
             if (!process.HasExited)
-            {
                 process.Kill(entireProcessTree: true);
-            }
         }
         catch (InvalidOperationException)
         {
