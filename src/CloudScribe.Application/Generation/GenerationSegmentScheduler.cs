@@ -2,16 +2,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record GenerationScheduledSegment(
-    Guid JobId,
-    string SegmentId,
-    int SegmentIndex,
-    GenerationSegmentExecutionRequest Request);
-
-public sealed record GenerationScheduledSegmentResult(
-    GenerationSegmentProgress Progress,
-    GenerationSegmentExecutionResult? ExecutionResult);
-
 public sealed class GenerationSegmentScheduler
 {
     private readonly GenerationSegmentExecutor _executor;

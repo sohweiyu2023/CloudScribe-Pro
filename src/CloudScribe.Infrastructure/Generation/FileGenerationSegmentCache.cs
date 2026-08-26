@@ -5,20 +5,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-[Flags]
-public enum GenerationCacheEntryProtection
-{
-    None = 0,
-    Active = 1,
-    Pinned = 2,
-    Referenced = 4,
-    UnresolvedSubmission = 8,
-}
-
-public sealed record GenerationCacheTrimResult(long BytesBefore, long BytesAfter, int EntriesEvicted, int EntriesProtected);
-
-public sealed record GenerationCacheClearResult(int EntriesRemoved, int EntriesProtected, long BytesRemoved);
-
 public sealed class FileGenerationSegmentCache : IGenerationSegmentCache
 {
     private const string MetadataSchema = "cloudscribe.private-segment-cache.v2.23";

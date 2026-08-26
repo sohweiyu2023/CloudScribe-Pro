@@ -1,15 +1,5 @@
 namespace CloudScribe.Application.Generation;
 
-public enum GenerationCacheLifecycleState
-{
-    Idle,
-    Active,
-    Pinned,
-    Referenced,
-    UnresolvedSubmission,
-    Completed
-}
-
 public static class GenerationCacheProtectionPolicy
 {
     public static GenerationCacheEntryProtection ForState(GenerationCacheLifecycleState state) => state switch

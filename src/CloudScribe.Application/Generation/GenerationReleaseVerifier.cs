@@ -2,11 +2,6 @@ using System.Security.Cryptography;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record GenerationReleaseVerificationResult(
-    bool IsValid,
-    string DiagnosticCode,
-    string? ObservedOutputSha256);
-
 public sealed class GenerationReleaseVerifier
 {
     private readonly long _maximumOutputBytes;
