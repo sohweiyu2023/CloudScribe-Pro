@@ -1,3 +1,4 @@
+using CloudScribe.App.Navigation;
 using CloudScribe.Application.Generation;
 using CommunityToolkit.Mvvm.Input;
 
@@ -27,7 +28,7 @@ public sealed partial class ShellViewModel
 
     private void RefreshGenerationDiagnosticsRouteAction()
     {
-        if (!_pages.TryGetValue(AppRoute.Diagnostics, out RoutePageViewModel? page))
+        if (!_pages.TryGetValue(AppRoute.Diagnostics, out var page))
         {
             return;
         }
