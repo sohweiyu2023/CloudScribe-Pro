@@ -5,7 +5,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage5SupportBundleMetadataTokenTests
 {
     [Fact]
-    public void Metadata_only_bundle_accepts_bounded_tokens()
+    public void MetadataOnlyBundleAcceptsBoundedTokens()
     {
         var service = new GenerationSupportBundleService();
         var bundle = service.CreateMetadataOnly(
@@ -24,7 +24,7 @@ public sealed class Stage5SupportBundleMetadataTokenTests
     [InlineData("source text goes here")]
     [InlineData("GEN/CACHE/001")]
     [InlineData("GEN\nCACHE")]
-    public void Diagnostic_code_rejects_free_form_or_path_like_content(string code)
+    public void DiagnosticCodeRejectsFreeFormOrPathLikeContent(string code)
     {
         var service = new GenerationSupportBundleService();
         Assert.Throws<InvalidOperationException>(() => service.CreateMetadataOnly(
