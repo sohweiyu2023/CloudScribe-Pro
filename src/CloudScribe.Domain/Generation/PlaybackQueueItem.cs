@@ -31,7 +31,7 @@ public sealed record PlaybackQueueItem(
         ArgumentException.ThrowIfNullOrWhiteSpace(mediaPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayTitle);
         if (!Path.IsPathFullyQualified(mediaPath)) throw new InvalidOperationException("Playback media paths must be fully qualified.");
-        if (duration <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(duration));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
         if (resumePosition < TimeSpan.Zero || resumePosition > duration) throw new ArgumentOutOfRangeException(nameof(resumePosition));
         if (missing && corrupt) throw new InvalidOperationException("Playback media cannot be both missing and corrupt.");
         return this;
