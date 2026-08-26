@@ -28,7 +28,6 @@ public sealed record CacheReuseMediaMetadata(
 
     private static void ValidateDuration(long durationMilliseconds)
     {
-        if (durationMilliseconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(durationMilliseconds));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(durationMilliseconds);
     }
 }
