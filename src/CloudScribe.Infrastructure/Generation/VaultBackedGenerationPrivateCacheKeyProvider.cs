@@ -5,7 +5,7 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class VaultBackedGenerationPrivateCacheKeyProvider : IGenerationPrivateCacheKeyProvider
+public sealed class VaultBackedGenerationPrivateCacheKeyProvider : IGenerationPrivateCacheKeyProvider, IDisposable
 {
     private const int KeyBytes = 32;
     private static readonly CredentialReference CacheKeyReference = new("cache-private-hmac-v2-23");
@@ -54,6 +54,12 @@ public sealed class VaultBackedGenerationPrivateCacheKeyProvider : IGenerationPr
         {
             _gate.Release();
         }
+    }
+
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private static GenerationPrivateCacheKeyMaterial Decode(ReadOnlySpan<char> encoded)
