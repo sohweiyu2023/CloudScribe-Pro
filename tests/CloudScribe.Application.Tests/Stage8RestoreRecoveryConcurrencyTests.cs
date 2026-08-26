@@ -10,12 +10,13 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var verificationCalls = 0;
+        var cancellationToken = TestContext.Current.CancellationToken;
 
         var coordinator = new RestoreRecoveryCoordinator(
             async _ =>
             {
                 entered.SetResult();
-                await release.Task.ConfigureAwait(false);
+                await release.Task.ConfigureAwait(true);
             },
             _ => Task.CompletedTask);
 
@@ -30,16 +31,17 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
         Task<bool> VerifyAsync(string outcome, CancellationToken _)
         {
             verificationCalls++;
-            return Task.FromResult(outcome == "rollback-completed");
+            return Task.FromResult(string.Equals(outcome, "rollback-completed", StringComparison.Ordinal));
         }
 
-        var first = coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync);
-        await entered.Task.ConfigureAwait(false);
+        var first = coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync, cancellationToken);
+        await entered.Task.ConfigureAwait(true);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync, cancellationToken));
 
         release.SetResult();
-        Assert.Equal("rollback-completed", await first.ConfigureAwait(false));
+        Assert.Equal("rollback-completed", await first.ConfigureAwait(true));
         Assert.Equal(1, verificationCalls);
     }
 
@@ -51,7 +53,8 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.RecoverVerifiedAsync(
             rollbackState,
-            static (_, _) => Task.FromResult(false)));
+            static (_, _) => Task.FromResult(false),
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -78,8 +81,9 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
             (candidate, _) =>
             {
                 verificationCalls++;
-                return Task.FromResult(candidate == "no-op-terminal-rolled-back");
-            });
+                return Task.FromResult(string.Equals(candidate, "no-op-terminal-rolled-back", StringComparison.Ordinal));
+            },
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal("no-op-terminal-rolled-back", outcome);
         Assert.Equal(0, rollbackCalls);
