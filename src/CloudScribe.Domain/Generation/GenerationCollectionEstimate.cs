@@ -19,15 +19,8 @@ public sealed class GenerationCollectionEstimate
             throw new ArgumentException("Collection id cannot be empty.", nameof(collectionId));
         }
 
-        if (requestRevision < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(requestRevision));
-        }
-
-        if (scaledTotal < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(scaledTotal));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(requestRevision);
+        ArgumentOutOfRangeException.ThrowIfNegative(scaledTotal);
 
         if (scale < 0 || scale > 12)
         {
