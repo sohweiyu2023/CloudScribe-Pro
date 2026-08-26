@@ -4,11 +4,18 @@ namespace CloudScribe.Application.Generation;
 
 public sealed class GenerationOutputReservationService
 {
+    private readonly StringComparer _pathComparer;
+
+    public GenerationOutputReservationService(StringComparer? pathComparer = null)
+    {
+        _pathComparer = pathComparer ?? StringComparer.OrdinalIgnoreCase;
+    }
+
     public IReadOnlyList<OutputReservation> ReservePlanOutputs(AudioAssemblyPlan plan, bool allowExplicitReplacement = false)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var reservations = new List<OutputReservation>(plan.OutputPaths.Count);
-        var canonical = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var canonical = new HashSet<string>(_pathComparer);
 
         foreach (var outputPath in plan.OutputPaths)
         {
