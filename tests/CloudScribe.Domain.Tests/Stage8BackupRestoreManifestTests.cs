@@ -15,15 +15,15 @@ public sealed class Stage8BackupRestoreManifestTests
         {
             var bytes = "backup-payload"u8.ToArray();
             var path = Path.Combine(root, "db.bin");
-            await File.WriteAllBytesAsync(path, bytes, cancellationToken).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(path, bytes, cancellationToken);
             var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             var entry = new BackupFileEntry("db.bin", bytes.Length, hash).Validate();
 
-            await BackupRestoreManifest.VerifyFileAsync(root, entry, cancellationToken).ConfigureAwait(false);
+            await BackupRestoreManifest.VerifyFileAsync(root, entry, cancellationToken);
 
-            await File.AppendAllTextAsync(path, "tamper", cancellationToken).ConfigureAwait(false);
+            await File.AppendAllTextAsync(path, "tamper", cancellationToken);
             await Assert.ThrowsAsync<InvalidDataException>(
-                () => BackupRestoreManifest.VerifyFileAsync(root, entry, cancellationToken)).ConfigureAwait(false);
+                () => BackupRestoreManifest.VerifyFileAsync(root, entry, cancellationToken));
         }
         finally
         {
