@@ -16,15 +16,8 @@ public sealed class GenerationRecoverySnapshot
             throw new ArgumentException("Job id is required.", nameof(jobId));
         }
 
-        if (attemptCount < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(attemptCount));
-        }
-
-        if (revision < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(revision));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(attemptCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(revision);
 
         JobId = jobId;
         State = state;
