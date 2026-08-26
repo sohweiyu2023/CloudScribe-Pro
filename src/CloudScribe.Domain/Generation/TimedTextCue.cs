@@ -19,10 +19,7 @@ public sealed record TimedTextCue(
         string text,
         string provenanceId)
     {
-        if (sequence < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(sequence));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(sequence, 1);
         if (start < TimeSpan.Zero || end <= start)
         {
             throw new ArgumentOutOfRangeException(nameof(end));
