@@ -10,10 +10,7 @@ public sealed class GenerationCircuitBreaker
 
     public GenerationCircuitBreaker(int failureThreshold, TimeSpan cooldown, TimeProvider timeProvider)
     {
-        if (failureThreshold < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(failureThreshold));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(failureThreshold, 1);
 
         if (cooldown <= TimeSpan.Zero || cooldown > TimeSpan.FromHours(24))
         {
