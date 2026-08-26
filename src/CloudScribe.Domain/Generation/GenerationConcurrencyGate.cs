@@ -7,11 +7,7 @@ public sealed class GenerationConcurrencyGate
 
     public GenerationConcurrencyGate(int maximumConcurrent)
     {
-        if (maximumConcurrent < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumConcurrent));
-        }
-
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumConcurrent, 1);
         _maximumConcurrent = maximumConcurrent;
     }
 
