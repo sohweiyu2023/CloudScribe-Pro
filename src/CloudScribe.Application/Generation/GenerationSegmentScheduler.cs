@@ -2,7 +2,7 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed class GenerationSegmentScheduler
+public sealed class GenerationSegmentScheduler : IDisposable
 {
     private readonly GenerationSegmentExecutor _executor;
     private readonly IGenerationSegmentCache _cache;
@@ -11,6 +11,7 @@ public sealed class GenerationSegmentScheduler
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _concurrencyGate;
     private readonly GenerationSegmentCacheLifecycleCoordinator? _cacheLifecycleCoordinator;
+    private bool _disposed;
 
     public GenerationSegmentScheduler(
         GenerationSegmentExecutor executor,
@@ -33,6 +34,7 @@ public sealed class GenerationSegmentScheduler
         IReadOnlyList<GenerationScheduledSegment> segments,
         CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(segments);
         var tasks = segments
             .OrderBy(static segment => segment.SegmentIndex)
@@ -40,6 +42,16 @@ public sealed class GenerationSegmentScheduler
             .Select(segment => ExecuteOneBoundedAsync(segment, cancellationToken))
             .ToArray();
         return await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _concurrencyGate.Dispose();
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 
     private async Task<GenerationScheduledSegmentResult> ExecuteOneBoundedAsync(
@@ -284,8 +296,7 @@ public sealed class GenerationSegmentScheduler
         if (jobId == Guid.Empty)
             throw new ArgumentException("Job id is required.", nameof(jobId));
         ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);
-        if (segmentIndex < 0)
-            throw new ArgumentOutOfRangeException(nameof(segmentIndex));
+        ArgumentOutOfRangeException.ThrowIfNegative(segmentIndex);
         ArgumentNullException.ThrowIfNull(request);
     }
 }
