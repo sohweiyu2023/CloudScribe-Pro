@@ -5,12 +5,6 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace CloudScribe.App.ViewModels;
 
-public sealed record VoiceLabCatalogUiState(
-    VoiceLabCatalogQuery Query,
-    bool AccountAuthorized,
-    bool ProjectAuthorized,
-    bool PrivateVoiceAccessAuthorized);
-
 public sealed partial class ShellViewModel
 {
     private VoiceLabCatalogQueryService? _voiceLabCatalog;

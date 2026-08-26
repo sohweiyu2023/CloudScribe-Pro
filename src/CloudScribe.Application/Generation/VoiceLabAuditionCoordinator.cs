@@ -3,19 +3,6 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record VoiceLabAuditionRequest(
-    VoiceLabCatalogSelection Selection,
-    bool CachePolicyEligible,
-    bool ForceFresh,
-    bool ExplicitSpendApproved,
-    bool PricingCurrent,
-    string OutputFormat);
-
-public sealed record VoiceLabAuditionOutcome(
-    bool CacheHit,
-    ReadOnlyMemory<byte> MediaBytes,
-    string DiagnosticCode);
-
 public sealed class VoiceLabAuditionCoordinator
 {
     private readonly Func<CancellationToken, Task<ReadOnlyMemory<byte>?>> _cacheReader;

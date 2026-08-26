@@ -1,12 +1,5 @@
 namespace CloudScribe.Domain.Generation;
 
-public sealed record MultiSpeakerCompiledTurn(
-    int StartNodeIndex,
-    int EndNodeIndex,
-    string SpeakerRole,
-    SpeakerVoiceBinding Voice,
-    IReadOnlyList<SpeechPlanNode> Nodes);
-
 public static class MultiSpeakerSpeechCompiler
 {
     public static IReadOnlyList<MultiSpeakerCompiledTurn> Compile(SpeechPlan plan, MultiSpeakerVoiceMap voiceMap)
@@ -44,7 +37,6 @@ public static class MultiSpeakerSpeechCompiler
             if (activeSpeaker is null)
                 throw new InvalidOperationException($"Node {index} appears before the first speaker change.");
 
-            // Voice selection is controlled exclusively by the immutable speaker map.
             if (node is SpeechVoice)
                 throw new InvalidOperationException("Inline voice changes are forbidden in a pinned multi-speaker plan.");
 
