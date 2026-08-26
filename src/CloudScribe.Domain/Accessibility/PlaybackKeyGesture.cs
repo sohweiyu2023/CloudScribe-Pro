@@ -4,7 +4,13 @@ public sealed record PlaybackKeyGesture(string Key, bool Control = false, bool A
 {
     public PlaybackKeyGesture Normalize()
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(Key);
-        return this with { Key = Key.Trim().ToUpperInvariant() };
+        var key = NormalizeKey(Key);
+        return this with { Key = key };
+    }
+
+    private static string NormalizeKey(string key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        return key.Trim().ToUpperInvariant();
     }
 }
