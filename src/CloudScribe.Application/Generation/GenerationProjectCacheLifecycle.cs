@@ -12,16 +12,16 @@ public sealed class GenerationProjectCacheLifecycle
     }
 
     public Task SetPinnedAsync(ContentAddressedSegmentKey key, bool pinned, CancellationToken cancellationToken = default) =>
-        throw new InvalidOperationException("A partial project cache lifecycle update is unsafe. Use SetValidatedTransitionAsync with the complete previous and next lifecycle state.");
+        RejectUnsafePartialUpdate(key, cancellationToken, nameof(SetPinnedAsync), pinned.ToString());
 
     public Task SetReferencedAsync(ContentAddressedSegmentKey key, bool referenced, CancellationToken cancellationToken = default) =>
-        throw new InvalidOperationException("A partial project cache lifecycle update is unsafe. Use SetValidatedTransitionAsync with the complete previous and next lifecycle state.");
+        RejectUnsafePartialUpdate(key, cancellationToken, nameof(SetReferencedAsync), referenced.ToString());
 
     public Task SetProjectStateAsync(
         ContentAddressedSegmentKey key,
         GenerationProjectCacheState state,
         CancellationToken cancellationToken = default) =>
-        throw new InvalidOperationException("An unvalidated project cache lifecycle write is unsafe. Use SetValidatedTransitionAsync with materialization and reconciliation evidence.");
+        RejectUnsafePartialUpdate(key, cancellationToken, nameof(SetProjectStateAsync), state.ToString());
 
     public Task SetValidatedTransitionAsync(
         ContentAddressedSegmentKey key,
@@ -85,6 +85,19 @@ public sealed class GenerationProjectCacheLifecycle
             pinEvidence);
 
         await ApplyStateAsync(key, validated, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task RejectUnsafePartialUpdate(
+        ContentAddressedSegmentKey key,
+        CancellationToken cancellationToken,
+        string operationName,
+        string requestedState)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        key.Validate();
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new InvalidOperationException(
+            $"{_coordinator.GetType().Name} rejects unsafe partial cache lifecycle operation '{operationName}' ({requestedState}). Use SetValidatedTransitionAsync with the complete previous and next lifecycle state plus required evidence.");
     }
 
     private Task ApplyStateAsync(
