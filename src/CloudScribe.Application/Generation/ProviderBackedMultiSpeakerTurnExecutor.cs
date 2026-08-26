@@ -20,8 +20,7 @@ public sealed class ProviderBackedMultiSpeakerTurnExecutor : IMultiSpeakerTurnEx
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(turn);
-        ArgumentException.ThrowIfNullOrWhiteSpace(turn.Route.ProviderStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(turn.Route.VoiceStableId);
+        ValidateRouteIdentity(turn.Route.ProviderStableId, turn.Route.VoiceStableId);
 
         var provider = _providerResolver(turn.Route.ProviderStableId)
             ?? throw new InvalidOperationException("No provider is registered for the selected speaker route.");
@@ -48,5 +47,11 @@ public sealed class ProviderBackedMultiSpeakerTurnExecutor : IMultiSpeakerTurnEx
             SubmissionDisposition.NotSubmitted => new(turn.TurnIndex, false, false, response.DiagnosticCode),
             _ => throw new InvalidOperationException("Unsupported provider submission disposition for multi-speaker execution.")
         };
+    }
+
+    private static void ValidateRouteIdentity(string providerStableId, string voiceStableId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerStableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(voiceStableId);
     }
 }
