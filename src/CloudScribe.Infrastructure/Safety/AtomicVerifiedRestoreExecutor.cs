@@ -99,68 +99,13 @@ public sealed class AtomicVerifiedRestoreExecutor
         RestoreExecutionStep step,
         CancellationToken cancellationToken)
     {
-        var source = ResolveContained(sourceRoot, step.RelativePath, "Backup source path escapes the backup root.");
-        var sourceInfo = new FileInfo(source);
-        if (!sourceInfo.Exists) throw new FileNotFoundException("Backup source file is missing.", source);
-        if (sourceInfo.Attributes.HasFlag(FileAttributes.ReparsePoint))
-            throw new InvalidOperationException("Backup source files must not be symbolic links or reparse points.");
-        if (sourceInfo.Length != step.Length)
-            throw new InvalidDataException($"Backup source length mismatch for {step.RelativePath}.");
-
-        var destination = Path.GetFullPath(step.DestinationPath);
-        var expectedDestination = ResolveContained(restoreRoot, step.RelativePath, "Restore destination escapes the restore root.");
-        if (!string.Equals(destination, expectedDestination, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Restore plan destination identity changed after planning.");
-        if (File.Exists(destination) || Directory.Exists(destination))
-            throw new IOException($"Restore destination already exists: {step.RelativePath}");
-
-        var parent = Path.GetDirectoryName(destination)
-            ?? throw new InvalidOperationException("Restore destination has no parent directory.");
-        Directory.CreateDirectory(parent);
-        EnsureNoReparseDirectoryChain(restoreRoot, parent);
-
+        var source = ValidateSource(sourceRoot, step);
+        var destination = PrepareDestination(restoreRoot, step);
         var temporary = destination + ".restore-tmp-" + Guid.NewGuid().ToString("N");
         var destinationPublished = false;
         try
         {
-            var inputStream = new FileStream(
-                source,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                BufferSize,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await using var input = inputStream.ConfigureAwait(false);
-            var outputStream = new FileStream(
-                temporary,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                BufferSize,
-                FileOptions.Asynchronous | FileOptions.WriteThrough);
-            await using var output = outputStream.ConfigureAwait(false);
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-
-            var buffer = new byte[BufferSize];
-            long written = 0;
-            while (true)
-            {
-                var read = await inputStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
-                if (read == 0) break;
-                written = checked(written + read);
-                if (written > step.Length)
-                    throw new InvalidDataException($"Backup source grew beyond the planned length for {step.RelativePath}.");
-                hash.AppendData(buffer, 0, read);
-                await outputStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-            }
-            await outputStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-            if (written != step.Length)
-                throw new InvalidDataException($"Backup source length changed while restoring {step.RelativePath}.");
-            var observed = hash.GetHashAndReset();
-            if (!CryptographicOperations.FixedTimeEquals(observed, Convert.FromHexString(step.Sha256)))
-                throw new InvalidDataException($"Backup source digest mismatch for {step.RelativePath}.");
-
+            await CopyAndVerifySourceAsync(source, temporary, step, cancellationToken).ConfigureAwait(false);
             File.Move(temporary, destination, overwrite: false);
             destinationPublished = true;
             await VerifyDestinationAsync(restoreRoot, step, cancellationToken).ConfigureAwait(false);
@@ -175,6 +120,79 @@ public sealed class AtomicVerifiedRestoreExecutor
         {
             if (File.Exists(temporary)) File.Delete(temporary);
         }
+    }
+
+    private static string ValidateSource(string sourceRoot, RestoreExecutionStep step)
+    {
+        var source = ResolveContained(sourceRoot, step.RelativePath, "Backup source path escapes the backup root.");
+        var sourceInfo = new FileInfo(source);
+        if (!sourceInfo.Exists) throw new FileNotFoundException("Backup source file is missing.", source);
+        if (sourceInfo.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            throw new InvalidOperationException("Backup source files must not be symbolic links or reparse points.");
+        if (sourceInfo.Length != step.Length)
+            throw new InvalidDataException($"Backup source length mismatch for {step.RelativePath}.");
+        return source;
+    }
+
+    private static string PrepareDestination(string restoreRoot, RestoreExecutionStep step)
+    {
+        var destination = Path.GetFullPath(step.DestinationPath);
+        var expectedDestination = ResolveContained(restoreRoot, step.RelativePath, "Restore destination escapes the restore root.");
+        if (!string.Equals(destination, expectedDestination, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Restore plan destination identity changed after planning.");
+        if (File.Exists(destination) || Directory.Exists(destination))
+            throw new IOException($"Restore destination already exists: {step.RelativePath}");
+
+        var parent = Path.GetDirectoryName(destination)
+            ?? throw new InvalidOperationException("Restore destination has no parent directory.");
+        Directory.CreateDirectory(parent);
+        EnsureNoReparseDirectoryChain(restoreRoot, parent);
+        return destination;
+    }
+
+    private static async Task CopyAndVerifySourceAsync(
+        string source,
+        string temporary,
+        RestoreExecutionStep step,
+        CancellationToken cancellationToken)
+    {
+        var inputStream = new FileStream(
+            source,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            BufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var input = inputStream.ConfigureAwait(false);
+        var outputStream = new FileStream(
+            temporary,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            BufferSize,
+            FileOptions.Asynchronous | FileOptions.WriteThrough);
+        await using var output = outputStream.ConfigureAwait(false);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
+        var buffer = new byte[BufferSize];
+        long written = 0;
+        while (true)
+        {
+            var read = await inputStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
+            if (read == 0) break;
+            written = checked(written + read);
+            if (written > step.Length)
+                throw new InvalidDataException($"Backup source grew beyond the planned length for {step.RelativePath}.");
+            hash.AppendData(buffer, 0, read);
+            await outputStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+        }
+        await outputStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+        if (written != step.Length)
+            throw new InvalidDataException($"Backup source length changed while restoring {step.RelativePath}.");
+        var observed = hash.GetHashAndReset();
+        if (!CryptographicOperations.FixedTimeEquals(observed, Convert.FromHexString(step.Sha256)))
+            throw new InvalidDataException($"Backup source digest mismatch for {step.RelativePath}.");
     }
 
     private static Task VerifyDestinationAsync(
