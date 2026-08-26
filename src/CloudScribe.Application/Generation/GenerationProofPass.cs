@@ -50,7 +50,8 @@ public sealed class GenerationProofPass
         var quarantined = results.Where(static result => !result.IsReleaseSafe).Select(static result => result.SegmentId).ToArray();
         if (quarantined.Length != 0)
         {
-            throw new InvalidOperationException($"Proof Pass quarantined {quarantined.Length} segment(s); release is blocked.");
+            throw new InvalidOperationException(FormattableString.Invariant(
+                $"Proof Pass quarantined {quarantined.Length} segment(s); release is blocked under the configured maximum duration-deviation ratio {_maximumDurationDeviationRatio:R}."));
         }
     }
 }
