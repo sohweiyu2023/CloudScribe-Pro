@@ -28,7 +28,7 @@ public sealed partial class ShellViewModel
 
     private void RefreshGenerationDiagnosticsRouteAction()
     {
-        if (!_pages.TryGetValue(AppRoute.Diagnostics, out var page))
+        if (!_pages.TryGetValue(CloudScribe.App.Navigation.AppRoute.Diagnostics, out RoutePageViewModel? page) || page is null)
         {
             return;
         }
