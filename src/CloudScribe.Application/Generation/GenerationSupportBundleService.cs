@@ -5,6 +5,13 @@ public sealed class GenerationSupportBundleService
     private const int MaxApplicationVersionLength = 64;
     private const int MaxPlatformLength = 64;
     private const int MaxDiagnosticCodeLength = 80;
+    private readonly string _authorizedDecisionReason;
+
+    public GenerationSupportBundleService(string authorizedDecisionReason = "support-bundle-metadata-only")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(authorizedDecisionReason);
+        _authorizedDecisionReason = authorizedDecisionReason;
+    }
 
     public GenerationSupportBundle CreateMetadataOnly(
         bool userExplicitlyRequestedDiagnosticBundle,
@@ -24,7 +31,7 @@ public sealed class GenerationSupportBundleService
             currentPolicyAllowsDiagnostics);
         GenerationSupportBundlePrivacyPolicy.RequireSafe(decision);
 
-        if (!string.Equals(decision.Reason, "support-bundle-metadata-only", StringComparison.Ordinal))
+        if (!string.Equals(decision.Reason, _authorizedDecisionReason, StringComparison.Ordinal))
             throw new InvalidOperationException($"Generation support bundle is not authorized: {decision.Reason}");
 
         return new GenerationSupportBundle(metadata, decision);
