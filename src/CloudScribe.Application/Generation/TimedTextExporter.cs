@@ -7,6 +7,8 @@ namespace CloudScribe.Application.Generation;
 
 public static class TimedTextExporter
 {
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
     public static string Export(TimedTextTrack track, TimedTextExportFormat format)
     {
         ArgumentNullException.ThrowIfNull(track);
@@ -38,7 +40,7 @@ public static class TimedTextExporter
                 provenanceId = cue.ProvenanceId,
             }).ToArray(),
         };
-        return JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return JsonSerializer.Serialize(payload, WebJsonOptions);
     }
 
     private static string ExportWebVtt(TimedTextTrack track)
@@ -69,11 +71,7 @@ public static class TimedTextExporter
 
     private static string FormatTimestamp(TimeSpan value, char millisecondSeparator)
     {
-        if (value < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(value));
-        }
-
+        ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
         var totalHours = (long)value.TotalHours;
         return string.Create(
             CultureInfo.InvariantCulture,
