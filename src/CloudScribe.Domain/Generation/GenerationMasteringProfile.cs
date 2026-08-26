@@ -31,14 +31,7 @@ public sealed record GenerationMasteringProfile(
             throw new ArgumentOutOfRangeException(nameof(targetLufs));
         }
 
-        if (fadeInMilliseconds < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(fadeInMilliseconds));
-        }
-
-        if (fadeOutMilliseconds < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(fadeOutMilliseconds));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(fadeInMilliseconds);
+        ArgumentOutOfRangeException.ThrowIfNegative(fadeOutMilliseconds);
     }
 }
