@@ -19,7 +19,8 @@ public sealed class GoogleGenerationHttpTransport
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateEndpoint(request.Endpoint);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.CredentialReferenceId);
+        if (string.IsNullOrWhiteSpace(request.CredentialReferenceId))
+            throw new ArgumentException("Credential reference ID is required.", nameof(request));
         ValidateBoundedRequest(request.Payload, request.MaximumResponseBytes);
 
         var token = await _credentialResolver.ResolveAccessTokenAsync(request.CredentialReferenceId, cancellationToken).ConfigureAwait(false);
