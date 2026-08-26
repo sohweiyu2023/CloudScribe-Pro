@@ -1,0 +1,3 @@
+# Deterministic .NET build and test outputs are never candidate source.
+**/bin/
+**/obj/
