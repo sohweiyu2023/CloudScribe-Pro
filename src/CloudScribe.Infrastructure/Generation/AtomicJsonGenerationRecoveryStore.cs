@@ -4,7 +4,7 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
+public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -110,6 +110,12 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
 
         File.Delete(PathFor(jobId));
         return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private string PathFor(Guid jobId) => Path.Combine(_directory, jobId.ToString("N") + ".generation.json");
