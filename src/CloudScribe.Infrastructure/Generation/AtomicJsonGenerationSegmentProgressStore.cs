@@ -4,7 +4,7 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class AtomicJsonGenerationSegmentProgressStore : IGenerationSegmentProgressStore
+public sealed class AtomicJsonGenerationSegmentProgressStore : IGenerationSegmentProgressStore, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -109,6 +109,12 @@ public sealed class AtomicJsonGenerationSegmentProgressStore : IGenerationSegmen
         }
 
         return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private string PathFor(Guid jobId, string segmentId)
