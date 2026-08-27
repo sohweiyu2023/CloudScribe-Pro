@@ -1,4 +1,7 @@
-Trigger Stage 5 full certification for focused-green candidate lineage.
+Trigger Stage 5 full certification for manifest-refreshed focused-green candidate lineage.
 Focused run: 33044751892
 Focused head: ce6ee5f05e001ed88c5a8bfbfc9c23f2f4591607
-Triggered: 2026-08-27
+Previous full cert: 33044936937 — build/tests passed; verifier correctly rejected stale SHA256SUMS.txt.
+Manifest sync run: 33045488637 — SUCCESS.
+Manifest-refreshed head: 6a418e8f6a1dc76cc723be62730770f40dd65631
+Retriggered: 2026-08-27
