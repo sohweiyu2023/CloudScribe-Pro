@@ -82,11 +82,12 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           if (-not $env:FROZEN_HEAD) { throw 'Frozen head was not captured.' }
-          $body = @{ ref = 'agent/stage5-fast-track' } | ConvertTo-Json -Compress
+          $bodyPath = Join-Path $env:RUNNER_TEMP 'stage5-full-cert-dispatch.json'
+          @{ ref = 'agent/stage5-fast-track' } | ConvertTo-Json -Compress | Set-Content -LiteralPath $bodyPath -Encoding utf8NoBOM -NoNewline
           gh api --method POST `
             -H 'Accept: application/vnd.github+json' `
             -H 'X-GitHub-Api-Version: 2022-11-28' `
             "/repos/${{ github.repository }}/actions/workflows/cloudscribe-stage5-full-certification.yml/dispatches" `
-            --input - <<< $body
+            --input $bodyPath
           if ($LASTEXITCODE -ne 0) { throw 'Full certification dispatch failed.' }
           Write-Host "Dispatched full certification from frozen head $env:FROZEN_HEAD"
