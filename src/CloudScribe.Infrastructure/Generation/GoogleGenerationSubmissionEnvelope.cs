@@ -29,7 +29,7 @@ public sealed record GoogleGenerationSubmissionEnvelope(
         ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(voiceName);
         ArgumentException.ThrowIfNullOrWhiteSpace(audioEncoding);
-        if (requestRevision < 0) throw new ArgumentOutOfRangeException(nameof(requestRevision));
+        ArgumentOutOfRangeException.ThrowIfNegative(requestRevision);
         if (compiledPayload.IsEmpty) throw new ArgumentException("Compiled provider payload is required.", nameof(compiledPayload));
         if (!string.Equals(account.AccountId, capabilities.AccountId, StringComparison.Ordinal))
         {
