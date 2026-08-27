@@ -31,12 +31,13 @@ public sealed record GoogleBillableExecutionAuthorization(
         ValidateHash(pricingProvenanceSha256, nameof(pricingProvenanceSha256));
         ValidateHash(compiledPayloadSha256, nameof(compiledPayloadSha256));
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
-        if (currencyScale is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(currencyScale));
-        if (authorizedMaximumMinorUnits < 0) throw new ArgumentOutOfRangeException(nameof(authorizedMaximumMinorUnits));
-        if (approvedEstimateMinorUnits < 0) throw new ArgumentOutOfRangeException(nameof(approvedEstimateMinorUnits));
+        ArgumentOutOfRangeException.ThrowIfNegative(currencyScale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(currencyScale, 9);
+        ArgumentOutOfRangeException.ThrowIfNegative(authorizedMaximumMinorUnits);
+        ArgumentOutOfRangeException.ThrowIfNegative(approvedEstimateMinorUnits);
         if (approvedEstimateMinorUnits > authorizedMaximumMinorUnits)
             throw new InvalidOperationException("Approved Google estimate exceeds the authorized spend ceiling.");
-        if (requestRevision < 0) throw new ArgumentOutOfRangeException(nameof(requestRevision));
+        ArgumentOutOfRangeException.ThrowIfNegative(requestRevision);
 
         var canonical = string.Join("\n",
             accountId,
