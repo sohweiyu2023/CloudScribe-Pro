@@ -16,9 +16,10 @@ public sealed record GoogleGenerationSpendAuthorization(
     {
         ArgumentNullException.ThrowIfNull(envelope);
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
-        if (scale is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(scale));
-        if (approvedEstimateMinorUnits < 0) throw new ArgumentOutOfRangeException(nameof(approvedEstimateMinorUnits));
-        if (authorizedMaximumMinorUnits < 0) throw new ArgumentOutOfRangeException(nameof(authorizedMaximumMinorUnits));
+        ArgumentOutOfRangeException.ThrowIfNegative(scale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(scale, 9);
+        ArgumentOutOfRangeException.ThrowIfNegative(approvedEstimateMinorUnits);
+        ArgumentOutOfRangeException.ThrowIfNegative(authorizedMaximumMinorUnits);
         if (approvedEstimateMinorUnits > authorizedMaximumMinorUnits)
         {
             throw new InvalidOperationException("Approved Google estimate exceeds the authorized spend ceiling.");
@@ -40,8 +41,9 @@ public sealed record GoogleGenerationSpendAuthorization(
     {
         ArgumentNullException.ThrowIfNull(envelope);
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
-        if (scale is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(scale));
-        if (currentEstimateMinorUnits < 0) throw new ArgumentOutOfRangeException(nameof(currentEstimateMinorUnits));
+        ArgumentOutOfRangeException.ThrowIfNegative(scale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(scale, 9);
+        ArgumentOutOfRangeException.ThrowIfNegative(currentEstimateMinorUnits);
 
         if (envelope != Envelope)
         {
