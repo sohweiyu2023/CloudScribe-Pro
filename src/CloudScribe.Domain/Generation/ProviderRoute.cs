@@ -33,10 +33,7 @@ public sealed record ProviderRoute(
         ArgumentException.ThrowIfNullOrWhiteSpace(voiceStableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
-        if (estimatedMinorUnits < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(estimatedMinorUnits));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(estimatedMinorUnits);
         return this;
     }
 }
