@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
 
@@ -8,7 +9,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
 {
     [Fact]
-    public async Task SubmitAsync_ExactAuthorizedIdentityReachesProvider()
+    public async Task SubmitAsyncExactAuthorizedIdentityReachesProvider()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var calls = 0;
@@ -29,7 +30,7 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     }
 
     [Fact]
-    public async Task SubmitAsync_PayloadDriftFailsBeforeCredentialOrHttpUse()
+    public async Task SubmitAsyncPayloadDriftFailsBeforeCredentialOrHttpUse()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var calls = 0;
@@ -46,7 +47,7 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     }
 
     [Fact]
-    public async Task SubmitAsync_OperationDriftFailsBeforeCredentialOrHttpUse()
+    public async Task SubmitAsyncOperationDriftFailsBeforeCredentialOrHttpUse()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var calls = 0;
@@ -63,7 +64,7 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     }
 
     [Fact]
-    public async Task SubmitAsync_OutputFormatDriftFailsBeforeCredentialOrHttpUse()
+    public async Task SubmitAsyncOutputFormatDriftFailsBeforeCredentialOrHttpUse()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var calls = 0;
@@ -80,7 +81,7 @@ public sealed class Stage6GoogleAuthorizedGenerationExecutorTests
     }
 
     [Fact]
-    public void ProviderIdentityConstants_MatchV223TrustNamespace()
+    public void ProviderIdentityConstantsMatchV223TrustNamespace()
     {
         Assert.Equal("google-cloud-text-to-speech", GoogleGenerationProvider.StableProviderId);
         Assert.Equal("synthesize-speech", GoogleGenerationProvider.SynthesizeOperationStableId);
