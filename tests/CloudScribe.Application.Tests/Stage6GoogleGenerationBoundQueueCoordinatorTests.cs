@@ -7,7 +7,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage6GoogleGenerationBoundQueueCoordinatorTests
 {
     [Fact]
-    public async Task Mismatched_admitted_account_never_reaches_submit()
+    public async Task MismatchedAdmittedAccountNeverReachesSubmit()
     {
         var submitCalls = 0;
         var queue = new GoogleGenerationQueueCoordinator((request, decision, cancellationToken) =>
@@ -26,12 +26,12 @@ public sealed class Stage6GoogleGenerationBoundQueueCoordinatorTests
         var trust = Trust(accountId: "account-b");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.ProcessAsync(
-            request, trust, true, true, true, true, false));
+            request, trust, true, true, true, true, false, null));
         Assert.Equal(0, submitCalls);
     }
 
     [Fact]
-    public async Task Exact_binding_reaches_queue_once()
+    public async Task ExactBindingReachesQueueOnce()
     {
         var submitCalls = 0;
         var queue = new GoogleGenerationQueueCoordinator((request, decision, cancellationToken) =>
@@ -48,7 +48,7 @@ public sealed class Stage6GoogleGenerationBoundQueueCoordinatorTests
         var coordinator = new GoogleGenerationBoundQueueCoordinator(queue);
         var request = new GenerationProviderRequest("google-cloud-tts", "synthesize", "account-a", "idem", new byte[] { 1 }, "wav");
 
-        var outcome = await coordinator.ProcessAsync(request, Trust(), true, true, true, true, false);
+        var outcome = await coordinator.ProcessAsync(request, Trust(), true, true, true, true, false, null);
 
         Assert.Equal(1, submitCalls);
         Assert.NotNull(outcome.Response);
