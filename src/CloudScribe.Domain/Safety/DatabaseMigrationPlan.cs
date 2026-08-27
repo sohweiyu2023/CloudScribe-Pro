@@ -2,19 +2,19 @@ namespace CloudScribe.Domain.Safety;
 
 public sealed class DatabaseMigrationPlan
 {
-    private readonly IReadOnlyList<DatabaseMigrationStep> _steps;
+    private readonly DatabaseMigrationStep[] _steps;
 
     public DatabaseMigrationPlan(IEnumerable<DatabaseMigrationStep> steps)
     {
         ArgumentNullException.ThrowIfNull(steps);
         _steps = steps.ToArray();
-        if (_steps.Count == 0) throw new ArgumentException("At least one migration step is required.", nameof(steps));
-        if (_steps.Select(static step => step.StableId).Distinct(StringComparer.Ordinal).Count() != _steps.Count)
+        if (_steps.Length == 0) throw new ArgumentException("At least one migration step is required.", nameof(steps));
+        if (_steps.Select(static step => step.StableId).Distinct(StringComparer.Ordinal).Count() != _steps.Length)
         {
             throw new ArgumentException("Migration stable ids must be unique.", nameof(steps));
         }
 
-        for (var index = 1; index < _steps.Count; index++)
+        for (var index = 1; index < _steps.Length; index++)
         {
             if (_steps[index - 1].ToVersion != _steps[index].FromVersion)
             {
