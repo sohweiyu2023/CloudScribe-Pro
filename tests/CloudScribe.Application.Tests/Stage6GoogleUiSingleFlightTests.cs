@@ -87,7 +87,7 @@ public sealed class Stage6GoogleUiSingleFlightTests
         ProviderFeatureIdentity: "features-1",
         AccountCapabilityIdentity: "account-capability-1").Validate();
 
-    private static Task<GoogleGenerationPersistedQueueOutcome> ExecuteAsync(
+    private static Task<GoogleGenerationQueueOutcome> ExecuteAsync(
         GoogleGenerationUiQueueCoordinator coordinator,
         UiState state,
         CancellationToken cancellationToken) => coordinator.ProcessPersistedTransitionAsync(
