@@ -1,3 +1,4 @@
+using CloudScribe.Domain.Generation;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Application.Generation;
@@ -34,6 +35,7 @@ public sealed class ProviderBackedMultiSpeakerTurnExecutor : IMultiSpeakerTurnEx
         if (request.CompiledPayload.IsEmpty)
             throw new InvalidOperationException("Multi-speaker provider requests require a compiled payload.");
 
+        var expectedMediaFormat = ParseExpectedMediaFormat(request.OutputFormat);
         var response = await provider.SubmitAsync(request, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Multi-speaker provider returned no response.");
         if (string.IsNullOrWhiteSpace(response.DiagnosticCode))
@@ -41,11 +43,34 @@ public sealed class ProviderBackedMultiSpeakerTurnExecutor : IMultiSpeakerTurnEx
 
         return response.Disposition switch
         {
-            SubmissionDisposition.Accepted => new(turn.TurnIndex, true, false, response.DiagnosticCode),
+            SubmissionDisposition.Accepted => AcceptedOutcome(turn, response, expectedMediaFormat),
             SubmissionDisposition.UnknownRequiresReconciliation => new(turn.TurnIndex, false, true, response.DiagnosticCode),
             SubmissionDisposition.RejectedSafeToRetry => new(turn.TurnIndex, false, false, response.DiagnosticCode),
             SubmissionDisposition.NotSubmitted => new(turn.TurnIndex, false, false, response.DiagnosticCode),
             _ => throw new InvalidOperationException("Unsupported provider submission disposition for multi-speaker execution.")
+        };
+    }
+
+    private static MultiSpeakerTurnExecutionOutcome AcceptedOutcome(
+        PlannedSpeakerTurn turn,
+        GenerationProviderResponse response,
+        GenerationAudioFormat expectedMediaFormat)
+    {
+        var validation = ReturnedMediaValidator.Validate(response.MediaBytes.Span, response.MediaContentType);
+        if (!validation.IsValid || validation.DetectedFormat != expectedMediaFormat)
+            throw new InvalidDataException("Accepted multi-speaker provider media failed requested-format validation.");
+
+        return new(turn.TurnIndex, true, false, response.DiagnosticCode);
+    }
+
+    private static GenerationAudioFormat ParseExpectedMediaFormat(string outputFormat)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputFormat);
+        return outputFormat.Trim().ToLowerInvariant() switch
+        {
+            "wav" or "wave" or "audio/wav" or "audio/wave" => GenerationAudioFormat.Wav,
+            "mp3" or "mpeg" or "audio/mpeg" => GenerationAudioFormat.Mp3,
+            _ => throw new NotSupportedException($"Multi-speaker output format '{outputFormat}' is not supported.")
         };
     }
 
