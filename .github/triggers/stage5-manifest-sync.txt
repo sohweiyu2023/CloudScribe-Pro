@@ -1,4 +1,4 @@
 Stage 5 deterministic source-manifest refresh trigger.
 Repository verifier requires SHA256SUMS.txt to match the exact frozen tree.
-Full certification now also triggers on SHA256SUMS.txt, so the manifest-sync bot commit itself launches certification from the self-consistent manifest-refreshed head.
-Refresh requested: 2026-08-27.
+The manifest-sync workflow now refreshes SHA256SUMS.txt, verifies the pushed frozen head, then explicitly dispatches full Stage 5 certification from that branch head.
+Refresh and certification requested: 2026-08-27 14:31 SGT.
