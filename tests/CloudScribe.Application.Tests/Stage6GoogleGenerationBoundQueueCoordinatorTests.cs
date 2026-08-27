@@ -22,11 +22,13 @@ public sealed class Stage6GoogleGenerationBoundQueueCoordinatorTests
                 "google-accepted"));
         });
         var coordinator = new GoogleGenerationBoundQueueCoordinator(queue);
-        var request = new GenerationProviderRequest("google-cloud-tts", "synthesize", "account-a", "idem", new byte[] { 1 }, "wav");
+        var request = new GenerationProviderRequest(
+            "google-cloud-tts", "synthesize", "account-a", "idem", new byte[] { 1 }, "wav");
         var trust = Trust(accountId: "account-b");
+        var cancellationToken = TestContext.Current.CancellationToken;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.ProcessAsync(
-            request, trust, true, true, true, true, false, null));
+            request, trust, true, true, true, true, false, null, cancellationToken)).ConfigureAwait(true);
         Assert.Equal(0, submitCalls);
     }
 
@@ -46,9 +48,19 @@ public sealed class Stage6GoogleGenerationBoundQueueCoordinatorTests
                 "google-not-submitted"));
         });
         var coordinator = new GoogleGenerationBoundQueueCoordinator(queue);
-        var request = new GenerationProviderRequest("google-cloud-tts", "synthesize", "account-a", "idem", new byte[] { 1 }, "wav");
+        var request = new GenerationProviderRequest(
+            "google-cloud-tts", "synthesize", "account-a", "idem", new byte[] { 1 }, "wav");
 
-        var outcome = await coordinator.ProcessAsync(request, Trust(), true, true, true, true, false, null);
+        var outcome = await coordinator.ProcessAsync(
+            request,
+            Trust(),
+            accountAuthorized: true,
+            projectAuthorized: true,
+            capabilityCurrent: true,
+            pricingCurrent: true,
+            admissionCurrent: false,
+            persistedIdempotencyKey: null,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal(1, submitCalls);
         Assert.NotNull(outcome.Response);
