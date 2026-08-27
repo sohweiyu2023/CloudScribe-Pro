@@ -13,10 +13,10 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
         var cancellationToken = TestContext.Current.CancellationToken;
 
         var coordinator = new RestoreRecoveryCoordinator(
-            async _ =>
+            _ =>
             {
                 entered.SetResult();
-                await release.Task;
+                return release.Task;
             },
             _ => Task.CompletedTask);
 
