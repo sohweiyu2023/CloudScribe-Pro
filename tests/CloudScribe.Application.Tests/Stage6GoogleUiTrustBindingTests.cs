@@ -6,7 +6,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage6GoogleUiTrustBindingTests
 {
     [Fact]
-    public void Exact_ui_selection_matches_admitted_trust()
+    public void ExactUiSelectionMatchesAdmittedTrust()
     {
         var selection = new GoogleGenerationUiSelection("acct", "project", "voice", "model", "capability", "LINEAR16");
         GoogleGenerationUiTrustBindingPolicy.RequireExactBinding(selection, CreateTrust());
@@ -18,7 +18,7 @@ public sealed class Stage6GoogleUiTrustBindingTests
     [InlineData("project", "voice", "other-model", "capability", "LINEAR16")]
     [InlineData("project", "voice", "model", "other-capability", "LINEAR16")]
     [InlineData("project", "voice", "model", "capability", "MP3")]
-    public void Ui_trust_drift_fails_closed(string project, string voice, string model, string capability, string output)
+    public void UiTrustDriftFailsClosed(string project, string voice, string model, string capability, string output)
     {
         var selection = new GoogleGenerationUiSelection("acct", project, voice, model, capability, output);
         Assert.Throws<InvalidOperationException>(() =>
@@ -28,7 +28,7 @@ public sealed class Stage6GoogleUiTrustBindingTests
     [Theory]
     [InlineData("other-provider", "synthesize-speech")]
     [InlineData("google-cloud-text-to-speech", "other-operation")]
-    public void Non_google_synthesize_namespace_is_not_equivalent_to_ui_trust(string provider, string operation)
+    public void NonGoogleSynthesizeNamespaceIsNotEquivalentToUiTrust(string provider, string operation)
     {
         var trust = CreateTrust(provider, operation);
         Assert.False(
@@ -41,7 +41,7 @@ public sealed class Stage6GoogleUiTrustBindingTests
 
     private static GenerationCacheTrustContext CreateTrust(
         string provider = "google-cloud-text-to-speech",
-        string operation = "synthesize-speech") => new(
+        string operation = "synthesize-speech") => new GenerationCacheTrustContext(
         ProviderStableId: provider,
         AccountId: "acct",
         ProjectId: "project",
