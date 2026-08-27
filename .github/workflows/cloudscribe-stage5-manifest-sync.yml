@@ -9,6 +9,7 @@ on:
       - '.github/triggers/stage5-manifest-sync.txt'
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
@@ -55,13 +56,37 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if (@(git status --porcelain=v1 --untracked-files=all).Count -eq 0) { exit 0 }
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- SHA256SUMS.txt
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) { exit 0 }
-          git commit -m 'chore(stage5): refresh source SHA-256 manifest'
-          if ($LASTEXITCODE -ne 0) { throw 'Manifest commit failed.' }
-          git push origin HEAD:agent/stage5-fast-track
-          if ($LASTEXITCODE -ne 0) { throw 'Manifest push failed.' }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -- SHA256SUMS.txt
+            git diff --cached --quiet
+            if ($LASTEXITCODE -ne 0) {
+              git commit -m 'chore(stage5): refresh source SHA-256 manifest'
+              if ($LASTEXITCODE -ne 0) { throw 'Manifest commit failed.' }
+              git push origin HEAD:agent/stage5-fast-track
+              if ($LASTEXITCODE -ne 0) { throw 'Manifest push failed.' }
+            }
+          }
+          git fetch origin agent/stage5-fast-track
+          git reset --hard origin/agent/stage5-fast-track
+          python -B tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Pushed branch manifest is not exact.' }
+          $head = (git rev-parse HEAD).Trim()
+          "FROZEN_HEAD=$head" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Dispatch full certification from frozen manifest head
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:FROZEN_HEAD) { throw 'Frozen head was not captured.' }
+          $body = @{ ref = 'agent/stage5-fast-track' } | ConvertTo-Json -Compress
+          gh api --method POST `
+            -H 'Accept: application/vnd.github+json' `
+            -H 'X-GitHub-Api-Version: 2022-11-28' `
+            "/repos/${{ github.repository }}/actions/workflows/cloudscribe-stage5-full-certification.yml/dispatches" `
+            --input - <<< $body
+          if ($LASTEXITCODE -ne 0) { throw 'Full certification dispatch failed.' }
+          Write-Host "Dispatched full certification from frozen head $env:FROZEN_HEAD"
