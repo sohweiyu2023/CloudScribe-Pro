@@ -4,7 +4,7 @@ namespace CloudScribe.Infrastructure.Safety;
 
 public sealed class RestoreRecoveryTerminalVerifier
 {
-    public async Task<bool> VerifyAsync(
+    public static async Task<bool> VerifyAsync(
         string outcome,
         RestoreExecutionPlan plan,
         RestoreTransactionJournal journal,
