@@ -2,6 +2,8 @@ namespace CloudScribe.Domain.Generation;
 
 public sealed class ProviderRoutingPolicy
 {
+    private readonly StringComparer _stableIdComparer = StringComparer.Ordinal;
+
     public ProviderRoutingDecision Select(
         ProviderRoute requested,
         IReadOnlyList<ProviderRoute> candidates,
@@ -13,10 +15,7 @@ public sealed class ProviderRoutingPolicy
         ArgumentNullException.ThrowIfNull(candidates);
         requested.Validate();
         ArgumentException.ThrowIfNullOrWhiteSpace(authorizedCurrency);
-        if (authorizedMaximumMinorUnits < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(authorizedMaximumMinorUnits));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(authorizedMaximumMinorUnits);
 
         var exact = candidates.Where(candidate => IsSameRoute(requested, candidate.Validate())).ToArray();
         if (exact.Length == 1)
@@ -38,10 +37,10 @@ public sealed class ProviderRoutingPolicy
             .Where(route => string.Equals(route.Currency, authorizedCurrency, StringComparison.OrdinalIgnoreCase))
             .Where(route => route.EstimatedMinorUnits <= authorizedMaximumMinorUnits)
             .OrderBy(route => route.EstimatedMinorUnits)
-            .ThenBy(route => route.ProviderStableId, StringComparer.Ordinal)
-            .ThenBy(route => route.AccountId, StringComparer.Ordinal)
-            .ThenBy(route => route.OperationStableId, StringComparer.Ordinal)
-            .ThenBy(route => route.VoiceStableId, StringComparer.Ordinal)
+            .ThenBy(route => route.ProviderStableId, _stableIdComparer)
+            .ThenBy(route => route.AccountId, _stableIdComparer)
+            .ThenBy(route => route.OperationStableId, _stableIdComparer)
+            .ThenBy(route => route.VoiceStableId, _stableIdComparer)
             .ToArray();
 
         if (compatible.Length == 0)

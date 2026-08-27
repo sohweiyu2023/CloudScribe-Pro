@@ -13,8 +13,9 @@ public static class ProviderRouteOutagePolicy
     {
         pinnedRoute.Validate();
         ArgumentException.ThrowIfNullOrWhiteSpace(billedCurrency);
-        if (billedCurrencyScale is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(billedCurrencyScale));
-        if (projectedFallbackMinorUnits < 0) throw new ArgumentOutOfRangeException(nameof(projectedFallbackMinorUnits));
+        ArgumentOutOfRangeException.ThrowIfNegative(billedCurrencyScale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(billedCurrencyScale, 9);
+        ArgumentOutOfRangeException.ThrowIfNegative(projectedFallbackMinorUnits);
 
         if (pinnedRouteAvailable)
             return pinnedRoute;

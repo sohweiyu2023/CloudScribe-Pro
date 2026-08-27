@@ -24,14 +24,9 @@ public sealed record ProviderRouteFallbackAuthorization(
         pinnedRoute.Validate();
         allowedFallback.Validate();
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
-        if (currencyScale is < 0 or > 9)
-        {
-            throw new ArgumentOutOfRangeException(nameof(currencyScale));
-        }
-        if (maximumFallbackMinorUnits < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumFallbackMinorUnits));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(currencyScale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(currencyScale, 9);
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumFallbackMinorUnits);
         if (pinnedRoute == allowedFallback)
         {
             throw new InvalidOperationException("Fallback authorization must identify a distinct route.");

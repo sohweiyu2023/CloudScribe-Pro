@@ -63,10 +63,7 @@ public sealed record ProviderRouteHealthCircuit(
     {
         EnsureRoute(route);
         EnsureForwardTime(nowUtc);
-        if (failureThreshold <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(failureThreshold));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(failureThreshold);
         ValidateDelay(circuitOpenDuration, nameof(circuitOpenDuration));
 
         var failures = checked(ConsecutiveFailures + 1);
@@ -106,7 +103,7 @@ public sealed record ProviderRouteHealthCircuit(
         }
     }
 
-    private void EnsureTime(DateTimeOffset nowUtc) => RequireTimestamp(nowUtc, nameof(nowUtc));
+    private static void EnsureTime(DateTimeOffset nowUtc) => RequireTimestamp(nowUtc, nameof(nowUtc));
 
     private void EnsureForwardTime(DateTimeOffset nowUtc)
     {

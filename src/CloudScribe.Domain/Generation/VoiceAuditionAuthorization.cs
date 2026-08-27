@@ -29,8 +29,9 @@ public sealed record VoiceAuditionAuthorization(
         ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
         ArgumentException.ThrowIfNullOrWhiteSpace(sampleText);
-        if (maximumScaledAmount < 0) throw new ArgumentOutOfRangeException(nameof(maximumScaledAmount));
-        if (scale is < 0 or > 12) throw new ArgumentOutOfRangeException(nameof(scale));
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumScaledAmount);
+        ArgumentOutOfRangeException.ThrowIfNegative(scale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(scale, 12);
 
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sampleText))).ToLowerInvariant();
         return new VoiceAuditionAuthorization(
