@@ -1,4 +1,5 @@
 using CloudScribe.Application.Generation;
+using CloudScribe.Domain.Generation;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Application.Tests;
@@ -6,7 +7,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage6GoogleGenerationQueueCoordinatorTests
 {
     [Fact]
-    public async Task Authorized_request_reaches_submit_delegate_once()
+    public async Task AuthorizedRequestReachesSubmitDelegateOnce()
     {
         var calls = 0;
         var coordinator = new GoogleGenerationQueueCoordinator((request, decision, cancellationToken) =>
@@ -38,7 +39,7 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
     }
 
     [Fact]
-    public async Task Unresolved_submission_stays_reconciliation_only_and_never_resubmits()
+    public async Task UnresolvedSubmissionStaysReconciliationOnlyAndNeverResubmits()
     {
         var calls = 0;
         var coordinator = new GoogleGenerationQueueCoordinator((request, decision, cancellationToken) =>
@@ -62,7 +63,7 @@ public sealed class Stage6GoogleGenerationQueueCoordinatorTests
     }
 
     [Fact]
-    public async Task Ambiguous_submit_response_becomes_reconciliation_required()
+    public async Task AmbiguousSubmitResponseBecomesReconciliationRequired()
     {
         var coordinator = new GoogleGenerationQueueCoordinator((request, decision, cancellationToken) =>
             Task.FromResult(new GenerationProviderResponse(
