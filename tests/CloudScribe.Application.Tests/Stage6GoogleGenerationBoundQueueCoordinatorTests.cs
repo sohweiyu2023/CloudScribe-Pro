@@ -54,11 +54,11 @@ public sealed class Stage6GoogleGenerationBoundQueueCoordinatorTests
         var outcome = await coordinator.ProcessAsync(
             request,
             Trust(),
-            accountAuthorized: true,
-            projectAuthorized: true,
-            capabilityCurrent: true,
-            pricingCurrent: true,
-            admissionCurrent: false,
+            admissionCurrent: true,
+            accountCredentialAvailable: true,
+            pricingApproved: true,
+            postCompileLimitsSatisfied: true,
+            unresolvedPriorSubmission: false,
             persistedIdempotencyKey: null,
             cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
 
