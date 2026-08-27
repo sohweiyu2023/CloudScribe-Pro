@@ -39,6 +39,8 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
             return Unknown("google-transport-unknown");
         if (response.Value.TimedOut)
             return Unknown("google-transport-timeout");
+        if (response.Value.Response is null)
+            return Unknown("google-transport-unknown");
 
         return response.Value.Response.StatusCode == HttpStatusCode.OK
             ? CreateAcceptedResponse(response.Value.Response, request.OutputFormat)
@@ -67,7 +69,7 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
             throw new InvalidOperationException("Generation request account identity does not match the pinned Google account.");
     }
 
-    private async Task<(GoogleHttpTransportResponse Response, bool TimedOut)?> SendAsync(
+    private async Task<(GoogleHttpTransportResponse? Response, bool TimedOut)?> SendAsync(
         GenerationProviderRequest request,
         CancellationToken cancellationToken)
     {
@@ -83,7 +85,7 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return (default, true);
+            return (null, true);
         }
         catch (HttpRequestException)
         {
