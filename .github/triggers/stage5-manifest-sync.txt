@@ -1,0 +1,2 @@
+Stage 5 deterministic source-manifest refresh trigger.
+Created after full certification run 33044936937 proved locked restore, strict Release build, and the complete compiled test suite green, but RepositoryVerifierTests correctly rejected stale SHA256SUMS.txt.
