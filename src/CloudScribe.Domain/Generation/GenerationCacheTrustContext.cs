@@ -30,9 +30,7 @@ public sealed record GenerationCacheTrustContext(
         foreach (var value in Values())
         {
             if (string.IsNullOrWhiteSpace(value))
-            {
                 throw new InvalidOperationException("Every cache trust-namespace field must be explicit. Use a stable 'none' token when a field is not applicable.");
-            }
         }
 
         return this;
