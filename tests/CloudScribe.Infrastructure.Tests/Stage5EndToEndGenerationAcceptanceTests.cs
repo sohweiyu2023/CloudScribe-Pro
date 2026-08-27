@@ -446,7 +446,12 @@ public sealed class Stage5EndToEndGenerationAcceptanceTests
             idempotencyKey,
             payload,
             "wav",
-            CreateTrustContext(providerStableId));
+            CreateTrustContext(providerStableId),
+            ExpectedCacheMediaMetadata: new CacheReuseMediaMetadata(
+                GenerationAudioFormat.Wav,
+                SampleRateHz: 16000,
+                ChannelCount: 1,
+                DurationMilliseconds: 1));
 
     private static GenerationCacheTrustContext CreateTrustContext(string providerStableId) => new(
         providerStableId, "account-test", "project-test", "endpoint-test", "local", "synthesize-speech",
