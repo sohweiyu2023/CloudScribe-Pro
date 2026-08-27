@@ -8,7 +8,9 @@ public sealed record PrivateCacheLookupKey(string HmacSha256)
     public PrivateCacheLookupKey Validate()
     {
         if (HmacSha256.Length != 64 || HmacSha256.Any(static character => !Uri.IsHexDigit(character)))
+        {
             throw new InvalidOperationException("Private cache lookup identifiers must be 64-character HMAC-SHA-256 hex digests.");
+        }
 
         return this;
     }
@@ -21,12 +23,16 @@ public sealed record PrivateCacheLookupKey(string HmacSha256)
         ArgumentNullException.ThrowIfNull(trustContext);
         trustContext.Validate();
         if (hmacKey.Length < 32)
+        {
             throw new ArgumentException("Cache HMAC key material must contain at least 256 bits.", nameof(hmacKey));
+        }
 
         using var buffer = new MemoryStream();
         Append(buffer, "cloudscribe-private-cache-v2.23");
         foreach (var value in trustContext.Values())
+        {
             Append(buffer, value);
+        }
         AppendLength(buffer, compiledPayload.Length);
         buffer.Write(compiledPayload);
 
@@ -40,6 +46,19 @@ public sealed record PrivateCacheLookupKey(string HmacSha256)
         {
             CryptographicOperations.ZeroMemory(digest);
             CryptographicOperations.ZeroMemory(canonical);
+        }
+    }
+
+    public static string ComputeHmacSha256Hex(ReadOnlySpan<byte> key, ReadOnlySpan<byte> data)
+    {
+        var digest = HMACSHA256.HashData(key, data);
+        try
+        {
+            return Convert.ToHexString(digest).ToLowerInvariant();
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(digest);
         }
     }
 

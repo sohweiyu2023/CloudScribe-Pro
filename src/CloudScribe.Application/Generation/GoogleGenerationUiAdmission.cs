@@ -1,7 +1,11 @@
+using System.Buffers;
+
 namespace CloudScribe.Application.Generation;
 
 public static class GoogleGenerationUiAdmission
 {
+    private static readonly SearchValues<char> InvalidIdentityCharacters = SearchValues.Create("\r\n\0");
+
     public static GoogleGenerationUiSelection RequireCurrent(
         GoogleGenerationUiSelection selection,
         bool accountAuthorized,
@@ -14,7 +18,7 @@ public static class GoogleGenerationUiAdmission
         {
             if (string.IsNullOrWhiteSpace(value)
                 || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
-                || value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+                || value.AsSpan().ContainsAny(InvalidIdentityCharacters))
             {
                 throw new InvalidOperationException("Google generation UI selection contains a non-canonical identity.");
             }

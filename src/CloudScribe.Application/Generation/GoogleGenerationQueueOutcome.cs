@@ -1,3 +1,4 @@
+using CloudScribe.Domain.Generation;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Application.Generation;
