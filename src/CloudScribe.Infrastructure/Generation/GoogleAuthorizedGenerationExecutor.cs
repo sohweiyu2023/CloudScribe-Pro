@@ -33,9 +33,10 @@ public sealed class GoogleAuthorizedGenerationExecutor
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
         ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
-        if (requestRevision < 0) throw new ArgumentOutOfRangeException(nameof(requestRevision));
-        if (scale is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(scale));
-        if (currentEstimateMinorUnits < 0) throw new ArgumentOutOfRangeException(nameof(currentEstimateMinorUnits));
+        ArgumentOutOfRangeException.ThrowIfNegative(requestRevision);
+        ArgumentOutOfRangeException.ThrowIfNegative(scale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(scale, 9);
+        ArgumentOutOfRangeException.ThrowIfNegative(currentEstimateMinorUnits);
         _pricingProvenanceId = pricingProvenanceId;
         _requestRevision = requestRevision;
         _currency = currency;
