@@ -6,7 +6,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage6GoogleCacheReuseEligibilityTests
 {
     [Fact]
-    public void Exact_context_is_reusable_and_any_identity_drift_is_rejected()
+    public void ExactContextIsReusableAndAnyIdentityDriftIsRejected()
     {
         var current = Context("capability-v1", "voice-fingerprint-v1");
         Assert.True(GoogleCacheReuseEligibility.IsEligible(current, current with { }));

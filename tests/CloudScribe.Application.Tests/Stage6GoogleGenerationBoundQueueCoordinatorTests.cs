@@ -60,7 +60,7 @@ public sealed class Stage6GoogleGenerationBoundQueueCoordinatorTests
             pricingCurrent: true,
             admissionCurrent: false,
             persistedIdempotencyKey: null,
-            TestContext.Current.CancellationToken).ConfigureAwait(true);
+            cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal(1, submitCalls);
         Assert.NotNull(outcome.Response);

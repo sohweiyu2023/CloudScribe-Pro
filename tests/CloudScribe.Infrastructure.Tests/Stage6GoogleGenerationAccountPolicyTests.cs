@@ -6,7 +6,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage6GoogleGenerationAccountPolicyTests
 {
     [Fact]
-    public void Account_RejectsEmbeddedCredentialsAndNonHttpsEndpoint()
+    public void AccountRejectsEmbeddedCredentialsAndNonHttpsEndpoint()
     {
         Assert.Throws<ArgumentException>(() => new GoogleGenerationAccount(
             "acct", "vault-ref", new Uri("http://texttospeech.googleapis.com"), "global").Validate());
@@ -15,7 +15,7 @@ public sealed class Stage6GoogleGenerationAccountPolicyTests
     }
 
     [Fact]
-    public void CapabilitySnapshot_RejectsStaleOrUnsupportedSubmission()
+    public void CapabilitySnapshotRejectsStaleOrUnsupportedSubmission()
     {
         var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var snapshot = new GoogleCapabilitySnapshot(
@@ -32,7 +32,7 @@ public sealed class Stage6GoogleGenerationAccountPolicyTests
     }
 
     [Fact]
-    public void CapabilitySnapshot_RequiresVoiceEncodingAndPostCompileLimit()
+    public void CapabilitySnapshotRequiresVoiceEncodingAndPostCompileLimit()
     {
         var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var snapshot = new GoogleCapabilitySnapshot(
@@ -51,7 +51,7 @@ public sealed class Stage6GoogleGenerationAccountPolicyTests
     }
 
     [Fact]
-    public void AmbiguousSubmission_AlwaysReconcilesBeforeRetry()
+    public void AmbiguousSubmissionAlwaysReconcilesBeforeRetry()
     {
         var disposition = GoogleProviderResponsePolicy.Classify(503, TimeSpan.FromSeconds(5), true);
 
@@ -60,7 +60,7 @@ public sealed class Stage6GoogleGenerationAccountPolicyTests
     }
 
     [Fact]
-    public void RateLimit_HonorsBoundedRetryAfter()
+    public void RateLimitHonorsBoundedRetryAfter()
     {
         var disposition = GoogleProviderResponsePolicy.Classify(429, TimeSpan.FromSeconds(30), false);
 

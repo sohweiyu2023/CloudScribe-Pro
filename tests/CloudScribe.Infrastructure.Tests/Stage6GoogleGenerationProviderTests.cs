@@ -9,7 +9,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage6GoogleGenerationProviderTests
 {
     [Fact]
-    public async Task SubmitAsync_MapsValidGoogleResponseToAcceptedMedia()
+    public async Task SubmitAsyncMapsValidGoogleResponseToAcceptedMedia()
     {
         var audio = Convert.ToBase64String(new byte[] { 1, 2, 3 });
         using var client = new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -36,7 +36,7 @@ public sealed class Stage6GoogleGenerationProviderTests
     }
 
     [Fact]
-    public async Task SubmitAsync_RejectsNonCanonicalOperationBeforeHttp()
+    public async Task SubmitAsyncRejectsNonCanonicalOperationBeforeHttp()
     {
         var calls = 0;
         using var client = new HttpClient(new StubHandler(_ =>
@@ -60,7 +60,7 @@ public sealed class Stage6GoogleGenerationProviderTests
     }
 
     [Fact]
-    public async Task ReconcileAsync_DoesNotInventSafeRetryEvidence()
+    public async Task ReconcileAsyncDoesNotInventSafeRetryEvidence()
     {
         using var client = new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
         var account = new GoogleGenerationAccount("acct", "cred-ref", new Uri("https://texttospeech.googleapis.com/v1/text:synthesize"), "global");

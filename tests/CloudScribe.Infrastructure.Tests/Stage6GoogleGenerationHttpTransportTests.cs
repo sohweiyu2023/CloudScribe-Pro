@@ -7,7 +7,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage6GoogleGenerationHttpTransportTests
 {
     [Fact]
-    public async Task SendAsync_UsesTransientCredentialAndPreservesRetryAfter()
+    public async Task SendAsyncUsesTransientCredentialAndPreservesRetryAfter()
     {
         var handler = new RecordingHandler(_ =>
         {
@@ -34,7 +34,7 @@ public sealed class Stage6GoogleGenerationHttpTransportTests
     }
 
     [Fact]
-    public async Task SendAsync_RejectsOriginDriftBeforeCredentialResolution()
+    public async Task SendAsyncRejectsOriginDriftBeforeCredentialResolution()
     {
         var resolver = new FixedCredentialResolver("token");
         using var client = new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
@@ -50,7 +50,7 @@ public sealed class Stage6GoogleGenerationHttpTransportTests
     }
 
     [Fact]
-    public async Task SendAsync_RejectsOversizedResponse()
+    public async Task SendAsyncRejectsOversizedResponse()
     {
         using var client = new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {

@@ -7,7 +7,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage6GoogleSpeechPlanCompilerTests
 {
     [Fact]
-    public void Compile_IsDeterministic_AndReportsUnsupportedCanonicalFeatures()
+    public void CompileIsDeterministicAndReportsUnsupportedCanonicalFeatures()
     {
         var plan = new SpeechPlan(
             "en-US",
@@ -33,7 +33,7 @@ public sealed class Stage6GoogleSpeechPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_FailsClosed_WhenPostCompilePayloadExceedsAdmittedLimit()
+    public void CompileFailsClosedWhenPostCompilePayloadExceedsAdmittedLimit()
     {
         var plan = new SpeechPlan("en-US", [new SpeechText(new string('x', 1000))], "prov-2");
         var options = new GoogleSpeechCompilationOptions("en-US", "en-US-Test", "LINEAR16", 256);

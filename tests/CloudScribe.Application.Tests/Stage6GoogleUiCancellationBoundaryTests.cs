@@ -6,7 +6,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage6GoogleUiCancellationBoundaryTests
 {
     [Fact]
-    public async Task Pre_cancelled_UI_generation_never_reaches_queue_or_submit()
+    public async Task PreCancelledUiGenerationNeverReachesQueueOrSubmit()
     {
         var submitCalls = 0;
         var queue = new GoogleGenerationQueueCoordinator((_, _, _) =>

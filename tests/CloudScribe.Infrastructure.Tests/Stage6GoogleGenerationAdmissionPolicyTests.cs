@@ -5,7 +5,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage6GoogleGenerationAdmissionPolicyTests
 {
     [Fact]
-    public void Admission_binds_current_account_voice_output_and_capability()
+    public void AdmissionBindsCurrentAccountVoiceOutputAndCapability()
     {
         var now = new DateTimeOffset(2026, 8, 23, 12, 0, 0, TimeSpan.Zero);
         var account = new GoogleGenerationAccount(
@@ -37,7 +37,7 @@ public sealed class Stage6GoogleGenerationAdmissionPolicyTests
     }
 
     [Fact]
-    public void Stale_capability_cannot_pass_generation_admission()
+    public void StaleCapabilityCannotPassGenerationAdmission()
     {
         var now = new DateTimeOffset(2026, 8, 23, 12, 0, 0, TimeSpan.Zero);
         var account = new GoogleGenerationAccount("account-a", "credential-ref-a", new Uri("https://texttospeech.googleapis.com"), "global");
