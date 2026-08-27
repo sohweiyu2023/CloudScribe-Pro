@@ -8,7 +8,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage8BackupRestorePreparationCoordinatorTests
 {
     [Fact]
-    public void Valid_signature_and_safe_archive_reach_staging()
+    public void ValidSignatureAndSafeArchiveReachStaging()
     {
         var root = Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -46,7 +46,7 @@ public sealed class Stage8BackupRestorePreparationCoordinatorTests
     }
 
     [Fact]
-    public void Invalid_manifest_signature_never_creates_staging_output()
+    public void InvalidManifestSignatureNeverCreatesStagingOutput()
     {
         var root = Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
