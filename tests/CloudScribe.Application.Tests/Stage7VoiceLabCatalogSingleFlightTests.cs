@@ -5,7 +5,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage7VoiceLabCatalogSingleFlightTests
 {
     [Fact]
-    public async Task Concurrent_catalog_query_is_rejected_before_second_transport_call()
+    public async Task ConcurrentCatalogQueryIsRejectedBeforeSecondTransportCall()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

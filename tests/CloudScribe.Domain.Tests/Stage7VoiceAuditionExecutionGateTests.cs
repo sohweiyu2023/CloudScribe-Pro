@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage7VoiceAuditionExecutionGateTests
 {
     [Fact]
-    public void Eligible_cache_hit_authorizes_reuse_without_provider_spend()
+    public void EligibleCacheHitAuthorizesReuseWithoutProviderSpend()
     {
         var authorization = VoiceAuditionExecutionGate.Authorize(
             cacheHitEligible: true,
@@ -20,7 +20,7 @@ public sealed class Stage7VoiceAuditionExecutionGateTests
     }
 
     [Fact]
-    public void Force_fresh_requires_explicit_spend_approval()
+    public void ForceFreshRequiresExplicitSpendApproval()
     {
         Assert.Throws<InvalidOperationException>(() => VoiceAuditionExecutionGate.Authorize(
             cacheHitEligible: true,
@@ -43,7 +43,7 @@ public sealed class Stage7VoiceAuditionExecutionGateTests
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
-    public void Stale_capability_or_pricing_fails_closed(bool capabilityCurrent, bool pricingCurrent)
+    public void StaleCapabilityOrPricingFailsClosed(bool capabilityCurrent, bool pricingCurrent)
     {
         Assert.Throws<InvalidOperationException>(() => VoiceAuditionExecutionGate.Authorize(
             cacheHitEligible: false,

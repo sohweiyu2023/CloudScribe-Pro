@@ -9,7 +9,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage7VoiceLabAuditionCoordinatorTests
 {
     [Fact]
-    public async Task Eligible_cache_hit_avoids_provider_spend()
+    public async Task EligibleCacheHitAvoidsProviderSpend()
     {
         var wav = MinimalPcmWave();
         var submitCalls = 0;
@@ -35,7 +35,7 @@ public sealed class Stage7VoiceLabAuditionCoordinatorTests
     }
 
     [Fact]
-    public async Task Force_fresh_with_approval_submits_once()
+    public async Task ForceFreshWithApprovalSubmitsOnce()
     {
         var wav = MinimalPcmWave();
         var submitCalls = 0;

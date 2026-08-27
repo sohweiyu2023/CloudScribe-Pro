@@ -4,8 +4,10 @@ namespace CloudScribe.Domain.Tests;
 
 public sealed class Stage7MultiSpeakerSpeechCompilerTests
 {
+    private static readonly int[] ExpectedStartNodeIndices = [1, 4];
+
     [Fact]
-    public void Compile_ProducesDeterministicPinnedTurns()
+    public void CompileProducesDeterministicPinnedTurns()
     {
         var plan = new SpeechPlan("en-US", new SpeechPlanNode[]
         {
@@ -26,11 +28,11 @@ public sealed class Stage7MultiSpeakerSpeechCompilerTests
         Assert.Equal(2, turns.Count);
         Assert.Equal("provider-a/account-a/voice-a", turns[0].Voice.RouteIdentity);
         Assert.Equal("provider-b/account-b/voice-b", turns[1].Voice.RouteIdentity);
-        Assert.Equal(new[] { 1, 4 }, turns.Select(static t => t.StartNodeIndex));
+        Assert.Equal(ExpectedStartNodeIndices, turns.Select(static t => t.StartNodeIndex));
     }
 
     [Fact]
-    public void Compile_RejectsSpeakableContentBeforeSpeaker()
+    public void CompileRejectsSpeakableContentBeforeSpeaker()
     {
         var plan = new SpeechPlan("en-US", new SpeechPlanNode[] { new SpeechText("Unsafe") }, "p");
         var map = new MultiSpeakerVoiceMap(new[]
@@ -41,7 +43,7 @@ public sealed class Stage7MultiSpeakerSpeechCompilerTests
     }
 
     [Fact]
-    public void Compile_RejectsInlineVoiceOverride()
+    public void CompileRejectsInlineVoiceOverride()
     {
         var plan = new SpeechPlan("en-US", new SpeechPlanNode[]
         {

@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage7VoiceAuditionSpendPolicyTests
 {
     [Fact]
-    public void Cache_hit_avoids_spend_but_force_fresh_requires_approval()
+    public void CacheHitAvoidsSpendButForceFreshRequiresApproval()
     {
         var hit = VoiceAuditionSpendPolicy.Evaluate(
             cacheHitEligible: true,
@@ -27,7 +27,7 @@ public sealed class Stage7VoiceAuditionSpendPolicyTests
     }
 
     [Fact]
-    public void Stale_capability_or_pricing_fails_closed_without_throwing()
+    public void StaleCapabilityOrPricingFailsClosedWithoutThrowing()
     {
         var staleCapability = VoiceAuditionSpendPolicy.Evaluate(false, false, true, false, true);
         Assert.False(staleCapability.MayReuseCache);

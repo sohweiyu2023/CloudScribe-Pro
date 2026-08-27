@@ -6,7 +6,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage7VoiceLabCatalogBoundedResultTests
 {
     [Fact]
-    public async Task More_than_500_catalog_results_fail_closed_before_UI_or_audition()
+    public async Task MoreThan500CatalogResultsFailClosedBeforeUiOrAudition()
     {
         var results = Enumerable.Range(0, 501)
             .Select(index => Selection($"voice-{index}"))
@@ -23,7 +23,7 @@ public sealed class Stage7VoiceLabCatalogBoundedResultTests
     }
 
     [Fact]
-    public async Task Pre_cancelled_catalog_query_never_reaches_transport()
+    public async Task PreCancelledCatalogQueryNeverReachesTransport()
     {
         var transportCalls = 0;
         var service = new VoiceLabCatalogQueryService((_, _) =>

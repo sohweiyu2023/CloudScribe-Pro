@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage7ProviderRoutingPolicyTests
 {
     [Fact]
-    public void ExactPinnedRoute_WinsWithoutFallback()
+    public void ExactPinnedRouteWinsWithoutFallback()
     {
         var requested = Route("p1", "a1", "op", "v1", "price-1", 100, "USD");
         var other = Route("p2", "a2", "op", "v2", "price-1", 50, "USD");
@@ -17,7 +17,7 @@ public sealed class Stage7ProviderRoutingPolicyTests
     }
 
     [Fact]
-    public void MissingPinnedRoute_FailsWhenFallbackNotAuthorized()
+    public void MissingPinnedRouteFailsWhenFallbackNotAuthorized()
     {
         var requested = Route("p1", "a1", "op", "v1", "price-1", 100, "USD");
 
@@ -26,7 +26,7 @@ public sealed class Stage7ProviderRoutingPolicyTests
     }
 
     [Fact]
-    public void Fallback_CannotSilentlyChangePricingProvenance()
+    public void FallbackCannotSilentlyChangePricingProvenance()
     {
         var requested = Route("p1", "a1", "op", "v1", "price-1", 100, "USD");
         var candidate = Route("p2", "a2", "op", "v2", "price-2", 50, "USD");
@@ -38,7 +38,7 @@ public sealed class Stage7ProviderRoutingPolicyTests
     }
 
     [Fact]
-    public void Fallback_RejectsCurrencyOrSpendViolation()
+    public void FallbackRejectsCurrencyOrSpendViolation()
     {
         var requested = Route("p1", "a1", "op", "v1", "price-1", 100, "USD");
         var tooExpensive = Route("p2", "a2", "op", "v2", "price-1", 101, "USD");

@@ -5,8 +5,10 @@ namespace CloudScribe.Application.Tests;
 
 public sealed class Stage7MultiSpeakerTurnExecutionCoordinatorTests
 {
+    private static readonly int[] ExpectedExecutedTurns = [0, 1];
+
     [Fact]
-    public async Task Ambiguous_turn_stops_later_turns_from_executing()
+    public async Task AmbiguousTurnStopsLaterTurnsFromExecuting()
     {
         var executor = new RecordingExecutor(reconcileAtTurn: 1);
         var coordinator = new MultiSpeakerTurnExecutionCoordinator(executor);
@@ -28,11 +30,11 @@ public sealed class Stage7MultiSpeakerTurnExecutionCoordinatorTests
 
         Assert.Equal(2, outcomes.Count);
         Assert.True(outcomes[1].RequiresReconciliation);
-        Assert.Equal(new[] { 0, 1 }, executor.ExecutedTurns);
+        Assert.Equal(ExpectedExecutedTurns, executor.ExecutedTurns);
     }
 
     [Fact]
-    public async Task Contradictory_success_and_reconciliation_outcome_fails_closed()
+    public async Task ContradictorySuccessAndReconciliationOutcomeFailsClosed()
     {
         var coordinator = new MultiSpeakerTurnExecutionCoordinator(new ContradictoryExecutor());
         var turns = new[] { new MultiSpeakerTurn(0, "a", "first") };

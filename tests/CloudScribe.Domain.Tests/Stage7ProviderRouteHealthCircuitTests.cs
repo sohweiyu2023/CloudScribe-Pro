@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage7ProviderRouteHealthCircuitTests
 {
     [Fact]
-    public void TransientFailures_OpenOnlyTheExactPinnedRoute()
+    public void TransientFailuresOpenOnlyTheExactPinnedRoute()
     {
         var now = DateTimeOffset.UtcNow;
         var route = Route("voice-a");
@@ -20,7 +20,7 @@ public sealed class Stage7ProviderRouteHealthCircuitTests
     }
 
     [Fact]
-    public void RateLimit_HonorsExactRetryAfterWindow()
+    public void RateLimitHonorsExactRetryAfterWindow()
     {
         var now = DateTimeOffset.UtcNow;
         var route = Route("voice-a");
@@ -33,7 +33,7 @@ public sealed class Stage7ProviderRouteHealthCircuitTests
     }
 
     [Fact]
-    public void Success_ResetsFailuresAndCircuitWindow()
+    public void SuccessResetsFailuresAndCircuitWindow()
     {
         var now = DateTimeOffset.UtcNow;
         var route = Route("voice-a");

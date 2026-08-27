@@ -6,7 +6,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage7VoiceLabCatalogTests
 {
     [Fact]
-    public void Search_ExcludesStaleAndFiltersCapabilitiesDeterministically()
+    public void SearchExcludesStaleAndFiltersCapabilitiesDeterministically()
     {
         var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var entries = new[]
@@ -29,7 +29,7 @@ public sealed class Stage7VoiceLabCatalogTests
     }
 
     [Fact]
-    public void Search_RejectsDuplicateStableIdentity()
+    public void SearchRejectsDuplicateStableIdentity()
     {
         var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var duplicate = Entry("p1", "voice-a", "A", now.AddHours(1), true, "marks");
@@ -41,7 +41,7 @@ public sealed class Stage7VoiceLabCatalogTests
     }
 
     [Fact]
-    public void Search_PreservesProviderAndCapabilityProvenance()
+    public void SearchPreservesProviderAndCapabilityProvenance()
     {
         var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
         var entry = Entry("p1", "voice-a", "Narrator", now.AddHours(1), false, "marks");

@@ -8,7 +8,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage7ProviderBackedMultiSpeakerTurnExecutorTests
 {
     [Fact]
-    public async Task Unsupported_output_format_is_rejected_before_provider_submission()
+    public async Task UnsupportedOutputFormatIsRejectedBeforeProviderSubmission()
     {
         var provider = new RecordingProvider(Accepted(CreateWaveBytes(), "audio/wav"));
         var executor = CreateExecutor(provider, "ogg");
@@ -20,7 +20,7 @@ public sealed class Stage7ProviderBackedMultiSpeakerTurnExecutorTests
     }
 
     [Fact]
-    public async Task Accepted_corrupt_media_fails_closed()
+    public async Task AcceptedCorruptMediaFailsClosed()
     {
         var provider = new RecordingProvider(Accepted(new byte[] { 1, 2, 3 }, "audio/wav"));
         var executor = CreateExecutor(provider, "wav");
@@ -32,7 +32,7 @@ public sealed class Stage7ProviderBackedMultiSpeakerTurnExecutorTests
     }
 
     [Fact]
-    public async Task Accepted_media_must_match_requested_format()
+    public async Task AcceptedMediaMustMatchRequestedFormat()
     {
         var provider = new RecordingProvider(Accepted(CreateWaveBytes(), "audio/wav"));
         var executor = CreateExecutor(provider, "mp3");
@@ -44,7 +44,7 @@ public sealed class Stage7ProviderBackedMultiSpeakerTurnExecutorTests
     }
 
     [Fact]
-    public async Task Structurally_valid_requested_media_completes_turn()
+    public async Task StructurallyValidRequestedMediaCompletesTurn()
     {
         var provider = new RecordingProvider(Accepted(CreateWaveBytes(), "audio/wav"));
         var executor = CreateExecutor(provider, "wav");

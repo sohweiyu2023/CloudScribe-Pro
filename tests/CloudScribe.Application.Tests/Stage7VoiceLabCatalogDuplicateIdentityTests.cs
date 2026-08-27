@@ -6,7 +6,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage7VoiceLabCatalogDuplicateIdentityTests
 {
     [Fact]
-    public async Task Duplicate_voice_identity_fails_closed_before_UI_or_audition()
+    public async Task DuplicateVoiceIdentityFailsClosedBeforeUiOrAudition()
     {
         var duplicated = new[]
         {

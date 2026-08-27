@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage7ReleaseProviderSetManifestTests
 {
     [Fact]
-    public void Manifest_IsDeterministic_AndRejectsUnadmittedProviderOrOperation()
+    public void ManifestIsDeterministicAndRejectsUnadmittedProviderOrOperation()
     {
         var descriptor = new ReleaseProviderDescriptor(
             "provider-a",
@@ -30,7 +30,7 @@ public sealed class Stage7ReleaseProviderSetManifestTests
     }
 
     [Fact]
-    public void Manifest_RejectsDuplicateStableProviderIdentity()
+    public void ManifestRejectsDuplicateStableProviderIdentity()
     {
         var descriptor = new ReleaseProviderDescriptor(
             "provider-a",
