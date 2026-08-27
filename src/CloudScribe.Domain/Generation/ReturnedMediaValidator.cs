@@ -1,24 +1,5 @@
 namespace CloudScribe.Domain.Generation;
 
-public enum GenerationAudioFormat
-{
-    Wav,
-    Mp3,
-}
-
-public sealed record ReturnedMediaValidationResult(
-    bool IsValid,
-    GenerationAudioFormat? DetectedFormat,
-    string DiagnosticCode,
-    string Reason)
-{
-    public static ReturnedMediaValidationResult Valid(GenerationAudioFormat format) =>
-        new(true, format, "media.valid", "Returned media passed bounded structural validation.");
-
-    public static ReturnedMediaValidationResult Invalid(string code, string reason) =>
-        new(false, null, code, reason);
-}
-
 public static class ReturnedMediaValidator
 {
     public const int DefaultMaximumMediaBytes = 64 * 1024 * 1024;
@@ -28,10 +9,7 @@ public static class ReturnedMediaValidator
         string? contentType,
         int maximumMediaBytes = DefaultMaximumMediaBytes)
     {
-        if (maximumMediaBytes < 64)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumMediaBytes));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumMediaBytes, 64);
 
         if (mediaBytes.IsEmpty)
         {
@@ -122,34 +100,5 @@ public static class ReturnedMediaValidator
         }
 
         return bytes.Length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0;
-    }
-}
-
-public sealed record GenerationMasteringProfile(
-    string StableId,
-    decimal TargetPeakDbfs,
-    decimal? TargetLufs,
-    int FadeInMilliseconds,
-    int FadeOutMilliseconds)
-{
-    public GenerationMasteringProfile Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(StableId);
-        if (TargetPeakDbfs is > 0 or < -30)
-        {
-            throw new ArgumentOutOfRangeException(nameof(TargetPeakDbfs));
-        }
-
-        if (TargetLufs is > 0 or < -70)
-        {
-            throw new ArgumentOutOfRangeException(nameof(TargetLufs));
-        }
-
-        if (FadeInMilliseconds < 0 || FadeOutMilliseconds < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(FadeInMilliseconds));
-        }
-
-        return this;
     }
 }

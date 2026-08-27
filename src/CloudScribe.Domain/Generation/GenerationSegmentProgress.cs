@@ -1,16 +1,5 @@
 namespace CloudScribe.Domain.Generation;
 
-public enum GenerationSegmentProgressState
-{
-    Pending,
-    Submitting,
-    SubmissionUnknown,
-    RetryWait,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
 public sealed record GenerationSegmentProgress
 {
     public GenerationSegmentProgress(
@@ -33,15 +22,8 @@ public sealed record GenerationSegmentProgress
 
         ArgumentException.ThrowIfNullOrWhiteSpace(segmentId);
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
-        if (segmentIndex < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(segmentIndex));
-        }
-
-        if (completedAttempts < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(completedAttempts));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(segmentIndex);
+        ArgumentOutOfRangeException.ThrowIfNegative(completedAttempts);
 
         if (state == GenerationSegmentProgressState.Completed && string.IsNullOrWhiteSpace(cacheKeySha256))
         {
@@ -117,10 +99,7 @@ public sealed record GenerationSegmentProgress
 
     public GenerationSegmentProgress MarkRetryWait(long nowUnixMilliseconds, TimeSpan delay, string diagnosticCode)
     {
-        if (delay <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(delay));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(delay, TimeSpan.Zero);
 
         return this with
         {

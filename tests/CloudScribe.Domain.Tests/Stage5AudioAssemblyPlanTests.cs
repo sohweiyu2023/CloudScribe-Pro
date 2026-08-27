@@ -4,6 +4,8 @@ namespace CloudScribe.Domain.Tests;
 
 public sealed class Stage5AudioAssemblyPlanTests
 {
+    private static readonly string[] FirstPartSegmentIds = ["s1", "s2"];
+
     [Fact]
     public void MeasuredDurationsRegroupWithoutSplittingSegments()
     {
@@ -19,7 +21,7 @@ public sealed class Stage5AudioAssemblyPlanTests
         var plan = new AudioAssemblyPlan(segments, profile, ReleaseAudioFormat.Mp3, TimeSpan.FromSeconds(80), root, "chapter");
 
         Assert.Equal(2, plan.Parts.Count);
-        Assert.Equal(new[] { "s1", "s2" }, plan.Parts[0].Segments.Select(static item => item.SegmentId));
+        Assert.Equal(FirstPartSegmentIds, plan.Parts[0].Segments.Select(static item => item.SegmentId));
         Assert.Single(plan.Parts[1].Segments);
         Assert.Equal(TimeSpan.FromSeconds(130), plan.TotalMeasuredDuration);
         Assert.EndsWith("chapter.part-001.mp3", plan.OutputPaths[0], StringComparison.OrdinalIgnoreCase);

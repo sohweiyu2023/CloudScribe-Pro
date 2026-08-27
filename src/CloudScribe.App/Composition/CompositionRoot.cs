@@ -1,5 +1,6 @@
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Documents;
+using CloudScribe.Application.Generation;
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Providers;
 using CloudScribe.Infrastructure.DependencyInjection;
@@ -43,6 +44,9 @@ public static class CompositionRoot
                 serviceProvider.GetRequiredService<IPricingContractOverrideStore>(),
                 serviceProvider.GetRequiredService<IProviderAccountStore>(),
                 serviceProvider.GetRequiredService<IProviderCapabilitySnapshotStore>());
+            viewModel.ConfigureStage5GenerationDiagnostics(
+                serviceProvider.GetRequiredService<GenerationSupportBundleExportCoordinator>(),
+                currentPolicyAllowsDiagnostics: true);
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
             return viewModel;

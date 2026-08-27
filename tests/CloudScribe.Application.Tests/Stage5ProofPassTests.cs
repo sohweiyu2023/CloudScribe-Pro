@@ -5,6 +5,8 @@ namespace CloudScribe.Application.Tests;
 
 public sealed class Stage5ProofPassTests
 {
+    private static readonly string[] ClippedProviderDiagnostics = ["provider.output.clipped"];
+
     [Fact]
     public void HealthySegmentIsReleaseSafe()
     {
@@ -35,7 +37,7 @@ public sealed class Stage5ProofPassTests
             ExpectedDuration: TimeSpan.FromSeconds(10),
             ActualDuration: TimeSpan.FromSeconds(20),
             RequiredTimingMarksPresent: false,
-            ProviderDiagnostics: new[] { "provider.output.clipped" },
+            ProviderDiagnostics: ClippedProviderDiagnostics,
             ProvenanceId: "fake/provider/run-2"));
 
         Assert.False(result.IsReleaseSafe);

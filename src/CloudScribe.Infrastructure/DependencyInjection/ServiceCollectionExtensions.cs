@@ -1,6 +1,7 @@
 using CloudScribe.Application.Activation;
 using CloudScribe.Application.Diagnostics;
 using CloudScribe.Application.Documents;
+using CloudScribe.Application.Generation;
 using CloudScribe.Application.Observability;
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Providers;
@@ -10,6 +11,7 @@ using CloudScribe.Infrastructure.Activation;
 using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.Diagnostics;
 using CloudScribe.Infrastructure.Files;
+using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Persistence;
 using CloudScribe.Infrastructure.Pricing;
 using CloudScribe.Infrastructure.Providers;
@@ -30,14 +32,21 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+        AddCoreServices(services, configuration);
+        AddPersistenceServices(services);
+        AddProviderAndTrustServices(services, configuration);
+        AddGenerationSupportServices(services);
+        return services;
+    }
 
+    private static void AddCoreServices(IServiceCollection services, IConfiguration configuration)
+    {
         services.AddSingleton(TimeProvider.System);
         services.AddOptions<CloudScribeOptions>()
             .Bind(configuration.GetSection(CloudScribeOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<CloudScribeOptions>, CloudScribeOptionsValidator>();
         services.AddSingleton<AppPaths>();
-
         services.AddSingleton<BoundedJsonFileLoggerProvider>();
         services.AddSingleton<ILoggerProvider>(serviceProvider =>
             serviceProvider.GetRequiredService<BoundedJsonFileLoggerProvider>());
@@ -46,7 +55,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISupportBundleService, SupportBundleService>();
         services.AddSingleton<IActivationRouter, ActivationRouter>();
         services.AddSingleton<ISingleInstanceCoordinator, SingleInstanceCoordinator>();
+    }
 
+    private static void AddPersistenceServices(IServiceCollection services)
+    {
         services.AddPooledDbContextFactory<CloudScribeDbContext>((serviceProvider, builder) =>
         {
             AppPaths paths = serviceProvider.GetRequiredService<AppPaths>();
@@ -70,7 +82,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IActivityTimelineStore, EfActivityTimelineStore>();
         services.AddSingleton<IBillableOperationLedger, EfBillableOperationLedger>();
         services.AddSingleton<IApplicationInitializer, DatabaseInitializer>();
+    }
 
+    private static void AddProviderAndTrustServices(IServiceCollection services, IConfiguration configuration)
+    {
         services.AddSingleton<IProviderFactoryRegistry, ProviderFactoryRegistry>();
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
@@ -85,6 +100,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
         services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
-        return services;
+        services.AddSingleton<IGenerationPrivateCacheKeyProvider, VaultBackedGenerationPrivateCacheKeyProvider>();
+    }
+
+    private static void AddGenerationSupportServices(IServiceCollection services)
+    {
+        services.AddSingleton<GenerationSupportBundleService>();
+        services.AddSingleton<GenerationSupportBundleMetadataFileStore>();
+        services.AddSingleton(serviceProvider =>
+            new GenerationSupportBundleExportCoordinator(
+                serviceProvider.GetRequiredService<GenerationSupportBundleService>(),
+                serviceProvider.GetRequiredService<GenerationSupportBundleMetadataFileStore>().PersistAsync));
     }
 }

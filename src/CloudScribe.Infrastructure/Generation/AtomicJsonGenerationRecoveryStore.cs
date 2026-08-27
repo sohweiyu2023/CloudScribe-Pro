@@ -4,7 +4,7 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
+public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -31,7 +31,8 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
             var temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
             try
             {
-                await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough))
+                FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough);
+                await using (stream.ConfigureAwait(false))
                 {
                     await JsonSerializer.SerializeAsync(stream, snapshot, JsonOptions, cancellationToken).ConfigureAwait(false);
                     await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -66,9 +67,12 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
             return null;
         }
 
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        return await JsonSerializer.DeserializeAsync<GenerationRecoverySnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidDataException($"Recovery snapshot '{path}' was empty or invalid.");
+        FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using (stream.ConfigureAwait(false))
+        {
+            return await JsonSerializer.DeserializeAsync<GenerationRecoverySnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidDataException($"Recovery snapshot '{path}' was empty or invalid.");
+        }
     }
 
     public async Task<IReadOnlyList<GenerationRecoverySnapshot>> ListRecoverableAsync(CancellationToken cancellationToken = default)
@@ -77,12 +81,15 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
         foreach (var path in Directory.EnumerateFiles(_directory, "*.generation.json", SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var snapshot = await JsonSerializer.DeserializeAsync<GenerationRecoverySnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidDataException($"Recovery snapshot '{path}' was empty or invalid.");
-            if (snapshot.DecideRecovery().Kind != GenerationRecoveryKind.None)
+            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using (stream.ConfigureAwait(false))
             {
-                snapshots.Add(snapshot);
+                var snapshot = await JsonSerializer.DeserializeAsync<GenerationRecoverySnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
+                    ?? throw new InvalidDataException($"Recovery snapshot '{path}' was empty or invalid.");
+                if (snapshot.DecideRecovery().Kind != GenerationRecoveryKind.None)
+                {
+                    snapshots.Add(snapshot);
+                }
             }
         }
 
@@ -103,6 +110,12 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
 
         File.Delete(PathFor(jobId));
         return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private string PathFor(Guid jobId) => Path.Combine(_directory, jobId.ToString("N") + ".generation.json");

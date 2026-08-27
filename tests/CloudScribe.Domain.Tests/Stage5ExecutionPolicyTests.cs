@@ -1,3 +1,4 @@
+using System.Text;
 using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Domain.Tests;
@@ -43,15 +44,17 @@ public sealed class Stage5ExecutionPolicyTests
     }
 
     [Fact]
-    public void ContentAddressedCacheKeyChangesWithSemanticInputs()
+    public void PrivateCacheLookupChangesWithSemanticInputs()
     {
-        var payload = "<speak>Hello 👨‍👩‍👧‍👦</speak>"u8;
-        var baseline = ContentAddressedSegmentKey.Create(payload, "google", "synthesize", "voice-a", "profile-1");
-        var same = ContentAddressedSegmentKey.Create(payload, "google", "synthesize", "voice-a", "profile-1");
-        var otherVoice = ContentAddressedSegmentKey.Create(payload, "google", "synthesize", "voice-b", "profile-1");
+        var hmacKey = Enumerable.Range(0, 32).Select(static value => (byte)value).ToArray();
+        var payload = Encoding.UTF8.GetBytes("<speak>Hello 👨‍👩‍👧‍👦</speak>");
+        var baselineContext = CreateTrustContext("voice-a");
+        var baseline = PrivateCacheLookupKey.Derive(hmacKey, baselineContext, payload);
+        var same = PrivateCacheLookupKey.Derive(hmacKey, baselineContext, payload);
+        var otherVoice = PrivateCacheLookupKey.Derive(hmacKey, CreateTrustContext("voice-b"), payload);
         Assert.Equal(baseline, same);
         Assert.NotEqual(baseline, otherVoice);
-        Assert.Equal(64, baseline.Sha256.Length);
+        Assert.Equal(64, baseline.HmacSha256.Length);
     }
 
     [Fact]
@@ -91,4 +94,10 @@ public sealed class Stage5ExecutionPolicyTests
         Assert.True(gate.TryAcquire());
         Assert.Equal(2, gate.ActiveCount);
     }
+
+    private static GenerationCacheTrustContext CreateTrustContext(string voice) => new(
+        "google", "account-a", "project-a", "endpoint-a", "us-central1", "synthesize",
+        "model-a", voice, "stock-fingerprint", "speech-plan-v1", "en-SG", "controls-a", "wav",
+        "pcm16", "adapter-v1", "compiler-v1", "ast-v1", "normalizer-v1", "pricing-a",
+        "capabilities-a", "governance-a", "features-a", "account-capabilities-a");
 }
