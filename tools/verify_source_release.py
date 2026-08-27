@@ -19,6 +19,17 @@ def fail(message: str) -> int:
     return 1
 
 
+def canonical_zip_name(name: str) -> str:
+    if "\\" in name:
+        raise ValueError("backslash path separators are forbidden")
+    pure = PurePosixPath(name)
+    if pure.is_absolute() or not pure.parts or any(part in ("", ".", "..") for part in pure.parts):
+        raise ValueError("absolute, empty, dot and traversal path components are forbidden")
+    if any(part.endswith(" ") or part.endswith(".") for part in pure.parts):
+        raise ValueError("Windows-ambiguous trailing space/dot path components are forbidden")
+    return "/".join(part.casefold() for part in pure.parts)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify a CloudScribe source ZIP, clean extraction, regression inventory and post-test manifest immutability.")
     parser.add_argument("archive")
@@ -42,10 +53,17 @@ def main() -> int:
         if not names or len(names) != len(set(names)):
             return fail("ZIP is empty or contains duplicate entry names")
         roots: set[str] = set()
+        canonical_names: set[str] = set()
         for info in zf.infolist():
+            try:
+                canonical_name = canonical_zip_name(info.filename.rstrip("/"))
+            except ValueError as exc:
+                return fail(f"unsafe ZIP path {info.filename!r}: {exc}")
+            if canonical_name in canonical_names:
+                return fail(f"ZIP contains a Windows-equivalent duplicate/colliding path: {info.filename!r}")
+            canonical_names.add(canonical_name)
+
             pure = PurePosixPath(info.filename)
-            if pure.is_absolute() or ".." in pure.parts or not pure.parts:
-                return fail(f"unsafe ZIP path: {info.filename!r}")
             roots.add(pure.parts[0])
             mode = (info.external_attr >> 16) & 0o170000
             if mode == 0o120000:
