@@ -1,0 +1,4 @@
+Stage 5 deterministic source-manifest refresh trigger.
+Repository verifier requires SHA256SUMS.txt to match the exact frozen tree.
+The manifest-sync workflow refreshes SHA256SUMS.txt, verifies the pushed frozen head, then explicitly dispatches full Stage 5 certification from that exact branch head.
+Refresh and certification requested after PowerShell dispatch repair: 2026-08-27.

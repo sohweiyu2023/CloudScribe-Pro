@@ -1,52 +1,12 @@
 namespace CloudScribe.Domain.Generation;
 
-public enum PlaybackState
-{
-    Stopped,
-    Playing,
-    Paused,
-    MissingMedia,
-    CorruptMedia,
-}
-
-public sealed record PlaybackLoop(TimeSpan Start, TimeSpan End)
-{
-    public PlaybackLoop Validate(TimeSpan duration)
-    {
-        if (Start < TimeSpan.Zero || End <= Start || End > duration)
-        {
-            throw new ArgumentOutOfRangeException(nameof(duration), "Playback loop must be a positive range within media duration.");
-        }
-
-        return this;
-    }
-}
-
-public sealed record PlaybackBookmark(string Label, TimeSpan Position)
-{
-    public PlaybackBookmark Validate(TimeSpan duration)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(Label);
-        if (Position < TimeSpan.Zero || Position > duration)
-        {
-            throw new ArgumentOutOfRangeException(nameof(Position));
-        }
-
-        return this;
-    }
-}
-
 public sealed class PlaybackSession
 {
     private readonly List<PlaybackBookmark> _bookmarks = [];
 
     public PlaybackSession(TimeSpan duration)
     {
-        if (duration <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(duration));
-        }
-
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
         Duration = duration;
     }
 
@@ -168,48 +128,4 @@ public sealed class PlaybackSession
             throw new InvalidOperationException("Playback cannot proceed while media is missing or corrupt.");
         }
     }
-}
-
-public sealed class PlaybackSleepTimer
-{
-    private readonly TimeProvider _timeProvider;
-    private long? _deadlineTimestamp;
-
-    public PlaybackSleepTimer(TimeProvider timeProvider)
-    {
-        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    }
-
-    public bool IsArmed => _deadlineTimestamp.HasValue;
-
-    public void Arm(TimeSpan duration)
-    {
-        if (duration <= TimeSpan.Zero || duration > TimeSpan.FromHours(24))
-        {
-            throw new ArgumentOutOfRangeException(nameof(duration));
-        }
-
-        var delta = (long)Math.Ceiling(duration.TotalSeconds * _timeProvider.TimestampFrequency);
-        _deadlineTimestamp = checked(_timeProvider.GetTimestamp() + delta);
-    }
-
-    public void Cancel() => _deadlineTimestamp = null;
-
-    public TimeSpan Remaining()
-    {
-        if (_deadlineTimestamp is not { } deadline)
-        {
-            return TimeSpan.Zero;
-        }
-
-        var now = _timeProvider.GetTimestamp();
-        if (now >= deadline)
-        {
-            return TimeSpan.Zero;
-        }
-
-        return TimeSpan.FromSeconds((deadline - now) / (double)_timeProvider.TimestampFrequency);
-    }
-
-    public bool ShouldStopPlayback() => IsArmed && Remaining() == TimeSpan.Zero;
 }

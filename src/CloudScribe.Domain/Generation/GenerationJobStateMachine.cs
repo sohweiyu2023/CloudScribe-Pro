@@ -1,32 +1,9 @@
 namespace CloudScribe.Domain.Generation;
 
-public enum GenerationJobState
-{
-    Draft,
-    Validating,
-    Estimating,
-    AwaitingApproval,
-    Queued,
-    Preparing,
-    Submitting,
-    SubmissionUnknown,
-    Running,
-    RateLimited,
-    RetryWait,
-    Paused,
-    Cancelling,
-    CancelledUnreconciled,
-    CancelledReconciled,
-    Partial,
-    Completed,
-    Failed,
-    AbandonedRecoverable,
-}
-
 public static class GenerationJobStateMachine
 {
-    private static readonly IReadOnlyDictionary<GenerationJobState, HashSet<GenerationJobState>> Allowed =
-        new Dictionary<GenerationJobState, HashSet<GenerationJobState>>
+    private static readonly Dictionary<GenerationJobState, HashSet<GenerationJobState>> Allowed =
+        new()
         {
             [GenerationJobState.Draft] = [GenerationJobState.Validating, GenerationJobState.Failed],
             [GenerationJobState.Validating] = [GenerationJobState.Estimating, GenerationJobState.Failed],

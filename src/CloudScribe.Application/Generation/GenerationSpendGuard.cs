@@ -4,6 +4,13 @@ namespace CloudScribe.Application.Generation;
 
 public sealed class GenerationSpendGuard
 {
+    private readonly StringComparer _provenanceComparer;
+
+    public GenerationSpendGuard(StringComparer? provenanceComparer = null)
+    {
+        _provenanceComparer = provenanceComparer ?? StringComparer.Ordinal;
+    }
+
     public void EnsureCollectionAuthorized(
         GenerationSpendAuthorization authorization,
         AuthorizedSpendCeiling projectedSpend,
@@ -15,7 +22,9 @@ public sealed class GenerationSpendGuard
         authorization.Validate();
         projectedSpend.Validate();
 
-        if (!authorization.AllowsCollectionSpend(projectedSpend, currentRevision, pricingProvenanceId))
+        if (currentRevision != authorization.ApprovedRevision ||
+            !_provenanceComparer.Equals(pricingProvenanceId, authorization.PricingProvenanceId) ||
+            !authorization.AllowsCollectionSpend(projectedSpend, currentRevision, pricingProvenanceId))
         {
             throw new InvalidOperationException("Projected collection spend is not covered by the exact current authorization.");
         }
@@ -38,42 +47,11 @@ public sealed class GenerationSpendGuard
         projectedSpend.Validate();
 
         if (currentRevision != authorization.ApprovedRevision ||
-            !string.Equals(pricingProvenanceId, authorization.PricingProvenanceId, StringComparison.Ordinal) ||
+            !_provenanceComparer.Equals(pricingProvenanceId, authorization.PricingProvenanceId) ||
             !authorization.ItemCeilings.TryGetValue(itemId, out var ceiling) ||
             !ceiling.Allows(projectedSpend))
         {
             throw new InvalidOperationException("Projected item spend is not covered by the exact current authorization.");
         }
-    }
-}
-
-public sealed record OutputReservation(string Path, bool ExistingFileWouldBeReplaced);
-
-public sealed class GenerationOutputReservationService
-{
-    public IReadOnlyList<OutputReservation> ReservePlanOutputs(AudioAssemblyPlan plan, bool allowExplicitReplacement = false)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-        var reservations = new List<OutputReservation>(plan.OutputPaths.Count);
-        var canonical = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var outputPath in plan.OutputPaths)
-        {
-            var fullPath = Path.GetFullPath(outputPath);
-            if (!canonical.Add(fullPath))
-            {
-                throw new InvalidOperationException("Duplicate canonical output path detected.");
-            }
-
-            var exists = File.Exists(fullPath) || Directory.Exists(fullPath);
-            if (exists && !allowExplicitReplacement)
-            {
-                throw new IOException($"Output collision detected for '{fullPath}'. Explicit replacement authorization is required.");
-            }
-
-            reservations.Add(new OutputReservation(fullPath, exists));
-        }
-
-        return reservations;
     }
 }

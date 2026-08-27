@@ -16,13 +16,14 @@ public sealed class Stage5SegmentSchedulerTests
         var store = new AtomicJsonGenerationSegmentProgressStore(Path.Combine(temp.Path, "progress"));
         var scheduler = CreateScheduler(provider, cache, store);
         var segment = CreateSegment(Guid.NewGuid(), "segment-01", 0, "idem-01", "hello");
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        var first = await scheduler.ExecuteReadyAsync([segment]);
+        var first = await scheduler.ExecuteReadyAsync([segment], cancellationToken).ConfigureAwait(true);
         Assert.Equal(GenerationSegmentProgressState.Completed, first[0].Progress.State);
         Assert.Equal(1, provider.PhysicalSubmissionCount);
 
         var restartedScheduler = CreateScheduler(provider, cache, new AtomicJsonGenerationSegmentProgressStore(Path.Combine(temp.Path, "progress")));
-        var second = await restartedScheduler.ExecuteReadyAsync([segment]);
+        var second = await restartedScheduler.ExecuteReadyAsync([segment], cancellationToken).ConfigureAwait(true);
 
         Assert.Equal(GenerationSegmentProgressState.Completed, second[0].Progress.State);
         Assert.Equal(1, provider.PhysicalSubmissionCount);
@@ -36,14 +37,15 @@ public sealed class Stage5SegmentSchedulerTests
         var cache = new FileGenerationSegmentCache(Path.Combine(temp.Path, "cache"));
         var progressDirectory = Path.Combine(temp.Path, "progress");
         var segment = CreateSegment(Guid.NewGuid(), "segment-unknown", 0, "idem-unknown", "ambiguous");
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         var firstScheduler = CreateScheduler(provider, cache, new AtomicJsonGenerationSegmentProgressStore(progressDirectory));
-        var first = await firstScheduler.ExecuteReadyAsync([segment]);
+        var first = await firstScheduler.ExecuteReadyAsync([segment], cancellationToken).ConfigureAwait(true);
         Assert.Equal(GenerationSegmentProgressState.SubmissionUnknown, first[0].Progress.State);
         Assert.Equal(1, provider.PhysicalSubmissionCount);
 
         var restartedScheduler = CreateScheduler(provider, cache, new AtomicJsonGenerationSegmentProgressStore(progressDirectory));
-        var second = await restartedScheduler.ExecuteReadyAsync([segment]);
+        var second = await restartedScheduler.ExecuteReadyAsync([segment], cancellationToken).ConfigureAwait(true);
 
         Assert.Equal(GenerationSegmentProgressState.SubmissionUnknown, second[0].Progress.State);
         Assert.Equal(1, provider.PhysicalSubmissionCount);
@@ -65,10 +67,11 @@ public sealed class Stage5SegmentSchedulerTests
             GenerationSegmentProgressState.Submitting,
             1,
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        await store.SaveAsync(progress);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await store.SaveAsync(progress, cancellationToken).ConfigureAwait(true);
 
         var scheduler = CreateScheduler(provider, cache, store);
-        var result = await scheduler.ExecuteReadyAsync([segment]);
+        var result = await scheduler.ExecuteReadyAsync([segment], cancellationToken).ConfigureAwait(true);
 
         Assert.Equal(GenerationSegmentProgressState.SubmissionUnknown, result[0].Progress.State);
         Assert.Equal(0, provider.PhysicalSubmissionCount);
@@ -85,19 +88,20 @@ public sealed class Stage5SegmentSchedulerTests
         var segments = Enumerable.Range(0, 40)
             .Select(index => CreateSegment(jobId, $"segment-{index:D2}", index, $"idem-{index:D2}", $"payload-{index:D2}"))
             .ToArray();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         var firstStore = new AtomicJsonGenerationSegmentProgressStore(progressDirectory);
         var firstScheduler = CreateScheduler(provider, cache, firstStore);
-        await firstScheduler.ExecuteReadyAsync(segments[..20]);
+        await firstScheduler.ExecuteReadyAsync(segments[..20], cancellationToken).ConfigureAwait(true);
         Assert.Equal(20, provider.PhysicalSubmissionCount);
 
         var restartedStore = new AtomicJsonGenerationSegmentProgressStore(progressDirectory);
         var restartedScheduler = CreateScheduler(provider, cache, restartedStore);
-        var resumed = await restartedScheduler.ExecuteReadyAsync(segments);
+        var resumed = await restartedScheduler.ExecuteReadyAsync(segments, cancellationToken).ConfigureAwait(true);
 
         Assert.All(resumed, static result => Assert.Equal(GenerationSegmentProgressState.Completed, result.Progress.State));
         Assert.Equal(40, provider.PhysicalSubmissionCount);
-        Assert.Equal(40, (await restartedStore.ListForJobAsync(jobId)).Count);
+        Assert.Equal(40, (await restartedStore.ListForJobAsync(jobId, cancellationToken).ConfigureAwait(true)).Count);
     }
 
     private static GenerationSegmentScheduler CreateScheduler(
@@ -105,7 +109,7 @@ public sealed class Stage5SegmentSchedulerTests
         IGenerationSegmentCache cache,
         IGenerationSegmentProgressStore progressStore)
     {
-        var executor = new GenerationSegmentExecutor(provider, cache);
+        var executor = new GenerationSegmentExecutor(provider, cache, new DeterministicGenerationPrivateCacheKeyProvider());
         var policy = new GenerationExecutionPolicy(3, TimeSpan.FromMilliseconds(10), TimeSpan.FromSeconds(2), 4);
         return new GenerationSegmentScheduler(executor, cache, progressStore, policy);
     }
@@ -120,9 +124,16 @@ public sealed class Stage5SegmentSchedulerTests
             "profile-1",
             idempotencyKey,
             Encoding.UTF8.GetBytes(text),
-            "wav");
+            "wav",
+            CreateTrustContext());
         return new GenerationScheduledSegment(jobId, segmentId, index, request);
     }
+
+    private static GenerationCacheTrustContext CreateTrustContext() => new(
+        "cloudscribe.fake.deterministic", "account-1", "project-test", "fake-endpoint", "local",
+        "synthesize-speech", "fake-model-v1", "voice-1", "stock-fake-voice", "speech-plan-v1", "en-SG",
+        "controls-default", "wav", "pcm16", "fake-adapter-v1", "compiler-v1", "ast-v1", "normalize-v1",
+        "pricing-v2.23-test", "capabilities-v1", "governance-test", "features-test", "account-capabilities-test");
 
     private sealed class TemporaryDirectory : IDisposable
     {

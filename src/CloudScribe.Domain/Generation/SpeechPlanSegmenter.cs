@@ -4,50 +4,6 @@ using System.Text;
 
 namespace CloudScribe.Domain.Generation;
 
-public sealed record SpeechSegmentationLimits(int MaximumTextElements, int MaximumCompiledPayloadCharacters)
-{
-    public int MaximumTextElements { get; init; } = MaximumTextElements > 0
-        ? MaximumTextElements
-        : throw new ArgumentOutOfRangeException(nameof(MaximumTextElements));
-
-    public int MaximumCompiledPayloadCharacters { get; init; } = MaximumCompiledPayloadCharacters > 0
-        ? MaximumCompiledPayloadCharacters
-        : throw new ArgumentOutOfRangeException(nameof(MaximumCompiledPayloadCharacters));
-}
-
-public sealed class SpeechPlanSegment
-{
-    public SpeechPlanSegment(int index, IEnumerable<SpeechPlanNode> nodes, int textElementCount)
-    {
-        if (index < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index));
-        }
-
-        ArgumentNullException.ThrowIfNull(nodes);
-        if (textElementCount < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(textElementCount));
-        }
-
-        var materialized = nodes.ToArray();
-        if (materialized.Length == 0)
-        {
-            throw new ArgumentException("A speech segment cannot be empty.", nameof(nodes));
-        }
-
-        Index = index;
-        Nodes = new ReadOnlyCollection<SpeechPlanNode>(materialized);
-        TextElementCount = textElementCount;
-    }
-
-    public int Index { get; }
-
-    public IReadOnlyList<SpeechPlanNode> Nodes { get; }
-
-    public int TextElementCount { get; }
-}
-
 public static class SpeechPlanSegmenter
 {
     public static IReadOnlyList<SpeechPlanSegment> Segment(
@@ -114,7 +70,7 @@ public static class SpeechPlanSegmenter
         return new ReadOnlyCollection<SpeechPlanSegment>(result);
     }
 
-    private static IReadOnlyList<SpeechPlanNode> ExpandTextNodes(
+    private static List<SpeechPlanNode> ExpandTextNodes(
         IReadOnlyList<SpeechPlanNode> nodes,
         int maximumTextElements)
     {
@@ -161,7 +117,7 @@ public static class SpeechPlanSegmenter
         }
     }
 
-    private static int FindPreferredBreak(IReadOnlyList<string> elements, int start, int count)
+    private static int FindPreferredBreak(List<string> elements, int start, int count)
     {
         if (start + count >= elements.Count)
         {
@@ -182,7 +138,7 @@ public static class SpeechPlanSegmenter
 
     private static bool IsSentenceTerminal(char value) => value is '.' or '!' or '?' or ';' or ':' or '\u3002' or '\uff01' or '\uff1f';
 
-    private static IReadOnlyList<string> EnumerateTextElements(string text)
+    private static List<string> EnumerateTextElements(string text)
     {
         var result = new List<string>();
         var enumerator = StringInfo.GetTextElementEnumerator(text);

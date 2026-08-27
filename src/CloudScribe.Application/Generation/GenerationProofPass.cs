@@ -2,40 +2,6 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Application.Generation;
 
-public sealed record GenerationProofInput(
-    Guid SegmentId,
-    bool MediaValid,
-    TimeSpan ExpectedDuration,
-    TimeSpan ActualDuration,
-    bool RequiredTimingMarksPresent,
-    IReadOnlyList<string> ProviderDiagnostics,
-    string ProvenanceId)
-{
-    public GenerationProofInput Validate()
-    {
-        if (SegmentId == Guid.Empty)
-        {
-            throw new ArgumentException("Segment id is required.", nameof(SegmentId));
-        }
-        if (ExpectedDuration <= TimeSpan.Zero || ActualDuration <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(ExpectedDuration));
-        }
-        ArgumentNullException.ThrowIfNull(ProviderDiagnostics);
-        ArgumentException.ThrowIfNullOrWhiteSpace(ProvenanceId);
-        return this;
-    }
-}
-
-public sealed record GenerationProofResult(
-    Guid SegmentId,
-    OutputQualityAssessment Quality,
-    bool DurationWithinTolerance,
-    string ProvenanceId)
-{
-    public bool IsReleaseSafe => Quality.Disposition == OutputQualityDisposition.Accepted;
-}
-
 public sealed class GenerationProofPass
 {
     private readonly double _maximumDurationDeviationRatio;
@@ -84,7 +50,8 @@ public sealed class GenerationProofPass
         var quarantined = results.Where(static result => !result.IsReleaseSafe).Select(static result => result.SegmentId).ToArray();
         if (quarantined.Length != 0)
         {
-            throw new InvalidOperationException($"Proof Pass quarantined {quarantined.Length} segment(s); release is blocked.");
+            throw new InvalidOperationException(FormattableString.Invariant(
+                $"Proof Pass quarantined {quarantined.Length} segment(s); release is blocked under the configured maximum duration-deviation ratio {_maximumDurationDeviationRatio:R}."));
         }
     }
 }

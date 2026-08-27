@@ -1,23 +1,4 @@
-using System.Security.Cryptography;
-using System.Text;
-
 namespace CloudScribe.Domain.Generation;
-
-public enum SubmissionDisposition
-{
-    NotSubmitted,
-    Accepted,
-    RejectedSafeToRetry,
-    UnknownRequiresReconciliation,
-}
-
-public sealed record GenerationRetryDecision(
-    bool MayRetryAutomatically,
-    TimeSpan Delay,
-    string Reason)
-{
-    public static GenerationRetryDecision Blocked(string reason) => new(false, TimeSpan.Zero, reason);
-}
 
 public sealed class GenerationExecutionPolicy
 {
@@ -27,20 +8,14 @@ public sealed class GenerationExecutionPolicy
         TimeSpan maximumBackoff,
         int maximumConcurrentRequests)
     {
-        if (maximumAttempts < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumAttempts));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumAttempts, 1);
 
         if (initialBackoff <= TimeSpan.Zero || maximumBackoff < initialBackoff)
         {
             throw new ArgumentOutOfRangeException(nameof(initialBackoff));
         }
 
-        if (maximumConcurrentRequests < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumConcurrentRequests));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumConcurrentRequests, 1);
 
         MaximumAttempts = maximumAttempts;
         InitialBackoff = initialBackoff;
@@ -63,10 +38,7 @@ public sealed class GenerationExecutionPolicy
         TimeSpan? retryAfter,
         ulong deterministicJitterSeed)
     {
-        if (completedAttempts < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(completedAttempts));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(completedAttempts);
 
         if (GenerationJobStateMachine.RequiresReconciliationBeforeAutomaticRetry(state) ||
             disposition == SubmissionDisposition.UnknownRequiresReconciliation)
@@ -104,77 +76,4 @@ public sealed class GenerationExecutionPolicy
     }
 
     private TimeSpan Clamp(TimeSpan value) => value > MaximumBackoff ? MaximumBackoff : value;
-}
-
-public sealed record ContentAddressedSegmentKey(string Sha256)
-{
-    public static ContentAddressedSegmentKey Create(
-        ReadOnlySpan<byte> compiledPayload,
-        string providerStableId,
-        string operationStableId,
-        string voiceStableId,
-        string compilationProfileId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(providerStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(operationStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(voiceStableId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(compilationProfileId);
-
-        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        AppendUtf8(hasher, "cloudscribe-segment-cache-v1\n");
-        AppendUtf8(hasher, providerStableId);
-        AppendUtf8(hasher, "\n");
-        AppendUtf8(hasher, operationStableId);
-        AppendUtf8(hasher, "\n");
-        AppendUtf8(hasher, voiceStableId);
-        AppendUtf8(hasher, "\n");
-        AppendUtf8(hasher, compilationProfileId);
-        AppendUtf8(hasher, "\n");
-        hasher.AppendData(compiledPayload);
-        return new ContentAddressedSegmentKey(Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant());
-    }
-
-    private static void AppendUtf8(IncrementalHash hasher, string value)
-    {
-        var bytes = Encoding.UTF8.GetBytes(value);
-        try
-        {
-            hasher.AppendData(bytes);
-        }
-        finally
-        {
-            Array.Clear(bytes);
-        }
-    }
-}
-
-public sealed class GenerationSubmissionRecord
-{
-    public GenerationSubmissionRecord(
-        string idempotencyKey,
-        SubmissionDisposition disposition,
-        string? providerRequestId,
-        long recordedAtUnixMilliseconds)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
-        if (disposition == SubmissionDisposition.Accepted && string.IsNullOrWhiteSpace(providerRequestId))
-        {
-            throw new ArgumentException("Accepted submissions require a provider request identifier.", nameof(providerRequestId));
-        }
-
-        IdempotencyKey = idempotencyKey;
-        Disposition = disposition;
-        ProviderRequestId = providerRequestId;
-        RecordedAtUnixMilliseconds = recordedAtUnixMilliseconds;
-    }
-
-    public string IdempotencyKey { get; }
-
-    public SubmissionDisposition Disposition { get; }
-
-    public string? ProviderRequestId { get; }
-
-    public long RecordedAtUnixMilliseconds { get; }
-
-    public bool RequiresReconciliation => Disposition == SubmissionDisposition.UnknownRequiresReconciliation;
 }

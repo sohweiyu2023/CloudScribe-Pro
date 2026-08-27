@@ -7,13 +7,6 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public enum FakeGenerationOutcome
-{
-    Accept,
-    RejectSafeToRetry,
-    SubmissionUnknown,
-}
-
 public sealed class DeterministicFakeGenerationProvider : IGenerationProvider
 {
     private readonly FakeGenerationOutcome _outcome;

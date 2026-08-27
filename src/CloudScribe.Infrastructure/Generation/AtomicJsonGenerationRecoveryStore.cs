@@ -4,7 +4,7 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
+public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -31,7 +31,7 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
             var temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
             try
             {
-                var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough);
+                FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough);
                 await using (stream.ConfigureAwait(false))
                 {
                     await JsonSerializer.SerializeAsync(stream, snapshot, JsonOptions, cancellationToken).ConfigureAwait(false);
@@ -67,7 +67,7 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
             return null;
         }
 
-        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
         await using (stream.ConfigureAwait(false))
         {
             return await JsonSerializer.DeserializeAsync<GenerationRecoverySnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
@@ -81,7 +81,7 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
         foreach (var path in Directory.EnumerateFiles(_directory, "*.generation.json", SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
             await using (stream.ConfigureAwait(false))
             {
                 var snapshot = await JsonSerializer.DeserializeAsync<GenerationRecoverySnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
@@ -110,6 +110,12 @@ public sealed class AtomicJsonGenerationRecoveryStore : IGenerationRecoveryStore
 
         File.Delete(PathFor(jobId));
         return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private string PathFor(Guid jobId) => Path.Combine(_directory, jobId.ToString("N") + ".generation.json");
