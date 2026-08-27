@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CloudScribe.App.Navigation;
 using CloudScribe.Application.Generation;
 using CloudScribe.Domain.Generation;
 using CommunityToolkit.Mvvm.Input;
@@ -72,7 +73,7 @@ public sealed partial class ShellViewModel
 
     private void RefreshVoiceLabRouteAction()
     {
-        if (!_pages.TryGetValue(AppRoute.Audio, out RoutePageViewModel? page))
+        if (!_pages.TryGetValue(AppRoute.Audio, out RoutePageViewModel? page) || page is null)
             return;
 
         if (CanAuditionSelectedVoice)
