@@ -1,0 +1,121 @@
+name: CloudScribe Stage 8 Full Certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/stage8-fast-track
+    paths:
+      - '.github/workflows/cloudscribe-stage8-full-certification.yml'
+      - '.github/triggers/stage8-full-certification.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudscribe-stage8-full-certification
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  STAGE7_CERTIFIED_SHA: '719a7a445f0e034ff62e22d516e95f94e932df78'
+
+jobs:
+  certify:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - name: Checkout exact Stage 8 candidate
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require certified Stage 7 lineage and clean source governance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw 'Checkout does not match triggering candidate SHA.' }
+          git merge-base --is-ancestor $env:STAGE7_CERTIFIED_SHA $head
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 8 candidate is not descended from the certified Stage 7 head.' }
+          if (-not (Test-Path '.gitignore' -PathType Leaf)) { throw 'Candidate source is missing .gitignore.' }
+          $ignored = Get-Content '.gitignore' -Raw
+          if ($ignored -notmatch '\*\*/bin/' -or $ignored -notmatch '\*\*/obj/') { throw 'Candidate does not exclude deterministic .NET build outputs.' }
+          $trackedOutputs = @(git ls-files | Where-Object { $_ -match '(^|/)(bin|obj)/' })
+          if ($trackedOutputs.Count -ne 0) { throw "Tracked build outputs detected: $($trackedOutputs -join ', ')" }
+          $links = @(git ls-files -s | Where-Object { $_ -match '^120000 ' })
+          if ($links.Count -ne 0) { throw 'Candidate contains tracked symbolic links.' }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { throw 'Candidate checkout is not clean before certification.' }
+
+      - name: Set up exact .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Locked restore and strict full Release build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting/analyzer gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+
+      - name: Run complete compiled test suite
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1
+          if ($LASTEXITCODE -ne 0) { throw 'Complete compiled test suite failed.' }
+
+      - name: Run auxiliary verifier self-tests
+        shell: pwsh
+        run: |
+          python -B tools/run_verifier_self_tests.py
+          if ($LASTEXITCODE -ne 0) { throw 'Verifier self-tests failed.' }
+
+      - name: Run deterministic material regression inventory
+        shell: pwsh
+        run: |
+          python -B tools/run_python_regression_shards.py --all
+          if ($LASTEXITCODE -ne 0) { throw 'Deterministic regression inventory failed.' }
+
+      - name: Require exact no-mutation certification result
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne '${{ github.sha }}') { throw 'Candidate SHA changed during certification.' }
+          $status = @(git status --porcelain=v1 --untracked-files=all)
+          if ($status.Count -ne 0) {
+            $status | ForEach-Object { Write-Host $_ }
+            throw 'Certification mutated candidate source.'
+          }
+          $summary = Join-Path $env:RUNNER_TEMP 'cloudscribe-stage8-certification.txt'
+          @(
+            'STATUS=PASS',
+            "CANDIDATE_SHA=$head",
+            "STAGE7_CERTIFIED_ANCESTOR=$env:STAGE7_CERTIFIED_SHA",
+            "RUN_ID=${{ github.run_id }}",
+            'LOCKED_RESTORE=PASS',
+            'FORMAT_ANALYZERS=PASS',
+            'STRICT_RELEASE_BUILD=PASS',
+            'FULL_COMPILED_TEST_SUITE=PASS',
+            'VERIFIER_SELF_TESTS=PASS',
+            'DETERMINISTIC_REGRESSIONS=PASS',
+            'NO_MUTATION=PASS'
+          ) | Set-Content -LiteralPath $summary -Encoding utf8
+
+      - name: Upload certification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudscribe-stage8-full-certification-${{ github.sha }}
+          path: ${{ runner.temp }}/cloudscribe-stage8-certification.txt
+          if-no-files-found: error
+          retention-days: 30
