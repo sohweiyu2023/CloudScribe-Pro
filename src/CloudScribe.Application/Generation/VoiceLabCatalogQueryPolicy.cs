@@ -1,7 +1,11 @@
+using System.Buffers;
+
 namespace CloudScribe.Application.Generation;
 
 public static class VoiceLabCatalogQueryPolicy
 {
+    private static readonly SearchValues<char> ForbiddenIdentityCharacters = SearchValues.Create("\r\n\0");
+
     public static VoiceLabCatalogQuery RequireAuthorized(
         VoiceLabCatalogQuery query,
         bool accountAuthorized,
@@ -13,7 +17,7 @@ public static class VoiceLabCatalogQueryPolicy
         {
             if (string.IsNullOrWhiteSpace(value) ||
                 !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
-                value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+                value.AsSpan().IndexOfAny(ForbiddenIdentityCharacters) >= 0)
             {
                 throw new InvalidOperationException("Voice Lab catalog query contains a non-canonical trust identity.");
             }
