@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage8ArchiveExtractionPolicyTests
 {
     [Fact]
-    public void ValidEntries_ResolveInsideRoot()
+    public void ValidEntriesResolveInsideRoot()
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-root"));
         var policy = new ArchiveExtractionPolicy(1024, 4096, 10);
@@ -23,7 +23,7 @@ public sealed class Stage8ArchiveExtractionPolicyTests
     [Theory]
     [InlineData("../escape.txt")]
     [InlineData("a/../../escape.txt")]
-    public void ZipSlip_IsRejected(string entry)
+    public void ZipSlipIsRejected(string entry)
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-root"));
         var policy = new ArchiveExtractionPolicy(1024, 4096, 10);
@@ -33,7 +33,7 @@ public sealed class Stage8ArchiveExtractionPolicyTests
     }
 
     [Fact]
-    public void Symlink_IsRejected()
+    public void SymlinkIsRejected()
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-root"));
         var policy = new ArchiveExtractionPolicy(1024, 4096, 10);
@@ -43,7 +43,7 @@ public sealed class Stage8ArchiveExtractionPolicyTests
     }
 
     [Fact]
-    public void CaseInsensitiveOutputCollision_IsRejected()
+    public void CaseInsensitiveOutputCollisionIsRejected()
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-root"));
         var policy = new ArchiveExtractionPolicy(1024, 4096, 10);
@@ -57,7 +57,7 @@ public sealed class Stage8ArchiveExtractionPolicyTests
     }
 
     [Fact]
-    public void TotalExpansionLimit_IsRejected()
+    public void TotalExpansionLimitIsRejected()
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-root"));
         var policy = new ArchiveExtractionPolicy(10, 15, 10);
