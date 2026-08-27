@@ -1,0 +1,4 @@
+Trigger Stage 5 full certification for focused-green candidate lineage.
+Focused run: 33044751892
+Focused head: ce6ee5f05e001ed88c5a8bfbfc9c23f2f4591607
+Triggered: 2026-08-27
