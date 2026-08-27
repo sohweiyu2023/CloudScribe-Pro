@@ -16,7 +16,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
             async _ =>
             {
                 entered.SetResult();
-                await release.Task.ConfigureAwait(false);
+                await release.Task;
             },
             _ => Task.CompletedTask);
 
@@ -35,13 +35,13 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
         }
 
         var first = coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync, cancellationToken);
-        await entered.Task.ConfigureAwait(false);
+        await entered.Task;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync, cancellationToken)).ConfigureAwait(false);
+            coordinator.RecoverVerifiedAsync(rollbackState, VerifyAsync, cancellationToken));
 
         release.SetResult();
-        Assert.Equal("rollback-completed", await first.ConfigureAwait(false));
+        Assert.Equal("rollback-completed", await first);
         Assert.Equal(1, verificationCalls);
     }
 
@@ -54,7 +54,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.RecoverVerifiedAsync(
             rollbackState,
             static (_, _) => Task.FromResult(false),
-            TestContext.Current.CancellationToken)).ConfigureAwait(false);
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
                 verificationCalls++;
                 return Task.FromResult(string.Equals(candidate, "no-op-terminal-rolled-back", StringComparison.Ordinal));
             },
-            TestContext.Current.CancellationToken).ConfigureAwait(false);
+            TestContext.Current.CancellationToken);
 
         Assert.Equal("no-op-terminal-rolled-back", outcome);
         Assert.Equal(0, rollbackCalls);
@@ -105,6 +105,6 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
                 cancellation.Cancel();
                 return Task.FromResult(true);
             },
-            cancellation.Token)).ConfigureAwait(false);
+            cancellation.Token));
     }
 }

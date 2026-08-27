@@ -3,13 +3,6 @@ using CloudScribe.Domain.Safety;
 
 namespace CloudScribe.Infrastructure.Safety;
 
-public sealed record BackupRestoreArchiveInspection(
-    bool ArchiveStructureValid,
-    bool SecretsExcluded,
-    bool NativePayloadsAllowed,
-    bool PathTraversalSafe,
-    int EntryCount);
-
 public static class BackupRestoreArchiveInspector
 {
     private static readonly string[] SecretNameTokens = ["secret", "credential", "apikey", "api-key", "token", "password", "vault"];

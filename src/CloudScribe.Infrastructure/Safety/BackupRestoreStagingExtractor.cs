@@ -3,8 +3,6 @@ using CloudScribe.Domain.Safety;
 
 namespace CloudScribe.Infrastructure.Safety;
 
-public sealed record BackupRestoreStagingResult(string StagingDirectory, int FilesExtracted, long BytesExtracted);
-
 public static class BackupRestoreStagingExtractor
 {
     public static BackupRestoreStagingResult ExtractAdmittedArchive(
