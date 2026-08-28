@@ -1,0 +1,1 @@
+Stage 6 deterministic SHA-256 manifest synchronization trigger.
