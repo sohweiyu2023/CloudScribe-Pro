@@ -1,0 +1,34 @@
+using System.Buffers;
+
+namespace CloudScribe.Application.Generation;
+
+public static class GoogleGenerationUiAdmission
+{
+    private static readonly SearchValues<char> InvalidIdentityCharacters = SearchValues.Create("\r\n\0");
+
+    public static GoogleGenerationUiSelection RequireCurrent(
+        GoogleGenerationUiSelection selection,
+        bool accountAuthorized,
+        bool projectAuthorized,
+        bool capabilityCurrent,
+        bool pricingCurrent)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        foreach (var value in new[] { selection.AccountId, selection.ProjectId, selection.VoiceId, selection.ModelId, selection.CapabilityEvidenceId, selection.OutputFormat })
+        {
+            if (string.IsNullOrWhiteSpace(value)
+                || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
+                || value.AsSpan().ContainsAny(InvalidIdentityCharacters))
+            {
+                throw new InvalidOperationException("Google generation UI selection contains a non-canonical identity.");
+            }
+        }
+        if (!accountAuthorized || !projectAuthorized)
+            throw new InvalidOperationException("Google generation UI selection is not authorized for the current account/project.");
+        if (!capabilityCurrent)
+            throw new InvalidOperationException("Google generation capability evidence is stale.");
+        if (!pricingCurrent)
+            throw new InvalidOperationException("Google generation pricing evidence is stale.");
+        return selection;
+    }
+}
