@@ -1,0 +1,128 @@
+name: CloudScribe Final immutable release promotion
+
+on:
+  push:
+    branches:
+      - agent/final-1.0.0-tag-promotion
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TARGET_SHA: a7e46638df3982f8c3c285100d99c049b1240dee
+      FINAL_CERT_RUN_ID: '33177876189'
+      RELEASE_TAG: v1.0.0
+      PROMOTION_BRANCH: cloudscribe-final-1.0.0
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout auxiliary promotion branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Require auxiliary branch to contain only this promotion workflow above certified Final
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$TARGET_SHA" HEAD
+          mapfile -t changed < <(git diff --name-only "$TARGET_SHA" HEAD)
+          if [[ ${#changed[@]} -ne 1 || "${changed[0]}" != '.github/workflows/cloudscribe-final-immutable-release.yml' ]]; then
+            printf 'Refusing release: auxiliary branch delta is not exactly the one-shot promotion workflow.\n' >&2
+            printf 'Changed paths:\n%s\n' "${changed[*]:-<none>}" >&2
+            exit 1
+          fi
+
+      - name: Require exact promoted Final ref and both successful certification attempts
+        shell: bash
+        run: |
+          set -euo pipefail
+          promoted="$(git ls-remote origin "refs/heads/$PROMOTION_BRANCH" | awk '{print $1}')"
+          if [[ "$promoted" != "$TARGET_SHA" ]]; then
+            echo "Refusing release: $PROMOTION_BRANCH resolves to $promoted, expected $TARGET_SHA." >&2
+            exit 1
+          fi
+
+          attempt1="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${FINAL_CERT_RUN_ID}/attempts/1" --jq '[.head_sha, (.run_attempt|tostring), .status, .conclusion] | @tsv')"
+          latest="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${FINAL_CERT_RUN_ID}" --jq '[.head_sha, (.run_attempt|tostring), .status, .conclusion] | @tsv')"
+          expected1="${TARGET_SHA}"$'\t''1'$'\t''completed'$'\t''success'
+          expected2="${TARGET_SHA}"$'\t''2'$'\t''completed'$'\t''success'
+          if [[ "$attempt1" != "$expected1" ]]; then
+            printf 'Refusing release: certification attempt 1 is not exact green evidence.\nActual: %q\n' "$attempt1" >&2
+            exit 1
+          fi
+          if [[ "$latest" != "$expected2" ]]; then
+            printf 'Refusing release: certification attempt 2 is not exact green evidence.\nActual: %q\n' "$latest" >&2
+            exit 1
+          fi
+
+      - name: Create or verify immutable v1.0.0 tag at exact certified SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | awk '{print $1}')"
+          if [[ -n "$existing" && "$existing" != "$TARGET_SHA" ]]; then
+            echo "Refusing release: existing $RELEASE_TAG points to $existing, not $TARGET_SHA." >&2
+            exit 1
+          fi
+          if [[ -z "$existing" ]]; then
+            git tag "$RELEASE_TAG" "$TARGET_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+          verified="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | awk '{print $1}')"
+          if [[ "$verified" != "$TARGET_SHA" ]]; then
+            echo "Tag verification failed: $verified != $TARGET_SHA" >&2
+            exit 1
+          fi
+
+      - name: Create or verify GitHub Release for exact tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.txt" <<EOF
+          CloudScribe Pro 1.0.0
+
+          Exact certified source SHA: $TARGET_SHA
+          Final certification run: $FINAL_CERT_RUN_ID
+          Certification attempt 1: PASS
+          Exact-SHA no-change attempt 2: PASS
+          Promotion ref: $PROMOTION_BRANCH -> $TARGET_SHA
+
+          This release pins the twice-certified 1.0.0 source tree. It does not imply a live-provider test claim beyond the evidence recorded by the certified repository state.
+          EOF
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            tag="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+            draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+            prerelease="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease)"
+            if [[ "$tag" != "$RELEASE_TAG" || "$draft" != 'false' || "$prerelease" != 'false' ]]; then
+              echo 'Existing release is not the required final non-draft/non-prerelease release.' >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title 'CloudScribe Pro 1.0.0' \
+              --notes-file "$RUNNER_TEMP/release-notes.txt"
+          fi
+
+          release_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .tag_name)"
+          draft="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .draft)"
+          prerelease="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .prerelease)"
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq .object.sha)"
+          if [[ "$release_tag" != "$RELEASE_TAG" || "$draft" != 'false' || "$prerelease" != 'false' || "$tag_sha" != "$TARGET_SHA" ]]; then
+            echo 'Final release verification failed.' >&2
+            exit 1
+          fi
+
+      - name: Best-effort cleanup of accidental unused helper branches
+        continue-on-error: true
+        shell: bash
+        run: |
+          git push origin --delete agent/final-1.0.0-tag-promotion-tmp || true
+          git push origin --delete agent/final-1.0.0-tag-promotion-work || true
