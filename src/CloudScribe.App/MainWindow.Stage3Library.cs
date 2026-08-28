@@ -1,9 +1,11 @@
+using System.ComponentModel;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using CloudScribe.App.ViewModels;
 using CloudScribe.App.Views;
@@ -13,6 +15,11 @@ namespace CloudScribe.App;
 
 public sealed partial class MainWindow
 {
+    private const string FinalEmptyLifecycleDescription =
+        "No document is selected. Create a local document or import supported text formats to begin.";
+    private const string FinalErrorLifecycleDescription =
+        "Existing local documents were left unchanged. Retry the local operation or use the available recovery actions.";
+
     static MainWindow()
     {
         DataContextProperty.Changed.AddClassHandler<MainWindow>(HandleStage3ShellContext);
@@ -31,6 +38,19 @@ public sealed partial class MainWindow
             // first-launch users never see the historical staged-shell text.
             window.Opened -= HandleStage3WindowOpened;
             window.Opened += HandleStage3WindowOpened;
+
+            // Lifecycle state can change after Opened while the durable local library is
+            // initialized. Observe those changes so an Empty/Error transition cannot restore
+            // historical Stage 3 placeholder copy into a Final build.
+            viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(ShellViewModel.LifecycleDescription))
+                {
+                    Dispatcher.UIThread.Post(
+                        () => ReplaceLegacyStage2WorkspaceCopy(window, viewModel),
+                        DispatcherPriority.Background);
+                }
+            };
         }
     }
 
@@ -47,6 +67,13 @@ public sealed partial class MainWindow
 
     private static void ReplaceLegacyStage2WorkspaceCopy(MainWindow window, ShellViewModel viewModel)
     {
+        string lifecycleDescription = viewModel.LifecycleDescription switch
+        {
+            "No document is selected. Durable document creation arrives in Stage 3." => FinalEmptyLifecycleDescription,
+            "Your temporary text remains in the editor. Retry and recovery actions become durable in Stage 3." => FinalErrorLifecycleDescription,
+            string current => current,
+        };
+
         foreach (TextBlock textBlock in window.GetVisualDescendants().OfType<TextBlock>())
         {
             switch (textBlock.Text)
@@ -65,6 +92,12 @@ public sealed partial class MainWindow
                     break;
                 case "No document is selected. Durable creation and import arrive in Stage 3; this Stage 2 state intentionally contains no editable sample text or inactive creation control.":
                     textBlock.Text = "No document is selected. Create a local document or import TXT, Markdown, HTML, DOCX, or clipboard text to begin.";
+                    break;
+                case "No document is selected. Durable document creation arrives in Stage 3.":
+                case "Your temporary text remains in the editor. Retry and recovery actions become durable in Stage 3.":
+                case FinalEmptyLifecycleDescription:
+                case FinalErrorLifecycleDescription:
+                    textBlock.Text = lifecycleDescription;
                     break;
             }
         }
