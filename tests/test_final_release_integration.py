@@ -7,6 +7,8 @@ SHELL = ROOT / "src" / "CloudScribe.App" / "ViewModels" / "ShellViewModel.cs"
 PRICING = ROOT / "src" / "CloudScribe.App" / "ViewModels" / "ShellViewModel.Pricing.cs"
 FINAL_PRESENTATION = ROOT / "src" / "CloudScribe.App" / "ViewModels" / "ShellViewModel.FinalReleasePresentation.cs"
 STAGE3_MOUNT = ROOT / "src" / "CloudScribe.App" / "MainWindow.Stage3Library.cs"
+STAGE7_VOICE_LAB = ROOT / "src" / "CloudScribe.App" / "ViewModels" / "ShellViewModel.Stage7VoiceLab.cs"
+STAGE8_RESTORE = ROOT / "src" / "CloudScribe.App" / "ViewModels" / "ShellViewModel.Stage8RestoreRecovery.cs"
 COMPOSITION = ROOT / "src" / "CloudScribe.App" / "Composition" / "CompositionRoot.cs"
 
 
@@ -112,6 +114,27 @@ def test_stage3_document_import_and_final_presentation_are_composed_in_productio
     )
     missing = [text for text in required if text not in composition]
     assert not missing, f"Production composition is missing required Final wiring: {missing}"
+
+
+def test_stage7_voice_lab_and_stage8_restore_are_real_production_wiring_not_dead_code():
+    composition = _read(COMPOSITION)
+    stage7 = _read(STAGE7_VOICE_LAB)
+    stage8 = _read(STAGE8_RESTORE)
+
+    assert "ConfigureStage7VoiceLabCatalog" in stage7
+    assert "ConfigureStage7VoiceLabAudition" in stage7
+    assert "ConfigureStage8RestoreRecovery" in stage8
+
+    required_composition = (
+        "ConfigureStage7VoiceLabCatalog",
+        "ConfigureStage7VoiceLabAudition",
+        "ConfigureStage8RestoreRecovery",
+    )
+    missing = [text for text in required_composition if text not in composition]
+    assert not missing, (
+        "Stage7/8 implementations exist but are not wired into the production shell: "
+        f"{missing}"
+    )
 
 
 def test_known_prerelease_stamp_is_absent_from_active_production_sources():
