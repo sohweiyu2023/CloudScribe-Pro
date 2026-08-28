@@ -71,12 +71,25 @@ jobs:
           $composition = Get-Content 'src/CloudScribe.App/Composition/CompositionRoot.cs' -Raw
           @(
             'viewModel.ApplyFinalReleasePresentation();',
+            'viewModel.ConfigureStage6GoogleGeneration(',
             'viewModel.ConfigureStage7VoiceLabCatalog(',
             'viewModel.ConfigureStage7VoiceLabAudition(',
             'viewModel.ConfigureStage8RestoreRecovery('
           ) | ForEach-Object {
             if (-not $composition.Contains($_, [System.StringComparison]::Ordinal)) {
               throw "Production composition is missing required Final wiring: $_"
+            }
+          }
+
+          @(
+            'src/CloudScribe.App/ViewModels/ShellViewModel.Stage6GoogleGeneration.cs',
+            'src/CloudScribe.Application/Generation/GoogleGenerationQueueCoordinator.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleGenerationProvider.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleGenerationHttpTransport.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleGenerationSpendAuthorization.cs'
+          ) | ForEach-Object {
+            if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) {
+              throw "Certified Stage6 production runtime is missing from Final source: $_"
             }
           }
 
