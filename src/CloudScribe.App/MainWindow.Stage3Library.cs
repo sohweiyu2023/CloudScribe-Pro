@@ -25,7 +25,24 @@ public sealed partial class MainWindow
         {
             DocumentLibraryPanelMount.Attach(window);
             ReplaceLegacyStage2WorkspaceCopy(window, viewModel);
+
+            // The initial DataContext is assigned before Avalonia has necessarily built the
+            // complete visual tree. Re-run the production copy replacement after Opened so
+            // first-launch users never see the historical staged-shell text.
+            window.Opened -= HandleStage3WindowOpened;
+            window.Opened += HandleStage3WindowOpened;
         }
+    }
+
+    private static void HandleStage3WindowOpened(object? sender, EventArgs eventArgs)
+    {
+        if (sender is not MainWindow window || window.DataContext is not ShellViewModel viewModel)
+        {
+            return;
+        }
+
+        DocumentLibraryPanelMount.Attach(window);
+        ReplaceLegacyStage2WorkspaceCopy(window, viewModel);
     }
 
     private static void ReplaceLegacyStage2WorkspaceCopy(MainWindow window, ShellViewModel viewModel)
