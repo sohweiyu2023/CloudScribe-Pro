@@ -69,8 +69,15 @@ jobs:
           if ([bool]$session.whole_application_final_claimed) { throw 'Final repair state must not claim whole-application Final before certification completes.' }
 
           $composition = Get-Content 'src/CloudScribe.App/Composition/CompositionRoot.cs' -Raw
-          if ($composition -notmatch [regex]::Escape('viewModel.ApplyFinalReleasePresentation();')) {
-            throw 'Production composition does not apply Final release presentation.'
+          @(
+            'viewModel.ApplyFinalReleasePresentation();',
+            'viewModel.ConfigureStage7VoiceLabCatalog(',
+            'viewModel.ConfigureStage7VoiceLabAudition(',
+            'viewModel.ConfigureStage8RestoreRecovery('
+          ) | ForEach-Object {
+            if (-not $composition.Contains($_, [System.StringComparison]::Ordinal)) {
+              throw "Production composition is missing required Final wiring: $_"
+            }
           }
 
           $stage3Mount = Get-Content 'src/CloudScribe.App/MainWindow.Stage3Library.cs' -Raw
