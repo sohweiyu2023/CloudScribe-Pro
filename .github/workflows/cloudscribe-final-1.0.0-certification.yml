@@ -39,6 +39,7 @@ jobs:
           $allowed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
           @(
             '.github/workflows/cloudscribe-final-1.0.0-certification.yml',
+            'SESSION_STATE.json',
             'src/CloudScribe.App/CloudScribe.App.csproj',
             'src/CloudScribe.App/Composition/CompositionRoot.cs',
             'src/CloudScribe.App/MainWindow.Stage3Library.cs',
@@ -94,6 +95,11 @@ jobs:
           if ($properties.InformationalVersion -ne '1.0.0') { throw "InformationalVersion is $($properties.InformationalVersion), expected 1.0.0." }
           if ($properties.FileVersion -ne '1.0.0.0') { throw "FileVersion is $($properties.FileVersion), expected 1.0.0.0." }
           if ($properties.AssemblyVersion -ne '1.0.0.0') { throw "AssemblyVersion is $($properties.AssemblyVersion), expected 1.0.0.0." }
+
+          $session = Get-Content 'SESSION_STATE.json' -Raw | ConvertFrom-Json
+          if ($session.repository_version -ne '1.0.0') {
+            throw "SESSION_STATE.json repository_version is $($session.repository_version), expected 1.0.0."
+          }
 
           $composition = Get-Content 'src/CloudScribe.App/Composition/CompositionRoot.cs' -Raw
           if ($composition -notmatch [regex]::Escape('viewModel.ApplyFinalReleasePresentation();')) {
