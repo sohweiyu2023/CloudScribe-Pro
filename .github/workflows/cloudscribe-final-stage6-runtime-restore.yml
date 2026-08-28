@@ -1,0 +1,122 @@
+name: CloudScribe Final Stage6 certified runtime restoration
+
+on:
+  push:
+    branches:
+      - repair/final-stage6-runtime-restore-helper
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TARGET_BRANCH: repair/final-1.0.0-shell-integration
+      EXPECTED_TARGET_SHA: 37bda74fd4ad78417feb9be84445b8f1b49607ab
+      STAGE6_SHA: 8e1398a0b3dbcaaf7d8f8cf6c600c78d6ad60da2
+    steps:
+      - name: Checkout helper lineage with full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Restore only certified Stage6 production files deleted by Stage7
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_sha="$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')"
+          if [[ "$remote_sha" != "$EXPECTED_TARGET_SHA" ]]; then
+            echo "Refusing restore: $TARGET_BRANCH moved to $remote_sha; expected $EXPECTED_TARGET_SHA." >&2
+            exit 1
+          fi
+
+          paths=(
+            src/CloudScribe.App/ViewModels/GoogleGenerationUiExecutionSnapshot.cs
+            src/CloudScribe.App/ViewModels/ShellViewModel.Stage6GoogleGeneration.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationBoundQueueCoordinator.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationExecutionDecision.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationExecutionPolicy.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationPersistedQueueState.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationPersistedQueueStatePolicy.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationPersistedQueueTransitionPolicy.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationQueueCoordinator.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationQueueOutcome.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationReconciliationBarrier.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationReconciliationResolutionEvidence.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationRequestBindingPolicy.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationUiAdmission.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationUiQueueCoordinator.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationUiSelection.cs
+            src/CloudScribe.Application/Generation/GoogleGenerationUiTrustBindingPolicy.cs
+            src/CloudScribe.Domain/Generation/GoogleBillableExecutionAuthorization.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleAuthorizedGenerationExecutor.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleCacheReuseEligibility.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleCapabilityRefreshDecision.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleCapabilityRefreshPolicy.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleCapabilitySnapshot.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationAccount.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationAdmissionPolicy.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationCacheTrustContextFactory.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationHttpTransport.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationParsedResponse.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationProvider.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationResponseParser.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationSpendAuthorization.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationSubmissionCoordinator.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleGenerationSubmissionEnvelope.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleHttpTransportRequest.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleHttpTransportResponse.cs
+            src/CloudScribe.Infrastructure/Generation/GooglePersistedQueueEnvelope.cs
+            src/CloudScribe.Infrastructure/Generation/GooglePersistedQueueEnvelopePolicy.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleProviderResponseDisposition.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleProviderResponsePolicy.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleRetryDisposition.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleSpeechCompilation.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleSpeechCompilationOptions.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleSpeechPlanCompiler.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleSubmissionAttempt.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleSubmissionDecision.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleSubmissionDisposition.cs
+            src/CloudScribe.Infrastructure/Generation/GoogleSubmissionSafety.cs
+            src/CloudScribe.Infrastructure/Generation/ITransientCredentialResolver.cs
+          )
+
+          git fetch origin "$TARGET_BRANCH"
+          git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+          git checkout "$STAGE6_SHA" -- "${paths[@]}"
+
+          mapfile -t actual < <(git diff --cached --name-only | sort)
+          mapfile -t expected < <(printf '%s\n' "${paths[@]}" | sort)
+          if [[ ${#actual[@]} -ne ${#expected[@]} ]] || ! diff -u <(printf '%s\n' "${expected[@]}") <(printf '%s\n' "${actual[@]}"); then
+            echo 'Refusing restore: staged path set is not exactly the audited Stage6 production deletion set.' >&2
+            exit 1
+          fi
+
+          for path in "${paths[@]}"; do
+            stage6_blob="$(git rev-parse "$STAGE6_SHA:$path")"
+            restored_blob="$(git hash-object "$path")"
+            if [[ "$stage6_blob" != "$restored_blob" ]]; then
+              echo "Refusing restore: $path differs from certified Stage6 blob." >&2
+              exit 1
+            fi
+          done
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(final): restore certified Stage6 Google runtime removed by Stage7'
+          git push origin "HEAD:$TARGET_BRANCH"
+
+      - name: Verify single restoration commit and exact Stage6 blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          new_sha="$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')"
+          git fetch origin "$TARGET_BRANCH"
+          parent="$(git rev-parse "$new_sha^")"
+          if [[ "$parent" != "$EXPECTED_TARGET_SHA" ]]; then
+            echo "Unexpected restoration parent: $parent" >&2
+            exit 1
+          fi
+          echo "Restored repair SHA: $new_sha"
