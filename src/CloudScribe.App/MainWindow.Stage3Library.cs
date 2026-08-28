@@ -43,7 +43,10 @@ public sealed partial class MainWindow
             // historical Stage 3 placeholder copy into a Final build.
             viewModel.PropertyChanged += (_, args) =>
             {
-                if (args.PropertyName == nameof(ShellViewModel.LifecycleDescription))
+                if (string.Equals(
+                    args.PropertyName,
+                    nameof(ShellViewModel.LifecycleDescription),
+                    StringComparison.Ordinal))
                 {
                     Dispatcher.UIThread.Post(
                         () => ReplaceLegacyStage2WorkspaceCopy(window, viewModel),
