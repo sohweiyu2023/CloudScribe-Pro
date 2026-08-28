@@ -1,0 +1,142 @@
+name: CloudScribe Final 1.0.0 certification
+
+on:
+  push:
+    branches:
+      - agent/final-1.0.0-repair-v3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - name: Checkout exact Final candidate
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Require exact certified Stage 8 provenance and Final-only delta
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage8 = '99c319b349c7eb415777c2cc9a1d77fcb3673d4d'
+          git fetch --no-tags origin cloudscribe-stage8-promoted
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch promoted Stage 8 reference.' }
+          $promoted = (git rev-parse origin/cloudscribe-stage8-promoted).Trim()
+          if ($promoted -ne $stage8) {
+            throw "Promoted Stage 8 moved from pinned certified SHA $stage8 to $promoted. Reconcile before Final certification."
+          }
+          git merge-base --is-ancestor $stage8 HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Final candidate is not descended from the exact promoted Stage 8 SHA.' }
+
+          $allowed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+          @(
+            '.github/workflows/cloudscribe-final-1.0.0-certification.yml',
+            'src/CloudScribe.App/CloudScribe.App.csproj',
+            'src/CloudScribe.App/Composition/CompositionRoot.cs',
+            'src/CloudScribe.App/MainWindow.Stage3Library.cs',
+            'src/CloudScribe.App/ViewModels/ShellViewModel.FinalReleasePresentation.cs'
+          ) | ForEach-Object { [void]$allowed.Add($_) }
+
+          $unexpected = @(
+            git diff --name-only "$stage8..HEAD" |
+              Where-Object { -not $allowed.Contains($_) }
+          )
+          if ($unexpected.Count -gt 0) {
+            $unexpected | ForEach-Object { Write-Host "Unexpected Final delta: $_" }
+            throw 'Final candidate modifies files outside the audited Final-release allowlist.'
+          }
+
+      - name: Set up exact .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Locked restore
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+
+      - name: Formatting and strict Release build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+
+      - name: Complete compiled solution tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Complete compiled solution test suite failed.' }
+
+      - name: Final release source acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'src/CloudScribe.App/CloudScribe.App.csproj' -Raw
+          $properties = $project.Project.PropertyGroup | Select-Object -First 1
+          if ($properties.Version -ne '1.0.0') { throw "Version is $($properties.Version), expected 1.0.0." }
+          if ($properties.InformationalVersion -ne '1.0.0') { throw "InformationalVersion is $($properties.InformationalVersion), expected 1.0.0." }
+          if ($properties.FileVersion -ne '1.0.0.0') { throw "FileVersion is $($properties.FileVersion), expected 1.0.0.0." }
+          if ($properties.AssemblyVersion -ne '1.0.0.0') { throw "AssemblyVersion is $($properties.AssemblyVersion), expected 1.0.0.0." }
+
+          $composition = Get-Content 'src/CloudScribe.App/Composition/CompositionRoot.cs' -Raw
+          if ($composition -notmatch [regex]::Escape('viewModel.ApplyFinalReleasePresentation();')) {
+            throw 'Production composition does not apply Final release presentation.'
+          }
+
+          $stage3Mount = Get-Content 'src/CloudScribe.App/MainWindow.Stage3Library.cs' -Raw
+          if ($stage3Mount -notmatch [regex]::Escape('window.Opened += HandleStage3WindowOpened;')) {
+            throw 'Durable workspace presentation is not repaired after the visual tree opens.'
+          }
+
+          $releasePresentation = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.FinalReleasePresentation.cs' -Raw
+          @(
+            'this Stage 2 state',
+            'introduced in Stage 5',
+            'generation engine are complete',
+            'exact v2.22'
+          ) | ForEach-Object {
+            if ($releasePresentation.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "Stale staged release copy remains in active Final presentation: $_"
+            }
+          }
+
+      - name: Publish Windows executable and verify embedded version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $publish = Join-Path $env:RUNNER_TEMP 'cloudscribe-final-publish'
+          dotnet publish src/CloudScribe.App/CloudScribe.App.csproj -c Release --no-restore --no-build -o $publish
+          if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed.' }
+          $exe = Join-Path $publish 'CloudScribe.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'CloudScribe.exe was not published.' }
+          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+          if ($version.FileVersion -ne '1.0.0.0') { throw "Published FileVersion is $($version.FileVersion)." }
+          if (-not $version.ProductVersion.StartsWith('1.0.0', [System.StringComparison]::Ordinal)) {
+            throw "Published ProductVersion is $($version.ProductVersion)."
+          }
+
+      - name: Exact source no-mutation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (git status --porcelain=v1) {
+            git status --short
+            throw 'Validation mutated the checked-out source tree.'
+          }
