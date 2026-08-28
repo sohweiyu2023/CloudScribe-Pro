@@ -1,4 +1,4 @@
-name: CloudScribe Final immutable release promotion
+name: CloudScribe Final release pinning and immutability gate
 
 on:
   push:
@@ -60,7 +60,7 @@ jobs:
             exit 1
           fi
 
-      - name: Create or verify immutable v1.0.0 tag at exact certified SHA
+      - name: Create or verify exact v1.0.0 tag at certified SHA
         shell: bash
         run: |
           set -euo pipefail
@@ -120,7 +120,18 @@ jobs:
             exit 1
           fi
 
+      - name: Require GitHub immutable release protection
+        shell: bash
+        run: |
+          set -euo pipefail
+          immutable="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .immutable)"
+          if [[ "$immutable" != 'true' ]]; then
+            echo 'BLOCKED: GitHub reports immutable=false for v1.0.0. Enable repository release immutability in Settings before recreating the release; GitHub only applies the setting to future releases.' >&2
+            exit 1
+          fi
+
       - name: Best-effort cleanup of accidental unused helper branches
+        if: always()
         continue-on-error: true
         shell: bash
         run: |
