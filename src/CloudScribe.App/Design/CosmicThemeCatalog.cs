@@ -1,0 +1,157 @@
+using Avalonia.Media;
+
+namespace CloudScribe.App.Design;
+
+public static class CosmicThemeCatalog
+{
+    public static CosmicThemePalette Resolve(ThemePreference preference, bool systemUsesDark, bool systemHighContrast)
+    {
+        if (preference == ThemePreference.HighContrast || systemHighContrast)
+        {
+            return HighContrast;
+        }
+
+        return preference switch
+        {
+            ThemePreference.CosmicPaper => Paper,
+            ThemePreference.CosmicNight => Night,
+            ThemePreference.FollowSystem when !systemUsesDark => Paper,
+            _ => Night,
+        };
+    }
+
+    public static CosmicThemePalette Night { get; } = new()
+    {
+        Perimeter = Color.Parse("#0B0A17"),
+        PerimeterSoft = Color.Parse("#15112D"),
+        Surface = Color.Parse("#161427"),
+        SurfaceRaised = Color.Parse("#1E1B35"),
+        SurfaceInset = Color.Parse("#100E22"),
+        SurfaceHover = Color.Parse("#292442"),
+        SurfaceHighlight = Color.Parse("#221A48"),
+        Paper = Color.Parse("#FFFDF8"),
+        PaperWarm = Color.Parse("#FFF8E8"),
+        PaperInset = Color.Parse("#F5ECDD"),
+        PaperBorder = Color.Parse("#D7C7A7"),
+        Ink = Color.Parse("#241D2E"),
+        InkMuted = Color.Parse("#5F5668"),
+        TextOnDark = Color.Parse("#FFF9F5"),
+        TextOnDarkMuted = Color.Parse("#B9B2C8"),
+        Primary = Color.Parse("#FFCF6A"),
+        PrimaryBright = Color.Parse("#FFE09A"),
+        PrimaryFillBright = Color.Parse("#FFD77D"),
+        PrimaryText = Color.Parse("#1B1425"),
+        Secondary = Color.Parse("#7954FF"),
+        SecondaryBright = Color.Parse("#B49CFF"),
+        Cyan = Color.Parse("#48BDEB"),
+        CyanBright = Color.Parse("#73DCFF"),
+        Border = Color.Parse("#4D4263"),
+        BorderSubtle = Color.Parse("#312B46"),
+        Focus = Color.Parse("#83DFFF"),
+        Success = Color.Parse("#70D6A6"),
+        SuccessSoft = Color.Parse("#153B32"),
+        Warning = Color.Parse("#FFC857"),
+        WarningSoft = Color.Parse("#3A2A13"),
+        WarningOnPaper = Color.Parse("#6E4300"),
+        Error = Color.Parse("#FF8094"),
+        ErrorSoft = Color.Parse("#431A2A"),
+        Info = Color.Parse("#64C8FF"),
+        InfoSoft = Color.Parse("#132E4A"),
+        Selection = Color.Parse("#FFE6A3"),
+        Scrim = Color.Parse("#D90B0918"),
+        AmbientViolet = Color.Parse("#664C2395"),
+        AmbientBlue = Color.Parse("#552055A0"),
+        PreferDarkControls = true,
+        DecorativeEffectsEnabled = true,
+    };
+
+    public static CosmicThemePalette Paper { get; } = new()
+    {
+        Perimeter = Color.Parse("#100C1E"),
+        PerimeterSoft = Color.Parse("#1B1433"),
+        Surface = Color.Parse("#1A1630"),
+        SurfaceRaised = Color.Parse("#241E3D"),
+        SurfaceInset = Color.Parse("#110E25"),
+        SurfaceHover = Color.Parse("#30284B"),
+        SurfaceHighlight = Color.Parse("#282044"),
+        Paper = Color.Parse("#FFFDF8"),
+        PaperWarm = Color.Parse("#FFF8E8"),
+        PaperInset = Color.Parse("#F5ECDD"),
+        PaperBorder = Color.Parse("#D7C7A7"),
+        Ink = Color.Parse("#241D2E"),
+        InkMuted = Color.Parse("#5F5668"),
+        TextOnDark = Color.Parse("#FFF8EB"),
+        TextOnDarkMuted = Color.Parse("#C7BCD1"),
+        Primary = Color.Parse("#E5AE43"),
+        PrimaryBright = Color.Parse("#FFD77D"),
+        PrimaryFillBright = Color.Parse("#F3C55F"),
+        PrimaryText = Color.Parse("#1B1425"),
+        Secondary = Color.Parse("#7554C0"),
+        SecondaryBright = Color.Parse("#C4A9FF"),
+        Cyan = Color.Parse("#3FAFD2"),
+        CyanBright = Color.Parse("#7BDBF6"),
+        Border = Color.Parse("#594B70"),
+        BorderSubtle = Color.Parse("#372E4B"),
+        Focus = Color.Parse("#83DFFF"),
+        Success = Color.Parse("#68D39B"),
+        SuccessSoft = Color.Parse("#15372E"),
+        Warning = Color.Parse("#F8C359"),
+        WarningSoft = Color.Parse("#382812"),
+        WarningOnPaper = Color.Parse("#6E4300"),
+        Error = Color.Parse("#FF8498"),
+        ErrorSoft = Color.Parse("#421A29"),
+        Info = Color.Parse("#66C9F0"),
+        InfoSoft = Color.Parse("#132D43"),
+        Selection = Color.Parse("#FFE1A0"),
+        Scrim = Color.Parse("#D90B0819"),
+        AmbientViolet = Color.Parse("#5C5E2AA2"),
+        AmbientBlue = Color.Parse("#48255392"),
+        PreferDarkControls = true,
+        DecorativeEffectsEnabled = true,
+    };
+
+    public static CosmicThemePalette HighContrast { get; } = new()
+    {
+        Perimeter = Colors.Black,
+        PerimeterSoft = Colors.Black,
+        Surface = Colors.Black,
+        SurfaceRaised = Color.Parse("#101010"),
+        SurfaceInset = Colors.Black,
+        SurfaceHover = Color.Parse("#1A1A1A"),
+        SurfaceHighlight = Colors.Black,
+        Paper = Colors.Black,
+        PaperWarm = Colors.Black,
+        PaperInset = Colors.Black,
+        PaperBorder = Colors.White,
+        Ink = Colors.White,
+        InkMuted = Colors.White,
+        TextOnDark = Colors.White,
+        TextOnDarkMuted = Colors.White,
+        Primary = Colors.Yellow,
+        PrimaryBright = Colors.Yellow,
+        PrimaryFillBright = Colors.Yellow,
+        PrimaryText = Colors.Black,
+        Secondary = Colors.Cyan,
+        SecondaryBright = Colors.Cyan,
+        Cyan = Colors.Cyan,
+        CyanBright = Colors.Cyan,
+        Border = Colors.White,
+        BorderSubtle = Colors.White,
+        Focus = Colors.Cyan,
+        Success = Colors.Lime,
+        SuccessSoft = Colors.Black,
+        Warning = Colors.Yellow,
+        WarningSoft = Colors.Black,
+        WarningOnPaper = Colors.Yellow,
+        Error = Colors.Red,
+        ErrorSoft = Colors.Black,
+        Info = Colors.Cyan,
+        InfoSoft = Colors.Black,
+        Selection = Color.Parse("#004C99"),
+        Scrim = Colors.Black,
+        AmbientViolet = Colors.Transparent,
+        AmbientBlue = Colors.Transparent,
+        PreferDarkControls = true,
+        DecorativeEffectsEnabled = false,
+    };
+}

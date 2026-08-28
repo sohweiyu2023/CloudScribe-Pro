@@ -1,0 +1,22 @@
+CloudScribe Pro — Stage 4 Foundation Batch 8
+
+Purpose
+- Replace the inert catalog-signature seam with real Ed25519 verification while preserving fail-closed trust semantics.
+
+Scope
+- Verify detached Ed25519 signatures over the exact catalog bytes with NSec.Cryptography.
+- Trust only public keys supplied through the external CloudScribe:PricingCatalogTrust:TrustedEd25519PublicKeys key-ID mapping.
+- Keep the shipped trusted-key mapping empty: CloudScribe contains no built-in production trust anchor and no private signing key.
+- Match key IDs ordinally, require a 32-byte raw Ed25519 public key and 64-byte detached signature, and reject unknown/malformed/tampered inputs.
+- Preserve all admitted Batch 1–7 lineage and the existing exact-catalog contract blocker.
+
+Configuration
+- JSON: CloudScribe -> PricingCatalogTrust -> TrustedEd25519PublicKeys -> <key-id>: <Base64 raw 32-byte public key>.
+- Environment-variable configuration can use the normal .NET double-underscore path form.
+- An empty mapping is the default and causes signed catalogs to fail closed as untrusted.
+
+Non-claims
+- This batch does not fabricate or admit the unavailable exact v2.22 production pricing schema/seed bytes.
+- This batch does not ship or infer a production trusted public key.
+- This batch does not contain private signing key material.
+- Stage 4 and the whole application remain incomplete until their later gates pass.

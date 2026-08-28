@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Avalonia.BuildServices runs its optional statistics target before compilation.
+    Clearing its product marker immediately before that target is the package-level
+    equivalent of the documented AVALONIA_TELEMETRY_OPTOUT=1 setting and prevents
+    offline builds from depending on the collector process.
+  -->
+  <Target
+      Name="CloudScribeDisableAvaloniaBuildTelemetry"
+      BeforeTargets="AvaloniaStats"
+      Condition="'$(CloudScribeDisableAvaloniaBuildTelemetry)' == 'true'">
+    <PropertyGroup>
+      <UsedAvaloniaProducts></UsedAvaloniaProducts>
+    </PropertyGroup>
+  </Target>
+</Project>

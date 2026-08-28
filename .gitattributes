@@ -1,0 +1,9 @@
+# Keep release-source bytes and formatter results deterministic across Windows and Unix checkouts.
+* text=auto eol=lf
+
+# Binary archives must never be line-ending normalized. Exact control transports are
+# authenticated byte-for-byte and must survive Windows checkout unchanged.
+*.zip -text
+
+# Windows Command Prompt accepts LF, but keep batch launchers in the conventional CRLF form.
+*.cmd text eol=crlf

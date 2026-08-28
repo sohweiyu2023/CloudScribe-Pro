@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CloudScribe.Domain</RootNamespace>
+    <AssemblyName>CloudScribe.Domain</AssemblyName>
+  </PropertyGroup>
+</Project>

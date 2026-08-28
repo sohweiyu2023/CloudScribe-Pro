@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CloudScribe.Providers.Abstractions</RootNamespace>
+    <AssemblyName>CloudScribe.Providers.Abstractions</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../CloudScribe.Domain/CloudScribe.Domain.csproj" />
+  </ItemGroup>
+</Project>

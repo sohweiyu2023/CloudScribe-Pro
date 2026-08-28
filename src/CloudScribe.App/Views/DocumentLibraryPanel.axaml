@@ -1,0 +1,60 @@
+<UserControl
+    x:Class="CloudScribe.App.Views.DocumentLibraryPanel"
+    x:DataType="vm:ShellViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:documents="using:CloudScribe.Application.Documents"
+    xmlns:vm="using:CloudScribe.App.ViewModels"
+    IsVisible="{Binding CurrentPage.IsDocumentLibraryRoute}"
+    Background="{DynamicResource Brush.SurfaceInset}">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" Padding="28">
+    <Grid MaxWidth="980" HorizontalAlignment="Center" RowDefinitions="Auto,Auto,*" RowSpacing="18">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
+        <StackPanel MinWidth="0" Spacing="3">
+          <TextBlock Text="LOCAL DOCUMENT LIBRARY" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+          <TextBlock Text="Documents stay on this device" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Title}" />
+          <TextBlock Text="Open, search, import or create documents without provider credentials." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1" Classes="secondary" Content="Refresh" Command="{Binding RefreshDocumentLibraryCommand}" VerticalAlignment="Center" />
+        <Button Grid.Column="2" Classes="secondary" Content="Import…" Command="{Binding ImportDocumentCommand}" VerticalAlignment="Center" AutomationProperties.Name="Import a local document" />
+        <Button Grid.Column="3" Classes="primary" Content="New document" Command="{Binding NewDocumentCommand}" VerticalAlignment="Center" AutomationProperties.Name="Create a new local document" />
+      </Grid>
+
+      <TextBox
+          Grid.Row="1"
+          Text="{Binding LibrarySearchQuery, Mode=TwoWay}"
+          PlaceholderText="Search local documents"
+          AutomationProperties.Name="Search local document library" />
+
+      <Border Grid.Row="2" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}" Padding="10">
+        <Grid RowDefinitions="Auto,*" RowSpacing="8">
+          <Grid ColumnDefinitions="*,Auto" Margin="8,4">
+            <TextBlock Text="{Binding CurrentPage.StateTitle}" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{Binding CurrentPage.StateKind}" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+          </Grid>
+          <ListBox
+              Grid.Row="1"
+              MinHeight="360"
+              ItemsSource="{Binding LocalDocuments}"
+              SelectedItem="{Binding SelectedLocalDocument, Mode=TwoWay}"
+              Background="Transparent"
+              BorderThickness="0"
+              AutomationProperties.Name="Local documents">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="documents:DocumentSummary">
+                <Border Margin="3" Padding="14" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}">
+                  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="4">
+                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Meta}" />
+                    <TextBlock Grid.Row="1" Text="Select to open in Studio" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ConcurrencyVersion, StringFormat='v{0}'}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+    </Grid>
+  </ScrollViewer>
+</UserControl>

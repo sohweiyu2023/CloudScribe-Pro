@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CloudScribe.Infrastructure</RootNamespace>
+    <AssemblyName>CloudScribe.Infrastructure</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../CloudScribe.Application/CloudScribe.Application.csproj" />
+    <ProjectReference Include="../CloudScribe.Domain/CloudScribe.Domain.csproj" />
+    <ProjectReference Include="../CloudScribe.Providers.Abstractions/CloudScribe.Providers.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="NSec.Cryptography" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../controls/v2.22/clean-carrier/*.b64" LogicalName="CloudScribe.V222Carrier.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

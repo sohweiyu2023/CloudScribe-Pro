@@ -1,0 +1,25 @@
+CloudScribe Pro — Stage 4 Foundation Batch 9
+
+Purpose
+- Bind the authoritative Windows admission evidence for Batch 8 and normalize the live Stage 4 checkpoint before any later production-catalog gate.
+
+Authoritative Batch 8 evidence
+- Admission run: 32094911733.
+- Admitted commit: 77fea4e152738eafc00efb78242fa95ec4d56ed3.
+- Compiled tests: 255/255 passed, 0 failed, 0 skipped.
+- Windows verifier self-tests: 72/72 passed.
+- Deterministic regressions: 153/153 passed.
+- Evidence artifact: 9309652831.
+- Evidence artifact SHA-256: 9dcb5121e43c05d239227bdb169d2f322d2fe023fe578b3d3970e521028bdf00.
+- Deterministic admitted source ZIP SHA-256: 57d2a9196395cd6fbbae9cf7b4af830c4619ac323a7c192510c8f0b3372bd738.
+
+Checkpoint normalization
+- Stage 4 foundation Batches 1-8 are now recorded as Windows-admitted.
+- Batch 9 is itself a source-changing evidence-binding candidate and must remain not admitted until its own Windows run passes.
+- Real Ed25519 verification remains external-key-only and the shipped trusted-key map remains empty.
+
+Remaining Stage 4 blocker
+- The exact v2.22 production pricing schema/seed bytes are still unavailable in the active source package.
+- The intended production trusted public key is not shipped or inferred.
+- Do not fabricate pricing bytes, trust anchors, admission evidence, or a Stage 4 promotion.
+- Do not begin Stage 5 until the Stage 4 promotion gate is genuinely complete.
