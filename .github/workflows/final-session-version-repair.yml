@@ -1,0 +1,96 @@
+name: Final session-state refresh
+
+on:
+  push:
+    branches:
+      - agent/final-1.0.0-repair-v3
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact repair branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: agent/final-1.0.0-repair-v3
+
+      - name: Refresh only current release-session metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import copy
+          import json
+          from pathlib import Path
+
+          path = Path('SESSION_STATE.json')
+          before = json.loads(path.read_text(encoding='utf-8'))
+          after = copy.deepcopy(before)
+
+          updates = {
+              'repository_version': '1.0.0',
+              'generated_at_utc': '2026-08-28T13:55:29Z',
+              'current_stage': 8,
+              'stage_title': 'Final 1.0.0 Release Certification',
+              'status': 'Stages 0-8 are certified and promoted. Final 1.0.0 is an exact promoted-Stage8 descendant under full certification; whole-application Final is not claimed until a full PASS, exact-SHA no-change rerun, and final promotion.',
+              'controlling_package_version': '2.23',
+              'application_runtime_evidence_scope': 'Promoted Stages 0-8 are evidenced externally by immutable CI runs and refs; the current Final source-changing candidate does not self-certify and remains unpromoted until full and exact-SHA no-change Final gates pass.',
+              'next_stage': 8,
+              'next_exact_action': 'Complete full Final 1.0.0 certification; if PASS, re-run the exact same candidate SHA with no source changes; if that PASSes, promote cloudscribe-final-1.0.0 to that exact SHA.',
+              'latest_reaudit_completed_at_utc': '2026-08-28T13:55:29Z',
+              'stage4_complete': True,
+              'final_certification_status': 'pending',
+              'final_release_lineage': {
+                  'stage4_promoted_sha': '4a7d3492bd9e91bad316b214d6baad61a0f6e614',
+                  'stage4_authoritative_run': '32810797164',
+                  'stage5_promoted_sha': '838f59973051b7c34d31c4ae1aba53c4b031d409',
+                  'stage5_full_certification_run': '33046364655',
+                  'stage6_promoted_sha': '8e1398a0b3dbcaaf7d8f8cf6c600c78d6ad60da2',
+                  'stage6_full_certification_run': '33075280252',
+                  'stage7_promoted_sha': '719a7a445f0e034ff62e22d516e95f94e932df78',
+                  'stage7_full_certification_run': '33091313138',
+                  'stage8_promoted_sha': '99c319b349c7eb415777c2cc9a1d77fcb3673d4d',
+                  'stage8_full_certification_run': '33117285440'
+              }
+          }
+          after.update(updates)
+
+          allowed = set(updates)
+          changed = {
+              key for key in set(before) | set(after)
+              if before.get(key) != after.get(key)
+          }
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f'Refusing refresh; unexpected top-level metadata changes: {sorted(unexpected)}')
+
+          path.write_text(json.dumps(after, indent=2, ensure_ascii=False) + '\n', encoding='utf-8', newline='\n')
+          print('Changed top-level keys:', ', '.join(sorted(changed)))
+          PY
+
+          changed_paths="$(git diff --name-only)"
+          if [[ "$changed_paths" != 'SESSION_STATE.json' ]]; then
+            printf 'Refusing refresh; unexpected paths:\n%s\n' "$changed_paths" >&2
+            exit 1
+          fi
+          git diff --check
+
+      - name: Commit exact session-state refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'cloudscribe-final-repair'
+          git config user.email 'cloudscribe-final-repair@users.noreply.github.com'
+          git add -- SESSION_STATE.json
+          if [[ "$(git diff --cached --name-only)" != 'SESSION_STATE.json' ]]; then
+            echo 'Refusing commit: staged paths are not exactly SESSION_STATE.json.' >&2
+            exit 1
+          fi
+          git commit -m 'fix(final): refresh truthful 1.0.0 session state'
+          git push origin HEAD:agent/final-1.0.0-repair-v3
