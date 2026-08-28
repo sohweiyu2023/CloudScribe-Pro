@@ -1,0 +1,105 @@
+name: CloudScribe Final session-state updater
+
+on:
+  push:
+    branches:
+      - repair/final-1.0.0-session-state-updater
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TARGET_BRANCH: repair/final-1.0.0-shell-integration
+      EXPECTED_TARGET_SHA: 8c12d5a0b5c12a582e26c56e6a8fab763b77ccba
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Require exact repair target before mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')"
+          if [[ "$current" != "$EXPECTED_TARGET_SHA" ]]; then
+            echo "Refusing session-state update: target moved to $current; expected $EXPECTED_TARGET_SHA." >&2
+            exit 1
+          fi
+
+      - name: Surgically reconcile Final 1.0.0 session state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout "$TARGET_BRANCH"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('SESSION_STATE.json')
+          state = json.loads(path.read_text(encoding='utf-8'))
+
+          expected = {
+              'repository_version': '0.5.0-stage4-foundation-batch16',
+              'controlling_package_version': '2.22',
+              'blueprint_version': '2.22',
+              'current_stage': 4,
+          }
+          for key, value in expected.items():
+              if state.get(key) != value:
+                  raise SystemExit(f'Refusing update: {key}={state.get(key)!r}, expected {value!r}.')
+
+          state['repository_version'] = '1.0.0'
+          state['controlling_package_version'] = '2.23'
+          state['blueprint_version'] = '2.23'
+          state['current_stage'] = 8
+          state['stage_title'] = 'Stage 8 complete; Final 1.0.0 end-user integration acceptance reopened'
+          state['status'] = (
+              'Stage 0-8 implementation lineage is retained. Final 1.0.0 certification is reopened after '
+              'real executable acceptance exposed stale staged-shell integration; current repair work is '
+              'reconciling production shell wiring and runnable release acceptance without weakening '
+              'provider, pricing, spend, or trust fail-closed behavior.'
+          )
+          state['stage_gate_passed'] = False
+          state['whole_application_final_claimed'] = False
+          state['next_stage'] = 8
+          state['next_exact_action'] = (
+              'Complete Stage 6-8 production-shell composition using only real fail-closed dependencies; '
+              'then pass full Windows build/test/publish/runnable acceptance, strict full certification, '
+              'and an exact-SHA no-change rerun before Final promotion.'
+          )
+          state['bytes_changed_after_latest_reaudit'] = True
+          state['controlling_context_self_contained'] = True
+          state['controlling_context_manifest'] = 'CloudScribe_Pro_Master_Package_2026-07-21_v2.23 controlling baseline; exact release state retained in repository history and certification evidence.'
+
+          path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+          PY
+
+          python - <<'PY'
+          import json
+          s=json.load(open('SESSION_STATE.json', encoding='utf-8'))
+          assert s['repository_version']=='1.0.0'
+          assert s['controlling_package_version']=='2.23'
+          assert s['blueprint_version']=='2.23'
+          assert s['current_stage']==8
+          assert s['whole_application_final_claimed'] is False
+          assert s['stage_gate_passed'] is False
+          PY
+
+      - name: Commit only SESSION_STATE.json to repair branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git status --short | awk '{print $2}')
+          if [[ ${#changed[@]} -ne 1 || "${changed[0]}" != 'SESSION_STATE.json' ]]; then
+            printf 'Refusing commit: expected only SESSION_STATE.json to change.\nChanged: %s\n' "${changed[*]:-<none>}" >&2
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add SESSION_STATE.json
+          git commit -m 'fix(final): reconcile v2.23 final session state'
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
