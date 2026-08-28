@@ -47,6 +47,7 @@ public static class CompositionRoot
             viewModel.ConfigureStage5GenerationDiagnostics(
                 serviceProvider.GetRequiredService<GenerationSupportBundleExportCoordinator>(),
                 currentPolicyAllowsDiagnostics: true);
+            viewModel.ApplyFinalReleasePresentation();
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
             return viewModel;
