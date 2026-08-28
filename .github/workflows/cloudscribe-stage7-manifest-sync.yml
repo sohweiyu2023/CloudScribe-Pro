@@ -1,0 +1,77 @@
+name: CloudScribe Stage 7 Manifest Sync
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/stage7-fast-track
+    paths:
+      - '.github/workflows/cloudscribe-stage7-manifest-sync.yml'
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: cloudscribe-stage7-manifest-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact Stage 7 branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Regenerate and verify deterministic source manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git branch --show-current).Trim() -ne 'agent/stage7-fast-track') { throw 'Unexpected branch.' }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { throw 'Checkout is not clean before manifest sync.' }
+          python -B tools/update_sha256_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw 'Manifest generation failed.' }
+          python -B tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Generated manifest failed its own check.' }
+          $changed = @(git status --porcelain=v1 --untracked-files=all)
+          $unexpected = @($changed | Where-Object { $_ -notmatch '^ M SHA256SUMS\.txt$' })
+          if ($unexpected.Count -ne 0) { $unexpected | ForEach-Object { Write-Host $_ }; throw 'Manifest sync changed files other than SHA256SUMS.txt.' }
+
+      - name: Commit exact refreshed manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -- SHA256SUMS.txt
+            git diff --cached --quiet
+            if ($LASTEXITCODE -ne 0) {
+              git commit -m 'chore(stage7): refresh source SHA-256 manifest'
+              if ($LASTEXITCODE -ne 0) { throw 'Manifest commit failed.' }
+              git push origin HEAD:agent/stage7-fast-track
+              if ($LASTEXITCODE -ne 0) { throw 'Manifest push failed.' }
+            }
+          }
+          git fetch origin agent/stage7-fast-track
+          git reset --hard origin/agent/stage7-fast-track
+          python -B tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Pushed branch manifest is not exact.' }
+          $head = (git rev-parse HEAD).Trim()
+          "FROZEN_HEAD=$head" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Dispatch full certification from frozen manifest head
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bodyPath = Join-Path $env:RUNNER_TEMP 'stage7-full-cert-dispatch.json'
+          @{ ref = 'agent/stage7-fast-track' } | ConvertTo-Json -Compress | Set-Content -LiteralPath $bodyPath -Encoding utf8NoBOM -NoNewline
+          gh api --method POST -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "/repos/${{ github.repository }}/actions/workflows/cloudscribe-stage7-full-certification.yml/dispatches" --input $bodyPath
+          if ($LASTEXITCODE -ne 0) { throw 'Full certification dispatch failed.' }
+          Write-Host "Dispatched Stage 7 full certification from frozen head $env:FROZEN_HEAD"

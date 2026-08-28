@@ -1,0 +1,17 @@
+CloudScribe Pro Stage 4 foundation batch 1
+
+Admitted in this batch:
+- truthful exact-money cost assessment states and app-local/account-wide scope
+- strict bounded UTF-8 JSON object reader with duplicate-name rejection
+- explicit provider account, endpoint, region, lifecycle and capability snapshot contracts
+- lazy deterministic fake-provider contract coverage
+- credential-reference boundary plus Windows Credential Manager vault implementation
+- Stage 4 lineage/governance verifier bound to the exact promoted Stage 3 checkpoint
+
+Deliberately NOT claimed in this batch:
+- exact v2.22 pricing schema/seed import (exact master-package bytes are not available in the active session)
+- JSON Schema meta-validation or semantic agreement against those unavailable bytes
+- Ed25519 catalog-signature implementation/trusted-root rotation
+- catalog history/rollback/update workflow
+- complete pricing/capability UI
+- Stage 4 completion or promotion

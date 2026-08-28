@@ -1,0 +1,28 @@
+CloudScribe Pro — Stage 4 Foundation Batch 13
+
+Purpose
+- Bind the exact successful Batch 12 Windows certification evidence before any further Stage 4 product-source changes.
+- Preserve the authenticated v2.22 control identity locks without confusing hashes with possession or validation of exact controlling bytes.
+- Keep pricing-catalog, runtime-policy, limit-taxonomy and production trust boundaries fail-closed.
+
+Authoritative Batch 12 evidence
+- Run 32398889342
+- Tested head: eb7236d72765377804b9c8b7131ff4d26d7d6357
+- 262/262 compiled .NET tests passed; 0 failed; 0 skipped.
+- 82/82 auxiliary Python verifier self-tests passed on Windows.
+- 153/153 deterministic material regression checks passed.
+- Strict Release build/analyzers passed with 0 warnings and 0 errors.
+- Native Windows visual/runtime certification, post-native locked restore/format/source stability, special-character launcher regression and final no-mutation guard passed.
+- Deterministic source archive SHA-256: 2a87cf181e8fcdbe9e6cc9c075512fe24e3c69d248f0f8da9d95035448b80889
+- Evidence artifact: 9418053746
+- Evidence artifact ZIP SHA-256: 01344f43bab48d947dca5ecb1e51c6f9add3c9e90f4ff0adc91c706a235bb607
+
+Truth boundary
+- The exact v2.22 pricing schema/seed bytes remain unavailable and are not imported or reconstructed.
+- Hash identity locks do not constitute schema possession, Draft 2020-12 validation, or supplied semantic-validator agreement.
+- Runtime-policy 1.3 and schema-1.1.5 limit-taxonomy exact bytes remain separately unavailable/unadmitted.
+- No production trusted Ed25519 public key or private signing key is fabricated or embedded.
+
+Non-claims
+- This Batch 13 candidate does not claim catalog-contract admission, current production pricing, Stage 4 completion or promotion.
+- Stage 5 remains blocked until Stage 4 is fully promoted.

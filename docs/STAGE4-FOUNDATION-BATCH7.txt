@@ -1,0 +1,15 @@
+CloudScribe Pro — Stage 4 Foundation Batch 7
+
+Purpose
+- Harden the admitted provider-neutral pricing contracts so malformed enum/modifier inputs fail closed before cost computation.
+
+Scope
+- Reject undefined CostUsageScope enum values in allowances, estimate requests and cost assessments.
+- Defensively copy modifier collections, reject null modifier entries, and reject duplicate modifier stable IDs within a meter.
+- Add regression coverage for malformed modifiers, undefined usage scopes, and ExactMoney representation overflow remaining Unknown rather than wrapping or guessing.
+- Preserve exact integer pricing arithmetic and all admitted Batch 1–6 lineage.
+
+Non-claims
+- This batch does not fabricate or admit the unavailable exact v2.22 production pricing schema/seed bytes.
+- This batch does not claim Ed25519 catalog trust is implemented.
+- Stage 4 and the whole application remain incomplete until their later gates pass.

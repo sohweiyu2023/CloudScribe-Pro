@@ -1,0 +1,93 @@
+CloudScribe Pro 0.3.48 - Building the Windows executable
+=========================================================
+
+FASTEST METHOD
+--------------
+Double-click:
+
+    BUILD-CLOUDSCRIBE-WINDOWS.cmd
+
+or run it from Command Prompt / PowerShell while you are in the extracted
+source folder.
+
+The launcher checks for the required .NET SDK, restores the locked dependency
+graph, builds CloudScribe.App in Release configuration, publishes a runnable
+Windows folder, verifies the expected runtime files, and opens the output folder.
+
+The runnable output is created as a sibling of the source folder:
+
+    ..\CloudScribe-Windows\CloudScribe.exe
+    ..\CloudScribe-Windows\RUN-CLOUDSCRIBE.cmd
+
+WHICH PROJECT IS THE APPLICATION?
+---------------------------------
+The executable desktop project is:
+
+    src\CloudScribe.App\CloudScribe.App.csproj
+
+CloudScribe.Domain, CloudScribe.Application, CloudScribe.Infrastructure and
+CloudScribe.Providers.Abstractions are library projects, so DLL output from those
+projects is expected.
+
+Visual Studio / dotnet build may print a line ending in CloudScribe.dll for the
+CloudScribe.App project. That build message identifies the managed assembly; the
+Windows apphost CloudScribe.exe is also expected in the app output when the
+project is built normally.
+
+Typical Release build output:
+
+    src\CloudScribe.App\bin\Release\net10.0\CloudScribe.exe
+
+For the clean runnable handoff folder, use BUILD-CLOUDSCRIBE-WINDOWS.cmd rather
+than copying individual files out of bin\Release.
+
+WHY THE LAUNCHER USES -ExecutionPolicy Bypass
+----------------------------------------------
+Windows can mark scripts extracted from an Internet-downloaded ZIP as originating
+from the Internet. Under RemoteSigned, an unsigned downloaded .ps1 can then be
+blocked even though the source itself is valid. The launcher invokes the reviewed
+repository publish script in a child PowerShell process with:
+
+    -ExecutionPolicy Bypass
+
+This is process-scoped only; it does not change your persistent PowerShell
+execution-policy settings.
+
+If a managed MachinePolicy or UserPolicy requires signed scripts, that Group
+Policy has higher precedence and the process-scoped override will not defeat it.
+Inspect the effective scopes with:
+
+    pwsh -NoProfile -Command "Get-ExecutionPolicy -List"
+
+Do not weaken an organization-managed Group Policy. Use the administrator's
+approved/signed-script path instead.
+
+
+PATH NAMES WITH PARENTHESES / REPEATED DOWNLOADS
+-------------------------------------------------
+The launcher is designed to work when the extracted source is inside an ordinary
+Windows Downloads folder whose name contains parentheses, for example:
+
+    CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress(7)
+
+You should not need to rename the extracted folder just to build CloudScribe.
+The launcher deliberately avoids CMD parenthesized command blocks around paths
+derived from the source directory and keeps delayed expansion disabled so common
+path characters such as parentheses and literal exclamation marks are preserved.
+
+MANUAL COMMAND-LINE ALTERNATIVE
+-------------------------------
+From the extracted source root:
+
+    dotnet restore .\src\CloudScribe.App\CloudScribe.App.csproj --locked-mode --configfile .\NuGet.config
+    dotnet build .\src\CloudScribe.App\CloudScribe.App.csproj -c Release --no-restore
+
+The repository publish script can then be invoked in a one-off child process:
+
+    pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-stage2-windows.ps1 -OutputDirectory "<absolute sibling output path>" -Configuration Release -Status verification-pending
+
+IMPORTANT
+---------
+A successful dotnet build is not the same thing as a fully promoted CloudScribe
+release. Stage 2 certification and manual Windows accessibility/visual acceptance
+remain separate gates.

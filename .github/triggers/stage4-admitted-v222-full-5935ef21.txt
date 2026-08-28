@@ -1,5 +1,0 @@
-CloudScribe Stage 4 admitted v2.22 full-certification trigger
-Base candidate: 5935ef2110b76235ef626ac8b3340952d6ec4210
-Expected compiled tests: 268
-Purpose: single observable push trigger for the Stage 4 admitted-v2.22 full certification workflow.
-Triggered: 2026-08-22 15:55 SGT

@@ -1,0 +1,16 @@
+CloudScribe Pro — Stage 4 Foundation Batch 2
+
+Scope:
+- preserve exact promoted Stage 3 lineage and admitted Stage 4 Batch 1 behavior;
+- add fail-closed pricing-catalog dry-run/trust orchestration with structured diagnostics;
+- distinguish contract-unavailable, validation-failed, valid-unsigned, signature-invalid and signature-verified states;
+- never accept signature metadata or embedded keys as trust;
+- make Stage 4 provider controls visible while retaining truthful disabled reasons;
+- correct stale session-state claims after Stage 3 promotion and Stage 4 Batch 1 admission;
+- strengthen Stage 4 source and architecture tests.
+
+Non-claims:
+- exact v2.22 pricing schema/seed bytes are still unavailable and therefore not admitted;
+- Ed25519 cryptographic verification is not implemented on pinned .NET 10.0.400; the verifier boundary fails closed until a vetted implementation/dependency is chosen;
+- no live provider or provider pricing is claimed;
+- Stage 4 is not complete.

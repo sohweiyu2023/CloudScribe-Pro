@@ -1,0 +1,146 @@
+@echo off
+setlocal EnableExtensions DisableDelayedExpansion
+
+rem CloudScribe Pro - beginner-friendly Windows build/publish launcher.
+rem Delayed expansion stays disabled so literal ! characters in user paths are preserved.
+rem The control flow intentionally avoids parenthesized command blocks around paths
+rem derived from %~dp0; ordinary Downloads names such as "CloudScribe (7)" must work.
+rem PowerShell is invoked with a process-scoped execution-policy override so an
+rem Internet-downloaded source ZIP can run the repository's reviewed publish script
+rem without changing the user's persistent PowerShell policy.
+
+set "REQUIRED_DOTNET=10.0.400"
+set "ROOT=%~dp0"
+pushd "%ROOT%.." >nul 2>nul
+if errorlevel 1 goto :invalid_root
+set "PARENT=%CD%"
+popd
+set "OUT=%PARENT%\CloudScribe-Windows"
+set "APP=%ROOT%src\CloudScribe.App\CloudScribe.App.csproj"
+set "NUGET=%ROOT%NuGet.config"
+set "PUBLISH_SCRIPT=%ROOT%scripts\publish-stage2-windows.ps1"
+
+where dotnet >nul 2>nul
+if errorlevel 1 goto :missing_dotnet
+where pwsh >nul 2>nul
+if errorlevel 1 goto :missing_pwsh
+where python >nul 2>nul
+if errorlevel 1 goto :missing_python
+
+set "DOTNET_VERSION="
+for /f "tokens=1" %%V in ('dotnet --list-sdks 2^>nul ^| findstr /b /c:"%REQUIRED_DOTNET% "') do set "DOTNET_VERSION=%%V"
+if not "%DOTNET_VERSION%"=="%REQUIRED_DOTNET%" goto :wrong_dotnet
+
+pushd "%ROOT%"
+for /f "usebackq delims=" %%V in (`dotnet --version 2^>nul`) do set "DOTNET_VERSION=%%V"
+popd
+if not "%DOTNET_VERSION%"=="%REQUIRED_DOTNET%" goto :wrong_dotnet
+
+if not exist "%OUT%" goto :after_remove_output
+echo Removing previous runnable output:
+echo   "%OUT%"
+rmdir /s /q "%OUT%"
+if exist "%OUT%" goto :remove_failed
+:after_remove_output
+
+echo.
+echo [1/3] Restoring CloudScribe.App with the locked dependency graph...
+pushd "%ROOT%"
+dotnet restore "%APP%" --locked-mode --configfile "%NUGET%"
+if errorlevel 1 goto :failed_pop
+
+echo.
+echo [2/3] Building CloudScribe.App Release...
+dotnet build "%APP%" -c Release --no-restore
+if errorlevel 1 goto :failed_pop
+
+echo.
+echo [3/3] Publishing runnable Windows output...
+pwsh -NoProfile -ExecutionPolicy Bypass -File "%PUBLISH_SCRIPT%" -OutputDirectory "%OUT%" -Configuration Release -Status verification-pending
+if errorlevel 1 goto :publish_failed_pop
+popd
+
+call :require_output_file CloudScribe.exe
+if errorlevel 1 goto :failed
+call :require_output_file CloudScribe.dll
+if errorlevel 1 goto :failed
+call :require_output_file CloudScribe.deps.json
+if errorlevel 1 goto :failed
+call :require_output_file CloudScribe.runtimeconfig.json
+if errorlevel 1 goto :failed
+call :require_output_file appsettings.json
+if errorlevel 1 goto :failed
+call :require_output_file RUN-CLOUDSCRIBE.cmd
+if errorlevel 1 goto :failed
+
+echo.
+echo ============================================================
+echo BUILD AND PUBLISH SUCCEEDED
+echo ============================================================
+echo Executable:
+echo   "%OUT%\CloudScribe.exe"
+echo Launcher:
+echo   "%OUT%\RUN-CLOUDSCRIBE.cmd"
+echo.
+if /I "%CLOUDSCRIBE_NO_OPEN%"=="1" exit /b 0
+
+echo Opening the runnable output folder...
+start "" explorer.exe "%OUT%"
+exit /b 0
+
+:require_output_file
+if exist "%OUT%\%~1" exit /b 0
+echo ERROR: Publish reported success but %~1 is missing.
+exit /b 1
+
+:publish_failed_pop
+set "PUBLISH_EXIT=%ERRORLEVEL%"
+popd
+echo.
+echo ERROR: The publish step failed with exit code %PUBLISH_EXIT%.
+echo.
+echo The launcher used PowerShell's process-only -ExecutionPolicy Bypass switch.
+echo If Windows still says the script must be digitally signed, a Group Policy may
+echo be enforcing MachinePolicy or UserPolicy. Check with:
+echo   pwsh -NoProfile -Command "Get-ExecutionPolicy -List"
+echo Do not weaken a managed computer's Group Policy. Ask the administrator or use
+echo a trusted/signed-script workflow instead.
+exit /b %PUBLISH_EXIT%
+
+:failed_pop
+set "BUILD_EXIT=%ERRORLEVEL%"
+popd
+echo.
+echo ERROR: CloudScribe build failed with exit code %BUILD_EXIT%.
+exit /b %BUILD_EXIT%
+
+:missing_dotnet
+echo ERROR: dotnet was not found. Install the .NET SDK required by global.json.
+exit /b 2
+
+:missing_pwsh
+echo ERROR: pwsh was not found. Install PowerShell 7 or later.
+exit /b 2
+
+:missing_python
+echo ERROR: python was not found. Python is required by the safe publish-path validator.
+exit /b 2
+
+:wrong_dotnet
+echo ERROR: CloudScribe requires .NET SDK %REQUIRED_DOTNET% for this checkpoint.
+echo Installed SDKs:
+dotnet --list-sdks
+exit /b 2
+
+:invalid_root
+echo ERROR: Could not resolve the source folder parent:
+echo   "%ROOT%.."
+exit /b 2
+
+:remove_failed
+echo ERROR: Could not remove previous output folder:
+echo   "%OUT%"
+exit /b 2
+
+:failed
+exit /b 1

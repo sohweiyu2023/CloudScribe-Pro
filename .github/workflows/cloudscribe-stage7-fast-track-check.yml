@@ -1,0 +1,39 @@
+name: CloudScribe Stage 7 fast-track check
+
+on:
+  push:
+    branches:
+      - agent/stage7-fast-track
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Strict Stage 7 fast-track validation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git branch --show-current).Trim() -ne 'agent/stage7-fast-track') { throw 'Unexpected branch.' }
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+          dotnet test tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage7ProviderRoutingPolicyTests|FullyQualifiedName~Stage7VoiceLabCatalogTests|FullyQualifiedName~Stage7MultiSpeakerVoiceMapTests|FullyQualifiedName~Stage7VoiceAuditionAuthorizationTests|FullyQualifiedName~Stage7VoiceAuditionCacheRecordTests|FullyQualifiedName~Stage7MultiSpeakerTurnSpendAuthorizationTests|FullyQualifiedName~Stage7MultiSpeakerSpeechCompilerTests|FullyQualifiedName~Stage7ReleaseProviderSetManifestTests|FullyQualifiedName~Stage7ProviderRouteOutagePolicyTests|FullyQualifiedName~Stage7ProviderRouteHealthCircuitTests|FullyQualifiedName~Stage7VoiceCacheIsolationPolicyTests"
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 7 focused routing/voice/multi-speaker/health/cache-isolation tests failed.' }

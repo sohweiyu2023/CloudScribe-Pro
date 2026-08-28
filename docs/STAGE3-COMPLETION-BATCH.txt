@@ -1,0 +1,1 @@
+Stage 3 remaining implementation is being completed as one coherent batch before the next certification run. Canonical Stage 3 acceptance criteria remain unchanged.

@@ -1,0 +1,27 @@
+CloudScribe Pro — Stage 4 Foundation Batch 12
+
+Purpose
+- Bind the exact admitted Batch 11 Windows evidence before any further Stage 4 product changes.
+- Lock authenticated v2.22 package/schema/seed identities without pretending hash knowledge equals possession of exact bytes.
+- Preserve fail-closed catalog/runtime-policy/limit-taxonomy seams until their exact bytes are imported and independently validated.
+
+Authoritative Batch 11 evidence
+- Run 32387286642
+- Tested head: 801952c69b17ab38d7bacb527f9de1401076bc2a
+- Merge checkpoint: 34ea9435c72ce3229afc5d52cd6851d3a4d43078
+- 262/262 compiled .NET tests passed; 0 failed; 0 skipped.
+- Deterministic admitted source archive SHA-256: 50750f49c2fda74e99f5b1f8d382778d43d9c72a3ff5dfcc057c2890250e1174
+- Evidence artifact: 9413736543
+- Evidence artifact SHA-256: 5b91ba0b6ed72f7be433308d3faa19655ceec3bab67a751bee4329e3e3965124
+
+Exact-control truth boundary
+- Controlling v2.22 package expected SHA-256: 22b0609ca1375488ac04c8a807cfb08ad34a08aa883a8dc2984516e64f68f8b3
+- Pricing schema 1.1.5 expected SHA-256: 1dc77a16130efa0fa2428e954bbfc5c7d30088283bbaf5b3dddff5694e01972b
+- Dated pricing seed expected SHA-256: 3e647812dcae11face91b66c3df642f19134de34b8d706e2c2183c87266e8b61
+- The exact v2.22 pricing schema/seed bytes are not yet imported into this product source checkpoint.
+- Runtime-policy 1.3 and schema-1.1.5 limit-taxonomy bytes remain separately unadmitted.
+- No production trusted Ed25519 key is invented or embedded; trusted keys remain external-only.
+
+Non-claims
+- This Batch 12 candidate does not claim catalog-contract admission, current production pricing, Stage 4 completion or promotion.
+- Stage 5 remains blocked until Stage 4 is fully promoted.
