@@ -1,0 +1,107 @@
+name: CloudScribe Final acceptance repair
+
+on:
+  push:
+    branches:
+      - agent/final-acceptance-repair-v2
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Locked restore
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+
+      - name: Formatting and strict Release build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+
+      - name: Complete compiled solution tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Complete compiled solution test suite failed.' }
+
+      - name: Final release source acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'src/CloudScribe.App/CloudScribe.App.csproj' -Raw
+          $properties = $project.Project.PropertyGroup | Select-Object -First 1
+          if ($properties.Version -ne '1.0.0') { throw "Version is $($properties.Version), expected 1.0.0." }
+          if ($properties.InformationalVersion -ne '1.0.0') { throw "InformationalVersion is $($properties.InformationalVersion), expected 1.0.0." }
+          if ($properties.FileVersion -ne '1.0.0.0') { throw "FileVersion is $($properties.FileVersion), expected 1.0.0.0." }
+          if ($properties.AssemblyVersion -ne '1.0.0.0') { throw "AssemblyVersion is $($properties.AssemblyVersion), expected 1.0.0.0." }
+
+          $composition = Get-Content 'src/CloudScribe.App/Composition/CompositionRoot.cs' -Raw
+          if ($composition -notmatch [regex]::Escape('viewModel.ApplyFinalReleasePresentation();')) {
+            throw 'Production composition does not apply Final release presentation.'
+          }
+
+          $stage3Mount = Get-Content 'src/CloudScribe.App/MainWindow.Stage3Library.cs' -Raw
+          if ($stage3Mount -notmatch [regex]::Escape('window.Opened += HandleStage3WindowOpened;')) {
+            throw 'Durable workspace presentation is not repaired after the visual tree opens.'
+          }
+
+          $releasePresentation = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.FinalReleasePresentation.cs' -Raw
+          @(
+            'this Stage 2 state',
+            'introduced in Stage 5',
+            'generation engine are complete',
+            'exact v2.22'
+          ) | ForEach-Object {
+            if ($releasePresentation.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "Stale staged release copy remains in active Final presentation: $_"
+            }
+          }
+
+      - name: Publish Windows executable and verify embedded version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $publish = Join-Path $env:RUNNER_TEMP 'cloudscribe-final-publish'
+          dotnet publish src/CloudScribe.App/CloudScribe.App.csproj -c Release --no-restore --no-build -o $publish
+          if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed.' }
+          $exe = Join-Path $publish 'CloudScribe.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'CloudScribe.exe was not published.' }
+          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+          if ($version.FileVersion -ne '1.0.0.0') { throw "Published FileVersion is $($version.FileVersion)." }
+          if (-not $version.ProductVersion.StartsWith('1.0.0', [System.StringComparison]::Ordinal)) {
+            throw "Published ProductVersion is $($version.ProductVersion)."
+          }
+
+      - name: Exact source no-mutation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (git status --porcelain=v1) {
+            git status --short
+            throw 'Validation mutated the checked-out source tree.'
+          }
