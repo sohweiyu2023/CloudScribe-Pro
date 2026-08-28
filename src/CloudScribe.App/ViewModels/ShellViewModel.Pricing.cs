@@ -96,7 +96,7 @@ public sealed partial class ShellViewModel
 
             RoutePageViewModel page = _pages[AppRoute.Pricing];
             page.Detail = snapshots.Count == 0
-                ? $"No admitted catalog snapshots · exact schema 1.1.5/seed bytes still required · {PricingContractOverrideSummary} · {ProviderAccountSummary} · {ProviderCapabilitySummary} · {ProviderQuotaStatusSummary}"
+                ? $"No admitted catalog snapshots · no active trusted catalog · {PricingContractOverrideSummary} · {ProviderAccountSummary} · {ProviderCapabilitySummary} · {ProviderQuotaStatusSummary} · billable approval remains blocked"
                 : $"{snapshots.Count:N0} admitted historical snapshot{(snapshots.Count == 1 ? string.Empty : "s")} · {PricingCatalogActiveSummary} · {PricingContractOverrideSummary} · {ProviderAccountSummary} · {ProviderCapabilitySummary} · {ProviderQuotaStatusSummary}";
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
