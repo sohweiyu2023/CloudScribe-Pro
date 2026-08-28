@@ -100,6 +100,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
         services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
+        services.AddSingleton<ITransientCredentialResolver, VaultBackedTransientCredentialResolver>();
         services.AddSingleton<IGenerationPrivateCacheKeyProvider, VaultBackedGenerationPrivateCacheKeyProvider>();
     }
 
