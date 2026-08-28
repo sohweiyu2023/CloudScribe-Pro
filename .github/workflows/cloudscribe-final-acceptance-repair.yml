@@ -60,6 +60,14 @@ jobs:
           if ($properties.FileVersion -ne '1.0.0.0') { throw "FileVersion is $($properties.FileVersion), expected 1.0.0.0." }
           if ($properties.AssemblyVersion -ne '1.0.0.0') { throw "AssemblyVersion is $($properties.AssemblyVersion), expected 1.0.0.0." }
 
+          $session = Get-Content 'SESSION_STATE.json' -Raw | ConvertFrom-Json
+          if ($session.repository_version -ne '1.0.0') { throw "SESSION_STATE repository_version is $($session.repository_version)." }
+          if ($session.controlling_package_version -ne '2.23') { throw "SESSION_STATE controlling_package_version is $($session.controlling_package_version)." }
+          if ($session.blueprint_version -ne '2.23') { throw "SESSION_STATE blueprint_version is $($session.blueprint_version)." }
+          if ([int]$session.current_stage -ne 8) { throw "SESSION_STATE current_stage is $($session.current_stage)." }
+          if ([bool]$session.stage_gate_passed) { throw 'Final repair state must not self-certify before acceptance completes.' }
+          if ([bool]$session.whole_application_final_claimed) { throw 'Final repair state must not claim whole-application Final before certification completes.' }
+
           $composition = Get-Content 'src/CloudScribe.App/Composition/CompositionRoot.cs' -Raw
           if ($composition -notmatch [regex]::Escape('viewModel.ApplyFinalReleasePresentation();')) {
             throw 'Production composition does not apply Final release presentation.'
