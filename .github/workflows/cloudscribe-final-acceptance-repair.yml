@@ -86,10 +86,40 @@ jobs:
             'src/CloudScribe.Application/Generation/GoogleGenerationQueueCoordinator.cs',
             'src/CloudScribe.Infrastructure/Generation/GoogleGenerationProvider.cs',
             'src/CloudScribe.Infrastructure/Generation/GoogleGenerationHttpTransport.cs',
-            'src/CloudScribe.Infrastructure/Generation/GoogleGenerationSpendAuthorization.cs'
+            'src/CloudScribe.Infrastructure/Generation/GoogleGenerationSpendAuthorization.cs',
+            'src/CloudScribe.Infrastructure/Generation/VaultBackedTransientCredentialResolver.cs',
+            'tests/CloudScribe.Infrastructure.Tests/VaultBackedTransientCredentialResolverTests.cs'
           ) | ForEach-Object {
             if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) {
               throw "Certified Stage6 production runtime is missing from Final source: $_"
+            }
+          }
+
+          $di = Get-Content 'src/CloudScribe.Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs' -Raw
+          if (-not $di.Contains('services.AddSingleton<ITransientCredentialResolver, VaultBackedTransientCredentialResolver>();', [System.StringComparison]::Ordinal)) {
+            throw 'Fail-closed Stage6 transient credential resolver is not registered in production DI.'
+          }
+
+          $resolver = Get-Content 'src/CloudScribe.Infrastructure/Generation/VaultBackedTransientCredentialResolver.cs' -Raw
+          @(
+            'ICredentialVault',
+            'CredentialReference',
+            'CredentialSecret',
+            'string.IsNullOrWhiteSpace'
+          ) | ForEach-Object {
+            if (-not $resolver.Contains($_, [System.StringComparison]::Ordinal)) {
+              throw "Stage6 credential resolver lost required fail-closed implementation element: $_"
+            }
+          }
+          @(
+            'DefaultAzureCredential',
+            'GoogleCredential.GetApplicationDefault',
+            'Environment.GetEnvironmentVariable',
+            'interactive',
+            'silent refresh'
+          ) | ForEach-Object {
+            if ($resolver.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "Stage6 credential resolver contains forbidden ambient/discovery behavior: $_"
             }
           }
 
