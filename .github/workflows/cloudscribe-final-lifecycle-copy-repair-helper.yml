@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected_parent='1aa450d65d18339311f545cd7d55bca4496b8120'
+          expected_parent='3aacc63266f186612788eb468f9c9c7e1dec08d5'
           actual_parent="$(git rev-parse HEAD^)"
           if [ "$actual_parent" != "$expected_parent" ]; then
             echo "Refusing repair: parent is $actual_parent, expected $expected_parent" >&2
