@@ -18,6 +18,18 @@ public sealed class FinalReleaseIntegrationContractTests
             "CloudScribe.App",
             "ViewModels",
             "ShellViewModel.Stage6GoogleGeneration.cs");
+        string stage7Shell = ReadRepositoryFile(
+            repositoryRoot,
+            "src",
+            "CloudScribe.App",
+            "ViewModels",
+            "ShellViewModel.Stage7VoiceLab.cs");
+        string stage8Shell = ReadRepositoryFile(
+            repositoryRoot,
+            "src",
+            "CloudScribe.App",
+            "ViewModels",
+            "ShellViewModel.Stage8RestoreRecovery.cs");
         string finalPresentation = ReadRepositoryFile(
             repositoryRoot,
             "src",
@@ -33,6 +45,7 @@ public sealed class FinalReleaseIntegrationContractTests
 
         AssertNoStaleShellCopy(shell);
         AssertLiveStage6Boundaries(stage6Shell);
+        AssertLiveStage7And8Boundaries(stage7Shell, stage8Shell);
         AssertFinalPresentation(finalPresentation);
         AssertProductionComposition(composition);
     }
@@ -70,6 +83,35 @@ public sealed class FinalReleaseIntegrationContractTests
             Assert.True(
                 stage6Shell.Contains(required, StringComparison.Ordinal),
                 $"Final Stage6 coordinator/state resolution must remain live, asynchronous and cancellation-aware: {required}");
+        }
+    }
+
+    private static void AssertLiveStage7And8Boundaries(string stage7Shell, string stage8Shell)
+    {
+        string[] requiredStage7 =
+        [
+            "Func<CancellationToken, Task<VoiceLabCatalogUiState>>",
+            "await capture(cancellationToken)",
+            "Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabCatalogSelection>>",
+            "await refresh(selected, cancellationToken)",
+        ];
+        foreach (string required in requiredStage7)
+        {
+            Assert.True(
+                stage7Shell.Contains(required, StringComparison.Ordinal),
+                $"Final Stage7 authorization/trust state must remain live, asynchronous and cancellation-aware: {required}");
+        }
+
+        string[] requiredStage8 =
+        [
+            "Func<CancellationToken, Task<RestoreRecoveryState>>",
+            "await capture(cancellationToken)",
+        ];
+        foreach (string required in requiredStage8)
+        {
+            Assert.True(
+                stage8Shell.Contains(required, StringComparison.Ordinal),
+                $"Final Stage8 recovery state must remain live, asynchronous and cancellation-aware: {required}");
         }
     }
 
