@@ -149,6 +149,27 @@ jobs:
               throw "Stale staged release copy remains in active Final presentation: $_"
             }
           }
+          @(
+            'DocumentTitle = "CloudScribe Pro Local Workspace";',
+            'Provider-backed generation is available only through the production safety gates.',
+            'OutlineEntries.Clear();'
+          ) | ForEach-Object {
+            if (-not $releasePresentation.Contains($_, [System.StringComparison]::Ordinal)) {
+              throw "Final seeded-document repair is incomplete: $_"
+            }
+          }
+
+          $shellSource = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.cs' -Raw
+          @(
+            'This Stage 2 workspace demonstrates',
+            'Generation is not enabled yet',
+            'Durable document creation arrives in Stage 3',
+            'Retry and recovery actions become durable in Stage 3'
+          ) | ForEach-Object {
+            if ($shellSource.Contains($_, [System.StringComparison]::OrdinalIgnoreCase) -and -not $releasePresentation.Contains('DocumentTitle = "CloudScribe Pro Local Workspace";', [System.StringComparison]::Ordinal)) {
+              throw "Historical staged shell seed is not overridden by the active Final presentation: $_"
+            }
+          }
 
           $pricing = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs' -Raw
           @('exact v2.22', 'exact schema 1.1.5/seed', 'seed bytes still required') | ForEach-Object {
