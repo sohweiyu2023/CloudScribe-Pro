@@ -32,7 +32,7 @@ public sealed class FinalReleaseIntegrationContractTests
             "CompositionRoot.cs");
 
         AssertNoStaleShellCopy(shell);
-        AssertAsyncStage6Capture(stage6Shell);
+        AssertLiveStage6Boundaries(stage6Shell);
         AssertFinalPresentation(finalPresentation);
         AssertProductionComposition(composition);
     }
@@ -53,20 +53,23 @@ public sealed class FinalReleaseIntegrationContractTests
         }
     }
 
-    private static void AssertAsyncStage6Capture(string stage6Shell)
+    private static void AssertLiveStage6Boundaries(string stage6Shell)
     {
-        string[] requiredAsyncCapture =
+        string[] requiredLiveResolution =
         [
+            "Func<CancellationToken, Task<GoogleGenerationUiQueueCoordinator>>",
+            "var resolveCoordinator = _resolveGoogleGenerationUiQueue",
+            "await resolveCoordinator(cancellationToken)",
             "Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot>>",
             "var capture = _captureGoogleGenerationState",
             "await capture(cancellationToken)",
         ];
 
-        foreach (string required in requiredAsyncCapture)
+        foreach (string required in requiredLiveResolution)
         {
             Assert.True(
                 stage6Shell.Contains(required, StringComparison.Ordinal),
-                $"Final Stage6 state capture must remain asynchronous and cancellation-aware: {required}");
+                $"Final Stage6 coordinator/state resolution must remain live, asynchronous and cancellation-aware: {required}");
         }
     }
 
