@@ -7,7 +7,7 @@ namespace CloudScribe.App.ViewModels;
 public sealed partial class ShellViewModel
 {
     private RestoreRecoveryCoordinator? _restoreRecoveryCoordinator;
-    private Func<RestoreRecoveryState>? _captureRestoreRecoveryState;
+    private Func<CancellationToken, Task<RestoreRecoveryState>>? _captureRestoreRecoveryState;
     private Func<string, CancellationToken, Task<bool>>? _verifyRestoreRecoveryCompletion;
     private int _restoreRecoveryInFlight;
 
@@ -19,11 +19,11 @@ public sealed partial class ShellViewModel
 
     public void ConfigureStage8RestoreRecovery(
         RestoreRecoveryCoordinator coordinator,
-        Func<RestoreRecoveryState> captureCurrentState,
+        Func<CancellationToken, Task<RestoreRecoveryState>> captureCurrentStateAsync,
         Func<string, CancellationToken, Task<bool>> verifyCompletedActionAsync)
     {
         _restoreRecoveryCoordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
-        _captureRestoreRecoveryState = captureCurrentState ?? throw new ArgumentNullException(nameof(captureCurrentState));
+        _captureRestoreRecoveryState = captureCurrentStateAsync ?? throw new ArgumentNullException(nameof(captureCurrentStateAsync));
         _verifyRestoreRecoveryCompletion = verifyCompletedActionAsync ?? throw new ArgumentNullException(nameof(verifyCompletedActionAsync));
         OnPropertyChanged(nameof(CanRecoverInterruptedRestore));
         RecoverInterruptedRestoreCommand.NotifyCanExecuteChanged();
@@ -70,7 +70,8 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Restore recovery completion verification is not configured.");
 
             cancellationToken.ThrowIfCancellationRequested();
-            var state = capture() ?? throw new InvalidOperationException("Restore recovery state is unavailable.");
+            var state = await capture(cancellationToken).ConfigureAwait(true)
+                ?? throw new InvalidOperationException("Restore recovery state is unavailable.");
             StatusMessage = "Restore recovery · verifying journal and filesystem state";
 
             var outcome = await coordinator.RecoverVerifiedAsync(state, verify, cancellationToken).ConfigureAwait(true);
