@@ -7,7 +7,7 @@ namespace CloudScribe.App.ViewModels;
 public sealed partial class ShellViewModel
 {
     private GoogleGenerationUiQueueCoordinator? _googleGenerationUiQueue;
-    private Func<GoogleGenerationUiExecutionSnapshot>? _captureGoogleGenerationState;
+    private Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot>>? _captureGoogleGenerationState;
     private int _googleGenerationInFlight;
 
     public bool CanGenerateWithGoogle =>
@@ -17,7 +17,7 @@ public sealed partial class ShellViewModel
 
     public void ConfigureStage6GoogleGeneration(
         GoogleGenerationUiQueueCoordinator coordinator,
-        Func<GoogleGenerationUiExecutionSnapshot> captureCurrentState)
+        Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot>> captureCurrentState)
     {
         _googleGenerationUiQueue = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _captureGoogleGenerationState = captureCurrentState ?? throw new ArgumentNullException(nameof(captureCurrentState));
@@ -62,7 +62,8 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Google generation UI state capture is not configured.");
 
             cancellationToken.ThrowIfCancellationRequested();
-            var state = capture() ?? throw new InvalidOperationException("Google generation UI state is unavailable.");
+            var state = await capture(cancellationToken).ConfigureAwait(true)
+                ?? throw new InvalidOperationException("Google generation UI state is unavailable.");
 
             StatusMessage = "Google generation · validating current account, voice, pricing and trust";
             await coordinator.ProcessPersistedTransitionAsync(
