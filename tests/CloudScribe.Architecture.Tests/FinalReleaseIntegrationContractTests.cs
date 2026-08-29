@@ -12,6 +12,12 @@ public sealed class FinalReleaseIntegrationContractTests
             "CloudScribe.App",
             "ViewModels",
             "ShellViewModel.cs");
+        string stage6Shell = ReadRepositoryFile(
+            repositoryRoot,
+            "src",
+            "CloudScribe.App",
+            "ViewModels",
+            "ShellViewModel.Stage6GoogleGeneration.cs");
         string finalPresentation = ReadRepositoryFile(
             repositoryRoot,
             "src",
@@ -26,6 +32,7 @@ public sealed class FinalReleaseIntegrationContractTests
             "CompositionRoot.cs");
 
         AssertNoStaleShellCopy(shell);
+        AssertAsyncStage6Capture(stage6Shell);
         AssertFinalPresentation(finalPresentation);
         AssertProductionComposition(composition);
     }
@@ -43,6 +50,22 @@ public sealed class FinalReleaseIntegrationContractTests
             Assert.False(
                 shell.Contains(stale, StringComparison.OrdinalIgnoreCase),
                 $"Stale staged lifecycle copy remains in the production shell: {stale}");
+        }
+    }
+
+    private static void AssertAsyncStage6Capture(string stage6Shell)
+    {
+        string[] requiredAsyncCapture =
+        [
+            "Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot>>",
+            "await captureGoogleGenerationState(cancellationToken)",
+        ];
+
+        foreach (string required in requiredAsyncCapture)
+        {
+            Assert.True(
+                stage6Shell.Contains(required, StringComparison.Ordinal),
+                $"Final Stage6 state capture must remain asynchronous and cancellation-aware: {required}");
         }
     }
 
