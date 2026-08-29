@@ -1,0 +1,82 @@
+name: CloudScribe Final lifecycle copy repair helper
+
+on:
+  push:
+    branches:
+      - repair/final-1.0.0-shell-integration
+    paths:
+      - .github/workflows/cloudscribe-final-lifecycle-copy-repair-helper.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Verify exact parent and repair stale lifecycle copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_parent='1aa450d65d18339311f545cd7d55bca4496b8120'
+          actual_parent="$(git rev-parse HEAD^)"
+          if [ "$actual_parent" != "$expected_parent" ]; then
+            echo "Refusing repair: parent is $actual_parent, expected $expected_parent" >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          shell_path = Path('src/CloudScribe.App/ViewModels/ShellViewModel.cs')
+          shell = shell_path.read_text(encoding='utf-8')
+          replacements = {
+              'No document is selected. Durable document creation arrives in Stage 3.':
+                  'No document is selected. Create or import a local document to begin.',
+              'Your temporary text remains in the editor. Retry and recovery actions become durable in Stage 3.':
+                  'Your local text remains available. Retry the workspace operation; provider access stays blocked until current safety gates pass.',
+          }
+          for old, new in replacements.items():
+              count = shell.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one lifecycle occurrence of {old!r}; found {count}.')
+              shell = shell.replace(old, new)
+          shell_path.write_text(shell, encoding='utf-8')
+
+          workflow_path = Path('.github/workflows/cloudscribe-final-acceptance-repair.yml')
+          workflow = workflow_path.read_text(encoding='utf-8')
+          anchor = '''          $pricing = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs' -Raw\n'''
+          insertion = '''          @(\n            'Durable document creation arrives in Stage 3',\n            'Retry and recovery actions become durable in Stage 3'\n          ) | ForEach-Object {\n            if ($shellSource.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {\n              throw \"Stale staged lifecycle copy remains in the production shell: $_\"\n            }\n          }\n\n'''
+          if insertion in workflow:
+              raise SystemExit('Lifecycle direct-rejection gate already present unexpectedly.')
+          if workflow.count(anchor) != 1:
+              raise SystemExit(f'Expected one workflow insertion anchor; found {workflow.count(anchor)}.')
+          workflow = workflow.replace(anchor, insertion + anchor)
+          workflow_path.write_text(workflow, encoding='utf-8')
+          PY
+
+          git diff --check
+          git diff -- src/CloudScribe.App/ViewModels/ShellViewModel.cs .github/workflows/cloudscribe-final-acceptance-repair.yml
+
+          changed="$(git diff --name-only)"
+          expected=$'.github/workflows/cloudscribe-final-acceptance-repair.yml\nsrc/CloudScribe.App/ViewModels/ShellViewModel.cs'
+          if [ "$changed" != "$expected" ]; then
+            echo "Unexpected changed paths:" >&2
+            printf '%s\n' "$changed" >&2
+            exit 1
+          fi
+
+      - name: Commit exact repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'cloudscribe-final-repair-bot'
+          git config user.email 'cloudscribe-final-repair-bot@users.noreply.github.com'
+          git add -- .github/workflows/cloudscribe-final-acceptance-repair.yml src/CloudScribe.App/ViewModels/ShellViewModel.cs
+          git commit -m 'fix(final): remove stale staged lifecycle copy'
+          git push origin HEAD:repair/final-1.0.0-shell-integration
