@@ -6,37 +6,48 @@ public sealed class FinalReleaseIntegrationContractTests
     public void FinalBuildCannotRegressToStagedShellCopyOrDeadStage6To8Composition()
     {
         string repositoryRoot = FindRepositoryRoot();
-        string shell = File.ReadAllText(Path.Combine(
+        string shell = ReadRepositoryFile(
             repositoryRoot,
             "src",
             "CloudScribe.App",
             "ViewModels",
-            "ShellViewModel.cs"));
-        string finalPresentation = File.ReadAllText(Path.Combine(
+            "ShellViewModel.cs");
+        string finalPresentation = ReadRepositoryFile(
             repositoryRoot,
             "src",
             "CloudScribe.App",
             "ViewModels",
-            "ShellViewModel.FinalReleasePresentation.cs"));
-        string composition = File.ReadAllText(Path.Combine(
+            "ShellViewModel.FinalReleasePresentation.cs");
+        string composition = ReadRepositoryFile(
             repositoryRoot,
             "src",
             "CloudScribe.App",
             "Composition",
-            "CompositionRoot.cs"));
+            "CompositionRoot.cs");
 
+        AssertNoStaleShellCopy(shell);
+        AssertFinalPresentation(finalPresentation);
+        AssertProductionComposition(composition);
+    }
+
+    private static void AssertNoStaleShellCopy(string shell)
+    {
         string[] forbiddenShellCopy =
         [
             "Durable document creation arrives in Stage 3",
             "Retry and recovery actions become durable in Stage 3",
         ];
+
         foreach (string stale in forbiddenShellCopy)
         {
             Assert.False(
                 shell.Contains(stale, StringComparison.OrdinalIgnoreCase),
                 $"Stale staged lifecycle copy remains in the production shell: {stale}");
         }
+    }
 
+    private static void AssertFinalPresentation(string finalPresentation)
+    {
         string[] forbiddenFinalCopy =
         [
             "arrive in Stage 3",
@@ -67,7 +78,10 @@ public sealed class FinalReleaseIntegrationContractTests
                 finalPresentation.Contains(required, StringComparison.Ordinal),
                 $"Final presentation repair is incomplete: {required}");
         }
+    }
 
+    private static void AssertProductionComposition(string composition)
+    {
         string[] requiredProductionComposition =
         [
             "viewModel.ConfigureStage6GoogleGeneration(",
@@ -76,6 +90,7 @@ public sealed class FinalReleaseIntegrationContractTests
             "viewModel.ConfigureStage8RestoreRecovery(",
             "viewModel.ApplyFinalReleasePresentation();",
         ];
+
         foreach (string required in requiredProductionComposition)
         {
             Assert.True(
@@ -83,6 +98,9 @@ public sealed class FinalReleaseIntegrationContractTests
                 $"Production composition is missing required Final wiring: {required}");
         }
     }
+
+    private static string ReadRepositoryFile(string repositoryRoot, params string[] pathParts) =>
+        File.ReadAllText(Path.Combine([repositoryRoot, .. pathParts]));
 
     private static string FindRepositoryRoot()
     {
