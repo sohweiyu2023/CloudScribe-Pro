@@ -27,7 +27,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $expectedParent = '276f873757537d440e5330075b2f0bd97905c8e2'
+          $expectedParent = 'df358d8fb1e00151f3d13796a98bb76f7a3333a5'
           $actualParent = (git rev-parse HEAD^).Trim()
           if ($actualParent -ne $expectedParent) { throw "Refusing repair: parent is $actualParent, expected $expectedParent" }
           dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
