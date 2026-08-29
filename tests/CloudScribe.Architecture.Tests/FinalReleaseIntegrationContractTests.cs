@@ -58,7 +58,8 @@ public sealed class FinalReleaseIntegrationContractTests
         string[] requiredAsyncCapture =
         [
             "Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot>>",
-            "await captureGoogleGenerationState(cancellationToken)",
+            "var capture = _captureGoogleGenerationState",
+            "await capture(cancellationToken)",
         ];
 
         foreach (string required in requiredAsyncCapture)
