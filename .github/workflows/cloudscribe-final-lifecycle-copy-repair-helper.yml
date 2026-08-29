@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected_parent='3aacc63266f186612788eb468f9c9c7e1dec08d5'
+          expected_parent='bdda85b1e052bce345078ec99263b0c228796a88'
           actual_parent="$(git rev-parse HEAD^)"
           if [ "$actual_parent" != "$expected_parent" ]; then
             echo "Refusing repair: parent is $actual_parent, expected $expected_parent" >&2
@@ -47,36 +47,25 @@ jobs:
                   raise SystemExit(f'Expected exactly one lifecycle occurrence of {old!r}; found {count}.')
               shell = shell.replace(old, new)
           shell_path.write_text(shell, encoding='utf-8')
-
-          workflow_path = Path('.github/workflows/cloudscribe-final-acceptance-repair.yml')
-          workflow = workflow_path.read_text(encoding='utf-8')
-          anchor = '''          $pricing = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs' -Raw\n'''
-          insertion = '''          @(\n            'Durable document creation arrives in Stage 3',\n            'Retry and recovery actions become durable in Stage 3'\n          ) | ForEach-Object {\n            if ($shellSource.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {\n              throw \"Stale staged lifecycle copy remains in the production shell: $_\"\n            }\n          }\n\n'''
-          if insertion in workflow:
-              raise SystemExit('Lifecycle direct-rejection gate already present unexpectedly.')
-          if workflow.count(anchor) != 1:
-              raise SystemExit(f'Expected one workflow insertion anchor; found {workflow.count(anchor)}.')
-          workflow = workflow.replace(anchor, insertion + anchor)
-          workflow_path.write_text(workflow, encoding='utf-8')
           PY
 
           git diff --check
-          git diff -- src/CloudScribe.App/ViewModels/ShellViewModel.cs .github/workflows/cloudscribe-final-acceptance-repair.yml
+          git diff -- src/CloudScribe.App/ViewModels/ShellViewModel.cs
 
           changed="$(git diff --name-only)"
-          expected=$'.github/workflows/cloudscribe-final-acceptance-repair.yml\nsrc/CloudScribe.App/ViewModels/ShellViewModel.cs'
+          expected='src/CloudScribe.App/ViewModels/ShellViewModel.cs'
           if [ "$changed" != "$expected" ]; then
             echo "Unexpected changed paths:" >&2
             printf '%s\n' "$changed" >&2
             exit 1
           fi
 
-      - name: Commit exact repair
+      - name: Commit exact source repair
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'cloudscribe-final-repair-bot'
           git config user.email 'cloudscribe-final-repair-bot@users.noreply.github.com'
-          git add -- .github/workflows/cloudscribe-final-acceptance-repair.yml src/CloudScribe.App/ViewModels/ShellViewModel.cs
+          git add -- src/CloudScribe.App/ViewModels/ShellViewModel.cs
           git commit -m 'fix(final): remove stale staged lifecycle copy'
           git push origin HEAD:repair/final-1.0.0-shell-integration
