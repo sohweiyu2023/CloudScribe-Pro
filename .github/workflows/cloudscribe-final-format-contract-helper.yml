@@ -23,22 +23,31 @@ jobs:
         with:
           dotnet-version: '10.0.400'
 
-      - name: Verify exact parent and format only Final contract
+      - name: Verify exact parent and format only Final repair C# paths
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $expectedParent = 'df358d8fb1e00151f3d13796a98bb76f7a3333a5'
+          $expectedParent = '3094ec066958269add94f185a849c8b7034f970f'
           $actualParent = (git rev-parse HEAD^).Trim()
           if ($actualParent -ne $expectedParent) { throw "Refusing repair: parent is $actualParent, expected $expectedParent" }
           dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
           if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
-          dotnet format CloudScribe.sln --no-restore --include tests/CloudScribe.Architecture.Tests/FinalReleaseIntegrationContractTests.cs
+          dotnet format CloudScribe.sln --no-restore --include tests/CloudScribe.Architecture.Tests/FinalReleaseIntegrationContractTests.cs src/CloudScribe.App/ViewModels/ShellViewModel.cs
           if ($LASTEXITCODE -ne 0) { throw 'Targeted formatting failed.' }
           git diff --check
+          $allowed = @(
+            'tests/CloudScribe.Architecture.Tests/FinalReleaseIntegrationContractTests.cs',
+            'src/CloudScribe.App/ViewModels/ShellViewModel.cs'
+          )
           $changed = @(git diff --name-only)
-          if ($changed.Count -ne 1 -or $changed[0] -ne 'tests/CloudScribe.Architecture.Tests/FinalReleaseIntegrationContractTests.cs') {
-            git status --short
-            throw "Unexpected formatted paths: $($changed -join ', ')"
+          if ($changed.Count -lt 1) {
+            throw 'Targeted formatter produced no changes; formatting failure is outside the two recently edited Final C# paths.'
+          }
+          foreach ($path in $changed) {
+            if ($allowed -notcontains $path) {
+              git status --short
+              throw "Unexpected formatted path: $path"
+            }
           }
 
       - name: Commit exact formatting repair
@@ -47,8 +56,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           git config user.name 'cloudscribe-final-repair-bot'
           git config user.email 'cloudscribe-final-repair-bot@users.noreply.github.com'
-          git add -- tests/CloudScribe.Architecture.Tests/FinalReleaseIntegrationContractTests.cs
-          git commit -m 'style(final): format compiled integration contract'
+          git add -- tests/CloudScribe.Architecture.Tests/FinalReleaseIntegrationContractTests.cs src/CloudScribe.App/ViewModels/ShellViewModel.cs
+          git commit -m 'style(final): format reopened Final integration edits'
           if ($LASTEXITCODE -ne 0) { throw 'Formatting commit failed.' }
           git push origin HEAD:repair/final-1.0.0-shell-integration
           if ($LASTEXITCODE -ne 0) { throw 'Formatting push failed.' }
