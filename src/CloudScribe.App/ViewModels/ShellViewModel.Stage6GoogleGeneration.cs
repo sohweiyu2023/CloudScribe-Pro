@@ -6,20 +6,20 @@ namespace CloudScribe.App.ViewModels;
 
 public sealed partial class ShellViewModel
 {
-    private GoogleGenerationUiQueueCoordinator? _googleGenerationUiQueue;
+    private Func<CancellationToken, Task<GoogleGenerationUiQueueCoordinator>>? _resolveGoogleGenerationUiQueue;
     private Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot>>? _captureGoogleGenerationState;
     private int _googleGenerationInFlight;
 
     public bool CanGenerateWithGoogle =>
-        _googleGenerationUiQueue is not null &&
+        _resolveGoogleGenerationUiQueue is not null &&
         _captureGoogleGenerationState is not null &&
         Volatile.Read(ref _googleGenerationInFlight) == 0;
 
     public void ConfigureStage6GoogleGeneration(
-        GoogleGenerationUiQueueCoordinator coordinator,
+        Func<CancellationToken, Task<GoogleGenerationUiQueueCoordinator>> resolveCurrentCoordinator,
         Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot>> captureCurrentState)
     {
-        _googleGenerationUiQueue = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+        _resolveGoogleGenerationUiQueue = resolveCurrentCoordinator ?? throw new ArgumentNullException(nameof(resolveCurrentCoordinator));
         _captureGoogleGenerationState = captureCurrentState ?? throw new ArgumentNullException(nameof(captureCurrentState));
         OnPropertyChanged(nameof(CanGenerateWithGoogle));
         GenerateWithGoogleCommand.NotifyCanExecuteChanged();
@@ -33,7 +33,7 @@ public sealed partial class ShellViewModel
             return;
         }
 
-        if (_googleGenerationUiQueue is null || _captureGoogleGenerationState is null)
+        if (_resolveGoogleGenerationUiQueue is null || _captureGoogleGenerationState is null)
         {
             return;
         }
@@ -56,12 +56,14 @@ public sealed partial class ShellViewModel
 
         try
         {
-            var coordinator = _googleGenerationUiQueue
-                ?? throw new InvalidOperationException("Google generation is not configured.");
+            var resolveCoordinator = _resolveGoogleGenerationUiQueue
+                ?? throw new InvalidOperationException("Google generation coordinator resolution is not configured.");
             var capture = _captureGoogleGenerationState
                 ?? throw new InvalidOperationException("Google generation UI state capture is not configured.");
 
             cancellationToken.ThrowIfCancellationRequested();
+            var coordinator = await resolveCoordinator(cancellationToken).ConfigureAwait(true)
+                ?? throw new InvalidOperationException("Google generation coordinator is unavailable for the current authorization state.");
             var state = await capture(cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Google generation UI state is unavailable.");
 
