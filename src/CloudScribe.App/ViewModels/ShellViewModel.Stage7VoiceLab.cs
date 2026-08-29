@@ -9,7 +9,7 @@ namespace CloudScribe.App.ViewModels;
 public sealed partial class ShellViewModel
 {
     private VoiceLabCatalogQueryService? _voiceLabCatalog;
-    private Func<VoiceLabCatalogUiState>? _captureVoiceLabCatalogState;
+    private Func<CancellationToken, Task<VoiceLabCatalogUiState>>? _captureVoiceLabCatalogState;
     private Func<VoiceLabCatalogSelection, VoiceLabAuditionExecutionService>? _createVoiceLabAuditionService;
     private Func<VoiceLabCatalogSelection, VoiceLabAuditionRequest>? _captureVoiceLabAuditionRequest;
     private Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabCatalogSelection>>? _refreshVoiceLabSelection;
@@ -49,7 +49,7 @@ public sealed partial class ShellViewModel
 
     public void ConfigureStage7VoiceLabCatalog(
         VoiceLabCatalogQueryService catalogService,
-        Func<VoiceLabCatalogUiState> captureCurrentState)
+        Func<CancellationToken, Task<VoiceLabCatalogUiState>> captureCurrentState)
     {
         _voiceLabCatalog = catalogService ?? throw new ArgumentNullException(nameof(catalogService));
         _captureVoiceLabCatalogState = captureCurrentState ?? throw new ArgumentNullException(nameof(captureCurrentState));
@@ -109,7 +109,8 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Voice Lab catalog UI state capture is not configured.");
 
             cancellationToken.ThrowIfCancellationRequested();
-            var state = capture() ?? throw new InvalidOperationException("Voice Lab catalog UI state is unavailable.");
+            var state = await capture(cancellationToken).ConfigureAwait(true)
+                ?? throw new InvalidOperationException("Voice Lab catalog UI state is unavailable.");
             var results = await catalog.QueryAsync(
                 state.Query,
                 state.AccountAuthorized,
