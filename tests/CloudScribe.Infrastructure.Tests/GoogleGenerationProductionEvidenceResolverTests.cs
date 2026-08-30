@@ -7,6 +7,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class GoogleGenerationProductionEvidenceResolverTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 30, 0, 0, 0, TimeSpan.Zero);
+    private static readonly Uri EndpointOrigin = new("https://speech.example.test/", UriKind.Absolute);
 
     [Fact]
     public async Task ResolveAsyncReturnsOnlyCurrentMatchingUsableEvidence()
@@ -53,6 +54,60 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsyncRejectsCurrentAccountWithoutAdmittedEndpointOrigin()
+    {
+        ProviderAccountSnapshot account = CreateAccount(isEnabled: true, endpointOrigin: null);
+        var resolver = CreateResolver(account, CreateCapability(account.Reference, Now.AddHours(1)));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAsync(
+            account.Reference.AccountId,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("no admitted endpoint origin", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ResolveAsyncRejectsCapabilityCapturedWithoutEndpointOrigin()
+    {
+        ProviderAccountSnapshot account = CreateAccount(isEnabled: true);
+        ProviderAccountReference capturedWithoutOrigin = new(
+            GoogleGenerationProvider.StableProviderId,
+            account.Reference.AccountId,
+            "Google primary",
+            new CredentialReference("google.primary"),
+            "google-tts-v1",
+            "global");
+        var resolver = CreateResolver(account, CreateCapability(capturedWithoutOrigin, Now.AddHours(1)));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAsync(
+            account.Reference.AccountId,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("no captured endpoint origin", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ResolveAsyncRejectsCapabilityCapturedForPreviousEndpointOrigin()
+    {
+        ProviderAccountSnapshot account = CreateAccount(isEnabled: true);
+        ProviderAccountReference oldBinding = new(
+            GoogleGenerationProvider.StableProviderId,
+            account.Reference.AccountId,
+            "Google primary",
+            new CredentialReference("google.primary"),
+            "google-tts-v1",
+            "global",
+            new Uri("https://old-speech.example.test/", UriKind.Absolute));
+        var resolver = CreateResolver(account, CreateCapability(oldBinding, Now.AddHours(1)));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAsync(
+            account.Reference.AccountId,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("changed after capability evidence", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ResolveAsyncRejectsCapabilityCapturedForPreviousAccountBinding()
     {
         ProviderAccountSnapshot account = CreateAccount(isEnabled: true);
@@ -62,7 +117,8 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
             "Google primary",
             new CredentialReference("google.primary.old"),
             "google-tts-v1",
-            "global");
+            "global",
+            EndpointOrigin);
         var resolver = CreateResolver(account, CreateCapability(oldBinding, Now.AddHours(1)));
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAsync(
@@ -98,7 +154,7 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
         new CapabilityStore(capability),
         new FixedTimeProvider(Now));
 
-    private static ProviderAccountSnapshot CreateAccount(bool isEnabled)
+    private static ProviderAccountSnapshot CreateAccount(bool isEnabled, Uri? endpointOrigin = null)
     {
         ProviderAccountReference reference = new(
             GoogleGenerationProvider.StableProviderId,
@@ -106,7 +162,8 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
             "Google primary",
             new CredentialReference("google.primary"),
             "google-tts-v1",
-            "global");
+            "global",
+            endpointOrigin ?? EndpointOrigin);
         return new ProviderAccountSnapshot(reference, isEnabled, 1, Now.AddDays(-1), Now.AddHours(-1));
     }
 
