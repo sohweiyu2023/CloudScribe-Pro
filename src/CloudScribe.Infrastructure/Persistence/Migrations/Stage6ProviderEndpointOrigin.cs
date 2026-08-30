@@ -19,10 +19,21 @@ public sealed class Stage6ProviderEndpointOrigin : Migration
             type: "TEXT",
             maxLength: 512,
             nullable: true);
+
+        migrationBuilder.AddColumn<string>(
+            name: "EndpointOrigin",
+            table: "provider_capability_snapshots",
+            type: "TEXT",
+            maxLength: 512,
+            nullable: true);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.DropColumn(
+            name: "EndpointOrigin",
+            table: "provider_capability_snapshots");
+
         migrationBuilder.DropColumn(
             name: "EndpointOrigin",
             table: "provider_accounts");
