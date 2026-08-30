@@ -32,15 +32,23 @@ public sealed record GoogleGenerationProductionEvidence(
             throw new InvalidOperationException("Current Google provider account has no admitted endpoint identity.");
         if (string.IsNullOrWhiteSpace(account.RegionId))
             throw new InvalidOperationException("Current Google provider account has no admitted region identity.");
+        if (account.EndpointOrigin is null)
+            throw new InvalidOperationException("Current Google provider account has no admitted endpoint origin.");
         if (Capability.IsStale(nowUtc))
             throw new InvalidOperationException("Current Google capability evidence is stale.");
 
         ProviderAccountReference captured = capability.Account;
+        if (captured.EndpointOrigin is null)
+        {
+            throw new InvalidOperationException("Current Google capability evidence has no captured endpoint origin; refresh capability evidence before generation.");
+        }
+
         if (!string.Equals(captured.ProviderStableId, account.ProviderStableId, StringComparison.Ordinal) ||
             !string.Equals(captured.AccountId, account.AccountId, StringComparison.Ordinal) ||
             !string.Equals(captured.CredentialReference?.TargetName, account.CredentialReference.TargetName, StringComparison.Ordinal) ||
             !string.Equals(captured.EndpointId, account.EndpointId, StringComparison.Ordinal) ||
-            !string.Equals(captured.RegionId, account.RegionId, StringComparison.Ordinal))
+            !string.Equals(captured.RegionId, account.RegionId, StringComparison.Ordinal) ||
+            !Uri.Compare(captured.EndpointOrigin, account.EndpointOrigin, UriComponents.SchemeAndServer, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase).Equals(0))
         {
             throw new InvalidOperationException("Current Google account identity changed after capability evidence was captured; refresh capability evidence before generation.");
         }
