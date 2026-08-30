@@ -11,6 +11,19 @@ public sealed class Stage6GoogleGenerationSpendAuthorization : Migration
 {
     public const string MigrationId = "20260830092500_Stage6GoogleGenerationSpendAuthorization";
 
+    private static readonly string[] ExactEnvelopeColumns =
+    [
+        "AccountId",
+        "CredentialReferenceId",
+        "CapabilityProvenanceId",
+        "PricingProvenanceId",
+        "RequestRevision",
+        "VoiceName",
+        "AudioEncoding",
+        "CompiledPayloadSha256",
+        "CompiledPayloadBytes",
+    ];
+
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.CreateTable(
@@ -38,18 +51,7 @@ public sealed class Stage6GoogleGenerationSpendAuthorization : Migration
         migrationBuilder.CreateIndex(
             name: "IX_google_generation_spend_authorizations_exact_envelope",
             table: "google_generation_spend_authorizations",
-            columns: new[]
-            {
-                "AccountId",
-                "CredentialReferenceId",
-                "CapabilityProvenanceId",
-                "PricingProvenanceId",
-                "RequestRevision",
-                "VoiceName",
-                "AudioEncoding",
-                "CompiledPayloadSha256",
-                "CompiledPayloadBytes",
-            },
+            columns: ExactEnvelopeColumns,
             unique: true);
     }
 
