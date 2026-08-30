@@ -56,7 +56,7 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
     [Fact]
     public async Task ResolveAsyncRejectsCurrentAccountWithoutAdmittedEndpointOrigin()
     {
-        ProviderAccountSnapshot account = CreateAccount(isEnabled: true, endpointOrigin: null);
+        ProviderAccountSnapshot account = CreateAccount(isEnabled: true, includeEndpointOrigin: false);
         var resolver = CreateResolver(account, CreateCapability(account.Reference, Now.AddHours(1)));
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAsync(
@@ -154,7 +154,7 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
         new CapabilityStore(capability),
         new FixedTimeProvider(Now));
 
-    private static ProviderAccountSnapshot CreateAccount(bool isEnabled, Uri? endpointOrigin = null)
+    private static ProviderAccountSnapshot CreateAccount(bool isEnabled, bool includeEndpointOrigin = true)
     {
         ProviderAccountReference reference = new(
             GoogleGenerationProvider.StableProviderId,
@@ -163,7 +163,7 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
             new CredentialReference("google.primary"),
             "google-tts-v1",
             "global",
-            endpointOrigin ?? EndpointOrigin);
+            includeEndpointOrigin ? EndpointOrigin : null);
         return new ProviderAccountSnapshot(reference, isEnabled, 1, Now.AddDays(-1), Now.AddHours(-1));
     }
 
