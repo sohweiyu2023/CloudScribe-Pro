@@ -28,6 +28,12 @@ public sealed class VoiceLabProductionAuditionEvidenceLoader
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+        request.Selection.Validate();
+
+        if (!request.PricingCurrent)
+            throw new InvalidOperationException("Voice Lab audition request pricing is no longer current.");
+        if (!request.ExplicitSpendApproved)
+            throw new InvalidOperationException("Voice Lab audition request no longer has explicit spend approval.");
 
         VoiceLabAuditionAuthorizationEvidence? evidence = await _loadCurrentEvidence(
             request,
@@ -36,6 +42,9 @@ public sealed class VoiceLabProductionAuditionEvidenceLoader
             return null;
 
         evidence.Validate();
+
+        if (!Equals(evidence.Selection, request.Selection))
+            throw new InvalidOperationException("Voice Lab audition authorization selection changed after the request was bound.");
 
         ProviderAccountSnapshot account = await _accounts.FindAsync(
             evidence.Selection.ProviderStableId,
