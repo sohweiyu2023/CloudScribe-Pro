@@ -33,6 +33,78 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
     }
 
     [Fact]
+    public async Task LoadAsyncRejectsAuthorizationSelectionDrift()
+    {
+        Guid capabilityId = Guid.NewGuid();
+        ProviderAccountSnapshot account = CreateAccount("credential.current", isEnabled: true);
+        StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
+        VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId, "credential.current");
+        VoiceLabCatalogSelection changedSelection = evidence.Selection with { VoiceStableId = "voice-2" };
+        VoiceLabAuditionRequest request = CreateRequest(changedSelection);
+        var loader = CreateLoader(account, capability, evidence);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(
+            request,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("selection changed", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LoadAsyncRejectsRequestWithRevokedSpendApprovalBeforeLoadingEvidence()
+    {
+        Guid capabilityId = Guid.NewGuid();
+        ProviderAccountSnapshot account = CreateAccount("credential.current", isEnabled: true);
+        StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
+        VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId, "credential.current");
+        int evidenceLoads = 0;
+        var loader = new VoiceLabProductionAuditionEvidenceLoader(
+            new AccountStore(account),
+            new CapabilityStore(capability),
+            (_, _) =>
+            {
+                evidenceLoads++;
+                return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence);
+            },
+            new FixedTimeProvider(Now));
+        VoiceLabAuditionRequest request = CreateRequest(evidence.Selection) with { ExplicitSpendApproved = false };
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(
+            request,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("spend approval", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, evidenceLoads);
+    }
+
+    [Fact]
+    public async Task LoadAsyncRejectsRequestWithStalePricingBeforeLoadingEvidence()
+    {
+        Guid capabilityId = Guid.NewGuid();
+        ProviderAccountSnapshot account = CreateAccount("credential.current", isEnabled: true);
+        StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
+        VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId, "credential.current");
+        int evidenceLoads = 0;
+        var loader = new VoiceLabProductionAuditionEvidenceLoader(
+            new AccountStore(account),
+            new CapabilityStore(capability),
+            (_, _) =>
+            {
+                evidenceLoads++;
+                return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence);
+            },
+            new FixedTimeProvider(Now));
+        VoiceLabAuditionRequest request = CreateRequest(evidence.Selection) with { PricingCurrent = false };
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(
+            request,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("pricing", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, evidenceLoads);
+    }
+
+    [Fact]
     public async Task LoadAsyncRejectsCredentialReferenceDrift()
     {
         Guid capabilityId = Guid.NewGuid();
