@@ -5,12 +5,12 @@ namespace CloudScribe.Application.Generation;
 public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthorizedAuditionExecutor
 {
     private readonly VoiceLabAuditionAuthorizationEvidence _approvedEvidence;
-    private readonly Func<CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> _currentEvidenceResolver;
+    private readonly Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> _currentEvidenceResolver;
     private readonly Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> _submitProvider;
 
     public VoiceLabEvidenceAuthorizedAuditionExecutor(
         VoiceLabAuditionAuthorizationEvidence approvedEvidence,
-        Func<CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> currentEvidenceResolver,
+        Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> currentEvidenceResolver,
         Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> submitProvider)
     {
         _approvedEvidence = (approvedEvidence ?? throw new ArgumentNullException(nameof(approvedEvidence))).Validate();
@@ -44,7 +44,7 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
         if (!request.PricingCurrent || !selectedEvidence.PricingCurrent)
             throw new InvalidOperationException("Voice Lab audition requires current pricing evidence.");
 
-        var currentEvidence = await _currentEvidenceResolver(cancellationToken).ConfigureAwait(false)
+        var currentEvidence = await _currentEvidenceResolver(request, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Voice Lab audition current authorization evidence is unavailable.");
         selectedEvidence.EnsureStillAuthorized(currentEvidence);
 
