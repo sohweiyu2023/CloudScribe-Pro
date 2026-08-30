@@ -7,13 +7,18 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
 {
     [Fact]
-    public async Task MatchingCurrentEvidenceSubmitsExactRequest()
+    public async Task MatchingCurrentEvidenceResolvesAndSubmitsExactRequest()
     {
         var approved = CurrentEvidence();
+        VoiceLabAuditionRequest? resolved = null;
         VoiceLabAuditionRequest? submitted = null;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
-            _ => Task.FromResult(approved),
+            (request, _) =>
+            {
+                resolved = request;
+                return Task.FromResult(approved);
+            },
             (request, _) =>
             {
                 submitted = request;
@@ -24,6 +29,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var response = await executor.SubmitAuthorizedAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
+        Assert.Same(request, resolved);
         Assert.Same(request, submitted);
     }
 
@@ -35,7 +41,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var submitCalls = 0;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
-            _ => Task.FromResult(current),
+            (_, _) => Task.FromResult(current),
             (_, _) =>
             {
                 submitCalls++;
@@ -56,7 +62,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var submitCalls = 0;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
-            _ => Task.FromResult(current),
+            (_, _) => Task.FromResult(current),
             (_, _) =>
             {
                 submitCalls++;
@@ -77,7 +83,49 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var submitCalls = 0;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
-            _ => Task.FromResult(current),
+            (_, _) => Task.FromResult(current),
+            (_, _) =>
+            {
+                submitCalls++;
+                return Task.FromResult(Accepted());
+            });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, submitCalls);
+    }
+
+    [Fact]
+    public async Task RevokedSpendApprovalFailsClosedBeforeProviderSubmit()
+    {
+        var approved = CurrentEvidence();
+        var current = approved with { SpendApproved = false };
+        var submitCalls = 0;
+        var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
+            approved,
+            (_, _) => Task.FromResult(current),
+            (_, _) =>
+            {
+                submitCalls++;
+                return Task.FromResult(Accepted());
+            });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, submitCalls);
+    }
+
+    [Fact]
+    public async Task StalePricingFailsClosedBeforeProviderSubmit()
+    {
+        var approved = CurrentEvidence();
+        var current = approved with { PricingCurrent = false };
+        var submitCalls = 0;
+        var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
+            approved,
+            (_, _) => Task.FromResult(current),
             (_, _) =>
             {
                 submitCalls++;
