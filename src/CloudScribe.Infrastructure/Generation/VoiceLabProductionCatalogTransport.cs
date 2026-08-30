@@ -79,7 +79,7 @@ public sealed class VoiceLabProductionCatalogTransport
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        VoiceLabCatalogQueryPolicy.RequireAuthorized(query, accountAuthorized: true, projectAuthorized: true, privateVoiceAccessAuthorized: true);
+        ValidateQueryShape(query);
 
         VoiceLabCatalogAuthorizationEvidence evidence = await _loadAuthorizationAsync(query, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Voice Lab catalog current authorization evidence is unavailable.");
@@ -90,8 +90,12 @@ public sealed class VoiceLabProductionCatalogTransport
             query.AccountId,
             cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Voice Lab catalog provider account is no longer available.");
-        if (!account.IsEnabled)
-            throw new InvalidOperationException("Voice Lab catalog provider account is disabled.");
+
+        VoiceLabCatalogQueryPolicy.RequireAuthorized(
+            query,
+            account.IsEnabled,
+            evidence.ProjectAuthorized,
+            evidence.PrivateVoiceAccessAuthorized);
         if (account.Revision != evidence.AccountRevision)
             throw new InvalidOperationException("Voice Lab catalog provider account revision changed after authorization.");
 
@@ -138,5 +142,23 @@ public sealed class VoiceLabProductionCatalogTransport
         }
 
         return results;
+    }
+
+    private static void ValidateQueryShape(VoiceLabCatalogQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        foreach (string value in new[] { query.ProviderId, query.AccountId, query.ProjectId })
+        {
+            if (string.IsNullOrWhiteSpace(value) ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                value.Contains('\r') || value.Contains('\n') || value.Contains('\0'))
+            {
+                throw new InvalidOperationException("Voice Lab catalog query contains a non-canonical trust identity.");
+            }
+        }
+        if (query.SearchText is { Length: > 256 })
+            throw new InvalidOperationException("Voice Lab search text exceeds the bounded query length.");
+        if (query.Locale is { Length: > 32 })
+            throw new InvalidOperationException("Voice Lab locale filter exceeds the bounded length.");
     }
 }
