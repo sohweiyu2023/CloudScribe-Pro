@@ -2,10 +2,6 @@ using CloudScribe.Application.Providers;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed record GoogleGenerationProductionTransport(
-    GoogleGenerationAccount Account,
-    GoogleGenerationHttpTransport Transport);
-
 public sealed class GoogleGenerationProductionTransportFactory
 {
     private readonly HttpClient _httpClient;
