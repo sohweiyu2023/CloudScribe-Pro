@@ -32,6 +32,7 @@ public sealed class Stage3MigrationTests
                     Stage4PricingContractOverrides.MigrationId,
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
                     Stage6ProviderEndpointOrigin.MigrationId,
+                    Stage6GoogleGenerationSpendAuthorization.MigrationId,
                 ],
                 migrations);
 
@@ -113,6 +114,7 @@ public sealed class Stage3MigrationTests
                     Stage4PricingContractOverrides.MigrationId,
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
                     Stage6ProviderEndpointOrigin.MigrationId,
+                    Stage6GoogleGenerationSpendAuthorization.MigrationId,
                 ],
                 migrations);
             DocumentEntity document = await upgraded.Documents.SingleAsync(TestContext.Current.CancellationToken);
@@ -174,6 +176,7 @@ public sealed class Stage3MigrationTests
                     Stage4PricingContractOverrides.MigrationId,
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
                     Stage6ProviderEndpointOrigin.MigrationId,
+                    Stage6GoogleGenerationSpendAuthorization.MigrationId,
                 ],
                 migrations);
             ActivityTimelineEntity preserved = await upgrade.ActivityTimeline.SingleAsync(TestContext.Current.CancellationToken);
