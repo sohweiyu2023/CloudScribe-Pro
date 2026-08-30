@@ -11,7 +11,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage3MigrationTests
 {
     [Fact]
-    public async Task FreshDatabaseAppliesExecutableStage2ThroughStage4Migrations()
+    public async Task FreshDatabaseAppliesExecutableStage2ThroughStage6Migrations()
     {
         string root = CreateTemporaryRoot();
         string databasePath = Path.Combine(root, "fresh.db");
@@ -31,6 +31,7 @@ public sealed class Stage3MigrationTests
                     Stage4PricingCatalogHistory.MigrationId,
                     Stage4PricingContractOverrides.MigrationId,
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
+                    Stage6ProviderEndpointOrigin.MigrationId,
                 ],
                 migrations);
 
@@ -111,6 +112,7 @@ public sealed class Stage3MigrationTests
                     Stage4PricingCatalogHistory.MigrationId,
                     Stage4PricingContractOverrides.MigrationId,
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
+                    Stage6ProviderEndpointOrigin.MigrationId,
                 ],
                 migrations);
             DocumentEntity document = await upgraded.Documents.SingleAsync(TestContext.Current.CancellationToken);
@@ -171,6 +173,7 @@ public sealed class Stage3MigrationTests
                     Stage4PricingCatalogHistory.MigrationId,
                     Stage4PricingContractOverrides.MigrationId,
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
+                    Stage6ProviderEndpointOrigin.MigrationId,
                 ],
                 migrations);
             ActivityTimelineEntity preserved = await upgrade.ActivityTimeline.SingleAsync(TestContext.Current.CancellationToken);
