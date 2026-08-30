@@ -6,11 +6,29 @@ namespace CloudScribe.Application.Generation;
 public sealed class VoiceLabAuditionCoordinator
 {
     private readonly Func<CancellationToken, Task<ReadOnlyMemory<byte>?>> _cacheReader;
-    private readonly Func<CancellationToken, Task<GenerationProviderResponse>> _submitProvider;
+    private readonly Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> _submitProvider;
 
     public VoiceLabAuditionCoordinator(
         Func<CancellationToken, Task<ReadOnlyMemory<byte>?>> cacheReader,
         Func<CancellationToken, Task<GenerationProviderResponse>> submitProvider)
+        : this(cacheReader, WrapLegacySubmitProvider(submitProvider))
+    {
+    }
+
+    public VoiceLabAuditionCoordinator(
+        Func<CancellationToken, Task<ReadOnlyMemory<byte>?>> cacheReader,
+        IVoiceLabAuthorizedAuditionExecutor authorizedExecutor)
+        : this(
+            cacheReader,
+            (request, cancellationToken) =>
+                (authorizedExecutor ?? throw new ArgumentNullException(nameof(authorizedExecutor)))
+                    .SubmitAuthorizedAsync(request, cancellationToken))
+    {
+    }
+
+    private VoiceLabAuditionCoordinator(
+        Func<CancellationToken, Task<ReadOnlyMemory<byte>?>> cacheReader,
+        Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> submitProvider)
     {
         _cacheReader = cacheReader ?? throw new ArgumentNullException(nameof(cacheReader));
         _submitProvider = submitProvider ?? throw new ArgumentNullException(nameof(submitProvider));
@@ -73,7 +91,7 @@ public sealed class VoiceLabAuditionCoordinator
         if (!authorization.SubmitProviderRequest)
             throw new InvalidOperationException("Voice audition authorization produced neither cache reuse nor provider submission.");
 
-        var response = await _submitProvider(cancellationToken).ConfigureAwait(false)
+        var response = await _submitProvider(request, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Voice audition provider returned no response.");
         if (response.Disposition != SubmissionDisposition.Accepted)
             throw new InvalidOperationException($"Voice audition provider did not return accepted media: {response.DiagnosticCode}");
@@ -83,6 +101,13 @@ public sealed class VoiceLabAuditionCoordinator
             throw new InvalidOperationException("Voice audition provider responses require an explicit diagnostic code.");
 
         return new(false, response.MediaBytes, response.DiagnosticCode);
+    }
+
+    private static Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> WrapLegacySubmitProvider(
+        Func<CancellationToken, Task<GenerationProviderResponse>> submitProvider)
+    {
+        ArgumentNullException.ThrowIfNull(submitProvider);
+        return (_, cancellationToken) => submitProvider(cancellationToken);
     }
 
     private static bool IsExpectedMedia(ReadOnlySpan<byte> bytes, string outputFormat)
