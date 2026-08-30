@@ -19,39 +19,43 @@ public sealed class GoogleGenerationSpendAuthorizationStore(
         {
             DbConnection connection = context.Database.GetDbConnection();
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            await using DbTransaction transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-            await using (DbCommand delete = CreateEnvelopeCommand(connection, authorization.Envelope))
+            DbTransaction transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await using (transaction.ConfigureAwait(false))
             {
-                delete.Transaction = transaction;
-                delete.CommandText = $"DELETE FROM google_generation_spend_authorizations WHERE {EnvelopePredicate};";
-                await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            }
+                DbCommand delete = CreateEnvelopeCommand(connection, authorization.Envelope);
+                await using (delete.ConfigureAwait(false))
+                {
+                    delete.Transaction = transaction;
+                    delete.CommandText = $"DELETE FROM google_generation_spend_authorizations WHERE {EnvelopePredicate};";
+                    await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
 
-            await using (DbCommand insert = connection.CreateCommand())
-            {
-                insert.Transaction = transaction;
-                insert.CommandText = """
-                    INSERT INTO google_generation_spend_authorizations (
-                        Id, AccountId, CredentialReferenceId, CapabilityProvenanceId, PricingProvenanceId,
-                        RequestRevision, VoiceName, AudioEncoding, CompiledPayloadSha256, CompiledPayloadBytes,
-                        Currency, Scale, AuthorizedMaximumMinorUnits, ApprovedEstimateMinorUnits, ApprovedAtUnixMilliseconds)
-                    VALUES (
-                        @id, @accountId, @credentialReferenceId, @capabilityProvenanceId, @pricingProvenanceId,
-                        @requestRevision, @voiceName, @audioEncoding, @compiledPayloadSha256, @compiledPayloadBytes,
-                        @currency, @scale, @authorizedMaximumMinorUnits, @approvedEstimateMinorUnits, @approvedAt);
-                    """;
-                AddEnvelopeParameters(insert, authorization.Envelope);
-                AddParameter(insert, "@id", Guid.NewGuid().ToString("D"));
-                AddParameter(insert, "@currency", authorization.Currency);
-                AddParameter(insert, "@scale", authorization.Scale);
-                AddParameter(insert, "@authorizedMaximumMinorUnits", authorization.AuthorizedMaximumMinorUnits);
-                AddParameter(insert, "@approvedEstimateMinorUnits", authorization.ApprovedEstimateMinorUnits);
-                AddParameter(insert, "@approvedAt", timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
-                await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            }
+                DbCommand insert = connection.CreateCommand();
+                await using (insert.ConfigureAwait(false))
+                {
+                    insert.Transaction = transaction;
+                    insert.CommandText = """
+                        INSERT INTO google_generation_spend_authorizations (
+                            Id, AccountId, CredentialReferenceId, CapabilityProvenanceId, PricingProvenanceId,
+                            RequestRevision, VoiceName, AudioEncoding, CompiledPayloadSha256, CompiledPayloadBytes,
+                            Currency, Scale, AuthorizedMaximumMinorUnits, ApprovedEstimateMinorUnits, ApprovedAtUnixMilliseconds)
+                        VALUES (
+                            @id, @accountId, @credentialReferenceId, @capabilityProvenanceId, @pricingProvenanceId,
+                            @requestRevision, @voiceName, @audioEncoding, @compiledPayloadSha256, @compiledPayloadBytes,
+                            @currency, @scale, @authorizedMaximumMinorUnits, @approvedEstimateMinorUnits, @approvedAt);
+                        """;
+                    AddEnvelopeParameters(insert, authorization.Envelope);
+                    AddParameter(insert, "@id", Guid.NewGuid().ToString("D"));
+                    AddParameter(insert, "@currency", authorization.Currency);
+                    AddParameter(insert, "@scale", authorization.Scale);
+                    AddParameter(insert, "@authorizedMaximumMinorUnits", authorization.AuthorizedMaximumMinorUnits);
+                    AddParameter(insert, "@approvedEstimateMinorUnits", authorization.ApprovedEstimateMinorUnits);
+                    AddParameter(insert, "@approvedAt", timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
+                    await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                }
 
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
@@ -66,21 +70,27 @@ public sealed class GoogleGenerationSpendAuthorizationStore(
         {
             DbConnection connection = context.Database.GetDbConnection();
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            await using DbCommand command = CreateEnvelopeCommand(connection, envelope);
-            command.CommandText = $"SELECT Currency, Scale, AuthorizedMaximumMinorUnits, ApprovedEstimateMinorUnits FROM google_generation_spend_authorizations WHERE {EnvelopePredicate} LIMIT 1;";
-
-            await using DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            DbCommand command = CreateEnvelopeCommand(connection, envelope);
+            await using (command.ConfigureAwait(false))
             {
-                return null;
-            }
+                command.CommandText = $"SELECT Currency, Scale, AuthorizedMaximumMinorUnits, ApprovedEstimateMinorUnits FROM google_generation_spend_authorizations WHERE {EnvelopePredicate} LIMIT 1;";
 
-            return GoogleGenerationSpendAuthorization.Create(
-                envelope,
-                reader.GetString(0),
-                reader.GetInt32(1),
-                reader.GetInt64(3),
-                reader.GetInt64(2));
+                DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        return null;
+                    }
+
+                    return GoogleGenerationSpendAuthorization.Create(
+                        envelope,
+                        reader.GetString(0),
+                        reader.GetInt32(1),
+                        reader.GetInt64(3),
+                        reader.GetInt64(2));
+                }
+            }
         }
     }
 
