@@ -21,10 +21,11 @@ public sealed class FileAuthenticatedRestoreRecoveryJournalStoreTests
                 new DateTimeOffset(2026, 8, 30, 13, 0, 0, TimeSpan.Zero));
 
             using var store = new FileAuthenticatedRestoreRecoveryJournalStore(path, key);
-            Assert.Null(await store.LoadAuthenticatedAsync());
+            CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+            Assert.Null(await store.LoadAuthenticatedAsync(cancellationToken));
 
-            await store.SaveAsync(journal);
-            RestoreTransactionJournal? restored = await store.LoadAuthenticatedAsync();
+            await store.SaveAsync(journal, cancellationToken);
+            RestoreTransactionJournal? restored = await store.LoadAuthenticatedAsync(cancellationToken);
 
             Assert.NotNull(restored);
             Assert.Equal(journal.TransactionId, restored.TransactionId);
@@ -55,16 +56,17 @@ public sealed class FileAuthenticatedRestoreRecoveryJournalStoreTests
                 new DateTimeOffset(2026, 8, 30, 13, 1, 0, TimeSpan.Zero));
 
             using var store = new FileAuthenticatedRestoreRecoveryJournalStore(path, key);
-            await store.SaveAsync(journal);
+            CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+            await store.SaveAsync(journal, cancellationToken);
 
-            string document = await File.ReadAllTextAsync(path);
+            string document = await File.ReadAllTextAsync(path, cancellationToken);
             string[] lines = document.Split('\n', StringSplitOptions.None);
             Assert.True(lines.Length >= 3);
             char replacement = lines[2][^1] == '0' ? '1' : '0';
-            lines[2] = string.Concat(lines[2].AsSpan(0, lines[2].Length - 1), replacement);
-            await File.WriteAllTextAsync(path, string.Join('\n', lines));
+            lines[2] = lines[2][..^1] + replacement;
+            await File.WriteAllTextAsync(path, string.Join('\n', lines), cancellationToken);
 
-            await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAuthenticatedAsync());
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAuthenticatedAsync(cancellationToken));
         }
         finally
         {
@@ -76,7 +78,10 @@ public sealed class FileAuthenticatedRestoreRecoveryJournalStoreTests
     {
         var key = new byte[32];
         for (var index = 0; index < key.Length; index++)
+        {
             key[index] = checked((byte)(index + 1));
+        }
+
         return key;
     }
 
