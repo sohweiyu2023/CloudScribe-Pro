@@ -64,6 +64,7 @@ public sealed class EfProviderAccountStore(
             entity.CredentialTargetName = account.CredentialReference?.TargetName;
             entity.EndpointId = account.EndpointId;
             entity.RegionId = account.RegionId;
+            entity.EndpointOrigin = account.EndpointOrigin?.AbsoluteUri;
             entity.IsEnabled = isEnabled;
             entity.Revision++;
             entity.UpdatedAtUnixMilliseconds = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
@@ -119,6 +120,7 @@ public sealed class EfProviderAccountStore(
         CredentialTargetName = account.CredentialReference?.TargetName,
         EndpointId = account.EndpointId,
         RegionId = account.RegionId,
+        EndpointOrigin = account.EndpointOrigin?.AbsoluteUri,
         IsEnabled = isEnabled,
         Revision = 1,
         CreatedAtUnixMilliseconds = now,
@@ -132,7 +134,8 @@ public sealed class EfProviderAccountStore(
             entity.DisplayName,
             entity.CredentialTargetName is null ? null : new CredentialReference(entity.CredentialTargetName),
             entity.EndpointId,
-            entity.RegionId),
+            entity.RegionId,
+            string.IsNullOrWhiteSpace(entity.EndpointOrigin) ? null : new Uri(entity.EndpointOrigin, UriKind.Absolute)),
         entity.IsEnabled,
         entity.Revision,
         DateTimeOffset.FromUnixTimeMilliseconds(entity.CreatedAtUnixMilliseconds),
