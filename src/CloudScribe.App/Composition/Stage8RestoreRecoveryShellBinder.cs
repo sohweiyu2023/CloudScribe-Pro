@@ -17,26 +17,14 @@ public static class Stage8RestoreRecoveryShellBinder
         AtomicVerifiedRestoreExecutor restoreExecutor,
         Func<CancellationToken, Task<RestoreExecutionPlan>> captureCurrentPlanAsync)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(journalPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
-        ArgumentException.ThrowIfNullOrWhiteSpace(backupRoot);
-
-        if (!Path.IsPathFullyQualified(journalPath) ||
-            !Path.IsPathFullyQualified(stagingRoot) ||
-            !Path.IsPathFullyQualified(backupRoot))
-        {
-            throw new InvalidOperationException("Stage 8 restore recovery paths must be explicitly fully qualified.");
-        }
+        (string absoluteJournalPath, string absoluteStagingRoot, string absoluteBackupRoot) =
+            NormalizeRecoveryPaths(journalPath, stagingRoot, backupRoot);
 
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(compositionFactory);
         ArgumentNullException.ThrowIfNull(authenticationKeyReference);
         ArgumentNullException.ThrowIfNull(restoreExecutor);
         ArgumentNullException.ThrowIfNull(captureCurrentPlanAsync);
-
-        string absoluteJournalPath = Path.GetFullPath(journalPath);
-        string absoluteStagingRoot = Path.GetFullPath(stagingRoot);
-        string absoluteBackupRoot = Path.GetFullPath(backupRoot);
 
         viewModel.ConfigureStage8RestoreRecovery(async cancellationToken =>
         {
@@ -58,5 +46,27 @@ public static class Stage8RestoreRecoveryShellBinder
                 .RecoverAsync(plan, cancellationToken)
                 .ConfigureAwait(true);
         });
+    }
+
+    public static (string JournalPath, string StagingRoot, string BackupRoot) NormalizeRecoveryPaths(
+        string journalPath,
+        string stagingRoot,
+        string backupRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(journalPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(backupRoot);
+
+        if (!Path.IsPathFullyQualified(journalPath) ||
+            !Path.IsPathFullyQualified(stagingRoot) ||
+            !Path.IsPathFullyQualified(backupRoot))
+        {
+            throw new InvalidOperationException("Stage 8 restore recovery paths must be explicitly fully qualified.");
+        }
+
+        return (
+            Path.GetFullPath(journalPath),
+            Path.GetFullPath(stagingRoot),
+            Path.GetFullPath(backupRoot));
     }
 }
