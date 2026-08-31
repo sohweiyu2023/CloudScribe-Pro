@@ -26,15 +26,16 @@ public static class Stage8RestoreRecoveryShellBinder
         ArgumentNullException.ThrowIfNull(restoreExecutor);
         ArgumentNullException.ThrowIfNull(captureCurrentPlanAsync);
 
+        if (!Path.IsPathFullyQualified(journalPath) ||
+            !Path.IsPathFullyQualified(stagingRoot) ||
+            !Path.IsPathFullyQualified(backupRoot))
+        {
+            throw new InvalidOperationException("Stage 8 restore recovery paths must be explicitly fully qualified.");
+        }
+
         string absoluteJournalPath = Path.GetFullPath(journalPath);
         string absoluteStagingRoot = Path.GetFullPath(stagingRoot);
         string absoluteBackupRoot = Path.GetFullPath(backupRoot);
-        if (!Path.IsPathFullyQualified(absoluteJournalPath) ||
-            !Path.IsPathFullyQualified(absoluteStagingRoot) ||
-            !Path.IsPathFullyQualified(absoluteBackupRoot))
-        {
-            throw new InvalidOperationException("Stage 8 restore recovery paths must resolve to absolute paths.");
-        }
 
         viewModel.ConfigureStage8RestoreRecovery(async cancellationToken =>
         {
