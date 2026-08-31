@@ -11,17 +11,21 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
     {
         var reference = new CredentialReference("CloudScribe/RestoreRecovery/TestAuthenticationKey");
         var vault = new TestCredentialVault(secret: null);
-        var factory = new RestoreRecoveryExecutionCompositionFactory(
-            vault,
-            new AtomicVerifiedRestoreExecutor());
+        var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
         string journalPath = CreateUnusedJournalPath();
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => factory.CreateAsync(journalPath, reference, cancellationToken));
+            () => factory.CreateAsync(
+                reference,
+                journalPath,
+                Path.GetTempPath(),
+                Path.GetTempPath(),
+                new AtomicVerifiedRestoreExecutor(),
+                cancellationToken));
 
         Assert.Equal(
-            "Restore recovery authentication key is unavailable from the configured credential vault.",
+            "Restore recovery journal authentication key is not available in the credential vault.",
             exception.Message);
         Assert.Equal(1, vault.ReadCount);
         Assert.Equal(reference, vault.LastReadReference);
@@ -33,17 +37,21 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
     {
         var reference = new CredentialReference("CloudScribe/RestoreRecovery/TestAuthenticationKey");
         var vault = new TestCredentialVault("short-key".ToCharArray());
-        var factory = new RestoreRecoveryExecutionCompositionFactory(
-            vault,
-            new AtomicVerifiedRestoreExecutor());
+        var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
         string journalPath = CreateUnusedJournalPath();
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => factory.CreateAsync(journalPath, reference, cancellationToken));
+            () => factory.CreateAsync(
+                reference,
+                journalPath,
+                Path.GetTempPath(),
+                Path.GetTempPath(),
+                new AtomicVerifiedRestoreExecutor(),
+                cancellationToken));
 
         Assert.Equal(
-            "Restore recovery authentication key must contain at least 256 bits of key material.",
+            "Restore recovery journal authentication key must contain at least 256 bits of UTF-8 key material.",
             exception.Message);
         Assert.Equal(1, vault.ReadCount);
         Assert.Equal(reference, vault.LastReadReference);
