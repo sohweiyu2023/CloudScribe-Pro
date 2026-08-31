@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Localization;
 
 public static class PseudoLocalizer
 {
-    private static readonly IReadOnlyDictionary<char, char> Accents = new Dictionary<char, char>
+    private static readonly Dictionary<char, char> Accents = new()
     {
         ['a'] = 'á',
         ['A'] = 'Á',

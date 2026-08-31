@@ -79,7 +79,7 @@ public sealed class AtomicVerifiedRestoreExecutor
         }
     }
 
-    public Task RollbackAsync(
+    public static Task RollbackAsync(
         RestoreExecutionPlan plan,
         RestoreTransactionJournal rollbackJournal,
         CancellationToken cancellationToken = default)

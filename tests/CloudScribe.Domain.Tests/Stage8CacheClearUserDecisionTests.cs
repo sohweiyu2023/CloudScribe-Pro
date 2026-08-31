@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage8CacheClearUserDecisionTests
 {
     [Fact]
-    public void Clear_requires_explicit_confirmation_and_never_claims_secure_erase()
+    public void ClearRequiresExplicitConfirmationAndNeverClaimsSecureErase()
     {
         var denied = CacheClearUserDecisionPolicy.Create(userConfirmedClear: false);
         Assert.False(denied.MayClearUnprotectedEntries);
@@ -19,7 +19,7 @@ public sealed class Stage8CacheClearUserDecisionTests
     }
 
     [Fact]
-    public void Cost_avoidance_is_only_displayed_as_an_explicit_estimate()
+    public void CostAvoidanceIsOnlyDisplayedAsAnExplicitEstimate()
     {
         var decision = CacheClearUserDecisionPolicy.Create(
             userConfirmedClear: true,
@@ -33,7 +33,7 @@ public sealed class Stage8CacheClearUserDecisionTests
     }
 
     [Fact]
-    public void Estimate_without_currency_fails_closed()
+    public void EstimateWithoutCurrencyFailsClosed()
     {
         Assert.Throws<ArgumentException>(() => CacheClearUserDecisionPolicy.Create(
             userConfirmedClear: true,

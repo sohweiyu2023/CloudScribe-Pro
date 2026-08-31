@@ -89,6 +89,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProviderFactoryRegistry, ProviderFactoryRegistry>();
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
+        services.AddSingleton<GoogleGenerationProductionEvidenceResolver>();
         services.AddSingleton<StrictJsonObjectReader>();
         services.AddSingleton<ExactPricingControlMaterialInspector>();
         services.AddSingleton<V222ControlSet>();
@@ -100,6 +101,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
         services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
+        services.AddSingleton<ITransientCredentialResolver, VaultBackedTransientCredentialResolver>();
         services.AddSingleton<IGenerationPrivateCacheKeyProvider, VaultBackedGenerationPrivateCacheKeyProvider>();
     }
 

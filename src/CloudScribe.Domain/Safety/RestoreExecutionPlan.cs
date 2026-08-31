@@ -13,8 +13,8 @@ public sealed record RestoreExecutionPlan(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(restoreRoot);
         ArgumentNullException.ThrowIfNull(manifest);
-        if (maximumTotalBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumTotalBytes));
-        if (maximumFiles <= 0) throw new ArgumentOutOfRangeException(nameof(maximumFiles));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumTotalBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumFiles);
 
         manifest = manifest.Validate();
         if (manifest.Files.Count > maximumFiles)

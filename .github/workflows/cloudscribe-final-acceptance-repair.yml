@@ -1,0 +1,230 @@
+name: CloudScribe Final acceptance repair
+
+on:
+  push:
+    branches:
+      - repair/final-1.0.0-shell-integration
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Locked restore
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+
+      - name: Formatting and strict Release build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+
+      - name: Complete compiled solution tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Complete compiled solution test suite failed.' }
+
+      - name: Final release source acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'src/CloudScribe.App/CloudScribe.App.csproj' -Raw
+          $properties = $project.Project.PropertyGroup | Select-Object -First 1
+          if ($properties.Version -ne '1.0.0') { throw "Version is $($properties.Version), expected 1.0.0." }
+          if ($properties.InformationalVersion -ne '1.0.0') { throw "InformationalVersion is $($properties.InformationalVersion), expected 1.0.0." }
+          if ($properties.FileVersion -ne '1.0.0.0') { throw "FileVersion is $($properties.FileVersion), expected 1.0.0.0." }
+          if ($properties.AssemblyVersion -ne '1.0.0.0') { throw "AssemblyVersion is $($properties.AssemblyVersion), expected 1.0.0.0." }
+
+          $session = Get-Content 'SESSION_STATE.json' -Raw | ConvertFrom-Json
+          if ($session.repository_version -ne '1.0.0') { throw "SESSION_STATE repository_version is $($session.repository_version)." }
+          if ($session.controlling_package_version -ne '2.23') { throw "SESSION_STATE controlling_package_version is $($session.controlling_package_version)." }
+          if ($session.blueprint_version -ne '2.23') { throw "SESSION_STATE blueprint_version is $($session.blueprint_version)." }
+          if ([int]$session.current_stage -ne 8) { throw "SESSION_STATE current_stage is $($session.current_stage)." }
+          if ([bool]$session.stage_gate_passed) { throw 'Final repair state must not self-certify before acceptance completes.' }
+          if ([bool]$session.whole_application_final_claimed) { throw 'Final repair state must not claim whole-application Final before certification completes.' }
+
+          $composition = Get-Content 'src/CloudScribe.App/Composition/CompositionRoot.cs' -Raw
+          @(
+            'viewModel.ApplyFinalReleasePresentation();',
+            'viewModel.ConfigureStage6GoogleGeneration(',
+            'viewModel.ConfigureStage7VoiceLabCatalog(',
+            'viewModel.ConfigureStage7VoiceLabAudition(',
+            'viewModel.ConfigureStage8RestoreRecovery('
+          ) | ForEach-Object {
+            if (-not $composition.Contains($_, [System.StringComparison]::Ordinal)) {
+              throw "Production composition is missing required Final wiring: $_"
+            }
+          }
+
+          @(
+            'src/CloudScribe.App/ViewModels/ShellViewModel.Stage6GoogleGeneration.cs',
+            'src/CloudScribe.Application/Generation/GoogleGenerationQueueCoordinator.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleGenerationProvider.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleGenerationHttpTransport.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleGenerationSpendAuthorization.cs',
+            'src/CloudScribe.Infrastructure/Generation/VaultBackedTransientCredentialResolver.cs',
+            'tests/CloudScribe.Infrastructure.Tests/VaultBackedTransientCredentialResolverTests.cs'
+          ) | ForEach-Object {
+            if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) {
+              throw "Certified Stage6 production runtime is missing from Final source: $_"
+            }
+          }
+
+          $di = Get-Content 'src/CloudScribe.Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs' -Raw
+          if (-not $di.Contains('services.AddSingleton<ITransientCredentialResolver, VaultBackedTransientCredentialResolver>();', [System.StringComparison]::Ordinal)) {
+            throw 'Fail-closed Stage6 transient credential resolver is not registered in production DI.'
+          }
+
+          $resolver = Get-Content 'src/CloudScribe.Infrastructure/Generation/VaultBackedTransientCredentialResolver.cs' -Raw
+          @(
+            'ICredentialVault',
+            'CredentialReference',
+            'CredentialSecret',
+            'string.IsNullOrWhiteSpace'
+          ) | ForEach-Object {
+            if (-not $resolver.Contains($_, [System.StringComparison]::Ordinal)) {
+              throw "Stage6 credential resolver lost required fail-closed implementation element: $_"
+            }
+          }
+          @(
+            'DefaultAzureCredential',
+            'GoogleCredential.GetApplicationDefault',
+            'Environment.GetEnvironmentVariable',
+            'interactive',
+            'silent refresh'
+          ) | ForEach-Object {
+            if ($resolver.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "Stage6 credential resolver contains forbidden ambient/discovery behavior: $_"
+            }
+          }
+
+          $stage3Mount = Get-Content 'src/CloudScribe.App/MainWindow.Stage3Library.cs' -Raw
+          @(
+            'window.Opened += HandleStage3WindowOpened;',
+            'nameof(ShellViewModel.LifecycleDescription)',
+            'LOCAL AUTOSAVE'
+          ) | ForEach-Object {
+            if (-not $stage3Mount.Contains($_, [System.StringComparison]::Ordinal)) {
+              throw "Durable workspace runtime repair is incomplete: $_"
+            }
+          }
+
+          $releasePresentation = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.FinalReleasePresentation.cs' -Raw
+          @(
+            'arrive in Stage 3',
+            'arrives in Stage 3',
+            'introduced in Stage 5',
+            'generation engine incomplete',
+            'exact v2.22',
+            'schema 1.1.5/seed',
+            'STAGE 2 PREVIEW',
+            'UNSAVED PREVIEW'
+          ) | ForEach-Object {
+            if ($releasePresentation.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "Stale staged release copy remains in active Final presentation: $_"
+            }
+          }
+          @(
+            'DocumentTitle = "CloudScribe Pro Local Workspace";',
+            'Provider-backed generation is available only through the production safety gates.',
+            'OutlineEntries.Clear();'
+          ) | ForEach-Object {
+            if (-not $releasePresentation.Contains($_, [System.StringComparison]::Ordinal)) {
+              throw "Final seeded-document repair is incomplete: $_"
+            }
+          }
+
+          $shellSource = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.cs' -Raw
+          @(
+            'This Stage 2 workspace demonstrates',
+            'Generation is not enabled yet',
+            'Durable document creation arrives in Stage 3',
+            'Retry and recovery actions become durable in Stage 3'
+          ) | ForEach-Object {
+            if ($shellSource.Contains($_, [System.StringComparison]::OrdinalIgnoreCase) -and -not $releasePresentation.Contains('DocumentTitle = "CloudScribe Pro Local Workspace";', [System.StringComparison]::Ordinal)) {
+              throw "Historical staged shell seed is not overridden by the active Final presentation: $_"
+            }
+          }
+
+          $pricing = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.Pricing.cs' -Raw
+          @('exact v2.22', 'exact schema 1.1.5/seed', 'seed bytes still required') | ForEach-Object {
+            if ($pricing.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "Async pricing refresh can restore legacy Final copy: $_"
+            }
+          }
+          @('billable approval remains blocked', 'activation is never automatic') | ForEach-Object {
+            if (-not $pricing.Contains($_, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "Fail-closed pricing invariant is missing: $_"
+            }
+          }
+
+      - name: Publish Windows executable and verify embedded version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $publish = Join-Path $env:RUNNER_TEMP 'cloudscribe-final-publish'
+          dotnet publish src/CloudScribe.App/CloudScribe.App.csproj -c Release --no-restore --no-build -o $publish
+          if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed.' }
+          $exe = Join-Path $publish 'CloudScribe.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'CloudScribe.exe was not published.' }
+          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+          if ($version.FileVersion -ne '1.0.0.0') { throw "Published FileVersion is $($version.FileVersion)." }
+          if (-not $version.ProductVersion.StartsWith('1.0.0', [System.StringComparison]::Ordinal)) {
+            throw "Published ProductVersion is $($version.ProductVersion)."
+          }
+          "CLOUDSCRIBE_FINAL_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Exercise runnable Windows output
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $process = Start-Process -FilePath $env:CLOUDSCRIBE_FINAL_EXE -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            if ($process.HasExited) {
+              if ($process.ExitCode -ne 0) {
+                throw "Published CloudScribe.exe exited during startup smoke with code $($process.ExitCode)."
+              }
+              throw 'Published CloudScribe.exe exited unexpectedly during the startup smoke window.'
+            }
+          }
+          finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+              $process.WaitForExit()
+            }
+          }
+
+      - name: Exact source no-mutation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (git status --porcelain=v1) {
+            git status --short
+            throw 'Validation mutated the checked-out source tree.'
+          }

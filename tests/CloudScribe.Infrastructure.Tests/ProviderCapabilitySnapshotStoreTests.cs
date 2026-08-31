@@ -48,7 +48,8 @@ public sealed class ProviderCapabilitySnapshotStoreTests
     {
         await using Fixture fixture = await Fixture.CreateAsync().ConfigureAwait(true);
         CredentialReference oldCredential = new("fake.primary.old-key");
-        ProviderAccountReference original = new("fake", "primary", "Original", oldCredential, "default", "global");
+        Uri originalOrigin = new("https://speech.example.test/");
+        ProviderAccountReference original = new("fake", "primary", "Original", oldCredential, "default", "global", originalOrigin);
         ProviderAccountSnapshot account = await fixture.Accounts
             .CreateAsync(original, isEnabled: true, cancellationToken: TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
@@ -57,7 +58,14 @@ public sealed class ProviderCapabilitySnapshotStoreTests
             new DateTimeOffset(2026, 8, 17, 7, 0, 0, TimeSpan.Zero),
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        ProviderAccountReference renamed = new("fake", "primary", "Renamed", new CredentialReference("fake.primary.new-key"), "secondary", "eu-west1");
+        ProviderAccountReference renamed = new(
+            "fake",
+            "primary",
+            "Renamed",
+            new CredentialReference("fake.primary.new-key"),
+            "secondary",
+            "eu-west1",
+            new Uri("https://speech-eu.example.test/"));
         await fixture.Accounts.UpdateAsync(
             renamed, isEnabled: false, expectedRevision: account.Revision, cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
 
@@ -69,6 +77,8 @@ public sealed class ProviderCapabilitySnapshotStoreTests
         Assert.Equal(oldCredential.TargetName, historical?.Snapshot.Account.CredentialReference?.TargetName);
         Assert.Equal("default", historical?.Snapshot.Account.EndpointId);
         Assert.Equal("global", historical?.Snapshot.Account.RegionId);
+        Assert.Equal(originalOrigin, historical?.Snapshot.Account.EndpointOrigin);
+        Assert.NotEqual(renamed.EndpointOrigin, historical?.Snapshot.Account.EndpointOrigin);
     }
 
     [Fact]

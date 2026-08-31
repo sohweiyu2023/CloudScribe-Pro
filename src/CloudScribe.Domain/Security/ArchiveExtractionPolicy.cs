@@ -4,14 +4,8 @@ public sealed class ArchiveExtractionPolicy
 {
     public ArchiveExtractionPolicy(long maximumEntryBytes, long maximumTotalBytes, int maximumEntries)
     {
-        if (maximumEntryBytes <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumEntryBytes));
-        }
-        if (maximumTotalBytes < maximumEntryBytes)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maximumTotalBytes));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumEntryBytes);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumTotalBytes, maximumEntryBytes);
         if (maximumEntries is < 1 or > 1_000_000)
         {
             throw new ArgumentOutOfRangeException(nameof(maximumEntries));
