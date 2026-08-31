@@ -43,6 +43,43 @@ public sealed class VoiceLabProductionCatalogTransportRevalidationTests
         Assert.Equal(1, providerCalls);
     }
 
+    [Fact]
+    public async Task QueryAsyncRejectsAccountRevisionChangedDuringProviderQuery()
+    {
+        Guid capabilityId = Guid.NewGuid();
+        ProviderAccountSnapshot approvedAccount = CreateAccount();
+        ProviderAccountSnapshot changedAccount = new(
+            approvedAccount.Reference,
+            approvedAccount.IsEnabled,
+            approvedAccount.Revision + 1,
+            approvedAccount.CreatedAtUtc,
+            Now);
+        StoredProviderCapabilitySnapshot capability = CreateCapability(approvedAccount.Reference, capabilityId);
+        VoiceLabCatalogQuery query = new("google", "primary", "project-1", null, "en-US", false);
+        VoiceLabCatalogAuthorizationEvidence approved = CreateEvidence(capabilityId, projectAuthorized: true);
+        int accountLoads = 0;
+        int providerCalls = 0;
+
+        var transport = new VoiceLabProductionCatalogTransport(
+            new SequencedAccountStore(() => ++accountLoads == 1 ? approvedAccount : changedAccount),
+            new CapabilityStore(capability),
+            (_, _) => Task.FromResult<VoiceLabCatalogAuthorizationEvidence?>(approved),
+            (_, _) =>
+            {
+                providerCalls++;
+                return Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([CreateSelection(capabilityId)]);
+            },
+            new FixedTimeProvider(Now));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => transport.QueryAsync(
+            query,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("account revision", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, accountLoads);
+        Assert.Equal(1, providerCalls);
+    }
+
     private static VoiceLabCatalogAuthorizationEvidence CreateEvidence(Guid capabilityId, bool projectAuthorized) => new(
         "google",
         "primary",
@@ -102,6 +139,24 @@ public sealed class VoiceLabProductionCatalogTransportRevalidationTests
 
         public Task<IReadOnlyList<ProviderAccountSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProviderAccountSnapshot>>([account]);
+    }
+
+    private sealed class SequencedAccountStore(Func<ProviderAccountSnapshot> nextAccount) : IProviderAccountStore
+    {
+        public Task<ProviderAccountSnapshot> CreateAsync(ProviderAccountReference accountReference, bool isEnabled, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderAccountSnapshot> UpdateAsync(ProviderAccountReference accountReference, bool isEnabled, long expectedRevision, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderAccountSnapshot?> FindAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<ProviderAccountSnapshot?>(nextAccount());
+        }
+
+        public Task<IReadOnlyList<ProviderAccountSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class CapabilityStore(StoredProviderCapabilitySnapshot capability) : IProviderCapabilitySnapshotStore
