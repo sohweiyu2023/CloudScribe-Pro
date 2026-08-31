@@ -34,13 +34,19 @@ public sealed class RestoreRecoveryExecutionCompositionFactory
             .ReadAsync(authenticationKeyReference, cancellationToken)
             .ConfigureAwait(false);
         if (secret is null)
+        {
             throw new InvalidOperationException("Restore recovery journal authentication key is not available in the credential vault.");
+        }
 
-        byte[] keyBytes = Encoding.UTF8.GetBytes(secret.Value.Span);
+        ReadOnlySpan<char> secretChars = secret.Value.Span;
+        byte[] keyBytes = GC.AllocateUninitializedArray<byte>(Encoding.UTF8.GetByteCount(secretChars));
+        Encoding.UTF8.GetBytes(secretChars, keyBytes);
         try
         {
             if (keyBytes.Length < 32)
+            {
                 throw new InvalidOperationException("Restore recovery journal authentication key must contain at least 256 bits of UTF-8 key material.");
+            }
 
             var journalStore = new FileAuthenticatedRestoreRecoveryJournalStore(journalPath, keyBytes);
             try
