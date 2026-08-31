@@ -96,9 +96,9 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
                     : new CredentialSecret((char[])_secret.Clone()));
         }
 
-        public ValueTask DeleteAsync(
+        public ValueTask<bool> DeleteAsync(
             CredentialReference reference,
             CancellationToken cancellationToken = default) =>
-            ValueTask.CompletedTask;
+            ValueTask.FromResult(false);
     }
 }
