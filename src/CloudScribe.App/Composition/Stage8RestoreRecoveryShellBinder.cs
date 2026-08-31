@@ -17,14 +17,9 @@ public static class Stage8RestoreRecoveryShellBinder
         AtomicVerifiedRestoreExecutor restoreExecutor,
         Func<CancellationToken, Task<RestoreExecutionPlan>> captureCurrentPlanAsync)
     {
-        ArgumentNullException.ThrowIfNull(viewModel);
-        ArgumentNullException.ThrowIfNull(compositionFactory);
-        ArgumentNullException.ThrowIfNull(authenticationKeyReference);
         ArgumentException.ThrowIfNullOrWhiteSpace(journalPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(backupRoot);
-        ArgumentNullException.ThrowIfNull(restoreExecutor);
-        ArgumentNullException.ThrowIfNull(captureCurrentPlanAsync);
 
         if (!Path.IsPathFullyQualified(journalPath) ||
             !Path.IsPathFullyQualified(stagingRoot) ||
@@ -32,6 +27,12 @@ public static class Stage8RestoreRecoveryShellBinder
         {
             throw new InvalidOperationException("Stage 8 restore recovery paths must be explicitly fully qualified.");
         }
+
+        ArgumentNullException.ThrowIfNull(viewModel);
+        ArgumentNullException.ThrowIfNull(compositionFactory);
+        ArgumentNullException.ThrowIfNull(authenticationKeyReference);
+        ArgumentNullException.ThrowIfNull(restoreExecutor);
+        ArgumentNullException.ThrowIfNull(captureCurrentPlanAsync);
 
         string absoluteJournalPath = Path.GetFullPath(journalPath);
         string absoluteStagingRoot = Path.GetFullPath(stagingRoot);
