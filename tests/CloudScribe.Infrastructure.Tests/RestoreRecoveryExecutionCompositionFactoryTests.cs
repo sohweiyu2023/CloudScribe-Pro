@@ -58,6 +58,30 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
         Assert.False(File.Exists(journalPath));
     }
 
+    [Fact]
+    public async Task CreateAsyncHonorsCancellationBeforeCredentialAccess()
+    {
+        var reference = new CredentialReference("CloudScribe/RestoreRecovery/TestAuthenticationKey");
+        var vault = new TestCredentialVault("0123456789abcdef0123456789abcdef".ToCharArray());
+        var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
+        string journalPath = CreateUnusedJournalPath();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => factory.CreateAsync(
+                reference,
+                journalPath,
+                Path.GetTempPath(),
+                Path.GetTempPath(),
+                new AtomicVerifiedRestoreExecutor(),
+                cancellation.Token));
+
+        Assert.Equal(0, vault.ReadCount);
+        Assert.Null(vault.LastReadReference);
+        Assert.False(File.Exists(journalPath));
+    }
+
     private static string CreateUnusedJournalPath() =>
         Path.Combine(
             Path.GetTempPath(),
