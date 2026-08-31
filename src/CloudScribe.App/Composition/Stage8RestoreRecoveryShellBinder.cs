@@ -1,7 +1,7 @@
 using CloudScribe.App.ViewModels;
-using CloudScribe.Application.Security;
 using CloudScribe.Domain.Safety;
 using CloudScribe.Infrastructure.Safety;
+using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.App.Composition;
 
