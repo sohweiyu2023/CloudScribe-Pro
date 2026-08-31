@@ -54,6 +54,7 @@ public sealed class VoiceLabProductionCatalogTransport
             capabilityEvidenceId,
             endpointOrigin,
             cancellationToken).ConfigureAwait(false);
+        await RevalidateCurrentBindingsAsync(query, evidence, cancellationToken).ConfigureAwait(false);
         ValidateResults(results, query, capabilityEvidenceId, cancellationToken);
         return results;
     }
@@ -90,6 +91,27 @@ public sealed class VoiceLabProductionCatalogTransport
         if (capability.IsStale(_timeProvider.GetUtcNow()))
             throw new InvalidOperationException("Voice Lab catalog capability evidence is stale.");
         return capability;
+    }
+
+    private async Task RevalidateCurrentBindingsAsync(
+        VoiceLabCatalogQuery query,
+        VoiceLabCatalogAuthorizationEvidence approvedEvidence,
+        CancellationToken cancellationToken)
+    {
+        VoiceLabCatalogAuthorizationEvidence currentEvidence = await LoadAuthorizationAsync(query, cancellationToken).ConfigureAwait(false);
+        if (!Equals(currentEvidence, approvedEvidence))
+            throw new InvalidOperationException("Voice Lab catalog authorization evidence changed during provider query.");
+
+        ProviderAccountSnapshot account = await LoadAccountAsync(query, cancellationToken).ConfigureAwait(false);
+        VoiceLabCatalogQueryPolicy.RequireAuthorized(
+            query,
+            account.IsEnabled,
+            currentEvidence.ProjectAuthorized,
+            currentEvidence.PrivateVoiceAccessAuthorized);
+        _ = ValidateAccountBinding(account, currentEvidence);
+
+        StoredProviderCapabilitySnapshot capability = await LoadCapabilityAsync(query, cancellationToken).ConfigureAwait(false);
+        _ = ValidateCapabilityBinding(capability, currentEvidence);
     }
 
     private static string ValidateAccountBinding(
