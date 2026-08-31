@@ -3,10 +3,6 @@ using CloudScribe.Domain.Safety;
 
 namespace CloudScribe.Infrastructure.Safety;
 
-public sealed record RestoreRecoveryContext(
-    RestoreRecoveryState State,
-    RestoreTransactionJournal Journal);
-
 public sealed class RestoreRecoveryStateResolver
 {
     private readonly FileAuthenticatedRestoreRecoveryJournalStore _journalStore;
