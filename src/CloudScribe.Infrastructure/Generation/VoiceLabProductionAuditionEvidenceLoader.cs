@@ -41,8 +41,9 @@ public sealed class VoiceLabProductionAuditionEvidenceLoader
         if (evidence is null)
             return null;
 
-        evidence.Validate();
-
+        if (evidence.Selection is null)
+            throw new InvalidOperationException("Voice Lab audition authorization requires a catalog selection.");
+        evidence.Selection.Validate();
         if (!Equals(evidence.Selection, request.Selection))
             throw new InvalidOperationException("Voice Lab audition authorization selection changed after the request was bound.");
 
@@ -55,9 +56,16 @@ public sealed class VoiceLabProductionAuditionEvidenceLoader
         if (!account.IsEnabled)
             throw new InvalidOperationException("Voice Lab audition provider account is disabled.");
 
-        // The persisted account snapshot is authoritative for revision binding. Do not
-        // trust a compatibility/default revision supplied by UI or caller evidence.
-        evidence = evidence with { AccountRevision = account.Revision };
+        Uri endpointOrigin = account.Reference.EndpointOrigin
+            ?? throw new InvalidOperationException("Voice Lab audition provider account has no explicit endpoint origin.");
+
+        // The persisted account snapshot is authoritative for both revision and endpoint
+        // binding. Do not trust compatibility/default values supplied by UI or caller evidence.
+        evidence = evidence with
+        {
+            AccountRevision = account.Revision,
+            EndpointOrigin = endpointOrigin,
+        };
         evidence.Validate();
 
         string credentialReferenceId = account.Reference.CredentialReference?.TargetName
