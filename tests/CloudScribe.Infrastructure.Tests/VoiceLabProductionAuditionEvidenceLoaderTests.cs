@@ -9,6 +9,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 31, 0, 0, 0, TimeSpan.Zero);
+    private static readonly Uri EndpointOrigin = new("https://texttospeech.googleapis.com", UriKind.Absolute);
 
     [Fact]
     public async Task LoadAsyncReturnsEvidenceBoundToCurrentProviderStores()
@@ -29,7 +30,27 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
             request,
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.Same(evidence, resolved);
+        Assert.NotNull(resolved);
+        Assert.Equal(account.Revision, resolved.AccountRevision);
+        Assert.Equal(EndpointOrigin, resolved.EndpointOrigin);
+        Assert.Equal(evidence.Selection, resolved.Selection);
+        Assert.Equal(evidence.CredentialReferenceId, resolved.CredentialReferenceId);
+    }
+
+    [Fact]
+    public async Task LoadAsyncRejectsProviderAccountWithoutExplicitEndpointOrigin()
+    {
+        Guid capabilityId = Guid.NewGuid();
+        ProviderAccountSnapshot account = CreateAccount("credential.current", isEnabled: true, endpointOrigin: null);
+        StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
+        VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId, "credential.current");
+        var loader = CreateLoader(account, capability, evidence);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(
+            CreateRequest(evidence.Selection),
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("explicit endpoint origin", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -40,18 +61,22 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
         VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId, "credential.current");
         VoiceLabCatalogSelection changedSelection = evidence.Selection with { VoiceStableId = "voice-2" };
-        VoiceLabAuditionRequest request = CreateRequest(changedSelection);
         var loader = CreateLoader(account, capability, evidence);
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(
-            request,
+            CreateRequest(changedSelection),
             TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
         Assert.Contains("selection changed", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public async Task LoadAsyncRejectsRequestWithRevokedSpendApprovalBeforeLoadingEvidence()
+    [Theory]
+    [InlineData(false, true, "spend approval")]
+    [InlineData(true, false, "pricing")]
+    public async Task LoadAsyncRejectsRevokedRequestEvidenceBeforeLoadingAuthorization(
+        bool spendApproved,
+        bool pricingCurrent,
+        string expectedMessage)
     {
         Guid capabilityId = Guid.NewGuid();
         ProviderAccountSnapshot account = CreateAccount("credential.current", isEnabled: true);
@@ -67,40 +92,17 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
                 return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence);
             },
             new FixedTimeProvider(Now));
-        VoiceLabAuditionRequest request = CreateRequest(evidence.Selection) with { ExplicitSpendApproved = false };
+        VoiceLabAuditionRequest request = CreateRequest(evidence.Selection) with
+        {
+            ExplicitSpendApproved = spendApproved,
+            PricingCurrent = pricingCurrent,
+        };
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(
             request,
             TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
-        Assert.Contains("spend approval", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(0, evidenceLoads);
-    }
-
-    [Fact]
-    public async Task LoadAsyncRejectsRequestWithStalePricingBeforeLoadingEvidence()
-    {
-        Guid capabilityId = Guid.NewGuid();
-        ProviderAccountSnapshot account = CreateAccount("credential.current", isEnabled: true);
-        StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
-        VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId, "credential.current");
-        int evidenceLoads = 0;
-        var loader = new VoiceLabProductionAuditionEvidenceLoader(
-            new AccountStore(account),
-            new CapabilityStore(capability),
-            (_, _) =>
-            {
-                evidenceLoads++;
-                return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence);
-            },
-            new FixedTimeProvider(Now));
-        VoiceLabAuditionRequest request = CreateRequest(evidence.Selection) with { PricingCurrent = false };
-
-        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(
-            request,
-            TestContext.Current.CancellationToken)).ConfigureAwait(true);
-
-        Assert.Contains("pricing", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, evidenceLoads);
     }
 
@@ -162,14 +164,20 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
         (_, _) => Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence),
         new FixedTimeProvider(Now));
 
-    private static ProviderAccountSnapshot CreateAccount(string credentialReferenceId, bool isEnabled)
+    private static ProviderAccountSnapshot CreateAccount(
+        string credentialReferenceId,
+        bool isEnabled,
+        Uri? endpointOrigin = null,
+        bool useDefaultEndpoint = true)
     {
+        Uri? resolvedEndpoint = useDefaultEndpoint ? endpointOrigin ?? EndpointOrigin : endpointOrigin;
         ProviderAccountReference reference = new(
             "google",
             "primary",
             "Google primary",
-            new CredentialReference(credentialReferenceId));
-        return new ProviderAccountSnapshot(reference, isEnabled, 1, Now.AddDays(-1), Now.AddHours(-1));
+            new CredentialReference(credentialReferenceId),
+            endpointOrigin: resolvedEndpoint);
+        return new ProviderAccountSnapshot(reference, isEnabled, 2, Now.AddDays(-1), Now.AddHours(-1));
     }
 
     private static StoredProviderCapabilitySnapshot CreateCapability(
@@ -221,41 +229,29 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
 
     private sealed class AccountStore(ProviderAccountSnapshot? account) : IProviderAccountStore
     {
-        public Task<ProviderAccountSnapshot> CreateAsync(ProviderAccountReference accountReference, bool isEnabled, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<ProviderAccountSnapshot> UpdateAsync(ProviderAccountReference accountReference, bool isEnabled, long expectedRevision, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
+        public Task<ProviderAccountSnapshot> CreateAsync(ProviderAccountReference accountReference, bool isEnabled, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<ProviderAccountSnapshot> UpdateAsync(ProviderAccountReference accountReference, bool isEnabled, long expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<ProviderAccountSnapshot?> FindAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(account is not null &&
                 string.Equals(account.Reference.ProviderStableId, providerStableId, StringComparison.Ordinal) &&
-                string.Equals(account.Reference.AccountId, accountId, StringComparison.Ordinal)
-                ? account
-                : null);
+                string.Equals(account.Reference.AccountId, accountId, StringComparison.Ordinal) ? account : null);
         }
-
         public Task<IReadOnlyList<ProviderAccountSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProviderAccountSnapshot>>(account is null ? [] : [account]);
     }
 
     private sealed class CapabilityStore(StoredProviderCapabilitySnapshot? capability) : IProviderCapabilitySnapshotStore
     {
-        public Task<StoredProviderCapabilitySnapshot> SaveAsync(ProviderCapabilitySnapshot snapshot, DateTimeOffset expiresAtUtc, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
+        public Task<StoredProviderCapabilitySnapshot> SaveAsync(ProviderCapabilitySnapshot snapshot, DateTimeOffset expiresAtUtc, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<StoredProviderCapabilitySnapshot?> GetLatestAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(capability is not null &&
                 string.Equals(capability.Snapshot.Account.ProviderStableId, providerStableId, StringComparison.Ordinal) &&
-                string.Equals(capability.Snapshot.Account.AccountId, accountId, StringComparison.Ordinal)
-                ? capability
-                : null);
+                string.Equals(capability.Snapshot.Account.AccountId, accountId, StringComparison.Ordinal) ? capability : null);
         }
-
         public Task<IReadOnlyList<StoredProviderCapabilitySnapshot>> ListRecentAsync(string providerStableId, string accountId, int maximumCount = 20, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<StoredProviderCapabilitySnapshot>>(capability is null ? [] : [capability]);
     }
