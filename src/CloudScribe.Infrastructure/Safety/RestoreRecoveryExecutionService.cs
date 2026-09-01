@@ -22,10 +22,24 @@ public sealed class RestoreRecoveryExecutionService
         _journalStore = journalStore ?? throw new ArgumentNullException(nameof(journalStore));
         _restoreExecutor = restoreExecutor ?? throw new ArgumentNullException(nameof(restoreExecutor));
         ArgumentException.ThrowIfNullOrWhiteSpace(backupRoot);
+        if (!Path.IsPathFullyQualified(backupRoot))
+            throw new InvalidOperationException("Restore recovery backup root must be explicitly fully qualified.");
         _backupRoot = Path.GetFullPath(backupRoot);
-        if (!Path.IsPathFullyQualified(_backupRoot))
-            throw new InvalidOperationException("Restore recovery backup root must resolve to an absolute path.");
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    }
+
+    public async Task<string?> RecoverPersistedAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RestoreTransactionJournal? journal = await _journalStore
+            .LoadAuthenticatedAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (journal is null)
+            return null;
+
+        RestoreExecutionPlan plan = journal.RequirePersistedPlan();
+        return await RecoverAsync(plan, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<string?> RecoverAsync(
