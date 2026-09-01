@@ -2,33 +2,29 @@ CloudScribe Pro Stage7 handover — 2026-09-01
 
 Baseline: v2.23 controlling baseline.
 Branch: agent/stage7-fast-track
-Main observed immediately before this handover: 14f85105f111d59e9693174153b5236bafe6f990
-Stage6 observed immediately before this handover: 9a63f5432fcfe3781c56b05f9220909939b1100a; exact Windows fast-track run 33492055292 PASS.
-Stage8 observed immediately before this handover: 4e3ef9ca668a4f470b761eeae91e20fbff53b165; focused Windows acceptance PASS.
-Stage7 substantive source/test head before this handover: 29537d20c72ec1a33c6164572d172b688c50b88f.
+Main observed before latest mutation: 14f85105f111d59e9693174153b5236bafe6f990
+Stage6: 9a63f5432fcfe3781c56b05f9220909939b1100a; exact Windows fast-track run 33492055292 PASS.
+Stage8: 4e3ef9ca668a4f470b761eeae91e20fbff53b165; focused Windows acceptance PASS.
+Latest substantive Stage7 source/test head: ca557fcbdb0ef0e2bb811274d59fa1054f98a25e.
 
-This run:
-1. Verified repaired evidence-aware Stage7 transport run 33507588655 PASS, including Strict Stage 7 fast-track validation.
-2. 484dfbb97f16da4a2cd4f0bdf289445123f3abc3 — VoiceLabAuditionAuthorizationEvidence now carries EndpointOrigin and validates a bound endpoint as explicit absolute HTTPS scheme+authority with no credentials/query/fragment.
-3. 743e6cf3e1323d86e23b4b0597cdd20e7081098d — VoiceLabProductionAuditionEvidenceLoader now loads endpoint origin from the current persisted ProviderAccountSnapshot, fails closed when no explicit endpoint exists, and binds both persisted account revision and endpoint before final authorization validation. Caller-provided/default endpoint data is not trusted.
-4. 29537d20c72ec1a33c6164572d172b688c50b88f — focused loader tests migrated to explicit production endpoint evidence and assert persisted revision/endpoint binding; a missing-endpoint rejection regression was added.
+Landed this run:
+- Verified Stage7 evidence-aware audition transport run 33507588655 PASS.
+- 484dfbb97f16da4a2cd4f0bdf289445123f3abc3: VoiceLabAuditionAuthorizationEvidence carries EndpointOrigin and validates explicit HTTPS scheme+authority endpoints with no credentials/query/fragment.
+- 743e6cf3e1323d86e23b4b0597cdd20e7081098d: VoiceLabProductionAuditionEvidenceLoader binds endpoint origin and account revision from the current persisted ProviderAccountSnapshot, rejects accounts without explicit endpoint origin, then validates credential and current capability evidence before returning authorization evidence.
+- 29537d20c72ec1a33c6164572d172b688c50b88f: focused loader tests migrated to explicit endpoint evidence and assert persisted revision/endpoint rebinding.
+- ca557fcbdb0ef0e2bb811274d59fa1054f98a25e: corrected the missing-endpoint regression fixture so it genuinely constructs an account with no endpoint rather than silently taking the helper's default endpoint.
 
-Safety boundary now:
-approval -> current evidence resolution -> persisted account lookup -> enabled-account check -> persisted account revision + endpoint-origin binding -> credential-reference check -> current capability lookup/freshness/identity check -> exact authorization revalidation -> evidence-aware provider transport. The endpoint cannot be sourced from process state, a hardcoded provider URL, or a raw submit callback.
+Safety boundary:
+approval -> current evidence -> persisted account -> enabled check -> persisted revision + endpoint bind -> credential check -> current capability freshness/identity -> exact authorization revalidation -> evidence-aware provider transport. No ambient endpoint, hardcoded authorization, or request-only raw submit path is introduced.
 
 CI:
-- Stage7 run 33507588655 for 5c01bb2ea791b85b56bebb6a960928732877ba87: PASS.
-- Stage7 run 33514009580 for intermediate endpoint source SHA 743e6cf3e1323d86e23b4b0597cdd20e7081098d: FAIL in strict validation; this predated the focused fixture migration.
-- Stage7 exact run 33514184520 for 29537d20c72ec1a33c6164572d172b688c50b88f: RUNNING in strict validation at handover creation; do not infer PASS.
+- 5c01bb2ea791b85b56bebb6a960928732877ba87 / run 33507588655: PASS.
+- 743e6cf3e1323d86e23b4b0597cdd20e7081098d / run 33514009580: FAIL strict validation before fixture migration.
+- 29537d20c72ec1a33c6164572d172b688c50b88f / run 33514184520: FAIL strict validation; check run reports two annotations but connector cannot fetch annotation endpoint.
+- ca557fcbdb0ef0e2bb811274d59fa1054f98a25e / run 33514528680: RUNNING at this handover; do not infer PASS.
 
-Current completion:
-- Stage0-5: 100%.
-- Stage6: ~92%; production request/revision/pricing/spend/trust/queue/reconciliation composition still incomplete.
-- Stage7: ~96%; endpoint trust is now part of audition evidence, but genuine registry-backed provider VoiceLab catalog/audition capability and CompositionRoot ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition remain incomplete.
-- Stage8: ~99%; production source composition/focused acceptance passed, Final serial gates remain blocked by Stage6/7.
+Completion:
+Stage0-5 100%; Stage6 ~92%; Stage7 ~96%; Stage8 ~99%. Stage7 still needs genuine IProviderFactoryRegistry-backed VoiceLab catalog/audition capability plus production ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition. Stage6 still needs request/revision/pricing/spend/trust/queue/reconciliation composition. Final serial gates have NOT started.
 
-Next exact gates:
-1. Inspect run 33514184520 and repair its first exact formatter/compiler/test failure if non-green.
-2. Continue provider-neutral VoiceLab capability plus IProviderFactoryRegistry-backed catalog/audition transport. Fail closed if factory missing, adapter provider identity differs, or adapter lacks the VoiceLab capability. Preserve the fresh authorization evidence through final submit.
-3. Continue Stage6 independently while Stage7 CI executes.
-4. Only after Stage6-8 production composition all pass: full compiled tests -> Final source acceptance -> exact Windows 1.0.0 publish/version -> execute actual CloudScribe.exe -> exact source no-mutation -> freeze SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final/main promotion.
+Next exact gate:
+Inspect run 33514528680 and repair its first exact failure if non-green. If green, implement the provider-neutral VoiceLab adapter capability and registry-backed catalog/audition transport that fails closed for missing factory, provider identity mismatch, or adapter lacking VoiceLab capability, then wire Stage7 production composition. Continue Stage6 independently. Final/main promotion remains prohibited until all required gates pass.
