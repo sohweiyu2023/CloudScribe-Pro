@@ -2,29 +2,26 @@ CloudScribe Pro Stage7 handover — 2026-09-01
 
 Baseline: v2.23 controlling baseline.
 Branch: agent/stage7-fast-track
-Substantive source/test head before this handover: 7e6bcc373c93d689acb608c7c497b798700c81d5
-Main observed unchanged: 14f85105f111d59e9693174153b5236bafe6f990
-Stage6 observed: 5c499209793fa6f40c0dad5b4a14669ed81fa50f
-Stage8 observed: 1041e433fe242505db9660ec16caa892f08c9f1b
+Substantive source/test head before this handover: d9009f3aa0c3582ec6226e79c7bddfb578565601
+Main observed unchanged this run: 14f85105f111d59e9693174153b5236bafe6f990
+Stage6 observed: 9a63f5432fcfe3781c56b05f9220909939b1100a; exact-head Windows fast-track run 33492055292 completed successfully.
+Stage8 observed before its independent CI-gate repair: 1041e433fe242505db9660ec16caa892f08c9f1b.
 
 Landed this run:
-1. bfe2af1f60f558a7c76fcd5ba940826f5c37aa1e — VoiceLabProductionAuditionEvidenceLoader now treats the current persisted ProviderAccountSnapshot as authoritative for AccountRevision and binds that revision into returned authorization evidence instead of trusting the compatibility/default caller value.
-2. 075e466872d22f45c26922133a46ee3d8e3c237a — focused infrastructure test proves caller evidence using the compatibility revision is rebound to the actual persisted account revision.
-3. 7e6bcc373c93d689acb608c7c497b798700c81d5 — executor-level regression proves an account revision change after approval but before provider submission changes current authorization evidence and rejects submission with zero provider transport calls.
+1. 86c084b6cf4716a56a62ccc71c34916121102289 — VoiceLabEvidenceAuthorizedAuditionExecutor no longer discards freshly revalidated authorization evidence before provider submission. Its transport delegate now receives the exact VoiceLabAuditionAuthorizationEvidence resolved and equality-checked immediately before submission.
+2. 86b89f78d46c17d6f344b63553dcf0a0e350ee12 — VoiceLabProductionAuthorizedAuditionExecutorFactory migrated to the evidence-aware transport contract; the production factory no longer accepts the former request-only raw submit delegate.
+3. d9009f3aa0c3582ec6226e79c7bddfb578565601 — focused application regression asserts that the exact freshly revalidated evidence object is handed to transport, while all authorization-drift cases still produce zero provider calls.
 
 Safety rationale:
-Account revision is now derived at the production evidence boundary from IProviderAccountStore rather than from UI/caller evidence. The request-bound factory resolves evidence once for approval and again immediately before transport; both resolutions bind the then-current persisted revision. Consequently, account revision drift between those two points changes VoiceLabAuditionAuthorizationEvidence record equality and VoiceLabEvidenceAuthorizedAuditionExecutor fails closed before the transport delegate is invoked.
-
-The production path still revalidates enabled account state, credential reference, current capability snapshot/evidence ID, request pricing-current state and explicit spend approval. No raw provider-submit bypass, ambient credential, hardcoded authorization or sync-over-async was introduced.
+The request-bound audition path remains approval -> current evidence resolution -> exact authorization equality/revalidation -> provider transport. The newly resolved current evidence is now carried across the final transport boundary, making credential reference, persisted account revision, capability evidence, pricing evidence, and spend authorization available to the eventual real provider transport without reconstructing or fabricating them. No raw request-only production submit shortcut remains in VoiceLabProductionAuthorizedAuditionExecutorFactory.
 
 Gates:
-- Persisted account revision binding: PASS by source inspection.
-- Executor revision-drift rejection: PASS by source inspection.
-- GitHub Actions exact substantive head 7e6bcc373c93d689acb608c7c497b798700c81d5: RUNNING at handover refresh (workflow run 33486570736); final conclusion must be inspected and first exact failure repaired if non-green.
+- Stage6 exact-head Windows fast-track: PASS (run 33492055292).
+- Stage7 fresh-evidence handoff: PASS by source inspection; compiled exact-head run 33497207379 for d9009f3aa0c3582ec6226e79c7bddfb578565601 is IN PROGRESS at this handover refresh.
 - Stage7 production ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition composition: NOT COMPLETE.
-- Stage6 production composition: NOT COMPLETE.
-- Stage8 production composition: source-wired; compiled acceptance still outstanding.
+- Remaining concrete Stage7 composition seam: IProviderAdapter still exposes only Descriptor; a genuine provider VoiceLab operation contract plus registry-backed catalog/audition transport is still required before CompositionRoot wiring. Do not replace it with callbacks that bypass the evidence-aware authorization boundary.
+- Stage8 production composition: source-wired; independent strict Windows acceptance is being enabled on its actual repair branch.
 - Full compiled tests / Final source acceptance / exact Windows 1.0.0 publish / actual CloudScribe.exe / SHA freeze / strict-full certification / same-SHA no-change certification: NOT RUN.
 
 Next exact Stage7 gate:
-Inspect exact-head Stage7 CI. If green, move to production CompositionRoot wiring: use real VoiceLabProductionCatalogTransport and VoiceLabProductionAuthorizedAuditionExecutorFactory, genuine request/current-evidence capture, and authorized transport only. Wire ConfigureStage7VoiceLabCatalog and ConfigureStage7VoiceLabAudition with fail-closed composition/rejection tests; never route UI directly to raw provider SubmitAsync.
+Inspect run 33497207379 and repair its first exact formatter/compiler/test failure if non-green. If green, define the provider-neutral VoiceLab operation capability in Providers.Abstractions and a registry-backed infrastructure transport that fails closed when the selected provider/account adapter does not implement it. Feed the freshly validated evidence received from VoiceLabEvidenceAuthorizedAuditionExecutor into that transport, then wire ConfigureStage7VoiceLabCatalog and ConfigureStage7VoiceLabAudition with rejection tests.
