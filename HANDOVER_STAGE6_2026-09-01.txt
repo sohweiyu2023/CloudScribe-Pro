@@ -1,0 +1,33 @@
+CloudScribe Pro Stage6 handover — 2026-09-01
+
+Controlling baseline: v2.23
+Final 1.0.0 status: REOPENED. Do not promote main until Stage6-8 production composition and all serial Final gates pass.
+
+LIVE HEADS BEFORE THIS HANDOVER MUTATION
+main: 14f85105f111d59e9693174153b5236bafe6f990
+Stage6 branch: agent/stage6-fast-track @ 1b831118a576f75830dab0afd1fd629040897a99
+Stage7 branch: agent/stage7-fast-track @ 64ebbd077f59a53820cef0826cacb4a674f5cc76
+Stage8 branch: repair/final-stage8-production-parallel @ 1041e433fe242505db9660ec16caa892f08c9f1b
+
+LANDED THIS RUN
+49e272ff6489e8521732bf1e6b9b7438dc7fcdea — GoogleGenerationProductionEvidence now rejects capability evidence when the persisted provider account UpdatedAtUtc is newer than the capability snapshot CapturedAtUtc. This closes revision drift where account revision changed after capability capture even if provider/account/credential/endpoint strings remained identical.
+6626eb08cf9f46e50dca32794382b66d41b51767 — focused regression coverage: a revision-2 persisted Google account updated after capability capture is rejected with refresh-required semantics.
+1b831118a576f75830dab0afd1fd629040897a99 — adds .github/workflows/cloudscribe-stage6-fast-track-check.yml: exact Windows-2025 branch gate with locked restore, format no-change, strict Release build, and focused Stage6 production evidence/transport/spend tests.
+
+CI
+The first exact-head lookup for 1b831118a576f75830dab0afd1fd629040897a99 returned zero instantiated workflow runs immediately after push. Re-query before claiming PASS. Prior repository state had no Stage6 branch-specific fast-track workflow, so earlier Stage6 pushes could not satisfy the exact-CI requirement through a Stage6 gate.
+
+STAGE7 INDEPENDENT FINDING
+The Stage7 substantive SHA 7e6bcc373c93d689acb608c7c497b798700c81d5 has a green Windows Stage7 fast-track run (33486570736), including strict validation.
+Production Configure remains blocked by a concrete missing API boundary, not by Stage6: VoiceLabProductionCatalogTransport and VoiceLabProductionAuthorizedAuditionExecutorFactory still require injected authorization/provider callbacks; IProviderAdapter exposes only ProviderDescriptor and the Providers.Abstractions surface contains no VoiceLab catalog/audition provider transport contract. No persisted project-authorization source was found in the inspected production composition/configuration surfaces. Do not fabricate callbacks, authorization, or raw provider-submit plumbing to force ConfigureStage7VoiceLabCatalog/Audition.
+
+STAGE8
+Production source composition remains advanced on repair/final-stage8-production-parallel. Do not re-promote until compiled acceptance and all Final serial gates pass.
+
+NEXT EXACT STAGE6 GATE
+1. Re-query exact Windows CI for the Stage6 branch head after this handover commit; because this docs commit also matches the Stage6 push trigger, validate its exact SHA rather than an ancestor.
+2. If CI fails, fix the first exact compiler/format/test failure and rerun via a new exact branch-head push.
+3. If green, continue the genuine GoogleGenerationAuthorizedRuntimeEvidence + GoogleGenerationUiExecutionContext production join using current request/revision/pricing/spend/trust/queue/reconciliation evidence; preserve the full authorized executor/coordinator chain and only then wire ConfigureStage6GoogleGeneration.
+
+FINAL SERIAL GATES (ALL STILL PENDING)
+full compiled tests -> Final source acceptance -> Windows publish/version exact 1.0.0 -> run actual CloudScribe.exe -> exact source no-mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final/main re-promotion.
