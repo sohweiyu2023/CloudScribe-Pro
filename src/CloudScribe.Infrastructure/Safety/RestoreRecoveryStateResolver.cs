@@ -14,9 +14,10 @@ public sealed class RestoreRecoveryStateResolver
     {
         _journalStore = journalStore ?? throw new ArgumentNullException(nameof(journalStore));
         ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
+        if (!Path.IsPathFullyQualified(stagingRoot))
+            throw new InvalidOperationException("Restore recovery staging root must be explicitly fully qualified.");
+
         _stagingRoot = Path.GetFullPath(stagingRoot);
-        if (!Path.IsPathFullyQualified(_stagingRoot))
-            throw new InvalidOperationException("Restore recovery staging root must resolve to an absolute path.");
     }
 
     public async Task<RestoreRecoveryContext?> ResolveAsync(
@@ -51,10 +52,13 @@ public sealed class RestoreRecoveryStateResolver
 
     private static void RequireTrustedRoots(string stagingRoot, string restoreRoot)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(restoreRoot);
+        if (!Path.IsPathFullyQualified(stagingRoot) || !Path.IsPathFullyQualified(restoreRoot))
+            throw new InvalidOperationException("Restore recovery filesystem roots must be explicitly absolute paths.");
+
         string staging = Path.GetFullPath(stagingRoot);
         string destination = Path.GetFullPath(restoreRoot);
-        if (!Path.IsPathFullyQualified(staging) || !Path.IsPathFullyQualified(destination))
-            throw new InvalidOperationException("Restore recovery filesystem roots must be absolute paths.");
         if (!Directory.Exists(staging))
             throw new InvalidOperationException("Restore recovery staging root does not exist.");
 
