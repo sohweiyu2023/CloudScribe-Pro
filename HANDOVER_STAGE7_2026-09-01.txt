@@ -2,26 +2,39 @@ CloudScribe Pro Stage7 handover — 2026-09-01
 
 Baseline: v2.23 controlling baseline.
 Branch: agent/stage7-fast-track
-Substantive source/test head before this handover: d9009f3aa0c3582ec6226e79c7bddfb578565601
-Main observed unchanged this run: 14f85105f111d59e9693174153b5236bafe6f990
-Stage6 observed: 9a63f5432fcfe3781c56b05f9220909939b1100a; exact-head Windows fast-track run 33492055292 completed successfully.
-Stage8 observed before its independent CI-gate repair: 1041e433fe242505db9660ec16caa892f08c9f1b.
+Substantive source/test head before this handover: 5c01bb2ea791b85b56bebb6a960928732877ba87
+Main observed unchanged immediately before this handover: 14f85105f111d59e9693174153b5236bafe6f990
+Stage6 observed immediately before this handover: 9a63f5432fcfe3781c56b05f9220909939b1100a; exact-head Windows fast-track run 33492055292 completed successfully.
+Stage8 observed immediately before this handover: 4e3ef9ca668a4f470b761eeae91e20fbff53b165; exact Windows acceptance previously completed successfully.
 
-Landed this run:
-1. 86c084b6cf4716a56a62ccc71c34916121102289 — VoiceLabEvidenceAuthorizedAuditionExecutor no longer discards freshly revalidated authorization evidence before provider submission. Its transport delegate now receives the exact VoiceLabAuditionAuthorizationEvidence resolved and equality-checked immediately before submission.
-2. 86b89f78d46c17d6f344b63553dcf0a0e350ee12 — VoiceLabProductionAuthorizedAuditionExecutorFactory migrated to the evidence-aware transport contract; the production factory no longer accepts the former request-only raw submit delegate.
-3. d9009f3aa0c3582ec6226e79c7bddfb578565601 — focused application regression asserts that the exact freshly revalidated evidence object is handed to transport, while all authorization-drift cases still produce zero provider calls.
+Landed/current Stage7 authorization-bound transport chain:
+1. 86c084b6cf4716a56a62ccc71c34916121102289 — VoiceLabEvidenceAuthorizedAuditionExecutor transports the exact VoiceLabAuditionAuthorizationEvidence freshly resolved and equality-checked immediately before submission.
+2. 86b89f78d46c17d6f344b63553dcf0a0e350ee12 — VoiceLabProductionAuthorizedAuditionExecutorFactory migrated to the evidence-aware three-parameter transport contract; production no longer accepts the former request-only submit delegate.
+3. d9009f3aa0c3582ec6226e79c7bddfb578565601 — application regression coverage for exact fresh-evidence handoff and authorization-drift zero-submit behavior.
+4. 5c01bb2ea791b85b56bebb6a960928732877ba87 — repaired the concrete strict-build incompatibility left by the factory migration: VoiceLabProductionAuthorizedAuditionExecutorFactoryTests still supplied two-parameter transport lambdas while production now requires (request, evidence, cancellationToken). All stale callers in that focused test file now use the evidence-aware contract. The success regression was strengthened to capture and assert the exact persisted-rebound fresh evidence delivered to transport, including current ProviderAccountSnapshot.Revision.
+
+Exact failure diagnosis repaired this run:
+Previous Stage7 Windows run 33497207379 failed in Strict Stage 7 fast-track validation after checkout and .NET setup passed. GitHub did not expose a useful failed-log body/annotation through the available API. Source inspection identified the concrete compile mismatch in tests/CloudScribe.Infrastructure.Tests/VoiceLabProductionAuthorizedAuditionExecutorFactoryTests.cs: its submit delegates had arity 2 while src/CloudScribe.Infrastructure/Generation/VoiceLabProductionAuthorizedAuditionExecutorFactory.cs requires Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>>. Commit 5c01bb2e aligns those callers without weakening the production boundary.
 
 Safety rationale:
-The request-bound audition path remains approval -> current evidence resolution -> exact authorization equality/revalidation -> provider transport. The newly resolved current evidence is now carried across the final transport boundary, making credential reference, persisted account revision, capability evidence, pricing evidence, and spend authorization available to the eventual real provider transport without reconstructing or fabricating them. No raw request-only production submit shortcut remains in VoiceLabProductionAuthorizedAuditionExecutorFactory.
+The request-bound audition path remains approval -> current production evidence resolution -> persisted account/capability revalidation -> exact authorization equality/revalidation -> evidence-aware provider transport. The transport receives the current credential reference, persisted account revision, bound catalog selection/capability evidence, pricing evidence, and spend authorization through the freshly validated evidence object. No raw request-only production submit shortcut is reintroduced.
 
-Gates:
+Gates at this handover:
 - Stage6 exact-head Windows fast-track: PASS (run 33492055292).
-- Stage7 fresh-evidence handoff: PASS by source inspection; compiled exact-head run 33497207379 for d9009f3aa0c3582ec6226e79c7bddfb578565601 is IN PROGRESS at this handover refresh.
-- Stage7 production ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition composition: NOT COMPLETE.
-- Remaining concrete Stage7 composition seam: IProviderAdapter still exposes only Descriptor; a genuine provider VoiceLab operation contract plus registry-backed catalog/audition transport is still required before CompositionRoot wiring. Do not replace it with callbacks that bypass the evidence-aware authorization boundary.
-- Stage8 production composition: source-wired; independent strict Windows acceptance is being enabled on its actual repair branch.
-- Full compiled tests / Final source acceptance / exact Windows 1.0.0 publish / actual CloudScribe.exe / SHA freeze / strict-full certification / same-SHA no-change certification: NOT RUN.
+- Stage7 concrete stale-caller compile repair: PASS by source inspection; landed at 5c01bb2ea791b85b56bebb6a960928732877ba87.
+- Stage7 exact Windows fast-track for 5c01bb2ea791b85b56bebb6a960928732877ba87: RUNNING (run 33507588655) at handover creation; do not infer PASS until completed.
+- Stage7 ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition production composition: NOT COMPLETE.
+- Stage8 production composition/focused Windows acceptance: PASS at current repair head, but Final serial gates remain blocked by Stage6/7 production completion.
+- Full compiled tests / Final source acceptance / exact Windows 1.0.0 publish-version / actual CloudScribe.exe / source no-mutation + SHA freeze / strict-full certification / exact same-SHA no-change certification: NOT RUN.
 
-Next exact Stage7 gate:
-Inspect run 33497207379 and repair its first exact formatter/compiler/test failure if non-green. If green, define the provider-neutral VoiceLab operation capability in Providers.Abstractions and a registry-backed infrastructure transport that fails closed when the selected provider/account adapter does not implement it. Feed the freshly validated evidence received from VoiceLabEvidenceAuthorizedAuditionExecutor into that transport, then wire ConfigureStage7VoiceLabCatalog and ConfigureStage7VoiceLabAudition with rejection tests.
+Remaining concrete Stage7 production seam:
+The authorized executor/factory boundary is evidence-aware, but genuine provider-backed catalog/audition dispatch still must be composed without callback shims or raw provider submit. Continue from the provider-neutral VoiceLab operation capability / registry-backed transport seam, failing closed when the selected provider/account cannot supply the required VoiceLab capability. Preserve immediate revalidation of provider/account/project/voice/capability/credential/pricing/spend evidence before submission.
+
+Independent Stage6 observation while Stage7 CI was running:
+GoogleGenerationProductionEvidenceResolver currently loads the real persisted Google ProviderAccountSnapshot and latest StoredProviderCapabilitySnapshot. GoogleGenerationProductionEvidence validates enabled Google identity, credential reference, admitted endpoint/region/origin, capability freshness, account-updated-after-capability drift, captured account/credential/endpoint/region/origin equality, and usable synthesis capability. Stage6 still needs the broader request/revision/pricing/spend/trust/queue/reconciliation production evidence/context join before ConfigureStage6GoogleGeneration can be wired safely.
+
+Next exact gates:
+1. Inspect Stage7 run 33507588655. If non-green, repair the first exact formatter/compiler/test failure after re-reading main plus all active Stage6/7/8 heads.
+2. If green, continue genuine provider-neutral VoiceLab catalog/audition transport and registry composition, then wire ConfigureStage7VoiceLabCatalog and ConfigureStage7VoiceLabAudition with fail-closed rejection tests.
+3. Continue Stage6 request/revision/pricing/spend/trust/queue/reconciliation composition independently; do not wait on Stage7 when safe work exists.
+4. Do not start Final serial certification or touch main until Stage6-8 production composition all genuinely pass.
