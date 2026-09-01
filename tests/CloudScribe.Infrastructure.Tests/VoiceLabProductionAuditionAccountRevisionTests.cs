@@ -11,7 +11,7 @@ public sealed class VoiceLabProductionAuditionAccountRevisionTests
     private static readonly DateTimeOffset Now = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task LoadAsyncRejectsProviderAccountRevisionDrift()
+    public async Task LoadAsyncBindsProviderAccountRevisionFromPersistedSnapshot()
     {
         Guid capabilityId = Guid.NewGuid();
         ProviderAccountReference reference = new(
@@ -41,14 +41,13 @@ public sealed class VoiceLabProductionAuditionAccountRevisionTests
             CapabilityCurrent: true,
             VoiceEnabled: true,
             AccountProjectAuthorized: true);
-        VoiceLabAuditionAuthorizationEvidence approvedEvidence = new(
+        VoiceLabAuditionAuthorizationEvidence callerEvidence = new(
             selection,
             "credential.current",
             "pricing-current",
             "spend-approved",
             PricingCurrent: true,
-            SpendApproved: true,
-            AccountRevision: 1);
+            SpendApproved: true);
         VoiceLabAuditionRequest request = new(
             selection,
             CachePolicyEligible: false,
@@ -59,13 +58,16 @@ public sealed class VoiceLabProductionAuditionAccountRevisionTests
         var loader = new VoiceLabProductionAuditionEvidenceLoader(
             new AccountStore(currentAccount),
             new CapabilityStore(capability),
-            (_, _) => Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(approvedEvidence),
+            (_, _) => Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(callerEvidence),
             new FixedTimeProvider(Now));
 
-        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            loader.LoadAsync(request, TestContext.Current.CancellationToken)).ConfigureAwait(true);
+        VoiceLabAuditionAuthorizationEvidence? resolved = await loader.LoadAsync(
+            request,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.Contains("account revision changed", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(resolved);
+        Assert.Equal(currentAccount.Revision, resolved.AccountRevision);
+        Assert.NotEqual(callerEvidence.AccountRevision, resolved.AccountRevision);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
