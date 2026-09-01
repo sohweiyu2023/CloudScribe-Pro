@@ -4,29 +4,28 @@ Controlling baseline: v2.23
 Branch: repair/final-stage7-production-parallel
 Main remains untouched at 14f85105f111d59e9693174153b5236bafe6f990.
 
-Verified live state before mutation:
-- Existing Stage7 production-repair head was 695c84eb592e910b18334a1696bb058722be2462.
-- Exact Windows fast-track run 33537386645 for 695c84eb592e910b18334a1696bb058722be2462 completed SUCCESS.
+Verified live state before this mutation:
+- Stage7 production-repair head was af020eeb678a0ca0246b63cb0c25b5612c027ffe.
+- Previous exact Windows Stage7 fast-track run 33543010912 for substantive source SHA 403e60dd03433e9516105edf6aad06eecc7b8816 completed PASS.
+- Stage6 remains approximately 92% at agent/stage6-fast-track 9a63f5432fcfe3781c56b05f9220909939b1100a; previous exact fast-track PASS.
+- Stage8 remains approximately 99% at repair/final-stage8-production-parallel 4e3ef9ca668a4f470b761eeae91e20fbff53b165; previous focused Windows acceptance PASS.
 
 Substantive work landed this run:
-- 8dbd133529b726262b22bc28e2b653de89e9349e: VoiceLabEvidenceAuthorizedAuditionExecutor now passes the exact freshly revalidated VoiceLabAuditionAuthorizationEvidence into provider submission instead of discarding it after authorization comparison.
-- 0dbe349f4d63b35a78cef768cb128d86c567fcf1: VoiceLabProductionAuthorizedAuditionExecutorFactory now requires an evidence-aware authorized transport delegate; request-only production submission is no longer accepted by this factory.
-- 07b62d7fd247931574984db70733f543dec5aeb2: application regression asserts the exact request and revalidated authorization evidence reach transport and existing fail-closed authorization-drift tests still make zero provider calls.
-- 7284bed301363c673ec8f4a236ab10c8ae0fde17: production-factory regression asserts transport receives persisted-rebound current evidence, including the current provider-account revision and pricing/spend/credential bindings.
-- 403e60dd03433e9516105edf6aad06eecc7b8816: account-revision drift regression migrated to the evidence-aware transport signature while preserving zero provider submissions on drift.
+- e66f03157f918bb4c8a040ff85a696cbaea6c39c: VoiceLabCatalogTransportContext now fails closed unless credential and capability identities are canonical and the provider endpoint is an explicit absolute HTTPS scheme-and-authority origin with no user-info, query, fragment, or non-root path.
 
 Security/trust effect:
-The audition path now preserves its current production authorization evidence across the final trust boundary: approved evidence -> persisted account/capability re-resolution -> full evidence equality/revalidation -> evidence-aware transport. The freshly checked provider account revision, credential binding, capability selection, pricing evidence and spend authorization can no longer be discarded before the production transport call.
+- The live VoiceLabProductionCatalogTransport already builds its provider transport context exclusively from the current persisted provider account, credential binding, and capability evidence. The context itself previously accepted any Uri without enforcing origin semantics. The new constructor prevents malformed, path-bearing, credential-bearing, query-bearing, fragment-bearing, non-HTTPS, or relative endpoint values from crossing the final catalog provider transport boundary.
+- No ambient endpoint, hardcoded authorization, dummy Configure call, raw audition provider-submit shortcut, or sync-over-async path was introduced.
 
 Current lane estimates:
 - Stage0-5: 100%.
-- Stage6: ~92%, active branch agent/stage6-fast-track at 9a63f5432fcfe3781c56b05f9220909939b1100a; full production composition remains incomplete.
-- Stage7: ~93%; production evidence-aware audition boundary is landed, but genuine provider-registry-backed catalog/audition capability and CompositionRoot wiring remain incomplete.
-- Stage8: ~99%, repair/final-stage8-production-parallel at 4e3ef9ca668a4f470b761eeae91e20fbff53b165; prior focused Windows acceptance passed.
+- Stage6: ~92%; full production ConfigureStage6GoogleGeneration composition remains incomplete.
+- Stage7: ~94%; evidence-aware audition boundary and stricter catalog transport context are landed, but genuine provider-registry-backed catalog/audition capability and CompositionRoot wiring remain incomplete.
+- Stage8: ~99%; production/focused acceptance previously passed.
 
 Gates at handover creation:
-- Pre-change Stage7 exact Windows fast-track at 695c84eb592e910b18334a1696bb058722be2462: PASS.
-- New exact Stage7 Windows fast-track for 403e60dd03433e9516105edf6aad06eecc7b8816: RUNNING as Actions run 33543010912; do not claim PASS until strict validation completes.
+- Previous Stage7 exact Windows fast-track 33543010912 at 403e60dd03433e9516105edf6aad06eecc7b8816: PASS.
+- New Stage7 exact Windows fast-track 33554843565 for e66f03157f918bb4c8a040ff85a696cbaea6c39c: RUNNING. Checkout passed; .NET setup was in progress and strict Stage7 validation had not yet run. Do not claim PASS prematurely.
 - Stage6 full ConfigureStage6GoogleGeneration production composition: NOT COMPLETE.
 - Stage7 ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition production composition: NOT COMPLETE.
 - Full compiled Final suite: NOT RUN.
@@ -38,8 +37,8 @@ Gates at handover creation:
 - Exact same-SHA no-change certification: NOT RUN.
 
 Next exact gate:
-1. Inspect Actions run 33543010912 and repair its first concrete formatter/compiler/test failure if non-green.
-2. If green, implement a provider-neutral VoiceLab capability exposed by real provider adapters/registry, failing closed when a selected provider has no VoiceLab capability.
-3. Route VoiceLabProductionCatalogTransport and the evidence-aware audition transport through that registry capability; do not use raw provider-submit callbacks.
+1. Inspect Actions run 33554843565 and repair its first concrete formatter/compiler/test failure if non-green.
+2. If green, add focused rejection coverage for invalid VoiceLabCatalogTransportContext endpoint origins and continue the provider-neutral VoiceLab capability exposed by real provider adapters/registry.
+3. Route VoiceLabProductionCatalogTransport and evidence-aware audition transport through that registry capability; fail closed for missing factory, provider mismatch, or adapter without VoiceLab capability.
 4. Wire ConfigureStage7VoiceLabCatalog and ConfigureStage7VoiceLabAudition only after those production transports are real and rejection-tested.
 5. Continue Stage6 independently; do not re-promote Final/main until all serial Final gates pass.
