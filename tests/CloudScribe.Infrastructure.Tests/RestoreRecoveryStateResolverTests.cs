@@ -6,6 +6,27 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class RestoreRecoveryStateResolverTests
 {
     [Fact]
+    public void ConstructorRejectsRelativeStagingRootInsteadOfUsingAmbientWorkingDirectory()
+    {
+        string root = CreateTemporaryRoot();
+        try
+        {
+            using var store = new FileAuthenticatedRestoreRecoveryJournalStore(
+                Path.Combine(root, "recovery.journal"),
+                CreateAuthenticationKey());
+
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => new RestoreRecoveryStateResolver(store, "relative-staging-root"));
+
+            Assert.Contains("explicitly fully qualified", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteTemporaryRoot(root);
+        }
+    }
+
+    [Fact]
     public async Task ResolveDerivesRollbackOnlyFromAuthenticatedBoundJournal()
     {
         string root = CreateTemporaryRoot();
