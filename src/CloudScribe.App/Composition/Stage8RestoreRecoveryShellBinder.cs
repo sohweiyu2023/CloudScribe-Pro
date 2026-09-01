@@ -10,6 +10,38 @@ public static class Stage8RestoreRecoveryShellBinder
     public static void ConfigurePersistedRecovery(
         ShellViewModel viewModel,
         RestoreRecoveryExecutionCompositionFactory compositionFactory,
+        RestoreRecoveryProductionConfigurationResolver configurationResolver,
+        AtomicVerifiedRestoreExecutor restoreExecutor)
+    {
+        ArgumentNullException.ThrowIfNull(viewModel);
+        ArgumentNullException.ThrowIfNull(compositionFactory);
+        ArgumentNullException.ThrowIfNull(configurationResolver);
+        ArgumentNullException.ThrowIfNull(restoreExecutor);
+
+        viewModel.ConfigureStage8RestoreRecovery(async cancellationToken =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RestoreRecoveryProductionConfiguration configuration = configurationResolver.Resolve();
+
+            using RestoreRecoveryExecutionComposition composition = await compositionFactory
+                .CreateAsync(
+                    configuration.AuthenticationKeyReference,
+                    configuration.JournalPath,
+                    configuration.StagingRoot,
+                    configuration.BackupRoot,
+                    restoreExecutor,
+                    cancellationToken)
+                .ConfigureAwait(true);
+
+            return await composition.Service
+                .RecoverPersistedAsync(cancellationToken)
+                .ConfigureAwait(true);
+        });
+    }
+
+    public static void ConfigurePersistedRecovery(
+        ShellViewModel viewModel,
+        RestoreRecoveryExecutionCompositionFactory compositionFactory,
         CredentialReference authenticationKeyReference,
         string journalPath,
         string stagingRoot,

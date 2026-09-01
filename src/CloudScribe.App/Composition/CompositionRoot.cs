@@ -3,7 +3,9 @@ using CloudScribe.Application.Documents;
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Providers;
+using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.DependencyInjection;
+using CloudScribe.Infrastructure.Safety;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -31,6 +33,10 @@ public static class CompositionRoot
 
         builder.Services.AddCloudScribeInfrastructure(builder.Configuration);
         builder.Services.AddSingleton(serviceProvider =>
+            new RestoreRecoveryProductionConfigurationResolver(
+                serviceProvider.GetRequiredService<AppPaths>(),
+                builder.Configuration["CloudScribe:RestoreRecoveryAuthenticationKeyTargetName"]));
+        builder.Services.AddSingleton(serviceProvider =>
         {
             ShellViewModel viewModel = ActivatorUtilities.CreateInstance<ShellViewModel>(serviceProvider);
             viewModel.ConfigureStage3DocumentWorkflow(
@@ -47,6 +53,11 @@ public static class CompositionRoot
             viewModel.ConfigureStage5GenerationDiagnostics(
                 serviceProvider.GetRequiredService<GenerationSupportBundleExportCoordinator>(),
                 currentPolicyAllowsDiagnostics: true);
+            Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(
+                viewModel,
+                serviceProvider.GetRequiredService<RestoreRecoveryExecutionCompositionFactory>(),
+                serviceProvider.GetRequiredService<RestoreRecoveryProductionConfigurationResolver>(),
+                serviceProvider.GetRequiredService<AtomicVerifiedRestoreExecutor>());
             viewModel.ApplyFinalReleasePresentation();
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
