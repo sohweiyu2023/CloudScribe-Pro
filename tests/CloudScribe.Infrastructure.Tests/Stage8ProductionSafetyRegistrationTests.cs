@@ -8,7 +8,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage8ProductionSafetyRegistrationTests
 {
     [Fact]
-    public void AddCloudScribeInfrastructure_RegistersRestoreRecoveryProductionServicesAsSingletons()
+    public void AddCloudScribeInfrastructureRegistersRestoreRecoveryProductionServicesAsSingletons()
     {
         var services = new ServiceCollection();
         IConfiguration configuration = new ConfigurationBuilder().Build();
