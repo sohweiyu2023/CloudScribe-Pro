@@ -50,6 +50,44 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
     }
 
     [Fact]
+    public async Task CreatedExecutorRejectsPersistedAccountRevisionDriftBeforeProviderSubmission()
+    {
+        Guid capabilityId = Guid.NewGuid();
+        ProviderAccountSnapshot account = CreateAccount("credential.current");
+        var accountStore = new MutableAccountStore(account);
+        StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId);
+        VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId);
+        int submitCalls = 0;
+        var factory = new VoiceLabProductionAuthorizedAuditionExecutorFactory(
+            accountStore,
+            new CapabilityStore(capability),
+            (_, _) => Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence),
+            new FixedTimeProvider(Now),
+            (_, _) =>
+            {
+                submitCalls++;
+                return Task.FromResult(Accepted());
+            });
+        VoiceLabAuditionRequest request = CreateRequest(evidence.Selection);
+
+        IVoiceLabAuthorizedAuditionExecutor executor = await factory.CreateAsync(
+            request,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+        accountStore.Current = new ProviderAccountSnapshot(
+            account.Reference,
+            account.IsEnabled,
+            account.Revision + 1,
+            account.CreatedAtUtc,
+            Now);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.SubmitAuthorizedAsync(request, TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("authorization evidence changed", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, submitCalls);
+    }
+
+    [Fact]
     public async Task CreatedExecutorSubmitsExactRequestWhenEvidenceRemainsCurrent()
     {
         Guid capabilityId = Guid.NewGuid();
@@ -168,6 +206,31 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
 
         public Task<IReadOnlyList<ProviderAccountSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProviderAccountSnapshot>>([account]);
+    }
+
+    private sealed class MutableAccountStore(ProviderAccountSnapshot account) : IProviderAccountStore
+    {
+        public ProviderAccountSnapshot Current { get; set; } = account;
+
+        public Task<ProviderAccountSnapshot> CreateAsync(ProviderAccountReference accountReference, bool isEnabled, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderAccountSnapshot> UpdateAsync(ProviderAccountReference accountReference, bool isEnabled, long expectedRevision, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderAccountSnapshot?> FindAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ProviderAccountSnapshot current = Current;
+            return Task.FromResult<ProviderAccountSnapshot?>(
+                string.Equals(current.Reference.ProviderStableId, providerStableId, StringComparison.Ordinal) &&
+                string.Equals(current.Reference.AccountId, accountId, StringComparison.Ordinal)
+                    ? current
+                    : null);
+        }
+
+        public Task<IReadOnlyList<ProviderAccountSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProviderAccountSnapshot>>([Current]);
     }
 
     private sealed class CapabilityStore(StoredProviderCapabilitySnapshot capability) : IProviderCapabilitySnapshotStore
