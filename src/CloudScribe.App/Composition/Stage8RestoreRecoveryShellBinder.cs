@@ -7,6 +7,46 @@ namespace CloudScribe.App.Composition;
 
 public static class Stage8RestoreRecoveryShellBinder
 {
+    public static void ConfigurePersistedRecovery(
+        ShellViewModel viewModel,
+        RestoreRecoveryExecutionCompositionFactory compositionFactory,
+        CredentialReference authenticationKeyReference,
+        string journalPath,
+        string stagingRoot,
+        string backupRoot,
+        AtomicVerifiedRestoreExecutor restoreExecutor)
+    {
+        ArgumentNullException.ThrowIfNull(viewModel);
+        ArgumentNullException.ThrowIfNull(compositionFactory);
+        ArgumentNullException.ThrowIfNull(authenticationKeyReference);
+        ArgumentException.ThrowIfNullOrWhiteSpace(journalPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(backupRoot);
+        ArgumentNullException.ThrowIfNull(restoreExecutor);
+
+        (string absoluteJournalPath, string absoluteStagingRoot, string absoluteBackupRoot) =
+            ResolveExplicitRecoveryPaths(journalPath, stagingRoot, backupRoot);
+
+        viewModel.ConfigureStage8RestoreRecovery(async cancellationToken =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using RestoreRecoveryExecutionComposition composition = await compositionFactory
+                .CreateAsync(
+                    authenticationKeyReference,
+                    absoluteJournalPath,
+                    absoluteStagingRoot,
+                    absoluteBackupRoot,
+                    restoreExecutor,
+                    cancellationToken)
+                .ConfigureAwait(true);
+
+            return await composition.Service
+                .RecoverPersistedAsync(cancellationToken)
+                .ConfigureAwait(true);
+        });
+    }
+
     public static void Configure(
         ShellViewModel viewModel,
         RestoreRecoveryExecutionCompositionFactory compositionFactory,
@@ -26,16 +66,8 @@ public static class Stage8RestoreRecoveryShellBinder
         ArgumentNullException.ThrowIfNull(restoreExecutor);
         ArgumentNullException.ThrowIfNull(captureCurrentPlanAsync);
 
-        if (!Path.IsPathFullyQualified(journalPath) ||
-            !Path.IsPathFullyQualified(stagingRoot) ||
-            !Path.IsPathFullyQualified(backupRoot))
-        {
-            throw new InvalidOperationException("Stage 8 restore recovery paths must be explicitly fully qualified.");
-        }
-
-        string absoluteJournalPath = Path.GetFullPath(journalPath);
-        string absoluteStagingRoot = Path.GetFullPath(stagingRoot);
-        string absoluteBackupRoot = Path.GetFullPath(backupRoot);
+        (string absoluteJournalPath, string absoluteStagingRoot, string absoluteBackupRoot) =
+            ResolveExplicitRecoveryPaths(journalPath, stagingRoot, backupRoot);
 
         viewModel.ConfigureStage8RestoreRecovery(async cancellationToken =>
         {
@@ -57,5 +89,23 @@ public static class Stage8RestoreRecoveryShellBinder
                 .RecoverAsync(plan, cancellationToken)
                 .ConfigureAwait(true);
         });
+    }
+
+    private static (string JournalPath, string StagingRoot, string BackupRoot) ResolveExplicitRecoveryPaths(
+        string journalPath,
+        string stagingRoot,
+        string backupRoot)
+    {
+        if (!Path.IsPathFullyQualified(journalPath) ||
+            !Path.IsPathFullyQualified(stagingRoot) ||
+            !Path.IsPathFullyQualified(backupRoot))
+        {
+            throw new InvalidOperationException("Stage 8 restore recovery paths must be explicitly fully qualified.");
+        }
+
+        return (
+            Path.GetFullPath(journalPath),
+            Path.GetFullPath(stagingRoot),
+            Path.GetFullPath(backupRoot));
     }
 }
