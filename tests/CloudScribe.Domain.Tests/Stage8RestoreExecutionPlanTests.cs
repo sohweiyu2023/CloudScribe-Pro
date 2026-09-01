@@ -21,6 +21,17 @@ public sealed class Stage8RestoreExecutionPlanTests
     }
 
     [Fact]
+    public void RelativeRestoreRootFailsClosedInsteadOfUsingAmbientWorkingDirectory()
+    {
+        var manifest = Manifest(new BackupFileEntry("db/main.sqlite", 10, new string('a', 64)));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => RestoreExecutionPlan.Create("relative-restore-root", manifest, 100, 10));
+
+        Assert.Contains("explicitly fully qualified", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AggregateByteAndFileCeilingsFailClosed()
     {
         var root = Path.Combine(Path.GetTempPath(), $"cloudscribe-restore-plan-{Guid.NewGuid():N}");
