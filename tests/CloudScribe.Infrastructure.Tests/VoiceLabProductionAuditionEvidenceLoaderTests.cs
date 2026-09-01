@@ -41,7 +41,11 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
     public async Task LoadAsyncRejectsProviderAccountWithoutExplicitEndpointOrigin()
     {
         Guid capabilityId = Guid.NewGuid();
-        ProviderAccountSnapshot account = CreateAccount("credential.current", isEnabled: true, endpointOrigin: null);
+        ProviderAccountSnapshot account = CreateAccount(
+            "credential.current",
+            isEnabled: true,
+            endpointOrigin: null,
+            useDefaultEndpoint: false);
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
         VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId, "credential.current");
         var loader = CreateLoader(account, capability, evidence);
