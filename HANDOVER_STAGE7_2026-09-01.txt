@@ -1,0 +1,29 @@
+CloudScribe Pro Stage7 handover — 2026-09-01
+
+Baseline: v2.23 controlling baseline.
+Branch: agent/stage7-fast-track
+Substantive source/test head before this handover: 8da3c00990edd8180d064b470682de0b7d0c2d66
+Main observed unchanged: 14f85105f111d59e9693174153b5236bafe6f990
+Stage6 observed: 5c499209793fa6f40c0dad5b4a14669ed81fa50f
+Stage8 observed: 1041e433fe242505db9660ec16caa892f08c9f1b
+
+Landed this run:
+1. 6d4a744f78b5bc0a452238463cb6259be8a23a26 — VoiceLabAuditionAuthorizationEvidence now carries and validates a persisted provider AccountRevision.
+2. 9ecead40cb9c8c7f27b9fe90162ad207eae4c718 — VoiceLabProductionAuditionEvidenceLoader now rejects provider-account revision drift before authorized audition submission.
+3. 8da3c00990edd8180d064b470682de0b7d0c2d66 — focused infrastructure rejection test for an approved revision 1 versus current revision 2 while credential and capability identities otherwise remain unchanged.
+
+Safety rationale:
+The prior audition path revalidated account enabled state, credential reference, capability evidence, pricing and spend evidence, but did not bind the provider-account revision. An account mutation preserving the same credential target could therefore escape the request-bound authorization equality boundary. The new revision evidence closes that gap and participates in VoiceLabAuditionAuthorizationEvidence record equality, so the existing resolver/executor second revalidation also rejects revision changes.
+
+Compatibility behavior:
+AccountRevision has a default of 1 for existing construction sites. This preserves source compatibility while remaining fail-closed for any current provider account that has advanced beyond revision 1 unless its authorization evidence explicitly carries the current persisted revision. Production composition must supply the actual revision when it creates current audition evidence; it must not hardcode 1.
+
+Gates:
+- Account-revision trust repair: PASS by source inspection.
+- Focused compiled test: NOT RUN in this environment.
+- GitHub Actions for exact substantive head 8da3c00990edd8180d064b470682de0b7d0c2d66: NOT RUN; API returned zero workflow runs.
+- Stage7 production ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition composition: NOT COMPLETE.
+- Full compiled tests / Final source acceptance / exact Windows 1.0.0 publish / actual CloudScribe.exe / SHA freeze / strict-full certification / same-SHA no-change certification: NOT RUN.
+
+Next exact Stage7 gate:
+Implement the genuine production authorization-evidence creation/composition seam so AccountRevision is populated from the current persisted ProviderAccountSnapshot, and wire only request-bound authorized VoiceLab catalog/audition services into CompositionRoot. Do not use raw provider SubmitAsync as a shortcut. Add composition/rejection tests and then run/inspect exact-head CI.
