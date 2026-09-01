@@ -7,14 +7,14 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactory
 {
     private readonly VoiceLabProductionAuditionEvidenceLoader _evidenceLoader;
-    private readonly Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> _submitAuthorizedTransport;
+    private readonly Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>> _submitAuthorizedTransport;
 
     public VoiceLabProductionAuthorizedAuditionExecutorFactory(
         IProviderAccountStore accounts,
         IProviderCapabilitySnapshotStore capabilities,
         Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence?>> loadCurrentEvidence,
         TimeProvider timeProvider,
-        Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> submitAuthorizedTransport)
+        Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>> submitAuthorizedTransport)
     {
         _evidenceLoader = new VoiceLabProductionAuditionEvidenceLoader(
             accounts ?? throw new ArgumentNullException(nameof(accounts)),
