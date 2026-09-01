@@ -7,11 +7,12 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
 {
     [Fact]
-    public async Task MatchingCurrentEvidenceResolvesAndSubmitsExactRequest()
+    public async Task MatchingCurrentEvidenceResolvesAndSubmitsExactRequestAndFreshEvidence()
     {
         var approved = CurrentEvidence();
         VoiceLabAuditionRequest? resolved = null;
         VoiceLabAuditionRequest? submitted = null;
+        VoiceLabAuditionAuthorizationEvidence? submittedEvidence = null;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (request, _) =>
@@ -19,9 +20,10 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
                 resolved = request;
                 return Task.FromResult(approved);
             },
-            (request, _) =>
+            (request, evidence, _) =>
             {
                 submitted = request;
+                submittedEvidence = evidence;
                 return Task.FromResult(Accepted());
             });
         var request = CurrentRequest();
@@ -31,6 +33,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
         Assert.Same(request, resolved);
         Assert.Same(request, submitted);
+        Assert.Same(approved, submittedEvidence);
     }
 
     [Fact]
@@ -42,7 +45,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
-            (_, _) =>
+            (_, _, _) =>
             {
                 submitCalls++;
                 return Task.FromResult(Accepted());
@@ -63,7 +66,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
-            (_, _) =>
+            (_, _, _) =>
             {
                 submitCalls++;
                 return Task.FromResult(Accepted());
@@ -84,7 +87,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
-            (_, _) =>
+            (_, _, _) =>
             {
                 submitCalls++;
                 return Task.FromResult(Accepted());
@@ -105,7 +108,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
-            (_, _) =>
+            (_, _, _) =>
             {
                 submitCalls++;
                 return Task.FromResult(Accepted());
@@ -126,7 +129,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
-            (_, _) =>
+            (_, _, _) =>
             {
                 submitCalls++;
                 return Task.FromResult(Accepted());
