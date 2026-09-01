@@ -6,12 +6,12 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
 {
     private readonly VoiceLabAuditionAuthorizationEvidence _approvedEvidence;
     private readonly Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> _currentEvidenceResolver;
-    private readonly Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> _submitProvider;
+    private readonly Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>> _submitProvider;
 
     public VoiceLabEvidenceAuthorizedAuditionExecutor(
         VoiceLabAuditionAuthorizationEvidence approvedEvidence,
         Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> currentEvidenceResolver,
-        Func<VoiceLabAuditionRequest, CancellationToken, Task<GenerationProviderResponse>> submitProvider)
+        Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>> submitProvider)
     {
         _approvedEvidence = (approvedEvidence ?? throw new ArgumentNullException(nameof(approvedEvidence))).Validate();
         _currentEvidenceResolver = currentEvidenceResolver ?? throw new ArgumentNullException(nameof(currentEvidenceResolver));
@@ -48,7 +48,7 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
             ?? throw new InvalidOperationException("Voice Lab audition current authorization evidence is unavailable.");
         selectedEvidence.EnsureStillAuthorized(currentEvidence);
 
-        return await _submitProvider(request, cancellationToken).ConfigureAwait(false)
+        return await _submitProvider(request, currentEvidence, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Voice Lab audition provider returned no response.");
     }
 }
