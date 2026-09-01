@@ -29,7 +29,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
                 return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(currentEvidence);
             },
             new FixedTimeProvider(Now),
-            (_, _) =>
+            (_, _, _) =>
             {
                 submitCalls++;
                 return Task.FromResult(Accepted());
@@ -50,13 +50,14 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
     }
 
     [Fact]
-    public async Task CreatedExecutorSubmitsExactRequestWhenEvidenceRemainsCurrent()
+    public async Task CreatedExecutorSubmitsExactRequestAndRevalidatedEvidenceWhenEvidenceRemainsCurrent()
     {
         Guid capabilityId = Guid.NewGuid();
         ProviderAccountSnapshot account = CreateAccount("credential.current");
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId);
         VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId);
         VoiceLabAuditionRequest? submitted = null;
+        VoiceLabAuditionAuthorizationEvidence? submittedEvidence = null;
         int evidenceLoads = 0;
         var factory = new VoiceLabProductionAuthorizedAuditionExecutorFactory(
             new AccountStore(account),
@@ -67,9 +68,10 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
                 return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence);
             },
             new FixedTimeProvider(Now),
-            (request, _) =>
+            (request, current, _) =>
             {
                 submitted = request;
+                submittedEvidence = current;
                 return Task.FromResult(Accepted());
             });
         VoiceLabAuditionRequest request = CreateRequest(evidence.Selection);
@@ -84,6 +86,12 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
         Assert.Equal(2, evidenceLoads);
         Assert.Same(request, submitted);
+        Assert.NotNull(submittedEvidence);
+        Assert.Equal(account.Revision, submittedEvidence.AccountRevision);
+        Assert.Equal(evidence.Selection, submittedEvidence.Selection);
+        Assert.Equal(evidence.CredentialReferenceId, submittedEvidence.CredentialReferenceId);
+        Assert.Equal(evidence.PricingEvidenceId, submittedEvidence.PricingEvidenceId);
+        Assert.Equal(evidence.SpendAuthorizationId, submittedEvidence.SpendAuthorizationId);
     }
 
     private static ProviderAccountSnapshot CreateAccount(string credentialReferenceId)
