@@ -47,6 +47,39 @@ public sealed class Stage8RestoreTransactionJournalTests
         Assert.Throws<InvalidOperationException>(() => journal.BeginVerification(plan, now.AddSeconds(3)));
     }
 
+    [Fact]
+    public void StartedJournalPersistsHashBoundPlanForRestartRecovery()
+    {
+        var plan = Plan("a.db", "b.db");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
+
+        var journal = RestoreTransactionJournal.Start(plan, now);
+        var persisted = journal.RequirePersistedPlan();
+
+        Assert.Equal(plan, persisted);
+        Assert.Equal(RestoreTransactionJournal.ComputePlanSha256(plan), journal.PlanSha256);
+    }
+
+    [Fact]
+    public void RestartRecoveryFailsClosedWithoutMatchingPersistedPlan()
+    {
+        var plan = Plan("a.db");
+        var changed = Plan("a.db", "extra.db");
+        var now = DateTimeOffset.Parse("2026-08-23T00:00:00Z", CultureInfo.InvariantCulture);
+        var started = RestoreTransactionJournal.Start(plan, now);
+
+        var legacy = new RestoreTransactionJournal(
+            started.TransactionId,
+            started.PlanSha256,
+            started.State,
+            started.CompletedRelativePaths,
+            started.UpdatedAtUtc);
+        Assert.Throws<InvalidDataException>(() => legacy.RequirePersistedPlan());
+
+        var swapped = started with { PersistedPlan = changed };
+        Assert.Throws<InvalidOperationException>(() => swapped.RequirePersistedPlan());
+    }
+
     private static RestoreExecutionPlan Plan(params string[] names)
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cloudscribe-restore-root"));
