@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/stage8-fast-track
+      - repair/final-stage8-production-parallel
 
 permissions:
   contents: read
@@ -28,7 +29,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if ((git branch --show-current).Trim() -ne 'agent/stage8-fast-track') { throw 'Unexpected branch.' }
+          $branch = (git branch --show-current).Trim()
+          if ($branch -notin @('agent/stage8-fast-track', 'repair/final-stage8-production-parallel')) { throw "Unexpected branch: $branch" }
           dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
           if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
           dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
@@ -37,5 +39,5 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
           dotnet test tests/CloudScribe.Domain.Tests/CloudScribe.Domain.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage8ArchiveExtractionPolicyTests|FullyQualifiedName~Stage8SecretRedactionPolicyTests|FullyQualifiedName~Stage8BackupRestoreManifestTests|FullyQualifiedName~Stage8RestoreExecutionPlanTests|FullyQualifiedName~Stage8RestoreTransactionJournalTests|FullyQualifiedName~Stage8DatabaseMigrationPlanTests|FullyQualifiedName~Stage8PseudoLocalizerTests|FullyQualifiedName~Stage8AccessiblePlaybackCommandMapTests|FullyQualifiedName~Stage8AccessiblePlaybackStateTests|FullyQualifiedName~Stage8AccessibleDisplayPreferencesTests|FullyQualifiedName~Stage8CachePrivacyUserPolicyTests"
           if ($LASTEXITCODE -ne 0) { throw 'Stage 8 domain hardening/accessibility/cache-privacy tests failed.' }
-          dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter FullyQualifiedName~Stage8AtomicVerifiedRestoreExecutorTests
-          if ($LASTEXITCODE -ne 0) { throw 'Stage 8 atomic verified restore tests failed.' }
+          dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~Stage8AtomicVerifiedRestoreExecutorTests|FullyQualifiedName~Stage8RestoreRecoveryTerminalVerifierTests"
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 8 verified restore/recovery terminal tests failed.' }
