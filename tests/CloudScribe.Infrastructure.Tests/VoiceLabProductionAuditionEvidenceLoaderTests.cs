@@ -38,6 +38,27 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
     }
 
     [Fact]
+    public async Task LoadAsyncRebindsCallerEndpointToPersistedAccountEndpoint()
+    {
+        Guid capabilityId = Guid.NewGuid();
+        ProviderAccountSnapshot account = CreateAccount("credential.current", isEnabled: true);
+        StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
+        VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId, "credential.current") with
+        {
+            EndpointOrigin = new Uri("https://caller.example.invalid", UriKind.Absolute),
+        };
+        var loader = CreateLoader(account, capability, evidence);
+
+        VoiceLabAuditionAuthorizationEvidence? resolved = await loader.LoadAsync(
+            CreateRequest(evidence.Selection),
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.NotNull(resolved);
+        Assert.Equal(EndpointOrigin, resolved.EndpointOrigin);
+        Assert.NotEqual(evidence.EndpointOrigin, resolved.EndpointOrigin);
+    }
+
+    [Fact]
     public async Task LoadAsyncRejectsProviderAccountWithoutExplicitEndpointOrigin()
     {
         Guid capabilityId = Guid.NewGuid();
@@ -233,30 +254,62 @@ public sealed class VoiceLabProductionAuditionEvidenceLoaderTests
 
     private sealed class AccountStore(ProviderAccountSnapshot? account) : IProviderAccountStore
     {
-        public Task<ProviderAccountSnapshot> CreateAsync(ProviderAccountReference accountReference, bool isEnabled, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<ProviderAccountSnapshot> UpdateAsync(ProviderAccountReference accountReference, bool isEnabled, long expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<ProviderAccountSnapshot?> FindAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default)
+        public Task<ProviderAccountSnapshot> CreateAsync(
+            ProviderAccountReference accountReference,
+            bool isEnabled,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderAccountSnapshot> UpdateAsync(
+            ProviderAccountReference accountReference,
+            bool isEnabled,
+            long expectedRevision,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderAccountSnapshot?> FindAsync(
+            string providerStableId,
+            string accountId,
+            CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(account is not null &&
                 string.Equals(account.Reference.ProviderStableId, providerStableId, StringComparison.Ordinal) &&
-                string.Equals(account.Reference.AccountId, accountId, StringComparison.Ordinal) ? account : null);
+                string.Equals(account.Reference.AccountId, accountId, StringComparison.Ordinal)
+                ? account
+                : null);
         }
+
         public Task<IReadOnlyList<ProviderAccountSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProviderAccountSnapshot>>(account is null ? [] : [account]);
     }
 
     private sealed class CapabilityStore(StoredProviderCapabilitySnapshot? capability) : IProviderCapabilitySnapshotStore
     {
-        public Task<StoredProviderCapabilitySnapshot> SaveAsync(ProviderCapabilitySnapshot snapshot, DateTimeOffset expiresAtUtc, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<StoredProviderCapabilitySnapshot?> GetLatestAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default)
+        public Task<StoredProviderCapabilitySnapshot> SaveAsync(
+            ProviderCapabilitySnapshot snapshot,
+            DateTimeOffset expiresAtUtc,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<StoredProviderCapabilitySnapshot?> GetLatestAsync(
+            string providerStableId,
+            string accountId,
+            CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(capability is not null &&
                 string.Equals(capability.Snapshot.Account.ProviderStableId, providerStableId, StringComparison.Ordinal) &&
-                string.Equals(capability.Snapshot.Account.AccountId, accountId, StringComparison.Ordinal) ? capability : null);
+                string.Equals(capability.Snapshot.Account.AccountId, accountId, StringComparison.Ordinal)
+                ? capability
+                : null);
         }
-        public Task<IReadOnlyList<StoredProviderCapabilitySnapshot>> ListRecentAsync(string providerStableId, string accountId, int maximumCount = 20, CancellationToken cancellationToken = default) =>
+
+        public Task<IReadOnlyList<StoredProviderCapabilitySnapshot>> ListRecentAsync(
+            string providerStableId,
+            string accountId,
+            int maximumCount = 20,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<StoredProviderCapabilitySnapshot>>(capability is null ? [] : [capability]);
     }
 }
