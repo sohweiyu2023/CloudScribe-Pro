@@ -1,0 +1,39 @@
+name: CloudScribe Stage 6 fast-track check
+
+on:
+  push:
+    branches:
+      - agent/stage6-fast-track
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Strict Stage 6 fast-track validation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git branch --show-current).Trim() -ne 'agent/stage6-fast-track') { throw 'Unexpected branch.' }
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+          dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~GoogleGenerationProductionEvidenceResolverTests|FullyQualifiedName~GoogleGenerationCurrentSpendAuthorizationResolverTests|FullyQualifiedName~GoogleGenerationProductionTransportFactoryTests|FullyQualifiedName~GoogleGenerationSpendAuthorizationStoreTests"
+          if ($LASTEXITCODE -ne 0) { throw 'Stage 6 focused production evidence/transport/spend tests failed.' }
