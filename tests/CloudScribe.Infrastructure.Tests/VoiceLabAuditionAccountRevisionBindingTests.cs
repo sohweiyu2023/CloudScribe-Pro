@@ -64,7 +64,13 @@ public sealed class VoiceLabAuditionAccountRevisionBindingTests
             (_, _) =>
             {
                 providerSubmissions++;
-                return Task.FromResult(new GenerationProviderResponse([], "audio/wav"));
+                return Task.FromResult(new GenerationProviderResponse(
+                    SubmissionDisposition.Accepted,
+                    "voice-lab-test-request",
+                    ReadOnlyMemory<byte>.Empty,
+                    "audio/wav",
+                    null,
+                    "accepted"));
             });
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
