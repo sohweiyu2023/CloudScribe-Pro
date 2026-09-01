@@ -54,6 +54,8 @@ public sealed class VoiceLabProductionAuditionEvidenceLoader
 
         if (!account.IsEnabled)
             throw new InvalidOperationException("Voice Lab audition provider account is disabled.");
+        if (account.Revision != evidence.AccountRevision)
+            throw new InvalidOperationException("Voice Lab audition provider account revision changed after authorization.");
 
         string credentialReferenceId = account.Reference.CredentialReference?.TargetName
             ?? throw new InvalidOperationException("Voice Lab audition provider account has no credential reference.");
