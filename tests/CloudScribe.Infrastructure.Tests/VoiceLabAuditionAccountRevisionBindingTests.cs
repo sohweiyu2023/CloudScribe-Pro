@@ -61,7 +61,7 @@ public sealed class VoiceLabAuditionAccountRevisionBindingTests
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
-            (_, _) =>
+            (_, _, _) =>
             {
                 providerSubmissions++;
                 return Task.FromResult(new GenerationProviderResponse(
