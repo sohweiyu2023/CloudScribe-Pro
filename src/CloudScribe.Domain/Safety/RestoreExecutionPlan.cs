@@ -16,14 +16,14 @@ public sealed record RestoreExecutionPlan(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumTotalBytes);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumFiles);
 
+        if (!Path.IsPathFullyQualified(restoreRoot))
+            throw new InvalidOperationException("Restore root must be explicitly fully qualified.");
+
         manifest = manifest.Validate();
         if (manifest.Files.Count > maximumFiles)
             throw new InvalidOperationException("Backup restore exceeds the authorized file-count ceiling.");
 
         var root = Path.GetFullPath(restoreRoot);
-        if (!Path.IsPathFullyQualified(root))
-            throw new InvalidOperationException("Restore root must resolve to an absolute path.");
-
         var prefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
         var steps = new List<RestoreExecutionStep>(manifest.Files.Count);
         long total = 0;
