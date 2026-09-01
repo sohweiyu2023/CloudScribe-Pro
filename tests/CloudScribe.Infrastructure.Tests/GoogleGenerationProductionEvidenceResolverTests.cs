@@ -54,6 +54,22 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsyncRejectsCapabilityCapturedBeforeCurrentAccountRevision()
+    {
+        ProviderAccountSnapshot account = CreateAccount(
+            isEnabled: true,
+            updatedAtUtc: Now.AddMinutes(-1),
+            revision: 2);
+        var resolver = CreateResolver(account, CreateCapability(account.Reference, Now.AddHours(1)));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAsync(
+            account.Reference.AccountId,
+            TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("revised after capability evidence", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ResolveAsyncRejectsCurrentAccountWithoutAdmittedEndpointOrigin()
     {
         ProviderAccountSnapshot account = CreateAccount(isEnabled: true, includeEndpointOrigin: false);
@@ -154,7 +170,11 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
         new CapabilityStore(capability),
         new FixedTimeProvider(Now));
 
-    private static ProviderAccountSnapshot CreateAccount(bool isEnabled, bool includeEndpointOrigin = true)
+    private static ProviderAccountSnapshot CreateAccount(
+        bool isEnabled,
+        bool includeEndpointOrigin = true,
+        DateTimeOffset? updatedAtUtc = null,
+        long revision = 1)
     {
         ProviderAccountReference reference = new(
             GoogleGenerationProvider.StableProviderId,
@@ -164,7 +184,12 @@ public sealed class GoogleGenerationProductionEvidenceResolverTests
             "google-tts-v1",
             "global",
             includeEndpointOrigin ? EndpointOrigin : null);
-        return new ProviderAccountSnapshot(reference, isEnabled, 1, Now.AddDays(-1), Now.AddHours(-1));
+        return new ProviderAccountSnapshot(
+            reference,
+            isEnabled,
+            revision,
+            Now.AddDays(-1),
+            updatedAtUtc ?? Now.AddHours(-1));
     }
 
     private static StoredProviderCapabilitySnapshot CreateCapability(
