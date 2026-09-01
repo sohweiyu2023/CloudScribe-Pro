@@ -36,6 +36,11 @@ public sealed record GoogleGenerationProductionEvidence(
             throw new InvalidOperationException("Current Google provider account has no admitted endpoint origin.");
         if (Capability.IsStale(nowUtc))
             throw new InvalidOperationException("Current Google capability evidence is stale.");
+        if (Account.UpdatedAtUtc > capability.CapturedAtUtc)
+        {
+            throw new InvalidOperationException(
+                "Current Google provider account was revised after capability evidence was captured; refresh capability evidence before generation.");
+        }
 
         ProviderAccountReference captured = capability.Account;
         if (captured.EndpointOrigin is null)
