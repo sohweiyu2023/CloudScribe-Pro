@@ -22,7 +22,8 @@ public sealed class Stage8ProductionSafetyRegistrationTests
     private static void AssertSingleton<TService>(IServiceCollection services)
     {
         ServiceDescriptor descriptor = Assert.Single(
-            services.Where(static descriptor => descriptor.ServiceType == typeof(TService)));
+            services,
+            static descriptor => descriptor.ServiceType == typeof(TService));
         Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
         Assert.Equal(typeof(TService), descriptor.ImplementationType);
     }
