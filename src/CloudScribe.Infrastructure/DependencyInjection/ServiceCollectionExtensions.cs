@@ -37,7 +37,7 @@ public static class ServiceCollectionExtensions
         AddPersistenceServices(services);
         AddProviderAndTrustServices(services, configuration);
         AddGenerationSupportServices(services);
-        AddSafetyServices(services);
+        AddSafetyServices(services, configuration);
         return services;
     }
 
@@ -117,9 +117,14 @@ public static class ServiceCollectionExtensions
                 serviceProvider.GetRequiredService<GenerationSupportBundleMetadataFileStore>().PersistAsync));
     }
 
-    private static void AddSafetyServices(IServiceCollection services)
+    private static void AddSafetyServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<AtomicVerifiedRestoreExecutor>();
         services.AddSingleton<RestoreRecoveryExecutionCompositionFactory>();
+        services.AddSingleton(serviceProvider =>
+            new RestoreRecoveryProductionConfigurationResolver(
+                serviceProvider.GetRequiredService<AppPaths>(),
+                configuration["CloudScribe:RestoreRecoveryAuthenticationKeyTargetName"]));
+        services.AddSingleton<RestoreRecoveryProductionRuntime>();
     }
 }

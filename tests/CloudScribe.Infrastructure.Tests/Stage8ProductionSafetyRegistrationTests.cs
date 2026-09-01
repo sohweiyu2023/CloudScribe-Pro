@@ -17,6 +17,7 @@ public sealed class Stage8ProductionSafetyRegistrationTests
 
         AssertSingleton<AtomicVerifiedRestoreExecutor>(services);
         AssertSingleton<RestoreRecoveryExecutionCompositionFactory>(services);
+        AssertSingleton<RestoreRecoveryProductionRuntime>(services);
     }
 
     private static void AssertSingleton<TService>(IServiceCollection services)
