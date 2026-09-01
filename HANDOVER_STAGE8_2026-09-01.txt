@@ -1,0 +1,24 @@
+CloudScribe Pro Stage8 production-recovery handover
+Date: 2026-09-01
+Baseline: v2.23
+Branch: repair/final-stage8-production-parallel
+
+Landed this run:
+- c639cb554416273c4b235ac27e703debec8fa583: production DI now registers AtomicVerifiedRestoreExecutor and RestoreRecoveryExecutionCompositionFactory.
+- a44bfc008c080e298ad9fa3714ce53005d03a519: focused regression test locks both registrations as singletons.
+
+Verified existing production path before mutation:
+- Stage8RestoreRecoveryShellBinder uses a fully-qualified journal/staging/backup path contract.
+- RestoreRecoveryExecutionCompositionFactory reads the journal authentication key from ICredentialVault, rejects missing/short key material, and creates FileAuthenticatedRestoreRecoveryJournalStore + RestoreRecoveryStateResolver + RestoreRecoveryExecutionService.
+- No fabricated recovery state or ambient credential path was introduced.
+
+Gate state at handover creation:
+- Stage8 source integration: advanced, NOT yet final because CompositionRoot still does not invoke Stage8RestoreRecoveryShellBinder.Configure.
+- Focused registration test CI: workflow not yet observed for a44bfc008c080e298ad9fa3714ce53005d03a519.
+- Full compiled tests: NOT RUN.
+- Final source acceptance: NOT RUN.
+- Windows publish/version 1.0.0 + actual CloudScribe.exe execution: NOT RUN.
+- exact-SHA freeze / strict/full / same-SHA no-change certification: NOT RUN.
+
+Next exact Stage8 implementation gate:
+Wire CompositionRoot to Stage8RestoreRecoveryShellBinder.Configure only from real persisted/configured credential reference, journal/staging/backup paths, and a real current RestoreExecutionPlan capture source. Fail closed if any required production input is unavailable; do not synthesize recovery state or success.
