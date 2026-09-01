@@ -29,7 +29,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
                 return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(currentEvidence);
             },
             new FixedTimeProvider(Now),
-            (_, _) =>
+            (_, _, _) =>
             {
                 submitCalls++;
                 return Task.FromResult(Accepted());
@@ -63,7 +63,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
             new CapabilityStore(capability),
             (_, _) => Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence),
             new FixedTimeProvider(Now),
-            (_, _) =>
+            (_, _, _) =>
             {
                 submitCalls++;
                 return Task.FromResult(Accepted());
@@ -88,13 +88,14 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
     }
 
     [Fact]
-    public async Task CreatedExecutorSubmitsExactRequestWhenEvidenceRemainsCurrent()
+    public async Task CreatedExecutorSubmitsExactRequestAndFreshEvidenceWhenEvidenceRemainsCurrent()
     {
         Guid capabilityId = Guid.NewGuid();
         ProviderAccountSnapshot account = CreateAccount("credential.current");
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId);
         VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId);
         VoiceLabAuditionRequest? submitted = null;
+        VoiceLabAuditionAuthorizationEvidence? submittedEvidence = null;
         int evidenceLoads = 0;
         var factory = new VoiceLabProductionAuthorizedAuditionExecutorFactory(
             new AccountStore(account),
@@ -105,9 +106,10 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
                 return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence);
             },
             new FixedTimeProvider(Now),
-            (request, _) =>
+            (request, freshEvidence, _) =>
             {
                 submitted = request;
+                submittedEvidence = freshEvidence;
                 return Task.FromResult(Accepted());
             });
         VoiceLabAuditionRequest request = CreateRequest(evidence.Selection);
@@ -122,6 +124,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
         Assert.Equal(2, evidenceLoads);
         Assert.Same(request, submitted);
+        Assert.Equal(evidence with { AccountRevision = account.Revision }, submittedEvidence);
     }
 
     private static ProviderAccountSnapshot CreateAccount(string credentialReferenceId)
