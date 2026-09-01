@@ -1,31 +1,48 @@
 CloudScribe Pro — Stage8 Production Recovery Handover
 Date: 2026-09-01
 Branch: repair/final-stage8-production-parallel
-Current substantive head before this handover: cdad40dc8fe188f7208a8c78cee4c0277e3d7cb9
+Current substantive source head before this handover: 69f1d671b2e9d5f978713b5464eb252ed6dddd14
 
-This run removed the restart-recovery plan-provenance gap without ambient reconstruction.
+This run closed the Stage8 application production-composition gap without fabricating credentials, endpoints, plans, trust, or recovery success.
 
-Landed production changes:
-- fdba232e33085ac291dd52afb823740287852ccd — RestoreTransactionJournal now persists the exact RestoreExecutionPlan inside the authenticated journal payload. RequirePersistedPlan fails closed when the plan is absent and independently verifies that the persisted plan still matches PlanSha256.
-- e858019dcaccf2ab1b437a952666dc3ad1e6e4c6 — RestoreRecoveryExecutionService now exposes RecoverPersistedAsync, which loads the authenticated journal and recovers only from its hash-bound persisted plan. It also rejects a relative backup root before normalization.
-- 7f8bf8ad496fccaf4a04a86f23a842157b831873 — Stage8RestoreRecoveryShellBinder now exposes ConfigurePersistedRecovery, removing any dependency on ambient/current-plan reconstruction for restart recovery while preserving explicit fully-qualified path checks.
-- cdad40dc8fe188f7208a8c78cee4c0277e3d7cb9 — focused domain regression tests lock persisted-plan presence and reject missing or hash-mismatched restart plans.
+Landed production change:
+- 69f1d671b2e9d5f978713b5464eb252ed6dddd14 — CompositionRoot now installs Stage8 persisted recovery through a production configuration resolver. The resolver requires an explicitly configured restore-journal authentication vault target and derives journal/staging/backup paths only from validated owned AppPaths. Missing or blank authentication-key configuration fails closed when recovery is invoked. Stage8RestoreRecoveryShellBinder gained a resolver-backed overload that preserves RestoreRecoveryExecutionCompositionFactory -> RecoverPersistedAsync and never reconstructs an execution plan from ambient state.
+
+Focused regression coverage in the same source commit:
+- RestoreRecoveryProductionConfigurationResolverTests rejects missing and blank authentication-key target configuration.
+- It verifies the configured vault target is preserved as CredentialReference evidence.
+- It verifies journal and staging roots are derived beneath the validated AppPaths root and backup root is the existing AppPaths.BackupsDirectory, all fully qualified.
+
+Existing restart-recovery safeguards retained:
+- fdba232e33085ac291dd52afb823740287852ccd — authenticated journal persists the exact RestoreExecutionPlan and verifies PlanSha256.
+- e858019dcaccf2ab1b437a952666dc3ad1e6e4c6 — RecoverPersistedAsync loads the authenticated hash-bound plan and rejects relative backup roots.
+- 7f8bf8ad496fccaf4a04a86f23a842157b831873 — restart recovery no longer needs ambient/current-plan capture.
+- cdad40dc8fe188f7208a8c78cee4c0277e3d7cb9 — regression tests reject missing/substituted persisted plans.
 
 Safety rationale:
-The recovery journal HMAC authenticates the serialized transaction payload, including the persisted execution plan. PlanSha256 independently binds the transaction to that exact plan. Restart recovery refuses legacy journals without an authenticated persisted plan and rejects plan swaps whose digest no longer matches. No working-directory state, current UI state, or fabricated plan is used to reconstruct restore authorization.
+The application now supplies recovery composition only through owned application-data paths and an explicit credential-vault reference. The key secret itself remains resolved by the registered vault-backed production composition factory. No current working directory, ambient credential, hardcoded secret, fabricated recovery state, or synthetic execution plan is used. Configuration absence rejects recovery rather than silently authorizing it.
 
-Gate state:
-- Authenticated persisted-plan restart recovery: PASS by source inspection.
+Exact gate state for source SHA 69f1d671b2e9d5f978713b5464eb252ed6dddd14:
+- Stage8 production CompositionRoot registration: PASS by source inspection.
+- Stage8 explicit credential/path fail-closed composition: PASS by source inspection.
 - Focused compiled tests: NOT RUN.
-- Exact source-head GitHub Actions for cdad40dc8fe188f7208a8c78cee4c0277e3d7cb9: NOT RUN; GitHub returned zero workflow runs.
-- CompositionRoot Stage8 production registration: NOT COMPLETE.
-- Final Windows executable acceptance / strict-full / exact-SHA no-change certification: NOT RUN.
+- GitHub commit statuses: NOT RUN / none present.
+- GitHub Actions exact-head runs: NOT RUN; REST head_sha query returned total_count=0.
+- Full compiled suite: NOT RUN.
+- Final source acceptance: NOT RUN.
+- Windows publish/version exact 1.0.0: NOT RUN.
+- Actual CloudScribe.exe execution acceptance: NOT RUN.
+- Exact source no-mutation / SHA freeze: NOT RUN.
+- Strict/full certification: NOT RUN.
+- Exact same-SHA no-change certification: NOT RUN.
 
-Still open:
-- CompositionRoot still does not invoke Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery.
-- Production composition still needs a genuine persisted/configured CredentialReference for restore-journal authentication. Do not fabricate or hardcode this reference.
-- Explicit journal and staging paths must be derived from trusted production AppPaths; the backup root already has a trusted AppPaths source.
-- Stage6 and Stage7 production composition remain independent open lanes.
+Parallel lane state at the time of this handover:
+- main: 14f85105f111d59e9693174153b5236bafe6f990 (untouched).
+- Stage6: 5c499209793fa6f40c0dad5b4a14669ed81fa50f — production composition still open.
+- Stage7: f5346465ae569517e5e43cfec558c17b06bd0df2 — production composition still open.
+- Stage8 substantive source: 69f1d671b2e9d5f978713b5464eb252ed6dddd14 — production application wiring landed; compiled validation remains outstanding.
 
-Next exact Stage8 gate:
-Bind trusted AppPaths-based journal/staging/backup paths and the real persisted/configured restore-journal authentication CredentialReference into CompositionRoot -> Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery, then add fail-closed composition tests and run/inspect the exact compiled gate when available.
+Next exact gates:
+1. Run/inspect a compiled Stage8-focused gate on substantive source SHA 69f1d671b2e9d5f978713b5464eb252ed6dddd14 when an executable CI/test path is available; fix the first exact compiler/analyzer/test failure if any.
+2. Continue Stage6 and Stage7 production composition independently rather than waiting on Stage8 CI.
+3. Do not enter serial Final gates until Stage6-8 production composition all pass compiled acceptance.
