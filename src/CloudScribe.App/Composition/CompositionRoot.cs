@@ -35,6 +35,7 @@ public static class CompositionRoot
         builder.Services.AddSingleton<GoogleGenerationProductionTransportFactory>();
         builder.Services.AddSingleton<GoogleGenerationProductionRuntimeEvidenceResolver>();
         builder.Services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
+        builder.Services.AddSingleton<Stage7VoiceLabAuditionShellBinder>();
         builder.Services.AddSingleton(serviceProvider =>
         {
             ShellViewModel viewModel = ActivatorUtilities.CreateInstance<ShellViewModel>(serviceProvider);
@@ -53,6 +54,7 @@ public static class CompositionRoot
                 serviceProvider.GetRequiredService<GenerationSupportBundleExportCoordinator>(),
                 currentPolicyAllowsDiagnostics: true);
             serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
+            serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);
             viewModel.ApplyFinalReleasePresentation();
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
