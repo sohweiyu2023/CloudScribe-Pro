@@ -152,7 +152,7 @@ public sealed class VoiceLabProductionCatalogTransport
             query.AccountId,
             cancellationToken).ConfigureAwait(false);
 
-        await using (adapter)
+        await using (adapter.ConfigureAwait(false))
         {
             VoiceLabProviderCatalogRequest request = new(
                 query.ProjectId,
