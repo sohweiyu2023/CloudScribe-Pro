@@ -14,7 +14,7 @@ public sealed class VoiceLabProviderAdapterResolverTests
             await resolver.ResolveAsync(
                 "google",
                 "account-1",
-                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -26,7 +26,7 @@ public sealed class VoiceLabProviderAdapterResolverTests
             await resolver.ResolveAsync(
                 " google",
                 "account-1",
-                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                TestContext.Current.CancellationToken));
 
         Assert.Contains("providerStableId", error.Message, StringComparison.Ordinal);
     }
@@ -42,7 +42,7 @@ public sealed class VoiceLabProviderAdapterResolverTests
             await resolver.ResolveAsync(
                 "google",
                 "account-1\n",
-                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                TestContext.Current.CancellationToken));
 
         Assert.Contains("accountStableId", error.Message, StringComparison.Ordinal);
         Assert.Equal(0, factory.CreateCalls);
@@ -59,7 +59,7 @@ public sealed class VoiceLabProviderAdapterResolverTests
             await resolver.ResolveAsync(
                 "google",
                 "account-1",
-                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                TestContext.Current.CancellationToken));
 
         Assert.Contains("returned no adapter", error.Message, StringComparison.Ordinal);
         Assert.Equal(1, factory.CreateCalls);
@@ -76,7 +76,7 @@ public sealed class VoiceLabProviderAdapterResolverTests
             await resolver.ResolveAsync(
                 "google",
                 "account-1",
-                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                TestContext.Current.CancellationToken));
 
         Assert.True(adapter.Disposed);
     }
@@ -91,11 +91,11 @@ public sealed class VoiceLabProviderAdapterResolverTests
         IVoiceLabProviderAdapter resolved = await resolver.ResolveAsync(
             "google",
             "account-1",
-            TestContext.Current.CancellationToken).ConfigureAwait(false);
+            TestContext.Current.CancellationToken);
 
         Assert.Same(adapter, resolved);
         Assert.False(adapter.Disposed);
-        await resolved.DisposeAsync().ConfigureAwait(false);
+        await resolved.DisposeAsync();
     }
 
     private sealed class FakeFactory(string providerId, IProviderAdapter adapter) : IProviderAdapterFactory
