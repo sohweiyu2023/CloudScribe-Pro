@@ -35,6 +35,7 @@ public static class CompositionRoot
         builder.Services.AddSingleton<GoogleGenerationProductionTransportFactory>();
         builder.Services.AddSingleton<GoogleGenerationProductionRuntimeEvidenceResolver>();
         builder.Services.AddSingleton<GoogleGenerationProductionExecutionContextResolver>();
+        builder.Services.AddSingleton<Stage6GoogleGenerationShellBinder>();
         builder.Services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
         builder.Services.AddSingleton<Stage7VoiceLabAuditionShellBinder>();
         builder.Services.AddSingleton(serviceProvider =>
