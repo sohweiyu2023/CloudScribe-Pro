@@ -10,6 +10,8 @@ public sealed record RestoreTransactionJournal(
     IReadOnlyList<string> CompletedRelativePaths,
     DateTimeOffset UpdatedAtUtc)
 {
+    public RestoreExecutionPlan? PersistedPlan { get; init; }
+
     public static RestoreTransactionJournal Start(RestoreExecutionPlan plan, DateTimeOffset nowUtc)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -19,7 +21,10 @@ public sealed record RestoreTransactionJournal(
             ComputePlanSha256(plan),
             RestoreTransactionState.Pending,
             Array.Empty<string>(),
-            nowUtc.ToUniversalTime());
+            nowUtc.ToUniversalTime())
+        {
+            PersistedPlan = plan,
+        };
     }
 
     public RestoreTransactionJournal BeginCopy(RestoreExecutionPlan plan, DateTimeOffset nowUtc)
@@ -92,6 +97,14 @@ public sealed record RestoreTransactionJournal(
             CompletedRelativePaths = Array.Empty<string>(),
             UpdatedAtUtc = nowUtc.ToUniversalTime(),
         };
+    }
+
+    public RestoreExecutionPlan RequirePersistedPlan()
+    {
+        RestoreExecutionPlan plan = PersistedPlan
+            ?? throw new InvalidDataException("Restore recovery journal does not contain the authenticated execution plan required for restart recovery.");
+        EnsurePlan(plan);
+        return plan;
     }
 
     public void EnsurePlan(RestoreExecutionPlan plan)
