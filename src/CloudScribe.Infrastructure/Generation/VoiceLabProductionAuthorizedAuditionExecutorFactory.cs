@@ -1,5 +1,6 @@
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Providers;
+using CloudScribe.Infrastructure.Providers;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Generation;
@@ -7,21 +8,22 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactory
 {
     private readonly VoiceLabProductionAuditionEvidenceLoader _evidenceLoader;
-    private readonly Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>> _submitAuthorizedTransport;
+    private readonly VoiceLabProviderAdapterResolver _providerAdapterResolver;
 
     public VoiceLabProductionAuthorizedAuditionExecutorFactory(
         IProviderAccountStore accounts,
         IProviderCapabilitySnapshotStore capabilities,
         Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence?>> loadCurrentEvidence,
         TimeProvider timeProvider,
-        Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>> submitAuthorizedTransport)
+        IProviderFactoryRegistry providerFactoryRegistry)
     {
         _evidenceLoader = new VoiceLabProductionAuditionEvidenceLoader(
             accounts ?? throw new ArgumentNullException(nameof(accounts)),
             capabilities ?? throw new ArgumentNullException(nameof(capabilities)),
             loadCurrentEvidence ?? throw new ArgumentNullException(nameof(loadCurrentEvidence)),
             timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)));
-        _submitAuthorizedTransport = submitAuthorizedTransport ?? throw new ArgumentNullException(nameof(submitAuthorizedTransport));
+        _providerAdapterResolver = new VoiceLabProviderAdapterResolver(
+            providerFactoryRegistry ?? throw new ArgumentNullException(nameof(providerFactoryRegistry)));
     }
 
     public async Task<IVoiceLabAuthorizedAuditionExecutor> CreateAsync(
@@ -39,6 +41,6 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactory
         return new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approvedEvidence,
             resolver.ResolveAsync,
-            _submitAuthorizedTransport);
+            _providerAdapterResolver.ResolveAuditionAsync);
     }
 }
