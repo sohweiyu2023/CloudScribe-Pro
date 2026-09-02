@@ -8,6 +8,9 @@ public interface IVoiceLabProjectAuthorizationStore
         string projectId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<VoiceLabProjectAuthorizationEvidence>> ListCurrentAsync(
+        CancellationToken cancellationToken = default);
+
     Task SaveVerifiedAsync(
         VoiceLabProjectAuthorizationEvidence evidence,
         CancellationToken cancellationToken = default);
