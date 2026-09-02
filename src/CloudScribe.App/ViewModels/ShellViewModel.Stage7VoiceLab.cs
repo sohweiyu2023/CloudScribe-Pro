@@ -10,8 +10,8 @@ public sealed partial class ShellViewModel
 {
     private VoiceLabCatalogQueryService? _voiceLabCatalog;
     private Func<CancellationToken, Task<VoiceLabCatalogUiState>>? _captureVoiceLabCatalogState;
-    private Func<VoiceLabCatalogSelection, VoiceLabAuditionExecutionService>? _createVoiceLabAuditionService;
-    private Func<VoiceLabCatalogSelection, VoiceLabAuditionRequest>? _captureVoiceLabAuditionRequest;
+    private Func<VoiceLabCatalogSelection, VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionExecutionService>>? _createVoiceLabAuditionService;
+    private Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabAuditionRequest>>? _captureVoiceLabAuditionRequest;
     private Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabCatalogSelection>>? _refreshVoiceLabSelection;
     private VoiceLabCatalogSelection? _selectedVoiceLabVoice;
     private int _voiceLabCatalogRefreshInFlight;
@@ -59,12 +59,12 @@ public sealed partial class ShellViewModel
     }
 
     public void ConfigureStage7VoiceLabAudition(
-        Func<VoiceLabCatalogSelection, VoiceLabAuditionExecutionService> createAuditionService,
-        Func<VoiceLabCatalogSelection, VoiceLabAuditionRequest> captureCurrentRequest,
+        Func<VoiceLabCatalogSelection, VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionExecutionService>> createAuditionServiceAsync,
+        Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabAuditionRequest>> captureCurrentRequestAsync,
         Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabCatalogSelection>> refreshCurrentSelectionAsync)
     {
-        _createVoiceLabAuditionService = createAuditionService ?? throw new ArgumentNullException(nameof(createAuditionService));
-        _captureVoiceLabAuditionRequest = captureCurrentRequest ?? throw new ArgumentNullException(nameof(captureCurrentRequest));
+        _createVoiceLabAuditionService = createAuditionServiceAsync ?? throw new ArgumentNullException(nameof(createAuditionServiceAsync));
+        _captureVoiceLabAuditionRequest = captureCurrentRequestAsync ?? throw new ArgumentNullException(nameof(captureCurrentRequestAsync));
         _refreshVoiceLabSelection = refreshCurrentSelectionAsync ?? throw new ArgumentNullException(nameof(refreshCurrentSelectionAsync));
         OnPropertyChanged(nameof(CanAuditionSelectedVoice));
         AuditionSelectedVoiceCommand.NotifyCanExecuteChanged();
@@ -164,14 +164,14 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Voice Lab selection refresh is not configured.");
 
             cancellationToken.ThrowIfCancellationRequested();
-            var request = capture(selected)
+            var request = await capture(selected, cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Voice Lab audition request is unavailable.");
             var currentSelection = await refresh(selected, cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Voice Lab current selection evidence is unavailable.");
             currentSelection.Validate();
 
             cancellationToken.ThrowIfCancellationRequested();
-            var service = create(selected)
+            var service = await create(selected, request, cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Voice Lab audition service factory returned no service.");
             var outcome = await service.ExecuteWithCurrentSelectionAsync(
                 request,
