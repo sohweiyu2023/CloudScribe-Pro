@@ -30,6 +30,7 @@ public static class CompositionRoot
         builder.Logging.SetMinimumLevel(LogLevel.Information);
 
         builder.Services.AddCloudScribeInfrastructure(builder.Configuration);
+        builder.Services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
         builder.Services.AddSingleton(serviceProvider =>
         {
             ShellViewModel viewModel = ActivatorUtilities.CreateInstance<ShellViewModel>(serviceProvider);
@@ -47,6 +48,7 @@ public static class CompositionRoot
             viewModel.ConfigureStage5GenerationDiagnostics(
                 serviceProvider.GetRequiredService<GenerationSupportBundleExportCoordinator>(),
                 currentPolicyAllowsDiagnostics: true);
+            serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
             viewModel.ApplyFinalReleasePresentation();
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
