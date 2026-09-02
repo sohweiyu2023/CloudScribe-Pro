@@ -15,6 +15,7 @@ using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Persistence;
 using CloudScribe.Infrastructure.Pricing;
 using CloudScribe.Infrastructure.Providers;
+using CloudScribe.Infrastructure.Safety;
 using CloudScribe.Infrastructure.Security;
 using CloudScribe.Providers.Abstractions;
 using Microsoft.Data.Sqlite;
@@ -36,6 +37,7 @@ public static class ServiceCollectionExtensions
         AddPersistenceServices(services);
         AddProviderAndTrustServices(services, configuration);
         AddGenerationSupportServices(services);
+        AddSafetyServices(services, configuration);
         return services;
     }
 
@@ -138,5 +140,16 @@ public static class ServiceCollectionExtensions
             new GenerationSupportBundleExportCoordinator(
                 serviceProvider.GetRequiredService<GenerationSupportBundleService>(),
                 serviceProvider.GetRequiredService<GenerationSupportBundleMetadataFileStore>().PersistAsync));
+    }
+
+    private static void AddSafetyServices(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddSingleton<AtomicVerifiedRestoreExecutor>();
+        services.AddSingleton<RestoreRecoveryExecutionCompositionFactory>();
+        services.AddSingleton(serviceProvider =>
+            new RestoreRecoveryProductionConfigurationResolver(
+                serviceProvider.GetRequiredService<AppPaths>(),
+                configuration["CloudScribe:RestoreRecoveryAuthenticationKeyTargetName"]));
+        services.AddSingleton<RestoreRecoveryProductionRuntime>();
     }
 }
