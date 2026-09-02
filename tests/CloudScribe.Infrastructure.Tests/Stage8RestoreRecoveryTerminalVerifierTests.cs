@@ -32,6 +32,25 @@ public sealed class Stage8RestoreRecoveryTerminalVerifierTests
     }
 
     [Fact]
+    public async Task VerifyAsyncCommittedJournalRejectsMissingDestination()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var temp = new TemporaryDirectory();
+        byte[] payload = [10, 11, 12];
+        string relative = "library/missing.bin";
+        string destination = Path.Combine(temp.Path, "library", "missing.bin");
+        var plan = CreatePlan(temp.Path, relative, destination, payload);
+        var now = DateTimeOffset.UtcNow;
+        var journal = RestoreTransactionJournal.Start(plan, now)
+            .BeginCopy(plan, now)
+            .MarkCopied(plan, relative, now)
+            .BeginVerification(plan, now)
+            .Commit(plan, now);
+
+        Assert.False(await RestoreRecoveryTerminalVerifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
+    }
+
+    [Fact]
     public async Task VerifyAsyncRolledBackJournalRequiresTransactionOutputsAbsent()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -51,6 +70,21 @@ public sealed class Stage8RestoreRecoveryTerminalVerifierTests
 
         await File.WriteAllBytesAsync(destination, payload, cancellationToken);
         Assert.False(await RestoreRecoveryTerminalVerifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken));
+    }
+
+    [Fact]
+    public async Task VerifyAsyncRejectsUnsupportedTerminalOutcome()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var temp = new TemporaryDirectory();
+        byte[] payload = [13, 14];
+        string relative = "unsupported.bin";
+        string destination = Path.Combine(temp.Path, relative);
+        var plan = CreatePlan(temp.Path, relative, destination, payload);
+        var journal = RestoreTransactionJournal.Start(plan, DateTimeOffset.UtcNow);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RestoreRecoveryTerminalVerifier.VerifyAsync("fabricated-success", plan, journal, cancellationToken));
     }
 
     private static RestoreExecutionPlan CreatePlan(
