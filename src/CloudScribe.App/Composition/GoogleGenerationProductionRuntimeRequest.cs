@@ -16,10 +16,12 @@ public sealed record GoogleGenerationProductionRuntimeRequest(
     public GoogleGenerationProductionRuntimeRequest Validate()
     {
         RequireCanonical(AccountId, nameof(AccountId));
-        ArgumentNullException.ThrowIfNull(SubmissionEnvelope);
+        if (SubmissionEnvelope is null)
+            throw new InvalidOperationException("Google runtime request requires a durable submission envelope.");
         RequireCanonical(PricingProvenanceId, nameof(PricingProvenanceId));
         RequireCanonical(Currency, nameof(Currency));
-        ArgumentNullException.ThrowIfNull(Snapshot);
+        if (Snapshot is null)
+            throw new InvalidOperationException("Google runtime request requires a current UI execution snapshot.");
 
         if (RequestRevision < 0)
             throw new InvalidOperationException("Google generation request revision cannot be negative.");
