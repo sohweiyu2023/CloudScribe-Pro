@@ -67,5 +67,7 @@ public sealed class VoiceLabProviderAdapterResolverTests
         }
     }
 
-    private sealed class VoiceLabAdapter(string providerId) : GenericAdapter(providerId), IVoiceLabProviderAdapter;
+    private sealed class VoiceLabAdapter(string providerId) : GenericAdapter(providerId), IVoiceLabProviderAdapter
+    {
+    }
 }
