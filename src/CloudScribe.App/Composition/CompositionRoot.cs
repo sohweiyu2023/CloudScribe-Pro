@@ -5,6 +5,7 @@ using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Providers;
 using CloudScribe.Infrastructure.DependencyInjection;
 using CloudScribe.Infrastructure.Generation;
+using CloudScribe.Infrastructure.Safety;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -57,6 +58,11 @@ public static class CompositionRoot
                 currentPolicyAllowsDiagnostics: true);
             serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
             serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);
+            Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(
+                viewModel,
+                serviceProvider.GetRequiredService<RestoreRecoveryExecutionCompositionFactory>(),
+                serviceProvider.GetRequiredService<RestoreRecoveryProductionConfigurationResolver>(),
+                serviceProvider.GetRequiredService<AtomicVerifiedRestoreExecutor>());
             viewModel.ApplyFinalReleasePresentation();
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
