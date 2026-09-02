@@ -89,6 +89,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProviderFactoryRegistry, ProviderFactoryRegistry>();
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
+        services.AddSingleton<VoiceLabProviderAdapterResolver>();
         services.AddSingleton<GoogleGenerationProductionEvidenceResolver>();
         services.AddSingleton<StrictJsonObjectReader>();
         services.AddSingleton<ExactPricingControlMaterialInspector>();
