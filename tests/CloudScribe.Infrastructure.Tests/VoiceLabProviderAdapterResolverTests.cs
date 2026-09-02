@@ -3,6 +3,8 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Tests;
 
+#pragma warning disable MA0004 // xUnit1030 requires test awaits to preserve the test synchronization context.
+
 public sealed class VoiceLabProviderAdapterResolverTests
 {
     [Fact]
@@ -146,3 +148,5 @@ public sealed class VoiceLabProviderAdapterResolverTests
     {
     }
 }
+
+#pragma warning restore MA0004
