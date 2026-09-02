@@ -16,6 +16,32 @@ public sealed class VoiceLabProviderAdapterResolver
         string accountStableId,
         CancellationToken cancellationToken = default)
     {
+        var adapter = await ResolveAdapterAsync(providerStableId, accountStableId, cancellationToken).ConfigureAwait(false);
+        if (adapter is IVoiceLabProviderAdapter voiceLabAdapter)
+            return voiceLabAdapter;
+
+        await adapter.DisposeAsync().ConfigureAwait(false);
+        throw new InvalidOperationException("Provider adapter does not expose Voice Lab catalog capability.");
+    }
+
+    public async ValueTask<IVoiceLabAuditionProviderAdapter> ResolveAuditionAsync(
+        string providerStableId,
+        string accountStableId,
+        CancellationToken cancellationToken = default)
+    {
+        var adapter = await ResolveAdapterAsync(providerStableId, accountStableId, cancellationToken).ConfigureAwait(false);
+        if (adapter is IVoiceLabAuditionProviderAdapter auditionAdapter)
+            return auditionAdapter;
+
+        await adapter.DisposeAsync().ConfigureAwait(false);
+        throw new InvalidOperationException("Provider adapter does not expose Voice Lab audition capability.");
+    }
+
+    private async ValueTask<IProviderAdapter> ResolveAdapterAsync(
+        string providerStableId,
+        string accountStableId,
+        CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateIdentity(providerStableId, nameof(providerStableId));
         ValidateIdentity(accountStableId, nameof(accountStableId));
@@ -36,13 +62,7 @@ public sealed class VoiceLabProviderAdapterResolver
             throw new InvalidOperationException("Voice Lab provider adapter identity mismatch.");
         }
 
-        if (adapter is not IVoiceLabProviderAdapter voiceLabAdapter)
-        {
-            await adapter.DisposeAsync().ConfigureAwait(false);
-            throw new InvalidOperationException("Provider adapter does not expose Voice Lab capability.");
-        }
-
-        return voiceLabAdapter;
+        return adapter;
     }
 
     private static void ValidateIdentity(string value, string parameterName)
