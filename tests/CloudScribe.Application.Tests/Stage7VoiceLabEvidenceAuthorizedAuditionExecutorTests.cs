@@ -7,138 +7,146 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
 {
     [Fact]
-    public async Task MatchingCurrentEvidenceResolvesAndSubmitsExactRequestAndEvidence()
+    public async Task MatchingCurrentEvidenceSubmitsBoundProviderRequestAndDisposesAdapter()
     {
         var approved = CurrentEvidence();
-        VoiceLabAuditionRequest? resolved = null;
-        VoiceLabAuditionRequest? submitted = null;
-        VoiceLabAuditionAuthorizationEvidence? submittedEvidence = null;
+        var evidenceReads = 0;
+        var adapter = new RecordingAuditionAdapter(approved.Selection.ProviderStableId);
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (request, _) =>
             {
-                resolved = request;
+                Assert.Same(CurrentRequestSelectionHolder.Selection, request.Selection);
+                evidenceReads++;
                 return Task.FromResult(approved);
             },
-            (request, evidence, _) =>
+            (providerStableId, accountStableId, _) =>
             {
-                submitted = request;
-                submittedEvidence = evidence;
-                return Task.FromResult(Accepted());
+                Assert.Equal(approved.Selection.ProviderStableId, providerStableId);
+                Assert.Equal(approved.Selection.AccountStableId, accountStableId);
+                return ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(adapter);
             });
-        var request = CurrentRequest();
+        var request = CurrentRequestSelectionHolder.Request;
 
         var response = await executor.SubmitAuthorizedAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
-        Assert.Same(request, resolved);
-        Assert.Same(request, submitted);
-        Assert.Same(approved, submittedEvidence);
+        Assert.Equal(2, evidenceReads);
+        Assert.Equal(1, adapter.SubmitCalls);
+        Assert.Equal(1, adapter.DisposeCalls);
+        var providerRequest = Assert.IsType<VoiceLabProviderAuditionRequest>(adapter.LastRequest);
+        Assert.Equal(approved.Selection.ProviderStableId, providerRequest.ProviderStableId);
+        Assert.Equal(approved.Selection.AccountStableId, providerRequest.AccountStableId);
+        Assert.Equal(approved.Selection.ProjectStableId, providerRequest.ProjectStableId);
+        Assert.Equal(approved.Selection.VoiceStableId, providerRequest.VoiceStableId);
+        Assert.Equal(approved.Selection.VoiceFingerprint, providerRequest.VoiceFingerprint);
+        Assert.Equal(approved.Selection.CapabilityEvidenceId, providerRequest.CapabilityEvidenceId);
+        Assert.Equal(approved.CredentialReferenceId, providerRequest.CredentialReferenceId);
+        Assert.Equal(approved.PricingEvidenceId, providerRequest.PricingEvidenceId);
+        Assert.Equal(approved.SpendAuthorizationId, providerRequest.SpendAuthorizationId);
+        Assert.Equal(approved.AccountRevision, providerRequest.AccountRevision);
+        Assert.Equal("wav", providerRequest.OutputFormat);
+        Assert.True(providerRequest.ForceFresh);
     }
 
     [Fact]
-    public async Task ChangedCredentialReferenceFailsClosedBeforeProviderSubmit()
+    public async Task EvidenceDriftAfterAdapterResolutionFailsClosedBeforeProviderSubmit()
+    {
+        var approved = CurrentEvidence();
+        var changed = approved with { CredentialReferenceId = "credential-b" };
+        var evidenceReads = 0;
+        var adapter = new RecordingAuditionAdapter(approved.Selection.ProviderStableId);
+        var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
+            approved,
+            (_, _) => Task.FromResult(++evidenceReads == 1 ? approved : changed),
+            (_, _, _) => ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(adapter));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(2, evidenceReads);
+        Assert.Equal(0, adapter.SubmitCalls);
+        Assert.Equal(1, adapter.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task ChangedCredentialReferenceFailsClosedBeforeAdapterResolution()
     {
         var approved = CurrentEvidence();
         var current = approved with { CredentialReferenceId = "credential-b" };
-        var submitCalls = 0;
+        var resolveCalls = 0;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
             (_, _, _) =>
             {
-                submitCalls++;
-                return Task.FromResult(Accepted());
+                resolveCalls++;
+                return ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(new RecordingAuditionAdapter(approved.Selection.ProviderStableId));
             });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(0, submitCalls);
+        Assert.Equal(0, resolveCalls);
     }
 
     [Fact]
-    public async Task ChangedPricingEvidenceFailsClosedBeforeProviderSubmit()
+    public async Task ChangedPricingEvidenceFailsClosedBeforeAdapterResolution()
     {
         var approved = CurrentEvidence();
         var current = approved with { PricingEvidenceId = "pricing-b" };
-        var submitCalls = 0;
+        var resolveCalls = 0;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
             (_, _, _) =>
             {
-                submitCalls++;
-                return Task.FromResult(Accepted());
+                resolveCalls++;
+                return ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(new RecordingAuditionAdapter(approved.Selection.ProviderStableId));
             });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(0, submitCalls);
+        Assert.Equal(0, resolveCalls);
     }
 
     [Fact]
-    public async Task ChangedSpendAuthorizationFailsClosedBeforeProviderSubmit()
+    public async Task ChangedSpendAuthorizationFailsClosedBeforeAdapterResolution()
     {
         var approved = CurrentEvidence();
         var current = approved with { SpendAuthorizationId = "spend-b" };
-        var submitCalls = 0;
+        var resolveCalls = 0;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
             (_, _, _) =>
             {
-                submitCalls++;
-                return Task.FromResult(Accepted());
+                resolveCalls++;
+                return ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(new RecordingAuditionAdapter(approved.Selection.ProviderStableId));
             });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(0, submitCalls);
+        Assert.Equal(0, resolveCalls);
     }
 
     [Fact]
-    public async Task RevokedSpendApprovalFailsClosedBeforeProviderSubmit()
+    public async Task ProviderIdentityMismatchFailsClosedAndDisposesAdapter()
     {
         var approved = CurrentEvidence();
-        var current = approved with { SpendApproved = false };
-        var submitCalls = 0;
+        var adapter = new RecordingAuditionAdapter("other-provider");
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
-            (_, _) => Task.FromResult(current),
-            (_, _, _) =>
-            {
-                submitCalls++;
-                return Task.FromResult(Accepted());
-            });
+            (_, _) => Task.FromResult(approved),
+            (_, _, _) => ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(adapter));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(0, submitCalls);
-    }
-
-    [Fact]
-    public async Task StalePricingFailsClosedBeforeProviderSubmit()
-    {
-        var approved = CurrentEvidence();
-        var current = approved with { PricingCurrent = false };
-        var submitCalls = 0;
-        var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
-            approved,
-            (_, _) => Task.FromResult(current),
-            (_, _, _) =>
-            {
-                submitCalls++;
-                return Task.FromResult(Accepted());
-            });
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
-
-        Assert.Equal(0, submitCalls);
+        Assert.Equal(0, adapter.SubmitCalls);
+        Assert.Equal(1, adapter.DisposeCalls);
     }
 
     private static VoiceLabAuditionRequest CurrentRequest() => new(
@@ -175,4 +183,45 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         "audio/wav",
         null,
         "audition-accepted");
+
+    private static class CurrentRequestSelectionHolder
+    {
+        internal static readonly VoiceLabCatalogSelection Selection = CurrentSelection();
+        internal static readonly VoiceLabAuditionRequest Request = new(
+            Selection,
+            CachePolicyEligible: false,
+            ForceFresh: true,
+            ExplicitSpendApproved: true,
+            PricingCurrent: true,
+            OutputFormat: "wav");
+    }
+
+    private sealed class RecordingAuditionAdapter : IVoiceLabAuditionProviderAdapter
+    {
+        internal RecordingAuditionAdapter(string providerStableId)
+        {
+            Descriptor = new ProviderDescriptor(providerStableId, "Voice Lab Test Provider", true, true);
+        }
+
+        public ProviderDescriptor Descriptor { get; }
+        internal VoiceLabProviderAuditionRequest? LastRequest { get; private set; }
+        internal int SubmitCalls { get; private set; }
+        internal int DisposeCalls { get; private set; }
+
+        public Task<GenerationProviderResponse> SubmitVoiceLabAuditionAsync(
+            VoiceLabProviderAuditionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastRequest = (request ?? throw new ArgumentNullException(nameof(request))).Validate();
+            SubmitCalls++;
+            return Task.FromResult(Accepted());
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCalls++;
+            return ValueTask.CompletedTask;
+        }
+    }
 }
