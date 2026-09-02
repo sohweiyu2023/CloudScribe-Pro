@@ -11,7 +11,10 @@ public sealed class VoiceLabProviderAdapterResolverTests
         VoiceLabProviderAdapterResolver resolver = new(new ProviderFactoryRegistry([]));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await resolver.ResolveAsync("google", "account-1"));
+            await resolver.ResolveAsync(
+                "google",
+                "account-1",
+                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     [Fact]
@@ -22,7 +25,10 @@ public sealed class VoiceLabProviderAdapterResolverTests
             [new FakeFactory("google", adapter)]));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await resolver.ResolveAsync("google", "account-1"));
+            await resolver.ResolveAsync(
+                "google",
+                "account-1",
+                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.True(adapter.Disposed);
     }
@@ -34,11 +40,14 @@ public sealed class VoiceLabProviderAdapterResolverTests
         VoiceLabProviderAdapterResolver resolver = new(new ProviderFactoryRegistry(
             [new FakeFactory("google", adapter)]));
 
-        IVoiceLabProviderAdapter resolved = await resolver.ResolveAsync("google", "account-1");
+        IVoiceLabProviderAdapter resolved = await resolver.ResolveAsync(
+            "google",
+            "account-1",
+            TestContext.Current.CancellationToken).ConfigureAwait(false);
 
         Assert.Same(adapter, resolved);
         Assert.False(adapter.Disposed);
-        await resolved.DisposeAsync();
+        await resolved.DisposeAsync().ConfigureAwait(false);
     }
 
     private sealed class FakeFactory(string providerId, IProviderAdapter adapter) : IProviderAdapterFactory
