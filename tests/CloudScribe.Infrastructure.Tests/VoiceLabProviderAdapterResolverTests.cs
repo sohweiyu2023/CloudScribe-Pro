@@ -146,6 +146,14 @@ public sealed class VoiceLabProviderAdapterResolverTests
 
     private sealed class VoiceLabAdapter(string providerId) : GenericAdapter(providerId), IVoiceLabProviderAdapter
     {
+        public Task<IReadOnlyList<VoiceLabProviderCatalogVoice>> QueryVoiceLabCatalogAsync(
+            VoiceLabProviderCatalogRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<IReadOnlyList<VoiceLabProviderCatalogVoice>>([]);
+        }
     }
 }
 
