@@ -10,25 +10,45 @@ public sealed class VoiceLabCatalogCurrentEvidenceResolverTests
     private static readonly DateTimeOffset Now = new(2026, 9, 2, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task ResolveAsyncBindsPersistedAccountAndCapabilityButDoesNotInventProjectAuthorization()
+    public async Task ResolveAsyncBindsPersistedAccountCapabilityAndProjectAuthorization()
     {
         ProviderAccountSnapshot account = CreateAccount(isEnabled: true);
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, Now.AddHours(1));
+        VoiceLabProjectAuthorizationEvidence project = CreateProjectEvidence(account, capability, privateAccess: true);
         var resolver = new VoiceLabCatalogCurrentEvidenceResolver(
             new AccountStore(account),
             new CapabilityStore(capability),
+            new ProjectStore(project),
             new FixedTimeProvider(Now));
 
         VoiceLabCatalogAuthorizationEvidence? evidence = await resolver.ResolveAsync(
-            CreateQuery(),
+            CreateQuery(includePrivateVoices: true),
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.NotNull(evidence);
         Assert.Equal(account.Revision, evidence.AccountRevision);
         Assert.Equal("credential.current", evidence.CredentialReferenceId);
         Assert.Equal(capability.Id.ToString("D"), evidence.CapabilityEvidenceId, ignoreCase: true);
-        Assert.False(evidence.ProjectAuthorized);
-        Assert.False(evidence.PrivateVoiceAccessAuthorized);
+        Assert.True(evidence.ProjectAuthorized);
+        Assert.True(evidence.PrivateVoiceAccessAuthorized);
+    }
+
+    [Fact]
+    public async Task ResolveAsyncDoesNotInventMissingProjectAuthorization()
+    {
+        ProviderAccountSnapshot account = CreateAccount(isEnabled: true);
+        StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, Now.AddHours(1));
+        var resolver = new VoiceLabCatalogCurrentEvidenceResolver(
+            new AccountStore(account),
+            new CapabilityStore(capability),
+            new ProjectStore(null),
+            new FixedTimeProvider(Now));
+
+        VoiceLabCatalogAuthorizationEvidence? evidence = await resolver.ResolveAsync(
+            CreateQuery(includePrivateVoices: false),
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Null(evidence);
     }
 
     [Fact]
@@ -36,20 +56,22 @@ public sealed class VoiceLabCatalogCurrentEvidenceResolverTests
     {
         ProviderAccountSnapshot account = CreateAccount(isEnabled: true);
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, Now.AddMinutes(-1));
+        VoiceLabProjectAuthorizationEvidence project = CreateProjectEvidence(account, capability, privateAccess: false);
         var resolver = new VoiceLabCatalogCurrentEvidenceResolver(
             new AccountStore(account),
             new CapabilityStore(capability),
+            new ProjectStore(project),
             new FixedTimeProvider(Now));
 
         VoiceLabCatalogAuthorizationEvidence? evidence = await resolver.ResolveAsync(
-            CreateQuery(),
+            CreateQuery(includePrivateVoices: false),
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Null(evidence);
     }
 
-    private static VoiceLabCatalogQuery CreateQuery() => new(
-        "google", "primary", "project-1", SearchText: null, Locale: "en-US", IncludePrivateVoices: false);
+    private static VoiceLabCatalogQuery CreateQuery(bool includePrivateVoices) => new(
+        "google", "primary", "project-1", SearchText: null, Locale: "en-US", IncludePrivateVoices: includePrivateVoices);
 
     private static ProviderAccountSnapshot CreateAccount(bool isEnabled)
     {
@@ -70,9 +92,41 @@ public sealed class VoiceLabCatalogCurrentEvidenceResolverTests
         return new StoredProviderCapabilitySnapshot(Guid.NewGuid(), snapshot, expiresAtUtc);
     }
 
+    private static VoiceLabProjectAuthorizationEvidence CreateProjectEvidence(
+        ProviderAccountSnapshot account,
+        StoredProviderCapabilitySnapshot capability,
+        bool privateAccess) => new(
+            account.Reference.ProviderStableId,
+            account.Reference.AccountId,
+            "project-1",
+            account.Revision,
+            account.Reference.CredentialReference!.TargetName,
+            capability.Id.ToString("D"),
+            ProjectAuthorized: true,
+            PrivateVoiceAccessAuthorized: privateAccess,
+            CapturedAtUtc: Now.AddMinutes(-1),
+            ExpiresAtUtc: Now.AddMinutes(30));
+
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class ProjectStore(VoiceLabProjectAuthorizationEvidence? evidence) : IVoiceLabProjectAuthorizationStore
+    {
+        public Task<VoiceLabProjectAuthorizationEvidence?> LoadCurrentAsync(string providerId, string accountId, string projectId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(evidence is not null &&
+                string.Equals(evidence.ProviderId, providerId, StringComparison.Ordinal) &&
+                string.Equals(evidence.AccountId, accountId, StringComparison.Ordinal) &&
+                string.Equals(evidence.ProjectId, projectId, StringComparison.Ordinal)
+                ? evidence
+                : null);
+        }
+
+        public Task SaveVerifiedAsync(VoiceLabProjectAuthorizationEvidence evidenceToSave, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class AccountStore(ProviderAccountSnapshot? account) : IProviderAccountStore
