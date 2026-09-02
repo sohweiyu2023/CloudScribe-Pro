@@ -16,7 +16,7 @@ public sealed class Stage7VoiceLabCatalogShellBinder(
         viewModel.ConfigureStage7VoiceLabCatalog(catalogService, CaptureCurrentStateAsync);
     }
 
-    private async Task<VoiceLabCatalogUiState> CaptureCurrentStateAsync(
+    public async Task<VoiceLabCatalogUiState> CaptureCurrentStateAsync(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
