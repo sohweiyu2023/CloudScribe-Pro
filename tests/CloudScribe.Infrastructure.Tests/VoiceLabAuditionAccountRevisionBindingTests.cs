@@ -1,6 +1,5 @@
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Providers;
-using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
 
@@ -51,33 +50,28 @@ public sealed class VoiceLabAuditionAccountRevisionBindingTests
     }
 
     [Fact]
-    public async Task AuthorizedExecutorRejectsAccountRevisionDriftBeforeProviderSubmission()
+    public async Task AuthorizedExecutorRejectsAccountRevisionDriftBeforeProviderResolution()
     {
         Guid capabilityId = Guid.NewGuid();
         VoiceLabAuditionAuthorizationEvidence approved = CreateEvidence(capabilityId, accountRevision: 1);
         VoiceLabAuditionAuthorizationEvidence current = approved with { AccountRevision = 2 };
         VoiceLabAuditionRequest request = CreateRequest(approved.Selection);
-        int providerSubmissions = 0;
+        int providerResolutions = 0;
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(current),
             (_, _, _) =>
             {
-                providerSubmissions++;
-                return Task.FromResult(new GenerationProviderResponse(
-                    SubmissionDisposition.Accepted,
-                    "voice-lab-test-request",
-                    ReadOnlyMemory<byte>.Empty,
-                    "audio/wav",
-                    null,
-                    "accepted"));
+                providerResolutions++;
+                return ValueTask.FromException<IVoiceLabAuditionProviderAdapter>(
+                    new InvalidOperationException("Provider resolution must not occur after revision drift."));
             });
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             executor.SubmitAuthorizedAsync(request, TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
         Assert.Contains("authorization evidence changed", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(0, providerSubmissions);
+        Assert.Equal(0, providerResolutions);
     }
 
     private static VoiceLabAuditionAuthorizationEvidence CreateEvidence(Guid capabilityId, long accountRevision)
