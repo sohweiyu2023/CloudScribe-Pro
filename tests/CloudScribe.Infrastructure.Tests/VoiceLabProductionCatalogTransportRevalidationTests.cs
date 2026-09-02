@@ -1,7 +1,7 @@
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Providers;
-using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
+using CloudScribe.Infrastructure.Providers;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Tests;
@@ -27,11 +27,7 @@ public sealed class VoiceLabProductionCatalogTransportRevalidationTests
             new CapabilityStore(capability),
             (_, _) => Task.FromResult<VoiceLabCatalogAuthorizationEvidence?>(
                 ++authorizationLoads == 1 ? approved : revoked),
-            (_, _) =>
-            {
-                providerCalls++;
-                return Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([CreateSelection(capabilityId)]);
-            },
+            CreateResolver(() => providerCalls++),
             new FixedTimeProvider(Now));
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => transport.QueryAsync(
@@ -64,11 +60,7 @@ public sealed class VoiceLabProductionCatalogTransportRevalidationTests
             new SequencedAccountStore(() => ++accountLoads == 1 ? approvedAccount : changedAccount),
             new CapabilityStore(capability),
             (_, _) => Task.FromResult<VoiceLabCatalogAuthorizationEvidence?>(approved),
-            (_, _) =>
-            {
-                providerCalls++;
-                return Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([CreateSelection(capabilityId)]);
-            },
+            CreateResolver(() => providerCalls++),
             new FixedTimeProvider(Now));
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => transport.QueryAsync(
@@ -80,6 +72,9 @@ public sealed class VoiceLabProductionCatalogTransportRevalidationTests
         Assert.Equal(1, providerCalls);
     }
 
+    private static VoiceLabProviderAdapterResolver CreateResolver(Action onProviderCall) =>
+        new(new ProviderFactoryRegistry([new FakeFactory(new VoiceLabAdapter(onProviderCall))]));
+
     private static VoiceLabCatalogAuthorizationEvidence CreateEvidence(Guid capabilityId, bool projectAuthorized) => new(
         "google",
         "primary",
@@ -89,17 +84,6 @@ public sealed class VoiceLabProductionCatalogTransportRevalidationTests
         capabilityId.ToString("D"),
         projectAuthorized,
         PrivateVoiceAccessAuthorized: false);
-
-    private static VoiceLabCatalogSelection CreateSelection(Guid capabilityId) => new(
-        "voice-1",
-        "google",
-        "primary",
-        "project-1",
-        capabilityId.ToString("D"),
-        "voice-fingerprint-1",
-        CapabilityCurrent: true,
-        VoiceEnabled: true,
-        AccountProjectAuthorized: true);
 
     private static ProviderAccountSnapshot CreateAccount()
     {
@@ -172,5 +156,37 @@ public sealed class VoiceLabProductionCatalogTransportRevalidationTests
 
         public Task<IReadOnlyList<StoredProviderCapabilitySnapshot>> ListRecentAsync(string providerStableId, string accountId, int maximumCount = 20, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<StoredProviderCapabilitySnapshot>>([capability]);
+    }
+
+    private sealed class FakeFactory(IProviderAdapter adapter) : IProviderAdapterFactory
+    {
+        public ProviderDescriptor Descriptor { get; } = new("google", "google", true, true);
+
+        public ValueTask<IProviderAdapter> CreateAdapterAsync(string accountId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.Equals(accountId, "primary", StringComparison.Ordinal))
+                throw new InvalidOperationException("Unexpected Voice Lab test account.");
+            return ValueTask.FromResult(adapter);
+        }
+    }
+
+    private sealed class VoiceLabAdapter(Action onProviderCall) : IVoiceLabProviderAdapter
+    {
+        public ProviderDescriptor Descriptor { get; } = new("google", "google", true, true);
+
+        public Task<IReadOnlyList<VoiceLabProviderCatalogVoice>> QueryVoiceLabCatalogAsync(
+            VoiceLabProviderCatalogRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            cancellationToken.ThrowIfCancellationRequested();
+            onProviderCall();
+            return Task.FromResult<IReadOnlyList<VoiceLabProviderCatalogVoice>>([
+                new("voice-1", "voice-fingerprint-1", VoiceEnabled: true, AccountProjectAuthorized: true)
+            ]);
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
