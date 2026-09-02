@@ -7,24 +7,29 @@ Main remains untouched at 14f85105f111d59e9693174153b5236bafe6f990.
 Verified live state before mutations:
 - main: 14f85105f111d59e9693174153b5236bafe6f990.
 - Stage6 active helper repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1; Stage6 ~92%. Prior agent/stage6-fast-track Windows gate at 9a63f5432fcfe3781c56b05f9220909939b1100a passed.
-- Stage7 substantive head before this handover: b8a294843358c145344d5817ad36b50bed200d12.
+- Stage7 live head before this run: 4a7065ae589552dce50310010ec8736d0441b0ee.
 - Stage8 repair/final-stage8-production-parallel: 4e3ef9ca668a4f470b761eeae91e20fbff53b165; Stage8 ~99%, prior focused Windows acceptance passed.
 
-New exact CI finding and repair:
-- 6ad27ce5178a12d9b1383748339b52af3d6d4278 / Windows run 33575640084: FAIL, not PASS. The first exact failure was dotnet format/analyzer validation in VoiceLabProviderAdapterResolverTests.cs: MA0004 for missing ConfigureAwait(false) and xUnit1051 for calls omitting TestContext.Current.CancellationToken.
-- 5332c32c6c0350dcc1c2391cdd13023aba558f0c: repaired those exact failures by passing TestContext.Current.CancellationToken through resolver calls and using ConfigureAwait(false) on asynchronous test paths. Exact Windows run 33578913268 started for this SHA.
-- b8a294843358c145344d5817ad36b50bed200d12: added focused fail-closed identity regressions. Non-canonical provider identity is rejected before factory lookup; non-canonical account identity is rejected before adapter creation; the factory call count remains zero on rejected account identity. Exact Windows run 33578969814 was queued at handover creation.
+Corrected exact CI state:
+- 5332c32c6c0350dcc1c2391cdd13023aba558f0c / Windows run 33578913268: FAIL.
+- b8a294843358c145344d5817ad36b50bed200d12 / Windows run 33578969814: FAIL.
+- 4a7065ae589552dce50310010ec8736d0441b0ee / Windows run 33579041789: FAIL in Strict Stage 7 fast-track validation. The connector exposes the failing step but not the textual log payload, so no unsupported exact analyzer code is claimed for these later failures.
+
+Substantive changes landed this run:
+- 64123052363b520de4695565b319372771f59116: VoiceLabProviderAdapterResolver now fails closed if a provider factory returns no adapter instead of allowing a null adapter to become an uncontrolled NullReferenceException at the trust boundary.
+- f6b6c7fad52628ae4e5702408512b981e35e2d24: added focused regression coverage proving a null-returning provider factory is rejected as an InvalidOperationException after exactly one factory creation attempt. Existing missing-factory, canonical-identity, generic-adapter disposal, and exact-capability tests remain.
+- Exact Windows run 33582770734 was triggered for f6b6c7fad52628ae4e5702408512b981e35e2d24 and was IN PROGRESS at handover refresh.
 
 Current Stage7 production architecture:
-- IVoiceLabProviderAdapter is an explicit provider capability marker over IProviderAdapter.
-- VoiceLabProviderAdapterResolver resolves only through IProviderFactoryRegistry, validates canonical provider/account identities, verifies factory and adapter provider identity, disposes rejected adapters, and fails closed if the adapter lacks Voice Lab capability.
-- VoiceLabProductionCatalogTransport still contains a raw provider callback seam after persisted authorization/account/capability/endpoint binding. The next production slice is to replace that seam with real provider-neutral Voice Lab catalog/audition operations resolved through the registry, without weakening the existing trust revalidation.
+- IVoiceLabProviderAdapter remains an explicit provider capability marker over IProviderAdapter.
+- VoiceLabProviderAdapterResolver resolves only through IProviderFactoryRegistry, validates canonical provider/account identities, verifies factory and adapter provider identity, fails closed on a null adapter, disposes rejected adapters, and rejects adapters without Voice Lab capability.
+- VoiceLabProductionCatalogTransport still contains a raw provider callback seam after persisted authorization/account/capability/endpoint binding. Concrete provider-neutral catalog/audition operations behind IVoiceLabProviderAdapter remain the next production slice.
 
 Current lane estimates:
 - Stage0-5: 100%.
 - Stage6: ~92%; genuine full GoogleGenerationAuthorizedRuntimeEvidence / GoogleGenerationUiExecutionContext composition and ConfigureStage6GoogleGeneration remain incomplete.
-- Stage7: ~96%; explicit registry-backed capability resolution plus stronger fail-closed tests are landed, but concrete provider-neutral catalog/audition operations and ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition remain incomplete.
-- Stage8: ~99%; focused production acceptance previously passed; Final serial gates still pending.
+- Stage7: ~96%; provider-registry capability resolution is hardened, but concrete provider-neutral catalog/audition operations and ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition remain incomplete.
+- Stage8: ~99%; focused production acceptance previously passed; Final serial gates remain pending.
 
 Safety properties preserved:
 - No dummy Configure calls.
@@ -47,9 +52,9 @@ Final gates:
 - Exact same-SHA no-change certification: NOT RUN.
 
 Next exact gate:
-1. Inspect exact-head Stage7 Windows run 33578969814; if non-green, repair its first exact formatter/compiler/analyzer/test failure.
-2. If green, introduce provider-neutral Voice Lab catalog and authorized-audition operation contracts without adding another raw callback bypass.
+1. Inspect exact-head Stage7 Windows run 33582770734; if non-green, repair its first exact compiler/analyzer/test failure available from the run surface.
+2. If green, introduce provider-neutral Voice Lab catalog and authorized-audition operation contracts behind IVoiceLabProviderAdapter without another callback bypass.
 3. Route VoiceLabProductionCatalogTransport and the evidence-aware audition factory through VoiceLabProviderAdapterResolver / IProviderFactoryRegistry while preserving persisted account/capability/endpoint and immediate pre-submit authorization revalidation.
-4. Add rejection tests for missing factory, provider mismatch, missing Voice Lab operation capability, request/evidence mismatch, and zero provider calls on authorization drift.
+4. Add rejection tests for missing factory, provider mismatch, missing operation capability, request/evidence mismatch, and zero provider calls on authorization drift.
 5. Only after those pass, wire ConfigureStage7VoiceLabCatalog and ConfigureStage7VoiceLabAudition.
 6. Continue Stage6 independently and keep Final/main promotion prohibited until all serial Final gates pass.
