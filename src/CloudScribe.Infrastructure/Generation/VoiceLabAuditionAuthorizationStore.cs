@@ -12,8 +12,7 @@ public sealed class VoiceLabAuditionAuthorizationStore(
         VoiceLabCatalogSelection selection,
         CancellationToken cancellationToken = default)
     {
-        if (selection is null)
-            throw new ArgumentNullException(nameof(selection));
+        ArgumentNullException.ThrowIfNull(selection);
         selection.Validate();
 
         CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -71,8 +70,7 @@ public sealed class VoiceLabAuditionAuthorizationStore(
         VoiceLabAuditionPersistedAuthorization authorization,
         CancellationToken cancellationToken = default)
     {
-        if (authorization is null)
-            throw new ArgumentNullException(nameof(authorization));
+        ArgumentNullException.ThrowIfNull(authorization);
         authorization.Selection.Validate();
         _ = authorization.ToCurrentEvidence(authorization.CapturedAtUtc);
 
