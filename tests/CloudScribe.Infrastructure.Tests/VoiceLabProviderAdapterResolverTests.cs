@@ -18,6 +18,38 @@ public sealed class VoiceLabProviderAdapterResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsyncRejectsNonCanonicalProviderIdentityBeforeFactoryLookup()
+    {
+        VoiceLabProviderAdapterResolver resolver = new(new ProviderFactoryRegistry([]));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await resolver.ResolveAsync(
+                " google",
+                "account-1",
+                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.Contains("providerStableId", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ResolveAsyncRejectsNonCanonicalAccountIdentityBeforeAdapterCreation()
+    {
+        VoiceLabAdapter adapter = new("google");
+        FakeFactory factory = new("google", adapter);
+        VoiceLabProviderAdapterResolver resolver = new(new ProviderFactoryRegistry([factory]));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await resolver.ResolveAsync(
+                "google",
+                "account-1\n",
+                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.Contains("accountStableId", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, factory.CreateCalls);
+        Assert.False(adapter.Disposed);
+    }
+
+    [Fact]
     public async Task ResolveAsyncRejectsGenericAdapterAndDisposesIt()
     {
         GenericAdapter adapter = new("google");
@@ -53,12 +85,14 @@ public sealed class VoiceLabProviderAdapterResolverTests
     private sealed class FakeFactory(string providerId, IProviderAdapter adapter) : IProviderAdapterFactory
     {
         public ProviderDescriptor Descriptor { get; } = new(providerId, providerId, true, true);
+        public int CreateCalls { get; private set; }
 
         public ValueTask<IProviderAdapter> CreateAdapterAsync(
             string accountId,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            CreateCalls++;
             Assert.Equal("account-1", accountId);
             return ValueTask.FromResult(adapter);
         }
