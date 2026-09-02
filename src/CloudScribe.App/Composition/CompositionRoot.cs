@@ -4,6 +4,7 @@ using CloudScribe.Application.Generation;
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Providers;
 using CloudScribe.Infrastructure.DependencyInjection;
+using CloudScribe.Infrastructure.Generation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -30,6 +31,9 @@ public static class CompositionRoot
         builder.Logging.SetMinimumLevel(LogLevel.Information);
 
         builder.Services.AddCloudScribeInfrastructure(builder.Configuration);
+        builder.Services.AddSingleton<HttpClient>();
+        builder.Services.AddSingleton<GoogleGenerationProductionTransportFactory>();
+        builder.Services.AddSingleton<GoogleGenerationProductionRuntimeEvidenceResolver>();
         builder.Services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
         builder.Services.AddSingleton(serviceProvider =>
         {
