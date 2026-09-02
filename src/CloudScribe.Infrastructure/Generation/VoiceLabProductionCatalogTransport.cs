@@ -1,6 +1,8 @@
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Providers;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Providers;
+using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -10,20 +12,20 @@ public sealed class VoiceLabProductionCatalogTransport
     private readonly IProviderAccountStore _accounts;
     private readonly IProviderCapabilitySnapshotStore _capabilities;
     private readonly Func<VoiceLabCatalogQuery, CancellationToken, Task<VoiceLabCatalogAuthorizationEvidence?>> _loadAuthorizationAsync;
-    private readonly Func<VoiceLabCatalogTransportContext, CancellationToken, Task<IReadOnlyList<VoiceLabCatalogSelection>>> _queryProviderAsync;
+    private readonly VoiceLabProviderAdapterResolver _adapters;
     private readonly TimeProvider _timeProvider;
 
     public VoiceLabProductionCatalogTransport(
         IProviderAccountStore accounts,
         IProviderCapabilitySnapshotStore capabilities,
         Func<VoiceLabCatalogQuery, CancellationToken, Task<VoiceLabCatalogAuthorizationEvidence?>> loadAuthorizationAsync,
-        Func<VoiceLabCatalogTransportContext, CancellationToken, Task<IReadOnlyList<VoiceLabCatalogSelection>>> queryProviderAsync,
+        VoiceLabProviderAdapterResolver adapters,
         TimeProvider timeProvider)
     {
         _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         _loadAuthorizationAsync = loadAuthorizationAsync ?? throw new ArgumentNullException(nameof(loadAuthorizationAsync));
-        _queryProviderAsync = queryProviderAsync ?? throw new ArgumentNullException(nameof(queryProviderAsync));
+        _adapters = adapters ?? throw new ArgumentNullException(nameof(adapters));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
@@ -145,12 +147,49 @@ public sealed class VoiceLabProductionCatalogTransport
         Uri endpointOrigin,
         CancellationToken cancellationToken)
     {
-        var context = new VoiceLabCatalogTransportContext(query, credentialReferenceId, capabilityEvidenceId, endpointOrigin);
-        IReadOnlyList<VoiceLabCatalogSelection> results = await _queryProviderAsync(context, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Voice Lab catalog provider transport returned no result collection.");
-        if (results.Count > MaxCatalogResults)
-            throw new InvalidOperationException($"Voice Lab catalog provider transport returned {results.Count} results; maximum is {MaxCatalogResults}.");
-        return results;
+        IVoiceLabProviderAdapter adapter = await _adapters.ResolveAsync(
+            query.ProviderId,
+            query.AccountId,
+            cancellationToken).ConfigureAwait(false);
+
+        await using (adapter)
+        {
+            VoiceLabProviderCatalogRequest request = new(
+                query.ProjectId,
+                credentialReferenceId,
+                capabilityEvidenceId,
+                endpointOrigin,
+                query.SearchText,
+                query.Locale,
+                query.IncludePrivateVoices);
+            request.Validate();
+
+            IReadOnlyList<VoiceLabProviderCatalogVoice> providerVoices = await adapter.QueryVoiceLabCatalogAsync(
+                request,
+                cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Voice Lab provider adapter returned no catalog result collection.");
+            if (providerVoices.Count > MaxCatalogResults)
+                throw new InvalidOperationException($"Voice Lab provider adapter returned {providerVoices.Count} results; maximum is {MaxCatalogResults}.");
+
+            var results = new List<VoiceLabCatalogSelection>(providerVoices.Count);
+            foreach (VoiceLabProviderCatalogVoice providerVoice in providerVoices)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                providerVoice.Validate();
+                results.Add(new VoiceLabCatalogSelection(
+                    providerVoice.VoiceStableId,
+                    query.ProviderId,
+                    query.AccountId,
+                    query.ProjectId,
+                    capabilityEvidenceId,
+                    providerVoice.VoiceFingerprint,
+                    CapabilityCurrent: true,
+                    providerVoice.VoiceEnabled,
+                    providerVoice.AccountProjectAuthorized));
+            }
+
+            return results;
+        }
     }
 
     private static void ValidateResults(
