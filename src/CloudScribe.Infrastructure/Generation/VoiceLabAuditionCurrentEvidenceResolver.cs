@@ -1,4 +1,5 @@
 using CloudScribe.Application.Generation;
+using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -7,24 +8,32 @@ public sealed class VoiceLabAuditionCurrentEvidenceResolver(
     IVoiceLabProjectAuthorizationStore projectAuthorizations,
     TimeProvider timeProvider)
 {
-    public async Task<VoiceLabAuditionAuthorizationEvidence?> ResolveAsync(
+    public Task<VoiceLabAuditionAuthorizationEvidence?> ResolveAsync(
         VoiceLabAuditionRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        request.Selection.Validate();
+        return ResolveAsync(request.Selection, cancellationToken);
+    }
+
+    public async Task<VoiceLabAuditionAuthorizationEvidence?> ResolveAsync(
+        VoiceLabCatalogSelection selection,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        selection.Validate();
 
         VoiceLabAuditionPersistedAuthorization? persisted = await auditionAuthorizations
-            .LoadCurrentAsync(request.Selection, cancellationToken)
+            .LoadCurrentAsync(selection, cancellationToken)
             .ConfigureAwait(false);
         if (persisted is null)
             return null;
 
         VoiceLabProjectAuthorizationEvidence? project = await projectAuthorizations
             .LoadCurrentAsync(
-                request.Selection.ProviderStableId,
-                request.Selection.AccountStableId,
-                request.Selection.ProjectStableId,
+                selection.ProviderStableId,
+                selection.AccountStableId,
+                selection.ProjectStableId,
                 cancellationToken)
             .ConfigureAwait(false);
         if (project is null)
@@ -37,7 +46,7 @@ public sealed class VoiceLabAuditionCurrentEvidenceResolver(
             throw new InvalidOperationException("Voice Lab audition project/account revision changed after spend authorization.");
         if (!string.Equals(project.CredentialReferenceId, persisted.CredentialReferenceId, StringComparison.Ordinal))
             throw new InvalidOperationException("Voice Lab audition credential binding changed after spend authorization.");
-        if (!string.Equals(project.CapabilityEvidenceId, request.Selection.CapabilityEvidenceId, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(project.CapabilityEvidenceId, selection.CapabilityEvidenceId, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Voice Lab audition capability binding changed after spend authorization.");
 
         return persisted.ToCurrentEvidence(nowUtc);
