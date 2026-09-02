@@ -103,6 +103,9 @@ public static class ServiceCollectionExtensions
             new VoiceLabCatalogQueryService(
                 serviceProvider.GetRequiredService<VoiceLabProductionCatalogTransport>().QueryAsync));
         services.AddSingleton<GoogleGenerationProductionEvidenceResolver>();
+        services.AddSingleton<GoogleGenerationProductionAccountFactory>();
+        services.AddSingleton<IGoogleGenerationSpendAuthorizationStore, GoogleGenerationSpendAuthorizationStore>();
+        services.AddSingleton<GoogleGenerationCurrentSpendAuthorizationResolver>();
         services.AddSingleton<StrictJsonObjectReader>();
         services.AddSingleton<ExactPricingControlMaterialInspector>();
         services.AddSingleton<V222ControlSet>();
