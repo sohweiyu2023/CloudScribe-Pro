@@ -7,15 +7,18 @@ public sealed class VoiceLabCatalogCurrentEvidenceResolver
 {
     private readonly IProviderAccountStore _accounts;
     private readonly IProviderCapabilitySnapshotStore _capabilities;
+    private readonly IVoiceLabProjectAuthorizationStore _projects;
     private readonly TimeProvider _timeProvider;
 
     public VoiceLabCatalogCurrentEvidenceResolver(
         IProviderAccountStore accounts,
         IProviderCapabilitySnapshotStore capabilities,
+        IVoiceLabProjectAuthorizationStore projects,
         TimeProvider timeProvider)
     {
         _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+        _projects = projects ?? throw new ArgumentNullException(nameof(projects));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
@@ -41,7 +44,8 @@ public sealed class VoiceLabCatalogCurrentEvidenceResolver
             query.ProviderId,
             query.AccountId,
             cancellationToken).ConfigureAwait(false);
-        if (capability is null || capability.IsStale(_timeProvider.GetUtcNow()))
+        DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
+        if (capability is null || capability.IsStale(nowUtc))
             return null;
 
         if (!string.Equals(capability.Snapshot.Account.ProviderStableId, query.ProviderId, StringComparison.Ordinal) ||
@@ -51,18 +55,33 @@ public sealed class VoiceLabCatalogCurrentEvidenceResolver
             return null;
         }
 
-        // Persisted account/capability state can prove provider/account/credential/capability
-        // freshness, but it does not by itself prove project membership or private-voice
-        // entitlement. Those claims remain fail-closed until a production project-access
-        // evidence source is composed.
+        VoiceLabProjectAuthorizationEvidence? project = await _projects.LoadCurrentAsync(
+            query.ProviderId,
+            query.AccountId,
+            query.ProjectId,
+            cancellationToken).ConfigureAwait(false);
+        if (project is null || !project.IsCurrent(nowUtc))
+            return null;
+
+        string capabilityEvidenceId = capability.Id.ToString("D");
+        if (project.AccountRevision != account.Revision ||
+            !string.Equals(project.CredentialReferenceId, credentialReferenceId, StringComparison.Ordinal) ||
+            !string.Equals(project.CapabilityEvidenceId, capabilityEvidenceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (query.IncludePrivateVoices && !project.PrivateVoiceAccessAuthorized)
+            return null;
+
         return new VoiceLabCatalogAuthorizationEvidence(
             query.ProviderId,
             query.AccountId,
             query.ProjectId,
             account.Revision,
             credentialReferenceId,
-            capability.Id.ToString("D"),
-            ProjectAuthorized: false,
-            PrivateVoiceAccessAuthorized: false);
+            capabilityEvidenceId,
+            ProjectAuthorized: true,
+            PrivateVoiceAccessAuthorized: project.PrivateVoiceAccessAuthorized);
     }
 }
