@@ -90,6 +90,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
         services.AddSingleton<VoiceLabProviderAdapterResolver>();
+        services.AddSingleton<IVoiceLabProjectAuthorizationStore, VoiceLabProjectAuthorizationStore>();
         services.AddSingleton<VoiceLabCatalogCurrentEvidenceResolver>();
         services.AddSingleton<GoogleGenerationProductionEvidenceResolver>();
         services.AddSingleton<StrictJsonObjectReader>();
