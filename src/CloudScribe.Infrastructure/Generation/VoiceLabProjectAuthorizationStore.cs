@@ -43,17 +43,48 @@ public sealed class VoiceLabProjectAuthorizationStore(
                     if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                         return null;
 
-                    return new VoiceLabProjectAuthorizationEvidence(
-                        providerId,
-                        accountId,
-                        projectId,
-                        reader.GetInt64(0),
-                        reader.GetString(1),
-                        reader.GetString(2),
-                        reader.GetBoolean(3),
-                        reader.GetBoolean(4),
-                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(5)),
-                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(6)));
+                    return ReadEvidence(reader, providerId, accountId, projectId, startOrdinal: 0);
+                }
+            }
+        }
+    }
+
+    public async Task<IReadOnlyList<VoiceLabProjectAuthorizationEvidence>> ListCurrentAsync(
+        CancellationToken cancellationToken = default)
+    {
+        CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
+        {
+            DbConnection connection = context.Database.GetDbConnection();
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            DbCommand command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = """
+                    SELECT ProviderId, AccountId, ProjectId,
+                           AccountRevision, CredentialReferenceId, CapabilityEvidenceId,
+                           ProjectAuthorized, PrivateVoiceAccessAuthorized,
+                           CapturedAtUnixMilliseconds, ExpiresAtUnixMilliseconds
+                    FROM voice_lab_project_authorizations
+                    ORDER BY ProviderId, AccountId, ProjectId;
+                    """;
+
+                DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    var results = new List<VoiceLabProjectAuthorizationEvidence>();
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        results.Add(ReadEvidence(
+                            reader,
+                            reader.GetString(0),
+                            reader.GetString(1),
+                            reader.GetString(2),
+                            startOrdinal: 3));
+                    }
+
+                    return results;
                 }
             }
         }
@@ -117,6 +148,24 @@ public sealed class VoiceLabProjectAuthorizationStore(
             }
         }
     }
+
+    private static VoiceLabProjectAuthorizationEvidence ReadEvidence(
+        DbDataReader reader,
+        string providerId,
+        string accountId,
+        string projectId,
+        int startOrdinal) =>
+        new(
+            providerId,
+            accountId,
+            projectId,
+            reader.GetInt64(startOrdinal),
+            reader.GetString(startOrdinal + 1),
+            reader.GetString(startOrdinal + 2),
+            reader.GetBoolean(startOrdinal + 3),
+            reader.GetBoolean(startOrdinal + 4),
+            DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(startOrdinal + 5)),
+            DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(startOrdinal + 6)));
 
     private static void AddParameter(DbCommand command, string name, object value)
     {
