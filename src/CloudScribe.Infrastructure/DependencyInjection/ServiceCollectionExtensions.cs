@@ -92,6 +92,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<VoiceLabProviderAdapterResolver>();
         services.AddSingleton<IVoiceLabProjectAuthorizationStore, VoiceLabProjectAuthorizationStore>();
         services.AddSingleton<VoiceLabCatalogCurrentEvidenceResolver>();
+        services.AddSingleton(serviceProvider =>
+            new VoiceLabProductionCatalogTransport(
+                serviceProvider.GetRequiredService<IProviderAccountStore>(),
+                serviceProvider.GetRequiredService<IProviderCapabilitySnapshotStore>(),
+                serviceProvider.GetRequiredService<VoiceLabCatalogCurrentEvidenceResolver>().ResolveAsync,
+                serviceProvider.GetRequiredService<VoiceLabProviderAdapterResolver>(),
+                serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(serviceProvider =>
+            new VoiceLabCatalogQueryService(
+                serviceProvider.GetRequiredService<VoiceLabProductionCatalogTransport>().QueryAsync));
         services.AddSingleton<GoogleGenerationProductionEvidenceResolver>();
         services.AddSingleton<StrictJsonObjectReader>();
         services.AddSingleton<ExactPricingControlMaterialInspector>();
