@@ -70,8 +70,12 @@ public sealed class VoiceLabProjectAuthorizationStore(
             throw new InvalidOperationException("Only positively verified Voice Lab project authorization may be persisted.");
         if (evidence.CapturedAtUtc.Offset != TimeSpan.Zero || evidence.ExpiresAtUtc.Offset != TimeSpan.Zero || evidence.ExpiresAtUtc <= evidence.CapturedAtUtc)
             throw new InvalidOperationException("Voice Lab project authorization requires a bounded UTC validity window.");
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidence.CredentialReferenceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidence.CapabilityEvidenceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            evidence.CredentialReferenceId,
+            nameof(evidence.CredentialReferenceId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            evidence.CapabilityEvidenceId,
+            nameof(evidence.CapabilityEvidenceId));
 
         CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (context.ConfigureAwait(false))
