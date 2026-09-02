@@ -11,7 +11,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
     private static readonly DateTimeOffset Now = new(2026, 8, 31, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task CreatedExecutorRevalidatesCurrentEvidenceBeforeProviderSubmission()
+    public async Task CreatedExecutorRejectsEvidenceDriftBeforeResolvingProviderAdapter()
     {
         Guid capabilityId = Guid.NewGuid();
         ProviderAccountSnapshot account = CreateAccount("credential.current");
@@ -19,7 +19,8 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
         VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId);
         VoiceLabAuditionAuthorizationEvidence currentEvidence = evidence;
         int evidenceLoads = 0;
-        int submitCalls = 0;
+        var adapter = new AuditionAdapter();
+        var providerFactory = new ProviderFactory(adapter);
         var factory = new VoiceLabProductionAuthorizedAuditionExecutorFactory(
             new AccountStore(account),
             new CapabilityStore(capability),
@@ -29,11 +30,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
                 return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(currentEvidence);
             },
             new FixedTimeProvider(Now),
-            (_, _, _) =>
-            {
-                submitCalls++;
-                return Task.FromResult(Accepted());
-            });
+            new ProviderRegistry(providerFactory));
         VoiceLabAuditionRequest request = CreateRequest(evidence.Selection);
 
         IVoiceLabAuthorizedAuditionExecutor executor = await factory.CreateAsync(
@@ -46,19 +43,21 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
             TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
         Assert.Equal(2, evidenceLoads);
-        Assert.Equal(0, submitCalls);
+        Assert.Equal(0, providerFactory.CreateCalls);
+        Assert.Equal(0, adapter.SubmitCalls);
+        Assert.Equal(0, adapter.DisposeCalls);
     }
 
     [Fact]
-    public async Task CreatedExecutorSubmitsExactRequestAndRevalidatedEvidenceWhenEvidenceRemainsCurrent()
+    public async Task CreatedExecutorSubmitsExactRevalidatedEvidenceThroughAccountBoundAdapter()
     {
         Guid capabilityId = Guid.NewGuid();
         ProviderAccountSnapshot account = CreateAccount("credential.current");
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId);
         VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId);
-        VoiceLabAuditionRequest? submitted = null;
-        VoiceLabAuditionAuthorizationEvidence? submittedEvidence = null;
         int evidenceLoads = 0;
+        var adapter = new AuditionAdapter();
+        var providerFactory = new ProviderFactory(adapter);
         var factory = new VoiceLabProductionAuthorizedAuditionExecutorFactory(
             new AccountStore(account),
             new CapabilityStore(capability),
@@ -68,12 +67,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
                 return Task.FromResult<VoiceLabAuditionAuthorizationEvidence?>(evidence);
             },
             new FixedTimeProvider(Now),
-            (request, current, _) =>
-            {
-                submitted = request;
-                submittedEvidence = current;
-                return Task.FromResult(Accepted());
-            });
+            new ProviderRegistry(providerFactory));
         VoiceLabAuditionRequest request = CreateRequest(evidence.Selection);
 
         IVoiceLabAuthorizedAuditionExecutor executor = await factory.CreateAsync(
@@ -84,14 +78,24 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
-        Assert.Equal(2, evidenceLoads);
-        Assert.Same(request, submitted);
-        Assert.NotNull(submittedEvidence);
-        Assert.Equal(account.Revision, submittedEvidence.AccountRevision);
-        Assert.Equal(evidence.Selection, submittedEvidence.Selection);
-        Assert.Equal(evidence.CredentialReferenceId, submittedEvidence.CredentialReferenceId);
-        Assert.Equal(evidence.PricingEvidenceId, submittedEvidence.PricingEvidenceId);
-        Assert.Equal(evidence.SpendAuthorizationId, submittedEvidence.SpendAuthorizationId);
+        Assert.Equal(3, evidenceLoads);
+        Assert.Equal(1, providerFactory.CreateCalls);
+        Assert.Equal("primary", providerFactory.LastAccountId);
+        Assert.Equal(1, adapter.SubmitCalls);
+        Assert.Equal(1, adapter.DisposeCalls);
+        Assert.NotNull(adapter.SubmittedRequest);
+        Assert.Equal("google", adapter.SubmittedRequest.ProviderStableId);
+        Assert.Equal("primary", adapter.SubmittedRequest.AccountStableId);
+        Assert.Equal("project-1", adapter.SubmittedRequest.ProjectStableId);
+        Assert.Equal("voice-1", adapter.SubmittedRequest.VoiceStableId);
+        Assert.Equal("voice-fingerprint-1", adapter.SubmittedRequest.VoiceFingerprint);
+        Assert.Equal(capabilityId.ToString("D"), adapter.SubmittedRequest.CapabilityEvidenceId);
+        Assert.Equal("credential.current", adapter.SubmittedRequest.CredentialReferenceId);
+        Assert.Equal("pricing-current", adapter.SubmittedRequest.PricingEvidenceId);
+        Assert.Equal("spend-approved", adapter.SubmittedRequest.SpendAuthorizationId);
+        Assert.Equal(account.Revision, adapter.SubmittedRequest.AccountRevision);
+        Assert.Equal("wav", adapter.SubmittedRequest.OutputFormat);
+        Assert.True(adapter.SubmittedRequest.ForceFresh);
     }
 
     private static ProviderAccountSnapshot CreateAccount(string credentialReferenceId)
@@ -154,6 +158,64 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class ProviderRegistry(IProviderAdapterFactory factory) : IProviderFactoryRegistry
+    {
+        public IReadOnlyList<ProviderDescriptor> AvailableProviders => [factory.Descriptor];
+
+        public bool TryGetFactory(string stableProviderId, out IProviderAdapterFactory? resolvedFactory)
+        {
+            if (string.Equals(stableProviderId, factory.Descriptor.StableId, StringComparison.Ordinal))
+            {
+                resolvedFactory = factory;
+                return true;
+            }
+
+            resolvedFactory = null;
+            return false;
+        }
+    }
+
+    private sealed class ProviderFactory(AuditionAdapter adapter) : IProviderAdapterFactory
+    {
+        public ProviderDescriptor Descriptor { get; } = new("google", "Google", true, true);
+        public int CreateCalls { get; private set; }
+        public string? LastAccountId { get; private set; }
+
+        public ValueTask<IProviderAdapter> CreateAdapterAsync(
+            string accountId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CreateCalls++;
+            LastAccountId = accountId;
+            return ValueTask.FromResult<IProviderAdapter>(adapter);
+        }
+    }
+
+    private sealed class AuditionAdapter : IVoiceLabAuditionProviderAdapter
+    {
+        public ProviderDescriptor Descriptor { get; } = new("google", "Google", true, true);
+        public int SubmitCalls { get; private set; }
+        public int DisposeCalls { get; private set; }
+        public VoiceLabProviderAuditionRequest? SubmittedRequest { get; private set; }
+
+        public Task<GenerationProviderResponse> SubmitVoiceLabAuditionAsync(
+            VoiceLabProviderAuditionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SubmitCalls++;
+            SubmittedRequest = request;
+            return Task.FromResult(Accepted());
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCalls++;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class AccountStore(ProviderAccountSnapshot account) : IProviderAccountStore
