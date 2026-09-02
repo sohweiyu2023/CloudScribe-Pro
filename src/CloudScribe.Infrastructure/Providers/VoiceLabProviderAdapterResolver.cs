@@ -26,7 +26,10 @@ public sealed class VoiceLabProviderAdapterResolver
         if (!string.Equals(factory.Descriptor.StableId, providerStableId, StringComparison.Ordinal))
             throw new InvalidOperationException("Voice Lab provider factory identity mismatch.");
 
-        IProviderAdapter adapter = await factory.CreateAdapterAsync(accountStableId, cancellationToken).ConfigureAwait(false);
+        IProviderAdapter? adapter = await factory.CreateAdapterAsync(accountStableId, cancellationToken).ConfigureAwait(false);
+        if (adapter is null)
+            throw new InvalidOperationException("Voice Lab provider factory returned no adapter.");
+
         if (!string.Equals(adapter.Descriptor.StableId, providerStableId, StringComparison.Ordinal))
         {
             await adapter.DisposeAsync().ConfigureAwait(false);
