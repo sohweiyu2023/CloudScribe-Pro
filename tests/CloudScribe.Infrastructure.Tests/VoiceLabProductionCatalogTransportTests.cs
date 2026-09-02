@@ -2,6 +2,7 @@ using CloudScribe.Application.Generation;
 using CloudScribe.Application.Providers;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
+using CloudScribe.Infrastructure.Providers;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Tests;
@@ -18,16 +19,17 @@ public sealed class VoiceLabProductionCatalogTransportTests
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
         VoiceLabCatalogQuery query = CreateQuery();
         VoiceLabCatalogAuthorizationEvidence evidence = CreateEvidence(capabilityId, account.Revision);
-        VoiceLabCatalogTransportContext? observed = null;
+        VoiceLabProviderCatalogRequest? observed = null;
+        VoiceLabAdapter adapter = new(request =>
+        {
+            observed = request;
+            return [CreateProviderVoice()];
+        });
         var transport = new VoiceLabProductionCatalogTransport(
             new AccountStore(account),
             new CapabilityStore(capability),
             (_, _) => Task.FromResult<VoiceLabCatalogAuthorizationEvidence?>(evidence),
-            (context, _) =>
-            {
-                observed = context;
-                return Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([CreateSelection(capabilityId)]);
-            },
+            CreateResolver(adapter),
             new FixedTimeProvider(Now));
 
         IReadOnlyList<VoiceLabCatalogSelection> results = await transport.QueryAsync(
@@ -36,10 +38,16 @@ public sealed class VoiceLabProductionCatalogTransportTests
 
         Assert.Single(results);
         Assert.NotNull(observed);
-        Assert.Same(query, observed.Query);
+        Assert.Equal("project-1", observed.ProjectStableId);
         Assert.Equal("credential.current", observed.CredentialReferenceId);
         Assert.Equal(capabilityId.ToString("D"), observed.CapabilityEvidenceId, ignoreCase: true);
         Assert.Equal(new Uri("https://voice.example.test"), observed.EndpointOrigin);
+        Assert.Equal("en-US", observed.Locale);
+        Assert.False(observed.IncludePrivateVoices);
+        Assert.True(adapter.Disposed);
+        Assert.Equal("google", results[0].ProviderStableId);
+        Assert.Equal("primary", results[0].AccountStableId);
+        Assert.Equal("project-1", results[0].ProjectStableId);
     }
 
     [Fact]
@@ -80,42 +88,49 @@ public sealed class VoiceLabProductionCatalogTransportTests
     }
 
     [Fact]
-    public async Task QueryAsyncRejectsSelectionOutsidePersistedTrustBoundary()
+    public async Task QueryAsyncRejectsDisabledProviderVoice()
     {
         Guid capabilityId = Guid.NewGuid();
         ProviderAccountSnapshot account = CreateAccount(revision: 7, isEnabled: true);
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId, Now.AddHours(1));
         VoiceLabCatalogAuthorizationEvidence evidence = CreateEvidence(capabilityId, account.Revision);
+        VoiceLabAdapter adapter = new(_ => [CreateProviderVoice() with { VoiceEnabled = false }]);
         var transport = new VoiceLabProductionCatalogTransport(
             new AccountStore(account),
             new CapabilityStore(capability),
             (_, _) => Task.FromResult<VoiceLabCatalogAuthorizationEvidence?>(evidence),
-            (_, _) => Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([
-                CreateSelection(capabilityId) with { ProjectStableId = "different-project" }
-            ]),
+            CreateResolver(adapter),
             new FixedTimeProvider(Now));
 
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => transport.QueryAsync(
             CreateQuery(),
             TestContext.Current.CancellationToken)).ConfigureAwait(true);
 
-        Assert.Contains("trust boundary", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("disabled voice", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(adapter.Disposed);
     }
 
     private static VoiceLabProductionCatalogTransport CreateTransport(
         ProviderAccountSnapshot account,
         StoredProviderCapabilitySnapshot capability,
         VoiceLabCatalogAuthorizationEvidence evidence,
-        Action onProviderCall) => new(
-        new AccountStore(account),
-        new CapabilityStore(capability),
-        (_, _) => Task.FromResult<VoiceLabCatalogAuthorizationEvidence?>(evidence),
-        (_, _) =>
+        Action onProviderCall)
+    {
+        VoiceLabAdapter adapter = new(_ =>
         {
             onProviderCall();
-            return Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([CreateSelection(capability.Id)]);
-        },
-        new FixedTimeProvider(Now));
+            return [CreateProviderVoice()];
+        });
+        return new VoiceLabProductionCatalogTransport(
+            new AccountStore(account),
+            new CapabilityStore(capability),
+            (_, _) => Task.FromResult<VoiceLabCatalogAuthorizationEvidence?>(evidence),
+            CreateResolver(adapter),
+            new FixedTimeProvider(Now));
+    }
+
+    private static VoiceLabProviderAdapterResolver CreateResolver(IVoiceLabProviderAdapter adapter) =>
+        new(new ProviderFactoryRegistry([new FakeFactory(adapter)]));
 
     private static VoiceLabCatalogQuery CreateQuery() => new(
         "google",
@@ -135,14 +150,9 @@ public sealed class VoiceLabProductionCatalogTransportTests
         ProjectAuthorized: true,
         PrivateVoiceAccessAuthorized: false);
 
-    private static VoiceLabCatalogSelection CreateSelection(Guid capabilityId) => new(
+    private static VoiceLabProviderCatalogVoice CreateProviderVoice() => new(
         "voice-1",
-        "google",
-        "primary",
-        "project-1",
-        capabilityId.ToString("D"),
         "voice-fingerprint-1",
-        CapabilityCurrent: true,
         VoiceEnabled: true,
         AccountProjectAuthorized: true);
 
@@ -214,5 +224,38 @@ public sealed class VoiceLabProductionCatalogTransportTests
 
         public Task<IReadOnlyList<StoredProviderCapabilitySnapshot>> ListRecentAsync(string providerStableId, string accountId, int maximumCount = 20, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<StoredProviderCapabilitySnapshot>>(capability is null ? [] : [capability]);
+    }
+
+    private sealed class FakeFactory(IProviderAdapter adapter) : IProviderAdapterFactory
+    {
+        public ProviderDescriptor Descriptor { get; } = new("google", "google", true, true);
+
+        public ValueTask<IProviderAdapter> CreateAdapterAsync(string accountId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.Equals(accountId, "primary", StringComparison.Ordinal))
+                throw new InvalidOperationException("Unexpected Voice Lab test account.");
+            return ValueTask.FromResult(adapter);
+        }
+    }
+
+    private sealed class VoiceLabAdapter(Func<VoiceLabProviderCatalogRequest, IReadOnlyList<VoiceLabProviderCatalogVoice>> query) : IVoiceLabProviderAdapter
+    {
+        public ProviderDescriptor Descriptor { get; } = new("google", "google", true, true);
+        public bool Disposed { get; private set; }
+
+        public Task<IReadOnlyList<VoiceLabProviderCatalogVoice>> QueryVoiceLabCatalogAsync(
+            VoiceLabProviderCatalogRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(query(request));
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
     }
 }
