@@ -11,8 +11,7 @@ public sealed class VoiceLabAuditionCurrentEvidenceResolver(
         VoiceLabAuditionRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (request is null)
-            throw new ArgumentNullException(nameof(request));
+        ArgumentNullException.ThrowIfNull(request);
         request.Selection.Validate();
 
         VoiceLabAuditionPersistedAuthorization? persisted = await auditionAuthorizations
