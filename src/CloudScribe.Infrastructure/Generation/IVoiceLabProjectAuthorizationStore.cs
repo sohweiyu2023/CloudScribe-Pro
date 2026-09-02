@@ -9,7 +9,8 @@ public interface IVoiceLabProjectAuthorizationStore
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<VoiceLabProjectAuthorizationEvidence>> ListCurrentAsync(
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Voice Lab project authorization enumeration is unavailable for this store.");
 
     Task SaveVerifiedAsync(
         VoiceLabProjectAuthorizationEvidence evidence,
