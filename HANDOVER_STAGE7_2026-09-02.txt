@@ -4,33 +4,41 @@ Controlling baseline: v2.23
 Branch: repair/final-stage7-production-parallel
 Main remains untouched at 14f85105f111d59e9693174153b5236bafe6f990.
 
-Verified live state immediately before handover mutation:
+Verified live state before each mutation:
 - main: 14f85105f111d59e9693174153b5236bafe6f990.
-- Stage6 active helper repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1. Stage6 remains approximately 92%; prior agent/stage6-fast-track Windows gate at 9a63f5432fcfe3781c56b05f9220909939b1100a passed.
-- Stage7 production-repair substantive head: 45d3859cae4886d0c62ccffd862579bb5d6616f1.
-- Stage8 repair/final-stage8-production-parallel: 4e3ef9ca668a4f470b761eeae91e20fbff53b165. Stage8 remains approximately 99%; previous focused Windows acceptance passed.
+- Stage6 active helper repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1; Stage6 ~92%. Prior agent/stage6-fast-track Windows gate at 9a63f5432fcfe3781c56b05f9220909939b1100a passed.
+- Stage7 pre-handover implementation/CI head: 6ad27ce5178a12d9b1383748339b52af3d6d4278.
+- Stage8 repair/final-stage8-production-parallel: 4e3ef9ca668a4f470b761eeae91e20fbff53b165; Stage8 ~99%, prior focused Windows acceptance passed.
 
-Substantive work landed this run:
-- 45d3859cae4886d0c62ccffd862579bb5d6616f1: added tests/CloudScribe.Infrastructure.Tests/VoiceLabCatalogTransportContextTests.cs.
-- Added fail-closed regression coverage proving VoiceLabCatalogTransportContext rejects credential and capability identifiers with leading/trailing whitespace or CR/LF control characters.
-- Added fail-closed regression coverage proving catalog provider endpoints reject HTTP, embedded user-info, non-origin paths, query strings, and fragments.
-- Added a positive regression proving a trusted exact HTTPS-origin context preserves its request, credential reference, capability evidence, and endpoint binding.
+Substantive Stage7 work landed this run:
+- 7a36fc8d39b44f58e99656dacbda22691f5740a4: added explicit IVoiceLabProviderAdapter capability boundary so generic provider adapters are not implicitly trusted as Voice Lab capable.
+- 2635557e840296091db05fc09f08b870c1cfc28c: added VoiceLabProviderAdapterResolver. Resolution goes through IProviderFactoryRegistry, requires canonical provider/account identities, fails closed when the factory is absent, rejects factory or adapter provider-identity mismatch, rejects adapters lacking explicit Voice Lab capability, and disposes rejected adapters.
+- 3d4cdc2ad717ee65338777275dfa550fb94bb577 plus fixture repair 2cf051a2b1e9065b51f139e5d6e0ffc6ffbc69a8: added focused regression tests for missing factory, generic-adapter rejection/disposal, and exact Voice Lab-capability resolution.
+- 6ad27ce5178a12d9b1383748339b52af3d6d4278: expanded strict Stage7 Windows validation to execute both VoiceLabProviderAdapterResolverTests and VoiceLabCatalogTransportContextTests, preventing these production trust regressions from being build-only coverage.
 
-Why this matters:
-- e66f03157f918bb4c8a040ff85a696cbaea6c39c hardened the production final catalog transport context itself; this run locks that trust boundary with focused tests rather than relying on source inspection alone.
-- No ambient endpoint, hardcoded authorization, fabricated capability/trust evidence, raw audition submit, dummy Configure call, or sync-over-async path was introduced.
+Prior gate closed this run:
+- 45d3859cae4886d0c62ccffd862579bb5d6616f1 / Windows run 33570763605: PASS.
+
+Current exact gate:
+- 6ad27ce5178a12d9b1383748339b52af3d6d4278 / Windows run 33575640084: RUNNING at handover creation. Exact head_sha matches. Do not claim PASS until completed.
 
 Current lane estimates:
 - Stage0-5: 100%.
 - Stage6: ~92%; genuine full GoogleGenerationAuthorizedRuntimeEvidence / GoogleGenerationUiExecutionContext composition and ConfigureStage6GoogleGeneration remain incomplete.
-- Stage7: ~95%; evidence-aware audition revalidation and hardened/tested catalog transport trust boundary are landed, but genuine provider-registry-backed VoiceLab catalog/audition capability and ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition remain incomplete.
-- Stage8: ~99%; authenticated restore-recovery production composition/focused acceptance previously passed, Final serial gates still pending.
+- Stage7: ~96%; explicit registry-backed Voice Lab capability resolution is now landed and rejection-tested, but concrete provider adapters still need real Voice Lab catalog/audition operations and production ConfigureStage7VoiceLabCatalog / ConfigureStage7VoiceLabAudition composition.
+- Stage8: ~99%; focused production acceptance previously passed; Final serial gates still pending.
 
-Gates at handover creation:
-- Stage7 prior source SHA e66f03157f918bb4c8a040ff85a696cbaea6c39c / Windows run 33554843565: PASS.
-- Stage7 new exact source SHA 45d3859cae4886d0c62ccffd862579bb5d6616f1 / Windows run 33570763605: RUNNING. Exact head_sha matches; do not claim PASS until completion.
+Safety properties preserved:
+- No dummy Configure calls.
+- No hardcoded authorization.
+- No fabricated trust/reconciliation/recovery evidence.
+- No ambient credentials or endpoints.
+- No raw provider-submit shortcut.
+- No sync-over-async.
+
+Final gates:
 - Stage6 complete production composition: NOT COMPLETE.
-- Stage7 provider-registry production composition: NOT COMPLETE.
+- Stage7 complete provider-registry production composition: NOT COMPLETE.
 - Stage8 focused production acceptance: PASS previously.
 - Full compiled Final suite: NOT RUN.
 - Final source acceptance: NOT RUN.
@@ -41,8 +49,9 @@ Gates at handover creation:
 - Exact same-SHA no-change certification: NOT RUN.
 
 Next exact gate:
-1. Inspect Windows run 33570763605 for exact SHA 45d3859cae4886d0c62ccffd862579bb5d6616f1; repair the first exact formatter/compiler/analyzer/test failure if non-green.
-2. If green, continue immediately with the genuine provider-neutral VoiceLab capability exposed behind the real provider adapter/factory registry. Fail closed for missing factory, provider mismatch, or an adapter without VoiceLab support.
-3. Route catalog state/transport and evidence-aware audition transport through that capability; do not regress to request-only provider callbacks.
-4. Wire ConfigureStage7VoiceLabCatalog and ConfigureStage7VoiceLabAudition only after the production transport is real and rejection-tested.
-5. Continue Stage6 independently with the remaining request/revision/pricing/spend/trust/queue/reconciliation evidence join. Do not promote Final/main until all serial Final gates pass.
+1. Inspect run 33575640084; fix the first exact formatter/compiler/analyzer/test failure if non-green.
+2. If green, extend IVoiceLabProviderAdapter with provider-neutral catalog and audition operation contracts, then adapt VoiceLabProductionCatalogTransport and the evidence-aware audition factory to resolve through VoiceLabProviderAdapterResolver rather than raw callbacks.
+3. Preserve final pre-submit audition evidence revalidation and pass that exact current evidence into the adapter operation.
+4. Add missing-factory/provider-mismatch/missing-capability and request/evidence-binding rejection tests.
+5. Only after those pass, wire ConfigureStage7VoiceLabCatalog and ConfigureStage7VoiceLabAudition.
+6. Continue Stage6 independently; do not promote Final/main before all serial Final gates pass.
