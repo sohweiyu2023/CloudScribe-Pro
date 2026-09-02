@@ -50,6 +50,22 @@ public sealed class VoiceLabProviderAdapterResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsyncRejectsNullAdapterFailClosed()
+    {
+        NullAdapterFactory factory = new("google");
+        VoiceLabProviderAdapterResolver resolver = new(new ProviderFactoryRegistry([factory]));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await resolver.ResolveAsync(
+                "google",
+                "account-1",
+                TestContext.Current.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.Contains("returned no adapter", error.Message, StringComparison.Ordinal);
+        Assert.Equal(1, factory.CreateCalls);
+    }
+
+    [Fact]
     public async Task ResolveAsyncRejectsGenericAdapterAndDisposesIt()
     {
         GenericAdapter adapter = new("google");
@@ -95,6 +111,22 @@ public sealed class VoiceLabProviderAdapterResolverTests
             CreateCalls++;
             Assert.Equal("account-1", accountId);
             return ValueTask.FromResult(adapter);
+        }
+    }
+
+    private sealed class NullAdapterFactory(string providerId) : IProviderAdapterFactory
+    {
+        public ProviderDescriptor Descriptor { get; } = new(providerId, providerId, true, true);
+        public int CreateCalls { get; private set; }
+
+        public ValueTask<IProviderAdapter> CreateAdapterAsync(
+            string accountId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CreateCalls++;
+            Assert.Equal("account-1", accountId);
+            return ValueTask.FromResult<IProviderAdapter>(null!);
         }
     }
 
