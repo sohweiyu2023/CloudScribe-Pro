@@ -91,7 +91,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
         services.AddSingleton<VoiceLabProviderAdapterResolver>();
         services.AddSingleton<IVoiceLabProjectAuthorizationStore, VoiceLabProjectAuthorizationStore>();
+        services.AddSingleton<IVoiceLabAuditionAuthorizationStore, VoiceLabAuditionAuthorizationStore>();
         services.AddSingleton<VoiceLabCatalogCurrentEvidenceResolver>();
+        services.AddSingleton<VoiceLabAuditionCurrentEvidenceResolver>();
         services.AddSingleton(serviceProvider =>
             new VoiceLabProductionCatalogTransport(
                 serviceProvider.GetRequiredService<IProviderAccountStore>(),
@@ -102,6 +104,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(serviceProvider =>
             new VoiceLabCatalogQueryService(
                 serviceProvider.GetRequiredService<VoiceLabProductionCatalogTransport>().QueryAsync));
+        services.AddSingleton(serviceProvider =>
+            new VoiceLabProductionAuthorizedAuditionExecutorFactory(
+                serviceProvider.GetRequiredService<IProviderAccountStore>(),
+                serviceProvider.GetRequiredService<IProviderCapabilitySnapshotStore>(),
+                serviceProvider.GetRequiredService<VoiceLabAuditionCurrentEvidenceResolver>().ResolveAsync,
+                serviceProvider.GetRequiredService<TimeProvider>(),
+                serviceProvider.GetRequiredService<IProviderFactoryRegistry>()));
         services.AddSingleton<GoogleGenerationProductionEvidenceResolver>();
         services.AddSingleton<GoogleGenerationProductionAccountFactory>();
         services.AddSingleton<IGoogleGenerationSpendAuthorizationStore, GoogleGenerationSpendAuthorizationStore>();
