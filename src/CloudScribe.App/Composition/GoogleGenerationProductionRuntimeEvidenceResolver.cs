@@ -92,32 +92,3 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
             request.Snapshot);
     }
 }
-
-public sealed record GoogleGenerationProductionRuntimeRequest(
-    string AccountId,
-    GoogleGenerationSubmissionEnvelope SubmissionEnvelope,
-    string PricingProvenanceId,
-    int RequestRevision,
-    string Currency,
-    int Scale,
-    long CurrentEstimateMinorUnits,
-    GoogleGenerationUiExecutionSnapshot Snapshot)
-{
-    public GoogleGenerationProductionRuntimeRequest Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(AccountId);
-        ArgumentNullException.ThrowIfNull(SubmissionEnvelope);
-        ArgumentException.ThrowIfNullOrWhiteSpace(PricingProvenanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(Currency);
-        ArgumentNullException.ThrowIfNull(Snapshot);
-        if (RequestRevision < 0)
-            throw new InvalidOperationException("Google generation request revision cannot be negative.");
-        if (Scale is < 0 or > 9)
-            throw new InvalidOperationException("Google generation currency scale must be between zero and nine.");
-        if (CurrentEstimateMinorUnits < 0)
-            throw new InvalidOperationException("Google generation current estimate cannot be negative.");
-        if (!string.Equals(AccountId, SubmissionEnvelope.AccountId, StringComparison.Ordinal))
-            throw new InvalidOperationException("Google runtime request account differs from the durable submission envelope.");
-        return this;
-    }
-}
