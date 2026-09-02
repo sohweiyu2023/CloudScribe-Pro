@@ -6,16 +6,16 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
 {
     private readonly VoiceLabAuditionAuthorizationEvidence _approvedEvidence;
     private readonly Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> _currentEvidenceResolver;
-    private readonly Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>> _submitProvider;
+    private readonly Func<string, string, CancellationToken, ValueTask<IVoiceLabAuditionProviderAdapter>> _resolveProviderAdapter;
 
     public VoiceLabEvidenceAuthorizedAuditionExecutor(
         VoiceLabAuditionAuthorizationEvidence approvedEvidence,
         Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> currentEvidenceResolver,
-        Func<VoiceLabAuditionRequest, VoiceLabAuditionAuthorizationEvidence, CancellationToken, Task<GenerationProviderResponse>> submitProvider)
+        Func<string, string, CancellationToken, ValueTask<IVoiceLabAuditionProviderAdapter>> resolveProviderAdapter)
     {
         _approvedEvidence = (approvedEvidence ?? throw new ArgumentNullException(nameof(approvedEvidence))).Validate();
         _currentEvidenceResolver = currentEvidenceResolver ?? throw new ArgumentNullException(nameof(currentEvidenceResolver));
-        _submitProvider = submitProvider ?? throw new ArgumentNullException(nameof(submitProvider));
+        _resolveProviderAdapter = resolveProviderAdapter ?? throw new ArgumentNullException(nameof(resolveProviderAdapter));
     }
 
     public async Task<GenerationProviderResponse> SubmitAuthorizedAsync(
@@ -26,29 +26,79 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
         cancellationToken.ThrowIfCancellationRequested();
 
         var selectedEvidence = _approvedEvidence.Validate();
+        RequireRequestStillBound(request, selectedEvidence);
+
+        var currentEvidence = await ResolveCurrentEvidenceAsync(request, cancellationToken).ConfigureAwait(false);
+        selectedEvidence.EnsureStillAuthorized(currentEvidence);
+
+        var adapter = await _resolveProviderAdapter(
+            currentEvidence.Selection.ProviderStableId,
+            currentEvidence.Selection.AccountStableId,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Voice Lab audition provider adapter is unavailable.");
+
+        await using (adapter.ConfigureAwait(false))
+        {
+            if (!string.Equals(
+                    adapter.Descriptor.StableId,
+                    currentEvidence.Selection.ProviderStableId,
+                    StringComparison.Ordinal))
+                throw new InvalidOperationException("Voice Lab audition provider adapter identity changed before submission.");
+
+            var submissionEvidence = await ResolveCurrentEvidenceAsync(request, cancellationToken).ConfigureAwait(false);
+            selectedEvidence.EnsureStillAuthorized(submissionEvidence);
+            currentEvidence.EnsureStillAuthorized(submissionEvidence);
+
+            var providerRequest = new VoiceLabProviderAuditionRequest(
+                submissionEvidence.Selection.ProviderStableId,
+                submissionEvidence.Selection.AccountStableId,
+                submissionEvidence.Selection.ProjectStableId,
+                submissionEvidence.Selection.VoiceStableId,
+                submissionEvidence.Selection.VoiceFingerprint,
+                submissionEvidence.Selection.CapabilityEvidenceId,
+                submissionEvidence.CredentialReferenceId,
+                submissionEvidence.PricingEvidenceId,
+                submissionEvidence.SpendAuthorizationId,
+                submissionEvidence.AccountRevision,
+                request.OutputFormat,
+                request.ForceFresh).Validate();
+
+            return await adapter.SubmitVoiceLabAuditionAsync(providerRequest, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Voice Lab audition provider returned no response.");
+        }
+    }
+
+    private async Task<VoiceLabAuditionAuthorizationEvidence> ResolveCurrentEvidenceAsync(
+        VoiceLabAuditionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var evidence = await _currentEvidenceResolver(request, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Voice Lab audition current authorization evidence is unavailable.");
+        RequireRequestStillBound(request, evidence);
+        return evidence.Validate();
+    }
+
+    private static void RequireRequestStillBound(
+        VoiceLabAuditionRequest request,
+        VoiceLabAuditionAuthorizationEvidence evidence)
+    {
+        evidence.Validate();
         VoiceLabAuditionRequestBindingPolicy.RequireBoundSelection(
             request.Selection,
-            selectedEvidence.Selection.ProviderStableId,
-            selectedEvidence.Selection.AccountStableId,
-            selectedEvidence.Selection.ProjectStableId,
-            selectedEvidence.Selection.VoiceStableId,
-            selectedEvidence.Selection.VoiceFingerprint);
+            evidence.Selection.ProviderStableId,
+            evidence.Selection.AccountStableId,
+            evidence.Selection.ProjectStableId,
+            evidence.Selection.VoiceStableId,
+            evidence.Selection.VoiceFingerprint);
 
         if (!string.Equals(
                 request.Selection.CapabilityEvidenceId,
-                selectedEvidence.Selection.CapabilityEvidenceId,
+                evidence.Selection.CapabilityEvidenceId,
                 StringComparison.Ordinal))
             throw new InvalidOperationException("Voice Lab audition capability evidence changed after approval.");
-        if (!request.ExplicitSpendApproved || !selectedEvidence.SpendApproved)
+        if (!request.ExplicitSpendApproved || !evidence.SpendApproved)
             throw new InvalidOperationException("Voice Lab audition requires explicit current spend approval.");
-        if (!request.PricingCurrent || !selectedEvidence.PricingCurrent)
+        if (!request.PricingCurrent || !evidence.PricingCurrent)
             throw new InvalidOperationException("Voice Lab audition requires current pricing evidence.");
-
-        var currentEvidence = await _currentEvidenceResolver(request, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Voice Lab audition current authorization evidence is unavailable.");
-        selectedEvidence.EnsureStillAuthorized(currentEvidence);
-
-        return await _submitProvider(request, currentEvidence.Validate(), cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Voice Lab audition provider returned no response.");
     }
 }
