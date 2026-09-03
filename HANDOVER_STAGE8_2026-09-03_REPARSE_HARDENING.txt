@@ -3,33 +3,33 @@ Date: 2026-09-03
 
 CURRENT INTEGRATION LANE
 Branch: repair/final-stage7-production-parallel
-Source head before this handover: 86f99e8c1eb4fdda70d80cc4236886967726ba23
+Latest source-changing head: a3a8cb7989a8fc52d59666816d6eaa15623f9deb
 main: 14f85105f111d59e9693174153b5236bafe6f990
 
 LANE STATUS
 Stage 6: 93%
 - Production authorization/evidence/context plumbing exists, but production CompositionRoot still does not bind Stage6GoogleGenerationShellBinder.
 - Exact missing composition API is a genuine Func<CancellationToken, Task<GoogleGenerationProductionRuntimeRequest>> current-runtime-request source to pass to Stage6GoogleGenerationShellBinder.Bind(ShellViewModel, ...).
-- CompositionRoot registers Stage6GoogleGenerationShellBinder but has no source for GoogleGenerationProductionRuntimeRequest. Do not fabricate account, envelope, pricing, revision, spend, trust, queue, reconciliation, credential, or endpoint evidence to close this.
+- CompositionRoot registers Stage6GoogleGenerationShellBinder but has no source for GoogleGenerationProductionRuntimeRequest. ShellViewModel currently exposes DocumentText and Stage6 execution configuration but not the durable/current account + submission-envelope + pricing + revision + estimate + UI-snapshot bundle required by GoogleGenerationProductionRuntimeRequest.
+- Do not fabricate account, envelope, pricing, revision, spend, trust, queue, reconciliation, credential, or endpoint evidence to close this.
 
 Stage 7: 98%
 - Current production catalog/audition integration remains on this integration lane.
 - Previous exact fast-track CI at 9af91616808f9736f4f36c632dcdfc3db5c2005c passed.
 
 Stage 8: 98%
-- Landed 1d01cb94de4ef61ec84e620f384d210b4fd9d704: fix(stage8): reject reparse points in recovery destinations.
-- RestoreRecoveryTerminalVerifier now walks every existing destination path component beneath the restore root and rejects FileAttributes.ReparsePoint, closing an in-root symlink/junction traversal gap that lexical root binding alone did not prevent.
-- Landed 86f99e8c1eb4fdda70d80cc4236886967726ba23: test(stage8): reject reparse-point recovery destinations.
+- 1d01cb94de4ef61ec84e620f384d210b4fd9d704: fix(stage8): reject reparse points in recovery destinations.
+- RestoreRecoveryTerminalVerifier walks every existing destination path component beneath the restore root and rejects FileAttributes.ReparsePoint, closing an in-root symlink/junction traversal gap that lexical root binding alone did not prevent.
+- 86f99e8c1eb4fdda70d80cc4236886967726ba23: test(stage8): reject reparse-point recovery destinations.
 - Added committed-recovery test proving a restoreRoot/library symbolic link to an external directory fails closed instead of accepting externally resolved bytes.
-
-CI
-Exact workflow run for 86f99e8c1eb4fdda70d80cc4236886967726ba23: 33711052425 / CloudScribe Stage 7 fast-track check #282.
-At handover creation the validate job 100510402897 is in progress in the Strict Stage 7 fast-track validation step. Inspect its exact conclusion before the next mutation; if it fails, fix the first exact compiler/analyzer/test failure.
+- Exact CI run 33711052425 / #282 failed at the first strict analyzer gate with MA0099 on the FileAttributes bitmask comparison in RestoreRecoveryTerminalVerifier.cs; no later build/test failure was reached.
+- a3a8cb7989a8fc52d59666816d6eaa15623f9deb: fix(stage8): satisfy strict reparse attribute analysis. Replaced the flagged zero comparison with File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint), retaining fail-closed semantics.
+- Replacement exact CI run 33711185620 / #284 is in progress for a3a8cb7989a8fc52d59666816d6eaa15623f9deb at handover update time.
 
 FINAL GATES
 Stage6 production root composition: FAIL / incomplete.
 Stage7 prior focused/integrated CI: PASS.
-Stage8 current reparse-point hardening CI: RUNNING at handover creation.
+Stage8 current reparse-point hardening CI: RUNNING on exact source SHA a3a8cb7989a8fc52d59666816d6eaa15623f9deb.
 Full compiled tests: NOT RUN.
 Final source acceptance: NOT RUN.
 Windows publish/version exact 1.0.0: NOT RUN.
@@ -40,7 +40,7 @@ Exact same-SHA no-change certification: NOT RUN.
 Final 1.0.0/main re-promotion: NOT RUN.
 
 NEXT EXACT GATE
-1. Inspect workflow run 33711052425 and repair its first exact failure if any.
+1. Inspect workflow run 33711185620 and repair its first exact failure if any.
 2. In parallel, find or implement a genuine production current-runtime-request source for GoogleGenerationProductionRuntimeRequest from already-authoritative application/persistence/UI request state; do not use ambient settings or manufactured evidence.
 3. Wire Stage6GoogleGenerationShellBinder only when that source supplies the complete current AccountId, durable GoogleGenerationSubmissionEnvelope, PricingProvenanceId, RequestRevision, Currency/Scale/current estimate, and GoogleGenerationUiExecutionSnapshot, after fresh main/all-repair-head reread.
 4. Add focused fail-closed Stage6 production-composition tests and run exact CI.
