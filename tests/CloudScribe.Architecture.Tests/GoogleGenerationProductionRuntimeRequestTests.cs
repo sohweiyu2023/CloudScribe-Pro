@@ -65,7 +65,25 @@ public sealed class GoogleGenerationProductionRuntimeRequestTests
     private static GoogleGenerationProductionRuntimeRequest CreateRequest()
     {
         byte[] payload = "provider-payload"u8.ToArray();
-        GoogleGenerationSubmissionEnvelope envelope = new(
+        GoogleGenerationSubmissionEnvelope envelope = CreateEnvelope(payload);
+        GenerationProviderRequest providerRequest = CreateProviderRequest(payload);
+        GoogleGenerationPersistedQueueState queueState = CreateQueueState();
+        GenerationCacheTrustContext trust = CreateTrust();
+        GoogleGenerationUiExecutionSnapshot snapshot = CreateSnapshot(providerRequest, queueState, trust);
+
+        return new GoogleGenerationProductionRuntimeRequest(
+            "account-1",
+            envelope,
+            "pricing-1",
+            7,
+            "USD",
+            2,
+            123,
+            snapshot);
+    }
+
+    private static GoogleGenerationSubmissionEnvelope CreateEnvelope(byte[] payload) =>
+        new(
             "account-1",
             "credential-1",
             "capability-1",
@@ -75,20 +93,26 @@ public sealed class GoogleGenerationProductionRuntimeRequestTests
             "MP3",
             Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)).ToLowerInvariant(),
             payload.Length);
-        GenerationProviderRequest providerRequest = new(
+
+    private static GenerationProviderRequest CreateProviderRequest(byte[] payload) =>
+        new(
             GoogleGenerationProvider.StableProviderId,
             GoogleGenerationProvider.SynthesizeOperationStableId,
             "account-1",
             "idempotency-1",
             payload,
             "MP3");
-        GoogleGenerationPersistedQueueState queueState = new(
+
+    private static GoogleGenerationPersistedQueueState CreateQueueState() =>
+        new(
             "account-1",
             GoogleGenerationProvider.SynthesizeOperationStableId,
             "idempotency-1",
             false,
             null);
-        GenerationCacheTrustContext trust = new(
+
+    private static GenerationCacheTrustContext CreateTrust() =>
+        new(
             GoogleGenerationProvider.StableProviderId,
             "account-1",
             "project-1",
@@ -112,7 +136,12 @@ public sealed class GoogleGenerationProductionRuntimeRequestTests
             "governance-1",
             "provider-feature-1",
             "account-capability-1");
-        GoogleGenerationUiExecutionSnapshot snapshot = new(
+
+    private static GoogleGenerationUiExecutionSnapshot CreateSnapshot(
+        GenerationProviderRequest providerRequest,
+        GoogleGenerationPersistedQueueState queueState,
+        GenerationCacheTrustContext trust) =>
+        new(
             new GoogleGenerationUiSelection("account-1", "project-1", "voice-1", "model-1", "capability-1", "MP3"),
             true,
             true,
@@ -127,15 +156,4 @@ public sealed class GoogleGenerationProductionRuntimeRequestTests
             true,
             true,
             true);
-
-        return new GoogleGenerationProductionRuntimeRequest(
-            "account-1",
-            envelope,
-            "pricing-1",
-            7,
-            "USD",
-            2,
-            123,
-            snapshot);
-    }
 }
