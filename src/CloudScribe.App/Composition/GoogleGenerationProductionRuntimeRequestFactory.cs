@@ -3,9 +3,9 @@ using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.App.Composition;
 
-public sealed class GoogleGenerationProductionRuntimeRequestFactory
+public static class GoogleGenerationProductionRuntimeRequestFactory
 {
-    public GoogleGenerationProductionRuntimeRequest Create(
+    public static GoogleGenerationProductionRuntimeRequest Create(
         GoogleGenerationSpendAuthorization authorization,
         GoogleGenerationUiExecutionSnapshot snapshot,
         long currentEstimateMinorUnits)

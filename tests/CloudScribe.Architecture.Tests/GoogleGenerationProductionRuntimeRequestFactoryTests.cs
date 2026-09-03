@@ -10,9 +10,8 @@ public sealed class GoogleGenerationProductionRuntimeRequestFactoryTests
     [Fact]
     public void Create_RejectsMissingAuthorization()
     {
-        var factory = new GoogleGenerationProductionRuntimeRequestFactory();
-
-        Assert.Throws<ArgumentNullException>(() => factory.Create(null!, null!, 0));
+        Assert.Throws<ArgumentNullException>(
+            () => GoogleGenerationProductionRuntimeRequestFactory.Create(null!, null!, 0));
     }
 
     [Fact]
@@ -49,10 +48,9 @@ public sealed class GoogleGenerationProductionRuntimeRequestFactoryTests
             false,
             false,
             false);
-        var factory = new GoogleGenerationProductionRuntimeRequestFactory();
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => factory.Create(authorization, incompleteSnapshot, 126));
+            () => GoogleGenerationProductionRuntimeRequestFactory.Create(authorization, incompleteSnapshot, 126));
 
         Assert.Contains("estimate changed after approval", exception.Message, StringComparison.OrdinalIgnoreCase);
     }

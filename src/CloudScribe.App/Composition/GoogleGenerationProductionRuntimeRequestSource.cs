@@ -14,13 +14,11 @@ public sealed class GoogleGenerationProductionRuntimeRequestSource
     private readonly Func<CancellationToken, Task<GoogleGenerationSpendAuthorization?>> _resolveCurrentAuthorization;
     private readonly Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot?>> _resolveCurrentSnapshot;
     private readonly Func<CancellationToken, Task<long?>> _resolveCurrentEstimateMinorUnits;
-    private readonly GoogleGenerationProductionRuntimeRequestFactory _factory;
 
     public GoogleGenerationProductionRuntimeRequestSource(
         Func<CancellationToken, Task<GoogleGenerationSpendAuthorization?>> resolveCurrentAuthorization,
         Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot?>> resolveCurrentSnapshot,
-        Func<CancellationToken, Task<long?>> resolveCurrentEstimateMinorUnits,
-        GoogleGenerationProductionRuntimeRequestFactory factory)
+        Func<CancellationToken, Task<long?>> resolveCurrentEstimateMinorUnits)
     {
         _resolveCurrentAuthorization = resolveCurrentAuthorization
             ?? throw new ArgumentNullException(nameof(resolveCurrentAuthorization));
@@ -28,7 +26,6 @@ public sealed class GoogleGenerationProductionRuntimeRequestSource
             ?? throw new ArgumentNullException(nameof(resolveCurrentSnapshot));
         _resolveCurrentEstimateMinorUnits = resolveCurrentEstimateMinorUnits
             ?? throw new ArgumentNullException(nameof(resolveCurrentEstimateMinorUnits));
-        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
     }
 
     public async Task<GoogleGenerationProductionRuntimeRequest> ResolveAsync(CancellationToken cancellationToken)
@@ -65,6 +62,9 @@ public sealed class GoogleGenerationProductionRuntimeRequestSource
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        return _factory.Create(authorization, snapshot, currentEstimateMinorUnits.Value).Validate();
+        return GoogleGenerationProductionRuntimeRequestFactory.Create(
+            authorization,
+            snapshot,
+            currentEstimateMinorUnits.Value).Validate();
     }
 }
