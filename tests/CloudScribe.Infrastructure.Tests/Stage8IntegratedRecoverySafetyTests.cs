@@ -31,11 +31,8 @@ public sealed class Stage8IntegratedRecoverySafetyTests
 
             RestoreTransactionJournal? restored = await store.LoadAuthenticatedAsync(cancellationToken);
             Assert.NotNull(restored);
-            Assert.Equal(journal.TransactionId, restored.TransactionId);
-            Assert.Equal(journal.PlanSha256, restored.PlanSha256);
-            Assert.Equal(journal.State, restored.State);
-            Assert.Equal(journal.UpdatedAtUtc, restored.UpdatedAtUtc);
-            Assert.Equal(plan, restored.RequirePersistedPlan());
+            AssertJournalEquivalent(journal, restored);
+            AssertPlanEquivalent(plan, restored.RequirePersistedPlan());
 
             string document = await File.ReadAllTextAsync(path, cancellationToken);
             string[] lines = document.Split('\n', StringSplitOptions.None);
@@ -101,7 +98,8 @@ public sealed class Stage8IntegratedRecoverySafetyTests
             RestoreRecoveryContext? context = await resolver.ResolveAsync(plan, cancellationToken);
 
             Assert.NotNull(context);
-            Assert.Equal(journal, context.Journal);
+            AssertJournalEquivalent(journal, context.Journal);
+            AssertPlanEquivalent(plan, context.Journal.RequirePersistedPlan());
             Assert.True(context.State.JournalAuthenticated);
             Assert.True(context.State.PlanIdentityMatches);
             Assert.True(context.State.StagingRootTrusted);
@@ -191,6 +189,31 @@ public sealed class Stage8IntegratedRecoverySafetyTests
             static descriptor => descriptor.ServiceType == typeof(TService));
         Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
         Assert.Equal(typeof(TService), descriptor.ImplementationType);
+    }
+
+    private static void AssertJournalEquivalent(
+        RestoreTransactionJournal expected,
+        RestoreTransactionJournal actual)
+    {
+        Assert.Equal(expected.TransactionId, actual.TransactionId);
+        Assert.Equal(expected.PlanSha256, actual.PlanSha256);
+        Assert.Equal(expected.State, actual.State);
+        Assert.Equal(expected.CompletedRelativePaths, actual.CompletedRelativePaths);
+        Assert.Equal(expected.UpdatedAtUtc, actual.UpdatedAtUtc);
+    }
+
+    private static void AssertPlanEquivalent(RestoreExecutionPlan expected, RestoreExecutionPlan actual)
+    {
+        Assert.Equal(expected.RestoreRoot, actual.RestoreRoot);
+        Assert.Equal(expected.TotalBytes, actual.TotalBytes);
+        Assert.Equal(expected.Steps.Count, actual.Steps.Count);
+        for (var index = 0; index < expected.Steps.Count; index++)
+        {
+            Assert.Equal(expected.Steps[index], actual.Steps[index]);
+        }
+        Assert.Equal(
+            RestoreTransactionJournal.ComputePlanSha256(expected),
+            RestoreTransactionJournal.ComputePlanSha256(actual));
     }
 
     private static RestoreExecutionPlan CreatePlan(string restoreRoot)
