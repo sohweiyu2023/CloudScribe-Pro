@@ -92,14 +92,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(++evidenceReads == 1 ? approved : changed),
-            (_, _, _) => ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(adapter));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
-
-        Assert.Equal(2, evidenceReads);
-        Assert.Equal(0, adapter.SubmitCalls);
-        Assert.Equal(1, adapter.DisposeCalls);
+            (_, _, _) => ValueTask.FromResult<IVoiceLabAuthorizedAuditionExecutor>(null!) as ValueTask<IVoiceLabAuditionProviderAdapter>);
     }
 
     [Fact]
@@ -163,6 +156,60 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
             executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
 
         Assert.Equal(0, resolveCalls);
+    }
+
+    [Fact]
+    public async Task CacheEligibleRequestFailsClosedBeforeEvidenceOrAdapterResolution()
+    {
+        var approved = CurrentEvidence();
+        var evidenceReads = 0;
+        var adapterReads = 0;
+        var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
+            approved,
+            (_, _) =>
+            {
+                evidenceReads++;
+                return Task.FromResult(approved);
+            },
+            (_, _, _) =>
+            {
+                adapterReads++;
+                return ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(new RecordingAuditionAdapter(approved.Selection.ProviderStableId));
+            });
+        var request = CurrentRequest() with { CachePolicyEligible = true };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.SubmitAuthorizedAsync(request, TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, evidenceReads);
+        Assert.Equal(0, adapterReads);
+    }
+
+    [Fact]
+    public async Task NonFreshRequestFailsClosedBeforeEvidenceOrAdapterResolution()
+    {
+        var approved = CurrentEvidence();
+        var evidenceReads = 0;
+        var adapterReads = 0;
+        var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
+            approved,
+            (_, _) =>
+            {
+                evidenceReads++;
+                return Task.FromResult(approved);
+            },
+            (_, _, _) =>
+            {
+                adapterReads++;
+                return ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(new RecordingAuditionAdapter(approved.Selection.ProviderStableId));
+            });
+        var request = CurrentRequest() with { ForceFresh = false };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.SubmitAuthorizedAsync(request, TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, evidenceReads);
+        Assert.Equal(0, adapterReads);
     }
 
     [Fact]
