@@ -1,6 +1,5 @@
 using CloudScribe.App.Composition;
 using CloudScribe.App.ViewModels;
-using CloudScribe.Application.Generation;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.Architecture.Tests;
@@ -8,57 +7,124 @@ namespace CloudScribe.Architecture.Tests;
 public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
 {
     [Fact]
-    public async Task ResolveAsyncMissingAuthorizationFailsBeforeSnapshotOrEstimateResolution()
+    public async Task ResolveAsyncMissingCurrentSubmissionFailsBeforeDurableAuthorizationRead()
     {
-        var snapshotReads = 0;
-        var estimateReads = 0;
+        var authorizationReads = 0;
+        var store = new StubAuthorizationStore((_, _) =>
+        {
+            authorizationReads++;
+            return Task.FromResult<GoogleGenerationSpendAuthorization?>(null);
+        });
         var source = new GoogleGenerationProductionRuntimeRequestSource(
-            _ => Task.FromResult<GoogleGenerationSpendAuthorization?>(null),
-            _ =>
-            {
-                snapshotReads++;
-                return Task.FromResult<GoogleGenerationUiExecutionSnapshot?>(null);
-            },
-            _ =>
-            {
-                estimateReads++;
-                return Task.FromResult<long?>(null);
-            });
+            store,
+            _ => Task.FromResult<GoogleGenerationProductionSubmissionState?>(null));
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => source.ResolveAsync(CancellationToken.None));
 
-        Assert.Contains("current durable spend authorization", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(0, snapshotReads);
-        Assert.Equal(0, estimateReads);
+        Assert.Contains("coherent current compiled submission state", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, authorizationReads);
     }
 
     [Fact]
-    public async Task ResolveAsyncMissingSnapshotFailsBeforeEstimateResolution()
+    public async Task ResolveAsyncMissingSnapshotFailsBeforeDurableAuthorizationRead()
     {
-        var estimateReads = 0;
-        GoogleGenerationSpendAuthorization authorization = CreateAuthorization();
+        var authorizationReads = 0;
+        GoogleGenerationSubmissionEnvelope envelope = CreateEnvelope();
+        var store = new StubAuthorizationStore((_, _) =>
+        {
+            authorizationReads++;
+            return Task.FromResult<GoogleGenerationSpendAuthorization?>(CreateAuthorization());
+        });
+        var state = new GoogleGenerationProductionSubmissionState(envelope, null!, 125);
         var source = new GoogleGenerationProductionRuntimeRequestSource(
-            _ => Task.FromResult<GoogleGenerationSpendAuthorization?>(authorization),
-            _ => Task.FromResult<GoogleGenerationUiExecutionSnapshot?>(null),
-            _ =>
-            {
-                estimateReads++;
-                return Task.FromResult<long?>(125);
-            });
+            store,
+            _ => Task.FromResult<GoogleGenerationProductionSubmissionState?>(state));
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => source.ResolveAsync(CancellationToken.None));
 
         Assert.Contains("exact current compiled UI execution snapshot", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(0, estimateReads);
+        Assert.Equal(0, authorizationReads);
     }
 
     [Fact]
-    public async Task ResolveAsyncMissingEstimateFailsClosed()
+    public async Task ResolveAsyncNegativeEstimateFailsBeforeDurableAuthorizationRead()
     {
-        GoogleGenerationSpendAuthorization authorization = CreateAuthorization();
-        var snapshot = new GoogleGenerationUiExecutionSnapshot(
+        var authorizationReads = 0;
+        GoogleGenerationSubmissionEnvelope envelope = CreateEnvelope();
+        var store = new StubAuthorizationStore((_, _) =>
+        {
+            authorizationReads++;
+            return Task.FromResult<GoogleGenerationSpendAuthorization?>(CreateAuthorization());
+        });
+        var state = new GoogleGenerationProductionSubmissionState(
+            envelope,
+            CreateIncompleteSnapshot(),
+            -1);
+        var source = new GoogleGenerationProductionRuntimeRequestSource(
+            store,
+            _ => Task.FromResult<GoogleGenerationProductionSubmissionState?>(state));
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => source.ResolveAsync(CancellationToken.None));
+
+        Assert.Contains("current estimate cannot be negative", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, authorizationReads);
+    }
+
+    [Fact]
+    public async Task ResolveAsyncMissingDurableAuthorizationForExactEnvelopeFailsClosed()
+    {
+        GoogleGenerationSubmissionEnvelope envelope = CreateEnvelope();
+        GoogleGenerationSubmissionEnvelope? observedEnvelope = null;
+        var store = new StubAuthorizationStore((candidate, _) =>
+        {
+            observedEnvelope = candidate;
+            return Task.FromResult<GoogleGenerationSpendAuthorization?>(null);
+        });
+        var state = new GoogleGenerationProductionSubmissionState(
+            envelope,
+            CreateIncompleteSnapshot(),
+            125);
+        var source = new GoogleGenerationProductionRuntimeRequestSource(
+            store,
+            _ => Task.FromResult<GoogleGenerationProductionSubmissionState?>(state));
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => source.ResolveAsync(CancellationToken.None));
+
+        Assert.Contains("durable spend authorization for the exact current submission envelope", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Same(envelope, observedEnvelope);
+    }
+
+    private static GoogleGenerationSubmissionEnvelope CreateEnvelope()
+    {
+        return new GoogleGenerationSubmissionEnvelope(
+            "google-account",
+            "credential-ref",
+            "capability-v1",
+            "pricing-v1",
+            12,
+            "en-US-Studio-O",
+            "MP3",
+            "00",
+            1);
+    }
+
+    private static GoogleGenerationSpendAuthorization CreateAuthorization()
+    {
+        return GoogleGenerationSpendAuthorization.Create(
+            CreateEnvelope(),
+            "USD",
+            2,
+            approvedEstimateMinorUnits: 125,
+            authorizedMaximumMinorUnits: 150);
+    }
+
+    private static GoogleGenerationUiExecutionSnapshot CreateIncompleteSnapshot()
+    {
+        return new GoogleGenerationUiExecutionSnapshot(
             null!,
             false,
             false,
@@ -73,35 +139,30 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             false,
             false,
             false);
-        var source = new GoogleGenerationProductionRuntimeRequestSource(
-            _ => Task.FromResult<GoogleGenerationSpendAuthorization?>(authorization),
-            _ => Task.FromResult<GoogleGenerationUiExecutionSnapshot?>(snapshot),
-            _ => Task.FromResult<long?>(null));
-
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => source.ResolveAsync(CancellationToken.None));
-
-        Assert.Contains("current provider-billed estimate", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static GoogleGenerationSpendAuthorization CreateAuthorization()
+    private sealed class StubAuthorizationStore : IGoogleGenerationSpendAuthorizationStore
     {
-        var envelope = new GoogleGenerationSubmissionEnvelope(
-            "google-account",
-            "credential-ref",
-            "capability-v1",
-            "pricing-v1",
-            12,
-            "en-US-Studio-O",
-            "MP3",
-            "00",
-            1);
+        private readonly Func<GoogleGenerationSubmissionEnvelope, CancellationToken, Task<GoogleGenerationSpendAuthorization?>> _load;
 
-        return GoogleGenerationSpendAuthorization.Create(
-            envelope,
-            "USD",
-            2,
-            approvedEstimateMinorUnits: 125,
-            authorizedMaximumMinorUnits: 150);
+        public StubAuthorizationStore(
+            Func<GoogleGenerationSubmissionEnvelope, CancellationToken, Task<GoogleGenerationSpendAuthorization?>> load)
+        {
+            _load = load;
+        }
+
+        public Task SaveApprovedAsync(
+            GoogleGenerationSpendAuthorization authorization,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<GoogleGenerationSpendAuthorization?> LoadApprovedAsync(
+            GoogleGenerationSubmissionEnvelope envelope,
+            CancellationToken cancellationToken = default)
+        {
+            return _load(envelope, cancellationToken);
+        }
     }
 }
