@@ -8,14 +8,14 @@ namespace CloudScribe.Architecture.Tests;
 public sealed class GoogleGenerationProductionRuntimeRequestFactoryTests
 {
     [Fact]
-    public void Create_RejectsMissingAuthorization()
+    public void CreateRejectsMissingAuthorization()
     {
         Assert.Throws<ArgumentNullException>(
             () => GoogleGenerationProductionRuntimeRequestFactory.Create(null!, null!, 0));
     }
 
     [Fact]
-    public void Create_RejectsEstimateDriftBeforeUsingTheRuntimeSnapshot()
+    public void CreateRejectsEstimateDriftBeforeUsingTheRuntimeSnapshot()
     {
         var envelope = new GoogleGenerationSubmissionEnvelope(
             "google-account",

@@ -8,7 +8,7 @@ namespace CloudScribe.Architecture.Tests;
 public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
 {
     [Fact]
-    public async Task ResolveAsync_MissingAuthorization_FailsBeforeSnapshotOrEstimateResolution()
+    public async Task ResolveAsyncMissingAuthorizationFailsBeforeSnapshotOrEstimateResolution()
     {
         var snapshotReads = 0;
         var estimateReads = 0;
@@ -34,7 +34,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
     }
 
     [Fact]
-    public async Task ResolveAsync_MissingSnapshot_FailsBeforeEstimateResolution()
+    public async Task ResolveAsyncMissingSnapshotFailsBeforeEstimateResolution()
     {
         var estimateReads = 0;
         GoogleGenerationSpendAuthorization authorization = CreateAuthorization();
@@ -55,7 +55,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
     }
 
     [Fact]
-    public async Task ResolveAsync_MissingEstimate_FailsClosed()
+    public async Task ResolveAsyncMissingEstimateFailsClosed()
     {
         GoogleGenerationSpendAuthorization authorization = CreateAuthorization();
         var snapshot = new GoogleGenerationUiExecutionSnapshot(
