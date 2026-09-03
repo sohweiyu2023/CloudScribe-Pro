@@ -1,0 +1,55 @@
+CloudScribe Pro Final 1.0.0 repair handover — 2026-09-04 05:36 SGT
+
+CONTROLLING BASELINE
+v2.23. Final 1.0.0 remains reopened. Do not promote until Stage6-8 production composition, exact Windows executable acceptance, strict/full certification, and exact-SHA no-change certification pass.
+
+LIVE HEADS RE-READ BEFORE MUTATIONS
+main = 14f85105f111d59e9693174153b5236bafe6f990
+repair/final-1.0.0-session-state-updater = 1bcac65c2bec1f1a189f47e91870943e4fdf944e
+repair/final-1.0.0-shell-integration = 5c499209793fa6f40c0dad5b4a14669ed81fa50f
+repair/final-stage6-runtime-restore-helper = 9faef87cc7be2114b2b27076686520c6990738b1
+repair/final-stage8-production-parallel = f1d4e161acedd0ccb17c73de9b724e545f0ff038
+active integration lane repair/final-stage7-production-parallel advanced this run; source head before this handover = 19a4d1067efc5cd70fa96822c07e4723007fd098.
+
+SUBSTANTIVE STAGE6 CHANGES THIS RUN
+a8d1f3d785d3c573b0e29f5a158cf48e79cd93ba — production runtime request source no longer accepts ambient/current-authorization delegate. It resolves one coherent current submission state, then loads durable spend authorization using that exact GoogleGenerationSubmissionEnvelope immediately before request construction.
+87a8aa7d85a10431d96f40f855df9434b261bd10 — focused fail-closed exact-envelope runtime-source tests.
+3f693cfda47d67029195192848e6de25c84c7873 — separated production submission state type after strict analyzer MA0048.
+4f32d3c88b82f7234ed5932429c21e4f584277ad — added correctly named GoogleGenerationProductionSubmissionState.cs.
+5aed9a827b7c11e4a649d736238cff4e6506c8fe — added GoogleGenerationProductionSubmissionStateOwner. ApproveAsync validates the complete authorization/snapshot/current-estimate tuple through GoogleGenerationProductionRuntimeRequestFactory, persists the exact durable authorization first, and only after successful persistence atomically publishes the executable current state. Invalidate() fails the owner closed.
+19a4d1067efc5cd70fa96822c07e4723007fd098 — fixed exact predecessor CI compiler error by importing CloudScribe.Application.Generation in runtime-source architecture tests.
+
+EXACT CI
+Run 33808042205 on 87a8aa7... failed first on MA0048 for the colocated public submission-state record; fixed by 3f693cfd... + 4f32d3c8....
+Run 33808410682 on 4f32d3c8... passed formatting (Formatted 0 of 735 files) and production assemblies, then failed first and only observed compiler issue in architecture tests: CS0103 GoogleGenerationReconciliationResolutionEvidence missing namespace. Fixed by 19a4d106....
+Successor run 33808823022 on exact source/test head 19a4d106... was IN PROGRESS at last inspection; inspect it first next run and repair its first exact failure if any.
+
+STAGE6 STATUS — 93%
+The runtime resolver trust seam is now materially closed and an atomic approved-submission owner exists. Remaining mandatory production composition: connect the real compile/spend-approval UI workflow to GoogleGenerationProductionSubmissionStateOwner.ApproveAsync so the owner receives the exact compiled envelope, matching GoogleGenerationUiExecutionSnapshot, and current provider-billed estimate at explicit approval time. Then register owner + GoogleGenerationProductionRuntimeRequestSource and invoke Stage6GoogleGenerationShellBinder.Bind(viewModel, source.ResolveAsync) from CompositionRoot. Do not reconstruct latest values independently, fabricate approval, or wire a dummy state.
+
+STAGE7 STATUS — 98%
+Production catalog/audition composition is present. Audit confirms Stage7VoiceLabAuditionShellBinder refreshes current selection/evidence and VoiceLabEvidenceAuthorizedAuditionExecutor re-resolves authorization immediately before adapter submission, checking provider/account/project/voice/capability/credential/pricing/spend binding. No raw provider-submit shortcut is wired. Exact integrated CI still must pass on the current Stage6-mutated integration head.
+
+STAGE8 STATUS — 98%
+Persisted recovery composition is present. RestoreRecoveryExecutionService loads authenticated persisted journal/plan state, composes RestoreRecoveryCoordinator, performs real resume/rollback, persists transitions, and RestoreRecoveryTerminalVerifier checks terminal journal state plus filesystem/hash/length completion. No fabricated recovery success found. Exact integrated CI still must pass on current integration head.
+
+MANDATORY FINAL GATES
+Stage6 production composition: REPAIR / NOT YET PASS
+Stage7 production composition: structurally PASS; exact-head integrated qualification pending
+Stage8 production composition: structurally PASS; exact-head integrated qualification pending
+Full compiled Final tests: NOT RUN
+Final source acceptance: NOT RUN
+Windows publish/version exact 1.0.0: NOT RUN
+Actual CloudScribe.exe execution acceptance: NOT RUN
+Exact source no-mutation verification: NOT RUN
+Exact SHA freeze: NOT RUN
+Strict/full certification: NOT RUN
+Exact same-SHA no-change certification: NOT RUN
+Final 1.0.0/main re-promotion: NOT RUN
+
+NEXT EXACT GATE
+1. Inspect exact-head CI run 33808823022; if failed, repair first exact compiler/analyzer/test failure.
+2. Locate the genuine Stage6 compile + spend-approval UI/application boundary and call GoogleGenerationProductionSubmissionStateOwner.ApproveAsync there with the exact tuple. Invalidate on any request/account/project/voice/capability/pricing/compiled-payload mutation.
+3. Register the owner and GoogleGenerationProductionRuntimeRequestSource in CompositionRoot and bind Stage6GoogleGenerationShellBinder only after the genuine approval producer is connected.
+4. Add only required fail-closed tests proving failed durable save never publishes executable state and stale/mutated submission state cannot execute.
+5. Once Stage6-8 production composition all pass, begin serial Final gates only.
