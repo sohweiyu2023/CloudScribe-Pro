@@ -1,0 +1,41 @@
+CloudScribe Pro — Stage 8 fast-development handover
+Date: 2026-09-03
+Controlling baseline: v2.23
+Branch: repair/final-stage7-production-parallel
+
+LIVE BASELINES RE-READ BEFORE MUTATIONS
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- active repair/final-stage7-production-parallel before Stage8 source mutation: a0cb6541c7a893c0310786b503c674d0889237b6
+- all branch heads re-read before each source/test/handover mutation.
+
+LANDED THIS RUN
+1. 9e8a9415d4ca22e9ecd962062aade7fdd8184ea2
+   fix(stage8): fail closed on unsafe recovery path boundaries
+   - RestoreRecoveryExecutionCompositionFactory now validates journal/staging/backup paths before credential-vault access.
+   - Requires all three paths to be fully qualified.
+   - Canonicalizes all paths before composition.
+   - Rejects journal path inside staging/backup and rejects overlapping staging/backup roots.
+   - Passes only canonicalized validated paths into journal store/state resolver/recovery service.
+
+2. 93a1c5c8ffde9bd7135253affe4d6f068ccfce59
+   test(stage8): reject relative and overlapping recovery paths
+   - Existing credential/cancellation tests now use non-overlapping production-shaped recovery roots.
+   - New fail-closed tests reject a relative journal path before vault access.
+   - New fail-closed tests reject staging/backup containment before vault access.
+   - New fail-closed tests reject a journal located inside the backup root before vault access.
+
+CI
+- Prior Stage6 analyzer repair run 33738129463: PASS.
+- Stage8 source/test head fast-track run 33743939813: IN PROGRESS at last inspection; no exact failure was yet available to repair.
+
+STAGE STATUS
+- Stage6: 94%. Runtime-request validation/evidence binding is hardened. Production CompositionRoot still lacks the authoritative complete prepared GoogleGenerationProductionRuntimeRequest source required before Stage6 shell binding.
+- Stage7: 98%. Production catalog + request-bound authorized audition composition remains wired and revalidates current evidence/selection before provider execution.
+- Stage8: 99%. Persisted production restore composition is wired; this run closed the direct-composition unsafe-path boundary. Exact fast-track CI for the new hardening is pending.
+- Final 1.0.0 serial certification: 84%. Do not start serial Final gates until Stage6-8 composition is fully green.
+
+NEXT EXACT GATE
+1. Inspect run 33743939813 and repair its first exact compiler/analyzer/test failure if any.
+2. If Stage8 is green, resume implementation-first Stage6 work on an authoritative prepared-runtime-request persistence/source boundary; do not bind ConfigureStage6GoogleGeneration until that source supplies real request/account/capability/endpoint/credential/revision/pricing/spend/trust/queue/reconciliation evidence.
+3. Keep Stage7/8 active independently for any newly exposed production gap while Stage6 work proceeds.
+4. Only after Stage6-8 all pass: full compiled tests -> Final source acceptance -> exact Windows 1.0.0 publish -> execute actual CloudScribe.exe -> exact source no-mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final/main promotion.
