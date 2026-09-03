@@ -26,7 +26,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             new GoogleGenerationProductionRuntimeRequestFactory());
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => source.ResolveAsync(CancellationToken.None));
+            () => source.ResolveAsync(CancellationToken.None)).ConfigureAwait(false);
 
         Assert.Contains("current durable spend authorization", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, snapshotReads);
@@ -49,7 +49,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             new GoogleGenerationProductionRuntimeRequestFactory());
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => source.ResolveAsync(CancellationToken.None));
+            () => source.ResolveAsync(CancellationToken.None)).ConfigureAwait(false);
 
         Assert.Contains("exact current compiled UI execution snapshot", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, estimateReads);
@@ -60,7 +60,20 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
     {
         GoogleGenerationSpendAuthorization authorization = CreateAuthorization();
         var snapshot = new GoogleGenerationUiExecutionSnapshot(
-            null!, false, false, false, false, null!, null!, null!, null!, null!, false, false, false, false);
+            null!,
+            false,
+            false,
+            false,
+            false,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            false,
+            false,
+            false,
+            false);
         var source = new GoogleGenerationProductionRuntimeRequestSource(
             _ => Task.FromResult<GoogleGenerationSpendAuthorization?>(authorization),
             _ => Task.FromResult<GoogleGenerationUiExecutionSnapshot?>(snapshot),
@@ -68,7 +81,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             new GoogleGenerationProductionRuntimeRequestFactory());
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => source.ResolveAsync(CancellationToken.None));
+            () => source.ResolveAsync(CancellationToken.None)).ConfigureAwait(false);
 
         Assert.Contains("current provider-billed estimate", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
