@@ -1,5 +1,6 @@
 using CloudScribe.App.Composition;
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Generation;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.Architecture.Tests;
@@ -26,7 +27,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             new GoogleGenerationProductionRuntimeRequestFactory());
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => source.ResolveAsync(CancellationToken.None)).ConfigureAwait(false);
+            () => source.ResolveAsync(CancellationToken.None));
 
         Assert.Contains("current durable spend authorization", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, snapshotReads);
@@ -49,7 +50,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             new GoogleGenerationProductionRuntimeRequestFactory());
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => source.ResolveAsync(CancellationToken.None)).ConfigureAwait(false);
+            () => source.ResolveAsync(CancellationToken.None));
 
         Assert.Contains("exact current compiled UI execution snapshot", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, estimateReads);
@@ -69,7 +70,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             null!,
             null!,
             null!,
-            null!,
+            GoogleGenerationReconciliationResolutionEvidence.None,
             false,
             false,
             false,
@@ -81,7 +82,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             new GoogleGenerationProductionRuntimeRequestFactory());
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => source.ResolveAsync(CancellationToken.None)).ConfigureAwait(false);
+            () => source.ResolveAsync(CancellationToken.None));
 
         Assert.Contains("current provider-billed estimate", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
