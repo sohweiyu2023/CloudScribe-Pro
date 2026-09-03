@@ -23,8 +23,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             {
                 estimateReads++;
                 return Task.FromResult<long?>(null);
-            },
-            new GoogleGenerationProductionRuntimeRequestFactory());
+            });
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => source.ResolveAsync(CancellationToken.None));
@@ -46,8 +45,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
             {
                 estimateReads++;
                 return Task.FromResult<long?>(125);
-            },
-            new GoogleGenerationProductionRuntimeRequestFactory());
+            });
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => source.ResolveAsync(CancellationToken.None));
@@ -78,8 +76,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestSourceTests
         var source = new GoogleGenerationProductionRuntimeRequestSource(
             _ => Task.FromResult<GoogleGenerationSpendAuthorization?>(authorization),
             _ => Task.FromResult<GoogleGenerationUiExecutionSnapshot?>(snapshot),
-            _ => Task.FromResult<long?>(null),
-            new GoogleGenerationProductionRuntimeRequestFactory());
+            _ => Task.FromResult<long?>(null));
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => source.ResolveAsync(CancellationToken.None));
