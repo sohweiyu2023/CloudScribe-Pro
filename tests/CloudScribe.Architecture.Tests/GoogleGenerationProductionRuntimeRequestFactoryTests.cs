@@ -1,5 +1,6 @@
 using CloudScribe.App.Composition;
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Generation;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.Architecture.Tests;
@@ -43,7 +44,7 @@ public sealed class GoogleGenerationProductionRuntimeRequestFactoryTests
             null!,
             null!,
             null!,
-            null!,
+            GoogleGenerationReconciliationResolutionEvidence.None,
             false,
             false,
             false,
