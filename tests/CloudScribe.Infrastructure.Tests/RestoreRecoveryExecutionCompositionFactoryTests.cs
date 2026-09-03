@@ -14,15 +14,15 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
         var reference = new CredentialReference(AuthenticationKeyTarget);
         var vault = new TestCredentialVault(secret: null);
         var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
-        string journalPath = CreateUnusedJournalPath();
+        (string journalPath, string stagingRoot, string backupRoot) = CreateRecoveryPaths();
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => factory.CreateAsync(
                 reference,
                 journalPath,
-                Path.GetTempPath(),
-                Path.GetTempPath(),
+                stagingRoot,
+                backupRoot,
                 new AtomicVerifiedRestoreExecutor(),
                 cancellationToken));
 
@@ -40,15 +40,15 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
         var reference = new CredentialReference(AuthenticationKeyTarget);
         var vault = new TestCredentialVault("short-key".ToCharArray());
         var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
-        string journalPath = CreateUnusedJournalPath();
+        (string journalPath, string stagingRoot, string backupRoot) = CreateRecoveryPaths();
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => factory.CreateAsync(
                 reference,
                 journalPath,
-                Path.GetTempPath(),
-                Path.GetTempPath(),
+                stagingRoot,
+                backupRoot,
                 new AtomicVerifiedRestoreExecutor(),
                 cancellationToken));
 
@@ -66,7 +66,7 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
         var reference = new CredentialReference(AuthenticationKeyTarget);
         var vault = new TestCredentialVault("0123456789abcdef0123456789abcdef".ToCharArray());
         var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
-        string journalPath = CreateUnusedJournalPath();
+        (string journalPath, string stagingRoot, string backupRoot) = CreateRecoveryPaths();
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
@@ -74,8 +74,8 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
             () => factory.CreateAsync(
                 reference,
                 journalPath,
-                Path.GetTempPath(),
-                Path.GetTempPath(),
+                stagingRoot,
+                backupRoot,
                 new AtomicVerifiedRestoreExecutor(),
                 cancellation.Token));
 
@@ -84,12 +84,86 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
         Assert.False(File.Exists(journalPath));
     }
 
-    private static string CreateUnusedJournalPath() =>
-        Path.Combine(
+    [Fact]
+    public async Task CreateAsyncRejectsRelativeRecoveryPathBeforeCredentialAccess()
+    {
+        var reference = new CredentialReference(AuthenticationKeyTarget);
+        var vault = new TestCredentialVault("0123456789abcdef0123456789abcdef".ToCharArray());
+        var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
+        (_, string stagingRoot, string backupRoot) = CreateRecoveryPaths();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => factory.CreateAsync(
+                reference,
+                "restore-recovery.journal",
+                stagingRoot,
+                backupRoot,
+                new AtomicVerifiedRestoreExecutor(),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("Restore recovery paths must be explicitly fully qualified.", exception.Message);
+        Assert.Equal(0, vault.ReadCount);
+    }
+
+    [Fact]
+    public async Task CreateAsyncRejectsOverlappingStagingAndBackupRootsBeforeCredentialAccess()
+    {
+        var reference = new CredentialReference(AuthenticationKeyTarget);
+        var vault = new TestCredentialVault("0123456789abcdef0123456789abcdef".ToCharArray());
+        var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
+        (string journalPath, string stagingRoot, _) = CreateRecoveryPaths();
+        string nestedBackupRoot = Path.Combine(stagingRoot, "backup");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => factory.CreateAsync(
+                reference,
+                journalPath,
+                stagingRoot,
+                nestedBackupRoot,
+                new AtomicVerifiedRestoreExecutor(),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "Restore recovery journal, staging, and backup paths must not overlap.",
+            exception.Message);
+        Assert.Equal(0, vault.ReadCount);
+    }
+
+    [Fact]
+    public async Task CreateAsyncRejectsJournalInsideBackupRootBeforeCredentialAccess()
+    {
+        var reference = new CredentialReference(AuthenticationKeyTarget);
+        var vault = new TestCredentialVault("0123456789abcdef0123456789abcdef".ToCharArray());
+        var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
+        (_, string stagingRoot, string backupRoot) = CreateRecoveryPaths();
+        string journalPath = Path.Combine(backupRoot, "journal.json");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => factory.CreateAsync(
+                reference,
+                journalPath,
+                stagingRoot,
+                backupRoot,
+                new AtomicVerifiedRestoreExecutor(),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "Restore recovery journal, staging, and backup paths must not overlap.",
+            exception.Message);
+        Assert.Equal(0, vault.ReadCount);
+    }
+
+    private static (string JournalPath, string StagingRoot, string BackupRoot) CreateRecoveryPaths()
+    {
+        string root = Path.Combine(
             Path.GetTempPath(),
             "CloudScribe.Tests",
-            Guid.NewGuid().ToString("N"),
-            "restore-recovery.journal");
+            Guid.NewGuid().ToString("N"));
+        return (
+            Path.Combine(root, "journal", "restore-recovery.journal"),
+            Path.Combine(root, "staging"),
+            Path.Combine(root, "backup"));
+    }
 
     private sealed class TestCredentialVault : ICredentialVault
     {
