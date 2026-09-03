@@ -62,6 +62,101 @@ public sealed class GoogleGenerationProductionRuntimeRequestTests
         Assert.Contains("compiled payload", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ValidateRejectsUiSelectionVoiceDrift()
+    {
+        GoogleGenerationProductionRuntimeRequest request = CreateRequest();
+        request = request with
+        {
+            Snapshot = request.Snapshot with
+            {
+                UiSelection = request.Snapshot.UiSelection with { VoiceId = "voice-drifted" },
+            },
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(request.Validate);
+        Assert.Contains("voice", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateRejectsUiSelectionCapabilityDrift()
+    {
+        GoogleGenerationProductionRuntimeRequest request = CreateRequest();
+        request = request with
+        {
+            Snapshot = request.Snapshot with
+            {
+                UiSelection = request.Snapshot.UiSelection with { CapabilityEvidenceId = "capability-drifted" },
+            },
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(request.Validate);
+        Assert.Contains("capability evidence", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateRejectsProviderIdentityDrift()
+    {
+        GoogleGenerationProductionRuntimeRequest request = CreateRequest();
+        GenerationProviderRequest driftedProviderRequest = new(
+            "other-provider",
+            GoogleGenerationProvider.SynthesizeOperationStableId,
+            "account-1",
+            "idempotency-1",
+            request.Snapshot.ProviderRequest.CompiledPayload,
+            "MP3");
+
+        request = request with
+        {
+            Snapshot = request.Snapshot with { ProviderRequest = driftedProviderRequest },
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(request.Validate);
+        Assert.Contains("provider identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateRejectsProviderOperationDrift()
+    {
+        GoogleGenerationProductionRuntimeRequest request = CreateRequest();
+        GenerationProviderRequest driftedProviderRequest = new(
+            GoogleGenerationProvider.StableProviderId,
+            "other-operation",
+            "account-1",
+            "idempotency-1",
+            request.Snapshot.ProviderRequest.CompiledPayload,
+            "MP3");
+
+        request = request with
+        {
+            Snapshot = request.Snapshot with { ProviderRequest = driftedProviderRequest },
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(request.Validate);
+        Assert.Contains("operation", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateRejectsProviderOutputFormatDrift()
+    {
+        GoogleGenerationProductionRuntimeRequest request = CreateRequest();
+        GenerationProviderRequest driftedProviderRequest = new(
+            GoogleGenerationProvider.StableProviderId,
+            GoogleGenerationProvider.SynthesizeOperationStableId,
+            "account-1",
+            "idempotency-1",
+            request.Snapshot.ProviderRequest.CompiledPayload,
+            "LINEAR16");
+
+        request = request with
+        {
+            Snapshot = request.Snapshot with { ProviderRequest = driftedProviderRequest },
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(request.Validate);
+        Assert.Contains("output format", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static GoogleGenerationProductionRuntimeRequest CreateRequest()
     {
         byte[] payload = "provider-payload"u8.ToArray();
