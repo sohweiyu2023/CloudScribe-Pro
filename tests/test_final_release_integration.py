@@ -10,6 +10,7 @@ STAGE3_MOUNT = ROOT / "src" / "CloudScribe.App" / "MainWindow.Stage3Library.cs"
 STAGE7_VOICE_LAB = ROOT / "src" / "CloudScribe.App" / "ViewModels" / "ShellViewModel.Stage7VoiceLab.cs"
 STAGE8_RESTORE = ROOT / "src" / "CloudScribe.App" / "ViewModels" / "ShellViewModel.Stage8RestoreRecovery.cs"
 COMPOSITION = ROOT / "src" / "CloudScribe.App" / "Composition" / "CompositionRoot.cs"
+INFRASTRUCTURE_DI = ROOT / "src" / "CloudScribe.Infrastructure" / "DependencyInjection" / "ServiceCollectionExtensions.cs"
 
 
 def _read(path: Path) -> str:
@@ -116,8 +117,9 @@ def test_stage3_document_import_and_final_presentation_are_composed_in_productio
     assert not missing, f"Production composition is missing required Final wiring: {missing}"
 
 
-def test_stage7_voice_lab_and_stage8_restore_are_real_production_wiring_not_dead_code():
+def test_stage7_voice_lab_and_stage8_restore_use_exact_production_composition():
     composition = _read(COMPOSITION)
+    infrastructure_di = _read(INFRASTRUCTURE_DI)
     stage7 = _read(STAGE7_VOICE_LAB)
     stage8 = _read(STAGE8_RESTORE)
 
@@ -125,15 +127,32 @@ def test_stage7_voice_lab_and_stage8_restore_are_real_production_wiring_not_dead
     assert "ConfigureStage7VoiceLabAudition" in stage7
     assert "ConfigureStage8RestoreRecovery" in stage8
 
-    required_composition = (
-        "ConfigureStage7VoiceLabCatalog",
-        "ConfigureStage7VoiceLabAudition",
-        "ConfigureStage8RestoreRecovery",
+    required_root_wiring = (
+        "Stage7VoiceLabCatalogShellBinder.Bind(viewModel);",
+        "Stage7VoiceLabAuditionShellBinder.Bind(viewModel);",
+        "Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(",
+        "GetRequiredService<RestoreRecoveryExecutionCompositionFactory>()",
+        "GetRequiredService<RestoreRecoveryProductionConfigurationResolver>()",
+        "GetRequiredService<AtomicVerifiedRestoreExecutor>()",
     )
-    missing = [text for text in required_composition if text not in composition]
-    assert not missing, (
-        "Stage7/8 implementations exist but are not wired into the production shell: "
-        f"{missing}"
+    missing_root = [text for text in required_root_wiring if text not in composition]
+    assert not missing_root, (
+        "Stage7/8 implementations exist but exact production shell composition is missing: "
+        f"{missing_root}"
+    )
+
+    required_production_services = (
+        "VoiceLabProductionCatalogTransport",
+        "VoiceLabCatalogQueryService",
+        "VoiceLabProductionAuthorizedAuditionExecutorFactory",
+        "RestoreRecoveryExecutionCompositionFactory",
+        "RestoreRecoveryProductionConfigurationResolver",
+        "RestoreRecoveryProductionRuntime",
+    )
+    missing_services = [text for text in required_production_services if text not in infrastructure_di]
+    assert not missing_services, (
+        "Stage7/8 production binders are present but required production services are not registered: "
+        f"{missing_services}"
     )
 
 
