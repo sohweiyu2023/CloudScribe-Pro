@@ -92,7 +92,14 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
             (_, _) => Task.FromResult(++evidenceReads == 1 ? approved : changed),
-            (_, _, _) => ValueTask.FromResult<IVoiceLabAuthorizedAuditionExecutor>(null!) as ValueTask<IVoiceLabAuditionProviderAdapter>);
+            (_, _, _) => ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(adapter));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(2, evidenceReads);
+        Assert.Equal(0, adapter.SubmitCalls);
+        Assert.Equal(1, adapter.DisposeCalls);
     }
 
     [Fact]
