@@ -219,17 +219,42 @@ public sealed class AtomicVerifiedRestoreExecutor
         var info = new DirectoryInfo(directory);
         if (!info.Exists)
             throw new DirectoryNotFoundException($"{description} does not exist: {info.FullName}");
-        if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
-            throw new InvalidOperationException($"{description} must not be a symbolic link or reparse point.");
+        RequireNoReparseDirectoryAncestors(info, description);
     }
 
     private static void EnsurePhysicalDirectory(string directory, string description)
     {
         var info = new DirectoryInfo(directory);
-        if (!info.Exists) Directory.CreateDirectory(info.FullName);
+        if (!info.Exists)
+        {
+            DirectoryInfo? existingAncestor = info.Parent;
+            while (existingAncestor is not null && !existingAncestor.Exists)
+                existingAncestor = existingAncestor.Parent;
+
+            if (existingAncestor is null)
+                throw new DirectoryNotFoundException($"{description} has no existing physical ancestor: {info.FullName}");
+
+            RequireNoReparseDirectoryAncestors(existingAncestor, description);
+            Directory.CreateDirectory(info.FullName);
+        }
+
         info.Refresh();
-        if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
-            throw new InvalidOperationException($"{description} must not be a symbolic link or reparse point.");
+        RequireNoReparseDirectoryAncestors(info, description);
+    }
+
+    private static void RequireNoReparseDirectoryAncestors(DirectoryInfo directory, string description)
+    {
+        DirectoryInfo? current = directory;
+        while (current is not null)
+        {
+            current.Refresh();
+            if (current.Exists && current.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                throw new InvalidOperationException(
+                    $"{description} must not traverse a symbolic link or reparse-point directory: {current.FullName}");
+            }
+            current = current.Parent;
+        }
     }
 
     private static void EnsureNoReparseDirectoryChain(string root, string destinationParent)
