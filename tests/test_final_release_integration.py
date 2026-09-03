@@ -128,8 +128,8 @@ def test_stage7_voice_lab_and_stage8_restore_use_exact_production_composition():
     assert "ConfigureStage8RestoreRecovery" in stage8
 
     required_root_wiring = (
-        "Stage7VoiceLabCatalogShellBinder.Bind(viewModel);",
-        "Stage7VoiceLabAuditionShellBinder.Bind(viewModel);",
+        "GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);",
+        "GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);",
         "Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(",
         "GetRequiredService<RestoreRecoveryExecutionCompositionFactory>()",
         "GetRequiredService<RestoreRecoveryProductionConfigurationResolver>()",
