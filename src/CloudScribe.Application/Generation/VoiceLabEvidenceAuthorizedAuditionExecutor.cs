@@ -133,5 +133,15 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
             throw new InvalidOperationException("Voice Lab audition requires explicit current spend approval.");
         if (!request.PricingCurrent || !evidence.PricingCurrent)
             throw new InvalidOperationException("Voice Lab audition requires current pricing evidence.");
+        if (request.CachePolicyEligible || !request.ForceFresh)
+            throw new InvalidOperationException("Authorized production Voice Lab auditions must remain fresh-only and cache-ineligible.");
+        if (string.IsNullOrWhiteSpace(request.OutputFormat) ||
+            !string.Equals(request.OutputFormat, request.OutputFormat.Trim(), StringComparison.Ordinal) ||
+            request.OutputFormat.Contains('\r') ||
+            request.OutputFormat.Contains('\n') ||
+            request.OutputFormat.Contains('\0'))
+        {
+            throw new InvalidOperationException("Voice Lab audition output format must be a canonical non-empty value.");
+        }
     }
 }
