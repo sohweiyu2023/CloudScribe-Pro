@@ -6,6 +6,7 @@
     <RootNamespace>CloudScribe.Infrastructure.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/CloudScribe.App/CloudScribe.App.csproj" />
     <ProjectReference Include="../../src/CloudScribe.Infrastructure/CloudScribe.Infrastructure.csproj" />
     <ProjectReference Include="../../src/CloudScribe.Application/CloudScribe.Application.csproj" />
     <ProjectReference Include="../../src/CloudScribe.Domain/CloudScribe.Domain.csproj" />
