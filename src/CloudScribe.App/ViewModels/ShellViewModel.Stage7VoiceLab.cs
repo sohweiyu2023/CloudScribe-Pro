@@ -132,6 +132,11 @@ public sealed partial class ShellViewModel
                 SelectedVoiceLabVoice = null;
             }
 
+            if (SelectedVoiceLabVoice is null && VoiceLabCatalogResults.Count == 1)
+            {
+                SelectedVoiceLabVoice = VoiceLabCatalogResults[0];
+            }
+
             StatusMessage = $"Voice Lab · {VoiceLabCatalogResults.Count} trusted voices";
         }
         finally
