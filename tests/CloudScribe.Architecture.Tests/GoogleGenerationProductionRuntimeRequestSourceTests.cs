@@ -1,5 +1,6 @@
 using CloudScribe.App.Composition;
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Generation;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.Architecture.Tests;
