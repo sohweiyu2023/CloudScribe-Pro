@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Infrastructure.Generation;
 
@@ -31,6 +32,24 @@ public sealed record GoogleGenerationProductionRuntimeRequest(
             throw new InvalidOperationException("Google generation current estimate cannot be negative.");
         if (!string.Equals(AccountId, SubmissionEnvelope.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("Google runtime request account differs from the durable submission envelope.");
+        if (!string.Equals(PricingProvenanceId, SubmissionEnvelope.PricingProvenanceId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request pricing provenance differs from the durable submission envelope.");
+        if (RequestRevision != SubmissionEnvelope.RequestRevision)
+            throw new InvalidOperationException("Google runtime request revision differs from the durable submission envelope.");
+        if (Snapshot.ProviderRequest is null)
+            throw new InvalidOperationException("Google runtime request requires a bound provider request.");
+        if (!string.Equals(AccountId, Snapshot.ProviderRequest.AccountId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request account differs from the bound provider request.");
+
+        ReadOnlySpan<byte> compiledPayload = Snapshot.ProviderRequest.CompiledPayload.Span;
+        if (compiledPayload.IsEmpty)
+            throw new InvalidOperationException("Google runtime request requires a compiled provider payload.");
+        string compiledPayloadSha256 = Convert.ToHexString(SHA256.HashData(compiledPayload)).ToLowerInvariant();
+        if (compiledPayload.Length != SubmissionEnvelope.CompiledPayloadBytes ||
+            !string.Equals(compiledPayloadSha256, SubmissionEnvelope.CompiledPayloadSha256, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Google runtime request compiled payload differs from the durable submission envelope.");
+        }
 
         return this;
     }
