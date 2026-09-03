@@ -11,6 +11,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
     {
         var approved = CurrentEvidence();
         var evidenceReads = 0;
+        var selectionReads = 0;
         var adapter = new RecordingAuditionAdapter(approved.Selection.ProviderStableId);
         var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approved,
@@ -19,6 +20,12 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
                 Assert.Same(CurrentRequestSelectionHolder.Selection, request.Selection);
                 evidenceReads++;
                 return Task.FromResult(approved);
+            },
+            (selection, _) =>
+            {
+                selectionReads++;
+                Assert.Equal(approved.Selection, selection);
+                return Task.FromResult(approved.Selection);
             },
             (providerStableId, accountStableId, _) =>
             {
@@ -32,6 +39,7 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
 
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
         Assert.Equal(2, evidenceReads);
+        Assert.Equal(1, selectionReads);
         Assert.Equal(1, adapter.SubmitCalls);
         Assert.Equal(1, adapter.DisposeCalls);
         var providerRequest = Assert.IsType<VoiceLabProviderAuditionRequest>(adapter.LastRequest);
@@ -47,6 +55,31 @@ public sealed class Stage7VoiceLabEvidenceAuthorizedAuditionExecutorTests
         Assert.Equal(approved.AccountRevision, providerRequest.AccountRevision);
         Assert.Equal("wav", providerRequest.OutputFormat);
         Assert.True(providerRequest.ForceFresh);
+    }
+
+    [Fact]
+    public async Task VoiceFingerprintDriftImmediatelyBeforeSubmissionFailsClosed()
+    {
+        var approved = CurrentEvidence();
+        var changedSelection = approved.Selection with { VoiceFingerprint = "fingerprint-b" };
+        var selectionReads = 0;
+        var adapter = new RecordingAuditionAdapter(approved.Selection.ProviderStableId);
+        var executor = new VoiceLabEvidenceAuthorizedAuditionExecutor(
+            approved,
+            (_, _) => Task.FromResult(approved),
+            (_, _) =>
+            {
+                selectionReads++;
+                return Task.FromResult(changedSelection);
+            },
+            (_, _, _) => ValueTask.FromResult<IVoiceLabAuditionProviderAdapter>(adapter));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.SubmitAuthorizedAsync(CurrentRequest(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, selectionReads);
+        Assert.Equal(0, adapter.SubmitCalls);
+        Assert.Equal(1, adapter.DisposeCalls);
     }
 
     [Fact]

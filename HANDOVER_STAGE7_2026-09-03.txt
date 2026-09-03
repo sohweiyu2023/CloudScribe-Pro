@@ -1,0 +1,28 @@
+CloudScribe Pro Final 1.0.0 — Stage7 production fast-track handover
+Date: 2026-09-03
+Branch: repair/final-stage7-production-parallel
+Pre-mutation integration head: bf0c8b8f8c4e32297fd05c9fb7bbfe0d329f2961
+Controlling baseline: v2.23
+Status: REPAIR
+
+LANDED IN THE COMMIT CONTAINING THIS HANDOVER
+- Stage7 request-bound authorized audition executor now requires a current VoiceLab catalog selection revalidation before provider submission.
+- Production shell composition supplies its existing authorized RefreshCurrentSelectionAsync path to the executor factory; no raw provider-submit or ambient catalog path is introduced.
+- Revalidation occurs after the second/current authorization evidence read and adapter identity check, immediately before constructing and submitting VoiceLabProviderAuditionRequest.
+- Current selection must structurally equal the submission authorization selection, including provider/account/project/voice stable IDs, voice fingerprint, capability evidence, and trust booleans; drift fails closed before provider submit.
+- Legacy/direct factory/executor overloads remain compatibility-safe but fail closed if they reach submission without an explicit current-selection resolver.
+- Focused tests cover successful current-selection revalidation and fingerprint drift rejection before submission.
+
+LIVE BRANCHES READ BEFORE MUTATION
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- repair/final-stage7-production-parallel: bf0c8b8f8c4e32297fd05c9fb7bbfe0d329f2961 before this commit
+
+PRE-MUTATION CI
+- Stage7 fast-track workflow run 33701857954 on bf0c8b8f8c4e32297fd05c9fb7bbfe0d329f2961: PASS.
+
+NEXT EXACT GATE
+- Run/inspect Stage7 fast-track CI for the commit containing this handover; fix the first exact compiler/analyzer/test failure if any.
+- While CI runs, continue an independent Stage6 or Stage8 production-composition audit rather than waiting.
+- Do not start serial Final gates until Stage6-8 production composition is all green.

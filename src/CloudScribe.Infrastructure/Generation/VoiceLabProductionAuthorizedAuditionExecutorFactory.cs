@@ -1,5 +1,6 @@
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Providers;
+using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Providers;
 using CloudScribe.Providers.Abstractions;
 
@@ -26,11 +27,18 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactory
             providerFactoryRegistry ?? throw new ArgumentNullException(nameof(providerFactoryRegistry)));
     }
 
+    public Task<IVoiceLabAuthorizedAuditionExecutor> CreateAsync(
+        VoiceLabAuditionRequest request,
+        CancellationToken cancellationToken = default) =>
+        CreateAsync(request, FailClosedCurrentSelectionResolverAsync, cancellationToken);
+
     public async Task<IVoiceLabAuthorizedAuditionExecutor> CreateAsync(
         VoiceLabAuditionRequest request,
+        Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabCatalogSelection>> currentSelectionResolver,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(currentSelectionResolver);
         cancellationToken.ThrowIfCancellationRequested();
 
         var resolver = new VoiceLabAuditionAuthorizationEvidenceResolver(_evidenceLoader.LoadAsync);
@@ -41,6 +49,16 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactory
         return new VoiceLabEvidenceAuthorizedAuditionExecutor(
             approvedEvidence,
             resolver.ResolveAsync,
+            currentSelectionResolver,
             _providerAdapterResolver.ResolveAuditionAsync);
+    }
+
+    private static Task<VoiceLabCatalogSelection> FailClosedCurrentSelectionResolverAsync(
+        VoiceLabCatalogSelection selection,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new InvalidOperationException("Production Voice Lab audition current voice revalidation is not configured.");
     }
 }
