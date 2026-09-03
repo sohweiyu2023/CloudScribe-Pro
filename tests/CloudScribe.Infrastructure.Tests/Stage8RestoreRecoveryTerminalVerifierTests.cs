@@ -51,6 +51,41 @@ public sealed class Stage8RestoreRecoveryTerminalVerifierTests
     }
 
     [Fact]
+    public async Task VerifyAsyncRejectsReparsePointInsideRestoreRoot()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var temp = new TemporaryDirectory();
+        using var external = new TemporaryDirectory();
+        byte[] payload = [21, 22, 23, 24];
+        string linkedDirectory = Path.Combine(temp.Path, "library");
+
+        try
+        {
+            Directory.CreateSymbolicLink(linkedDirectory, external.Path);
+        }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or UnauthorizedAccessException or IOException)
+        {
+            return;
+        }
+
+        string relative = "library/item.bin";
+        string destination = Path.Combine(temp.Path, relative);
+        await File.WriteAllBytesAsync(Path.Combine(external.Path, "item.bin"), payload, cancellationToken);
+
+        var plan = CreatePlan(temp.Path, relative, destination, payload);
+        var now = DateTimeOffset.UtcNow;
+        var journal = RestoreTransactionJournal.Start(plan, now)
+            .BeginCopy(plan, now)
+            .MarkCopied(plan, relative, now)
+            .BeginVerification(plan, now)
+            .Commit(plan, now);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RestoreRecoveryTerminalVerifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
+        Assert.Contains("reparse-point destination path", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task VerifyAsyncRolledBackJournalRequiresTransactionOutputsAbsent()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
