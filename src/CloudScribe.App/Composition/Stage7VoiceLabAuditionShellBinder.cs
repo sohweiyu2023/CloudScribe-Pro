@@ -85,7 +85,7 @@ public sealed class Stage7VoiceLabAuditionShellBinder(
             throw new InvalidOperationException("Production Voice Lab shell auditions are fresh-only and may not enter an unverified cache path.");
 
         IVoiceLabAuthorizedAuditionExecutor executor = await executorFactory
-            .CreateAsync(request, cancellationToken)
+            .CreateAsync(request, RefreshCurrentSelectionAsync, cancellationToken)
             .ConfigureAwait(false);
         var coordinator = new VoiceLabAuditionCoordinator(FailClosedCacheReadAsync, executor);
         return new VoiceLabAuditionExecutionService(coordinator, selected);

@@ -1,3 +1,4 @@
+using CloudScribe.Domain.Generation;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Application.Generation;
@@ -6,15 +7,30 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
 {
     private readonly VoiceLabAuditionAuthorizationEvidence _approvedEvidence;
     private readonly Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> _currentEvidenceResolver;
+    private readonly Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabCatalogSelection>> _currentSelectionResolver;
     private readonly Func<string, string, CancellationToken, ValueTask<IVoiceLabAuditionProviderAdapter>> _resolveProviderAdapter;
 
     public VoiceLabEvidenceAuthorizedAuditionExecutor(
         VoiceLabAuditionAuthorizationEvidence approvedEvidence,
         Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> currentEvidenceResolver,
         Func<string, string, CancellationToken, ValueTask<IVoiceLabAuditionProviderAdapter>> resolveProviderAdapter)
+        : this(
+            approvedEvidence,
+            currentEvidenceResolver,
+            FailClosedCurrentSelectionResolverAsync,
+            resolveProviderAdapter)
+    {
+    }
+
+    public VoiceLabEvidenceAuthorizedAuditionExecutor(
+        VoiceLabAuditionAuthorizationEvidence approvedEvidence,
+        Func<VoiceLabAuditionRequest, CancellationToken, Task<VoiceLabAuditionAuthorizationEvidence>> currentEvidenceResolver,
+        Func<VoiceLabCatalogSelection, CancellationToken, Task<VoiceLabCatalogSelection>> currentSelectionResolver,
+        Func<string, string, CancellationToken, ValueTask<IVoiceLabAuditionProviderAdapter>> resolveProviderAdapter)
     {
         _approvedEvidence = (approvedEvidence ?? throw new ArgumentNullException(nameof(approvedEvidence))).Validate();
         _currentEvidenceResolver = currentEvidenceResolver ?? throw new ArgumentNullException(nameof(currentEvidenceResolver));
+        _currentSelectionResolver = currentSelectionResolver ?? throw new ArgumentNullException(nameof(currentSelectionResolver));
         _resolveProviderAdapter = resolveProviderAdapter ?? throw new ArgumentNullException(nameof(resolveProviderAdapter));
     }
 
@@ -49,6 +65,14 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
             selectedEvidence.EnsureStillAuthorized(submissionEvidence);
             currentEvidence.EnsureStillAuthorized(submissionEvidence);
 
+            VoiceLabCatalogSelection submissionSelection = await _currentSelectionResolver(
+                request.Selection,
+                cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Voice Lab audition current voice evidence is unavailable.");
+            submissionSelection.Validate();
+            if (!Equals(submissionSelection, submissionEvidence.Selection))
+                throw new InvalidOperationException("Voice Lab audition voice evidence changed immediately before submission.");
+
             var providerRequest = new VoiceLabProviderAuditionRequest(
                 submissionEvidence.Selection.ProviderStableId,
                 submissionEvidence.Selection.AccountStableId,
@@ -76,6 +100,15 @@ public sealed class VoiceLabEvidenceAuthorizedAuditionExecutor : IVoiceLabAuthor
             ?? throw new InvalidOperationException("Voice Lab audition current authorization evidence is unavailable.");
         RequireRequestStillBound(request, evidence);
         return evidence.Validate();
+    }
+
+    private static Task<VoiceLabCatalogSelection> FailClosedCurrentSelectionResolverAsync(
+        VoiceLabCatalogSelection selection,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new InvalidOperationException("Voice Lab audition current voice revalidation is not configured.");
     }
 
     private static void RequireRequestStillBound(

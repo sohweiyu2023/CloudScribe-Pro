@@ -56,6 +56,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
         StoredProviderCapabilitySnapshot capability = CreateCapability(account.Reference, capabilityId);
         VoiceLabAuditionAuthorizationEvidence evidence = CreateEvidence(capabilityId);
         int evidenceLoads = 0;
+        int selectionLoads = 0;
         var adapter = new AuditionAdapter();
         var providerFactory = new ProviderFactory(adapter);
         var factory = new VoiceLabProductionAuthorizedAuditionExecutorFactory(
@@ -72,6 +73,12 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
 
         IVoiceLabAuthorizedAuditionExecutor executor = await factory.CreateAsync(
             request,
+            (selection, _) =>
+            {
+                selectionLoads++;
+                Assert.Equal(evidence.Selection, selection);
+                return Task.FromResult(evidence.Selection);
+            },
             TestContext.Current.CancellationToken).ConfigureAwait(true);
         GenerationProviderResponse response = await executor.SubmitAuthorizedAsync(
             request,
@@ -79,6 +86,7 @@ public sealed class VoiceLabProductionAuthorizedAuditionExecutorFactoryTests
 
         Assert.Equal(SubmissionDisposition.Accepted, response.Disposition);
         Assert.Equal(3, evidenceLoads);
+        Assert.Equal(1, selectionLoads);
         Assert.Equal(1, providerFactory.CreateCalls);
         Assert.Equal("primary", providerFactory.LastAccountId);
         Assert.Equal(1, adapter.SubmitCalls);
