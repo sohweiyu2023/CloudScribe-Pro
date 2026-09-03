@@ -6,10 +6,12 @@ namespace CloudScribe.Infrastructure.Tests;
 
 public sealed class RestoreRecoveryExecutionCompositionFactoryTests
 {
+    private const string AuthenticationKeyTarget = "cloudscribe.restore-recovery.test-authentication-key";
+
     [Fact]
     public async Task CreateAsyncRejectsMissingVaultAuthenticationKey()
     {
-        var reference = new CredentialReference("CloudScribe/RestoreRecovery/TestAuthenticationKey");
+        var reference = new CredentialReference(AuthenticationKeyTarget);
         var vault = new TestCredentialVault(secret: null);
         var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
         string journalPath = CreateUnusedJournalPath();
@@ -35,7 +37,7 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
     [Fact]
     public async Task CreateAsyncRejectsAuthenticationKeyBelowMinimumStrength()
     {
-        var reference = new CredentialReference("CloudScribe/RestoreRecovery/TestAuthenticationKey");
+        var reference = new CredentialReference(AuthenticationKeyTarget);
         var vault = new TestCredentialVault("short-key".ToCharArray());
         var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
         string journalPath = CreateUnusedJournalPath();
@@ -61,7 +63,7 @@ public sealed class RestoreRecoveryExecutionCompositionFactoryTests
     [Fact]
     public async Task CreateAsyncHonorsCancellationBeforeCredentialAccess()
     {
-        var reference = new CredentialReference("CloudScribe/RestoreRecovery/TestAuthenticationKey");
+        var reference = new CredentialReference(AuthenticationKeyTarget);
         var vault = new TestCredentialVault("0123456789abcdef0123456789abcdef".ToCharArray());
         var factory = new RestoreRecoveryExecutionCompositionFactory(vault, TimeProvider.System);
         string journalPath = CreateUnusedJournalPath();
