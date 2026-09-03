@@ -36,10 +36,26 @@ public sealed record GoogleGenerationProductionRuntimeRequest(
             throw new InvalidOperationException("Google runtime request pricing provenance differs from the durable submission envelope.");
         if (RequestRevision != SubmissionEnvelope.RequestRevision)
             throw new InvalidOperationException("Google runtime request revision differs from the durable submission envelope.");
+        if (Snapshot.UiSelection is null)
+            throw new InvalidOperationException("Google runtime request requires a bound UI selection.");
+        if (!string.Equals(AccountId, Snapshot.UiSelection.AccountId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request account differs from the bound UI selection.");
+        if (!string.Equals(SubmissionEnvelope.VoiceName, Snapshot.UiSelection.VoiceId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request voice differs from the durable submission envelope.");
+        if (!string.Equals(SubmissionEnvelope.AudioEncoding, Snapshot.UiSelection.OutputFormat, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request output format differs from the durable submission envelope.");
+        if (!string.Equals(SubmissionEnvelope.CapabilityProvenanceId, Snapshot.UiSelection.CapabilityEvidenceId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request capability evidence differs from the durable submission envelope.");
         if (Snapshot.ProviderRequest is null)
             throw new InvalidOperationException("Google runtime request requires a bound provider request.");
         if (!string.Equals(AccountId, Snapshot.ProviderRequest.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("Google runtime request account differs from the bound provider request.");
+        if (!string.Equals(GoogleGenerationProvider.StableProviderId, Snapshot.ProviderRequest.ProviderStableId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request provider identity is not the authorized Google provider.");
+        if (!string.Equals(GoogleGenerationProvider.SynthesizeOperationStableId, Snapshot.ProviderRequest.OperationStableId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request operation is not the authorized Google synthesis operation.");
+        if (!string.Equals(SubmissionEnvelope.AudioEncoding, Snapshot.ProviderRequest.OutputFormat, StringComparison.Ordinal))
+            throw new InvalidOperationException("Google runtime request provider output format differs from the durable submission envelope.");
 
         ReadOnlySpan<byte> compiledPayload = Snapshot.ProviderRequest.CompiledPayload.Span;
         if (compiledPayload.IsEmpty)
