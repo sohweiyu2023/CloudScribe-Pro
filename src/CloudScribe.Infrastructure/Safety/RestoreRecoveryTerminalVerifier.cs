@@ -104,14 +104,13 @@ public sealed class RestoreRecoveryTerminalVerifier
     {
         string relative = Path.GetRelativePath(restoreRoot, destinationPath);
         string current = restoreRoot;
-        foreach (string component in relative.Split(
-                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-                     StringSplitOptions.RemoveEmptyEntries))
+        char[] separators = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+        foreach (string component in relative.Split(separators, StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, component);
             try
             {
-                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                if (File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
                 {
                     throw new InvalidOperationException(
                         $"Restore recovery verification may not traverse a reparse-point destination path: {current}");
