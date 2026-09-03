@@ -24,18 +24,37 @@ public sealed record GoogleGenerationProductionRuntimeRequest(
         if (Snapshot is null)
             throw new InvalidOperationException("Google runtime request requires a current UI execution snapshot.");
 
+        ValidateNumericBounds();
+        ValidateSubmissionEnvelopeBinding();
+        ValidateUiSelectionBinding();
+        ValidateProviderRequestBinding();
+        ValidateCompiledPayloadBinding();
+
+        return this;
+    }
+
+    private void ValidateNumericBounds()
+    {
         if (RequestRevision < 0)
             throw new InvalidOperationException("Google generation request revision cannot be negative.");
         if (Scale is < 0 or > 9)
             throw new InvalidOperationException("Google generation currency scale must be between zero and nine.");
         if (CurrentEstimateMinorUnits < 0)
             throw new InvalidOperationException("Google generation current estimate cannot be negative.");
+    }
+
+    private void ValidateSubmissionEnvelopeBinding()
+    {
         if (!string.Equals(AccountId, SubmissionEnvelope.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("Google runtime request account differs from the durable submission envelope.");
         if (!string.Equals(PricingProvenanceId, SubmissionEnvelope.PricingProvenanceId, StringComparison.Ordinal))
             throw new InvalidOperationException("Google runtime request pricing provenance differs from the durable submission envelope.");
         if (RequestRevision != SubmissionEnvelope.RequestRevision)
             throw new InvalidOperationException("Google runtime request revision differs from the durable submission envelope.");
+    }
+
+    private void ValidateUiSelectionBinding()
+    {
         if (Snapshot.UiSelection is null)
             throw new InvalidOperationException("Google runtime request requires a bound UI selection.");
         if (!string.Equals(AccountId, Snapshot.UiSelection.AccountId, StringComparison.Ordinal))
@@ -46,6 +65,10 @@ public sealed record GoogleGenerationProductionRuntimeRequest(
             throw new InvalidOperationException("Google runtime request output format differs from the durable submission envelope.");
         if (!string.Equals(SubmissionEnvelope.CapabilityProvenanceId, Snapshot.UiSelection.CapabilityEvidenceId, StringComparison.Ordinal))
             throw new InvalidOperationException("Google runtime request capability evidence differs from the durable submission envelope.");
+    }
+
+    private void ValidateProviderRequestBinding()
+    {
         if (Snapshot.ProviderRequest is null)
             throw new InvalidOperationException("Google runtime request requires a bound provider request.");
         if (!string.Equals(AccountId, Snapshot.ProviderRequest.AccountId, StringComparison.Ordinal))
@@ -56,18 +79,20 @@ public sealed record GoogleGenerationProductionRuntimeRequest(
             throw new InvalidOperationException("Google runtime request operation is not the authorized Google synthesis operation.");
         if (!string.Equals(SubmissionEnvelope.AudioEncoding, Snapshot.ProviderRequest.OutputFormat, StringComparison.Ordinal))
             throw new InvalidOperationException("Google runtime request provider output format differs from the durable submission envelope.");
+    }
 
+    private void ValidateCompiledPayloadBinding()
+    {
         ReadOnlySpan<byte> compiledPayload = Snapshot.ProviderRequest.CompiledPayload.Span;
         if (compiledPayload.IsEmpty)
             throw new InvalidOperationException("Google runtime request requires a compiled provider payload.");
+
         string compiledPayloadSha256 = Convert.ToHexString(SHA256.HashData(compiledPayload)).ToLowerInvariant();
         if (compiledPayload.Length != SubmissionEnvelope.CompiledPayloadBytes ||
             !string.Equals(compiledPayloadSha256, SubmissionEnvelope.CompiledPayloadSha256, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("Google runtime request compiled payload differs from the durable submission envelope.");
         }
-
-        return this;
     }
 
     private static void RequireCanonical(string value, string propertyName)
