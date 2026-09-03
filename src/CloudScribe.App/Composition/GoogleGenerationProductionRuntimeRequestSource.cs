@@ -4,57 +4,58 @@ using CloudScribe.Infrastructure.Generation;
 namespace CloudScribe.App.Composition;
 
 /// <summary>
+/// The exact current compile/approval handoff required by production Stage6 generation.
+/// The submission envelope and execution snapshot must describe the same compiled provider payload;
+/// the runtime request factory enforces that binding before any provider submission can occur.
+/// </summary>
+public sealed record GoogleGenerationProductionSubmissionState(
+    GoogleGenerationSubmissionEnvelope SubmissionEnvelope,
+    GoogleGenerationUiExecutionSnapshot Snapshot,
+    long CurrentEstimateMinorUnits);
+
+/// <summary>
 /// Owns the final Stage6 handoff from the real compile/approval workflow into production runtime composition.
-/// Every invocation resolves the current durable spend authorization, the exact current UI/provider snapshot
-/// (including compiled provider payload bytes), and the current estimate independently and immediately before
-/// execution. No runtime evidence is reconstructed or cached by this source.
+/// Every invocation resolves one coherent current compiled submission state, then loads the durable spend
+/// authorization by that exact submission envelope immediately before execution. Authorization is never
+/// supplied by an ambient delegate, reconstructed, or cached by this source.
 /// </summary>
 public sealed class GoogleGenerationProductionRuntimeRequestSource
 {
-    private readonly Func<CancellationToken, Task<GoogleGenerationSpendAuthorization?>> _resolveCurrentAuthorization;
-    private readonly Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot?>> _resolveCurrentSnapshot;
-    private readonly Func<CancellationToken, Task<long?>> _resolveCurrentEstimateMinorUnits;
+    private readonly IGoogleGenerationSpendAuthorizationStore _authorizationStore;
+    private readonly Func<CancellationToken, Task<GoogleGenerationProductionSubmissionState?>> _resolveCurrentSubmission;
 
     public GoogleGenerationProductionRuntimeRequestSource(
-        Func<CancellationToken, Task<GoogleGenerationSpendAuthorization?>> resolveCurrentAuthorization,
-        Func<CancellationToken, Task<GoogleGenerationUiExecutionSnapshot?>> resolveCurrentSnapshot,
-        Func<CancellationToken, Task<long?>> resolveCurrentEstimateMinorUnits)
+        IGoogleGenerationSpendAuthorizationStore authorizationStore,
+        Func<CancellationToken, Task<GoogleGenerationProductionSubmissionState?>> resolveCurrentSubmission)
     {
-        _resolveCurrentAuthorization = resolveCurrentAuthorization
-            ?? throw new ArgumentNullException(nameof(resolveCurrentAuthorization));
-        _resolveCurrentSnapshot = resolveCurrentSnapshot
-            ?? throw new ArgumentNullException(nameof(resolveCurrentSnapshot));
-        _resolveCurrentEstimateMinorUnits = resolveCurrentEstimateMinorUnits
-            ?? throw new ArgumentNullException(nameof(resolveCurrentEstimateMinorUnits));
+        _authorizationStore = authorizationStore
+            ?? throw new ArgumentNullException(nameof(authorizationStore));
+        _resolveCurrentSubmission = resolveCurrentSubmission
+            ?? throw new ArgumentNullException(nameof(resolveCurrentSubmission));
     }
 
     public async Task<GoogleGenerationProductionRuntimeRequest> ResolveAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        GoogleGenerationSpendAuthorization authorization =
-            await _resolveCurrentAuthorization(cancellationToken).ConfigureAwait(false)
+        GoogleGenerationProductionSubmissionState submission =
+            await _resolveCurrentSubmission(cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException(
-                "Stage6 production generation requires a current durable spend authorization.");
+                "Stage6 production generation requires one coherent current compiled submission state.");
 
-        cancellationToken.ThrowIfCancellationRequested();
-
-        GoogleGenerationUiExecutionSnapshot snapshot =
-            await _resolveCurrentSnapshot(cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException(
-                "Stage6 production generation requires the exact current compiled UI execution snapshot.");
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        long? currentEstimateMinorUnits =
-            await _resolveCurrentEstimateMinorUnits(cancellationToken).ConfigureAwait(false);
-        if (currentEstimateMinorUnits is null)
+        if (submission.SubmissionEnvelope is null)
         {
             throw new InvalidOperationException(
-                "Stage6 production generation requires a current provider-billed estimate.");
+                "Stage6 production generation requires the exact current durable submission envelope.");
         }
 
-        if (currentEstimateMinorUnits.Value < 0)
+        if (submission.Snapshot is null)
+        {
+            throw new InvalidOperationException(
+                "Stage6 production generation requires the exact current compiled UI execution snapshot.");
+        }
+
+        if (submission.CurrentEstimateMinorUnits < 0)
         {
             throw new InvalidOperationException(
                 "Stage6 production generation current estimate cannot be negative.");
@@ -62,9 +63,17 @@ public sealed class GoogleGenerationProductionRuntimeRequestSource
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        GoogleGenerationSpendAuthorization authorization = await _authorizationStore
+            .LoadApprovedAsync(submission.SubmissionEnvelope, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                "Stage6 production generation requires a durable spend authorization for the exact current submission envelope.");
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         return GoogleGenerationProductionRuntimeRequestFactory.Create(
             authorization,
-            snapshot,
-            currentEstimateMinorUnits.Value).Validate();
+            submission.Snapshot,
+            submission.CurrentEstimateMinorUnits).Validate();
     }
 }
