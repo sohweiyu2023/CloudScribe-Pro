@@ -1,0 +1,74 @@
+CloudScribe Pro Final 1.0.0 repair handover — 2026-09-03 19:30 SGT
+
+CONTROLLING BASELINE
+- v2.23 remains controlling baseline.
+- Final 1.0.0 remains reopened pending Stage6 production composition and the required serial Final acceptance/certification chain.
+
+LIVE HEADS READ IMMEDIATELY BEFORE THIS HANDOVER MUTATION
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-1.0.0-session-state-updater: 1bcac65c2bec1f1a189f47e91870943e4fdf944e
+- repair/final-1.0.0-shell-integration: 5c499209793fa6f40c0dad5b4a14669ed81fa50f
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- active carrier repair/final-stage7-production-parallel: d7ab306528010c117457dc76d569ca995d9f992d
+
+SUBSTANTIVE CHANGES LANDED THIS RUN
+- 89bfb2d0448540018370ec36e92436f0e27dc15f — Stage7 production shell auto-selects a voice only when the trusted catalog contains exactly one voice.
+- b70fbff43fb38fb0263f24adac8dbd1dfbc70f3c — Stage7 architecture test locks that auto-selection fail-closed contract and forbids >0 selection behavior.
+- bcef2315367d7a77d00055ece110846060818677 — Final integration test strengthened from substring/dead-code checks to exact Stage7/8 production-composition and production-service checks.
+- d7ab306528010c117457dc76d569ca995d9f992d — corrected the Stage7 root assertions to match the actual DI-resolved production binder calls in CompositionRoot.
+
+STAGE7 / STAGE8 PRODUCTION COMPOSITION
+CompositionRoot currently uses the real production Stage7 binders:
+- serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel)
+- serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel)
+
+CompositionRoot currently uses the persisted Stage8 production recovery path:
+- Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(...)
+- RestoreRecoveryExecutionCompositionFactory
+- RestoreRecoveryProductionConfigurationResolver
+- AtomicVerifiedRestoreExecutor
+
+The Final integration test now also requires the production infrastructure registrations for:
+- VoiceLabProductionCatalogTransport
+- VoiceLabCatalogQueryService
+- VoiceLabProductionAuthorizedAuditionExecutorFactory
+- RestoreRecoveryExecutionCompositionFactory
+- RestoreRecoveryProductionConfigurationResolver
+- RestoreRecoveryProductionRuntime
+
+CI
+- Previous carrier head 7d967c2721c7bcad095c2fc9a01d54c4b1d4a900: Stage7 fast-track PASS, run 33744017057.
+- Corrected exact-composition head d7ab306528010c117457dc76d569ca995d9f992d: Stage7 fast-track run 33749541867 was IN PROGRESS at the latest inspection. No exact compiler/analyzer/test failure was exposed yet.
+
+STAGE6 EXACT REMAINING PRODUCTION BLOCKER
+The runtime evidence and execution-context resolver themselves are production-shaped and fail closed, but CompositionRoot still cannot safely invoke Stage6GoogleGenerationShellBinder.Bind because there is no authoritative production producer/source registered for:
+
+  Func<CancellationToken, Task<GoogleGenerationProductionRuntimeRequest>>
+
+The missing source is not replaceable by GoogleGenerationSpendAuthorizationStore. That durable spend store preserves the submission-envelope identity and authorization fields, including CompiledPayloadSha256 and CompiledPayloadBytes, but it deliberately does NOT persist the exact GenerationProviderRequest.CompiledPayload bytes or the complete GoogleGenerationUiExecutionSnapshot/trust/queue snapshot needed by GoogleGenerationProductionRuntimeRequest.Validate and the production execution-context resolver.
+
+The genuine producer therefore must originate at the real compilation/approval/pre-submit workflow and preserve the exact compiled provider request plus its exact current UI selection/trust/queue/reconciliation/pricing/revision/estimate evidence. It must not reconstruct payload bytes from hashes, fabricate UI trust or queue state, or reuse ambient credentials/endpoints.
+
+Once that source exists, the required production chain remains:
+GoogleAuthorizedGenerationExecutor -> GoogleGenerationSubmissionCoordinator -> GoogleGenerationQueueCoordinator -> GoogleGenerationBoundQueueCoordinator -> GoogleGenerationUiQueueCoordinator
+
+NEXT EXACT GATE
+1. Inspect corrected-head CI run 33749541867; if failed, repair its first exact compiler/analyzer/test failure.
+2. If green, implement the authoritative Stage6 prepared-runtime-request ownership/source at the actual compiler/approval producer, with missing/stale/mismatch fail-closed tests.
+3. Only after that source is genuine, wire Stage6GoogleGenerationShellBinder.Bind / ConfigureStage6GoogleGeneration in CompositionRoot.
+4. Then begin the strictly serial Final gates: full compiled tests -> Final source acceptance -> exact Windows 1.0.0 publish -> execute actual CloudScribe.exe -> verify no source mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final/main promotion.
+
+FINAL GATES
+- Stage6 production composition: NOT PASS
+- Stage7 corrected exact production-composition CI: IN PROGRESS
+- Stage8 production wiring: implemented; exact Final integration assertion pending corrected-head CI
+- Full compiled Final tests: NOT RUN
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- Actual CloudScribe.exe acceptance: NOT RUN
+- Exact source no-mutation check: NOT RUN
+- SHA freeze: NOT RUN
+- Strict/full certification: NOT RUN
+- Exact same-SHA no-change certification: NOT RUN
+- Final re-promotion to main: NOT RUN
