@@ -1,0 +1,45 @@
+CloudScribe Pro Final 1.0.0 repair handover — 2026-09-03 21:14 SGT
+
+CONTROLLING BASELINE
+- v2.23 remains controlling baseline.
+- Final 1.0.0 remains reopened. Do not promote until Stage6-8 production composition and the required serial Final gates pass on the exact same source SHA.
+
+LIVE HEADS READ THIS RUN
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-stage7-production-parallel: 263e384be24be9e88879f18637dca3fd68536fc7 before this handover-only commit
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+SUBSTANTIVE STAGE6 CHANGES THIS RUN
+- a618a52811c0d58288e8495a0f0fc0abcdafd7ab — added GoogleGenerationProductionRuntimeRequestSource. Each invocation independently resolves the current durable spend authorization, exact current GoogleGenerationUiExecutionSnapshot containing the compiled provider payload bytes, and current provider-billed estimate immediately before runtime request creation. It fails closed on missing authorization/snapshot/estimate and does not reconstruct or cache runtime evidence.
+- 263e384be24be9e88879f18637dca3fd68536fc7 — added focused fail-closed source tests proving missing authorization stops before snapshot/estimate reads, missing snapshot stops before estimate read, and missing current estimate is rejected.
+
+CI
+- Exact substantive head 263e384be24be9e88879f18637dca3fd68536fc7 triggered CloudScribe Stage 7 fast-track check run 33760155847 (run 319).
+- At last inspection the run was IN PROGRESS; no exact compiler/analyzer/test failure had been exposed yet.
+- Do not count the substantive head as PASS until run 33760155847 completes successfully.
+
+STAGE STATUS
+- Stage6: 91% — production resolver/binder plus authoritative fail-closed runtime-request source now exist. Remaining mandatory work is binding that source to the real compile/approval/pre-submit workflow producers and then wiring Stage6GoogleGenerationShellBinder in CompositionRoot without fabricated evidence.
+- Stage7: 97% — production catalog/audition composition exists; deepest executor already revalidates current authorization/selection and rejects cache-eligible/non-fresh production audition requests. Integrated exact-head CI still pending on the current carrier.
+- Stage8: 97% — persisted interrupted-restore composition and terminal/filesystem verification exist; integrated Final validation remains pending.
+
+MANDATORY GATES
+- Stage6 production composition: REPAIR / NOT PASS — authoritative source exists, but real workflow delegate binding + CompositionRoot Stage6 binding remain.
+- Stage7 production composition: IMPLEMENTED; exact current carrier CI IN PROGRESS.
+- Stage8 production composition: IMPLEMENTED; integrated Final validation NOT RUN on certified Final SHA.
+- Full compiled Final tests: NOT RUN.
+- Final source acceptance: NOT RUN.
+- Windows publish/version exact 1.0.0: NOT RUN.
+- Actual CloudScribe.exe execution acceptance: NOT RUN.
+- Exact source no-mutation verification: NOT RUN.
+- Exact SHA freeze: NOT RUN.
+- Strict/full certification: NOT RUN.
+- Exact same-SHA no-change certification: NOT RUN.
+- Serial Final 1.0.0/main re-promotion: NOT RUN.
+
+NEXT EXACT GATE
+1. Inspect run 33760155847 for exact substantive head 263e384be24be9e88879f18637dca3fd68536fc7; if failed, fix the first exact compiler/analyzer/test failure.
+2. Bind GoogleGenerationProductionRuntimeRequestSource to the actual compile/approval/pre-submit owners of current GoogleGenerationSpendAuthorization, exact compiled GoogleGenerationUiExecutionSnapshot, and current estimate. Do not reconstruct payload bytes or fabricate trust/queue/reconciliation evidence.
+3. Once that binding is genuine, register the source/factory and bind Stage6GoogleGenerationShellBinder in CompositionRoot while preserving GoogleAuthorizedGenerationExecutor -> GoogleGenerationSubmissionCoordinator -> GoogleGenerationQueueCoordinator -> GoogleGenerationBoundQueueCoordinator -> GoogleGenerationUiQueueCoordinator.
+4. After Stage6/7/8 all pass, begin only the serial Final gate chain: full compiled tests -> Final source acceptance -> exact Windows 1.0.0 publish -> run actual CloudScribe.exe -> verify no source mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final/main promotion.
