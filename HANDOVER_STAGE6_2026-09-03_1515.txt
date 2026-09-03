@@ -1,0 +1,50 @@
+CloudScribe Pro Final 1.0.0 — Stage6 production fast-track handover
+Date: 2026-09-03
+Controlling baseline: v2.23
+Carrier branch: repair/final-stage7-production-parallel
+Pre-handover code/test head: 10ce6650f549f47f5f2ae35b28bfbac0d09a0888
+Status: REPAIR
+
+LIVE HEADS RE-READ BEFORE MUTATION
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage7-production-parallel: 6a1056fa7b9dbdafc22d2d9609650f5f75b3204c before this run
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- Stage6 restoration helper lineage remains historical support only; production work is continuing on the integrated carrier.
+
+LANDED THIS RUN
+1. d0d259560cbf9f995613c0c36adcbf1b3ea0ec3f — fix(stage6): fail closed on runtime request drift
+   - GoogleGenerationProductionRuntimeRequest.Validate now rejects PricingProvenanceId drift against the durable GoogleGenerationSubmissionEnvelope.
+   - Rejects RequestRevision drift against the durable envelope.
+   - Rejects provider-request AccountId drift against the runtime request account.
+   - Recomputes SHA-256 and byte length from Snapshot.ProviderRequest.CompiledPayload and rejects any mismatch with the durable envelope before production evidence resolution.
+   - No authorization/currentness evidence is synthesized; existing downstream current account/capability/spend/transport validation remains authoritative.
+
+2. 10ce6650f549f47f5f2ae35b28bfbac0d09a0888 — test(stage6): reject runtime request identity drift
+   - Added focused compiled tests for exact valid binding plus pricing-provenance drift, request-revision drift, and compiled-payload drift rejection.
+
+CURRENT STAGE ESTIMATES
+- Stage6 production composition: 93%
+- Stage7 production composition: 98%
+- Stage8 production composition: 98%
+- Final 1.0.0 serial certification: 84%
+
+GATES
+- Stage6/7 carrier fast-track CI for code commit d0d259560c: RUNNING when last inspected (run 33727309681).
+- Stage6/7 carrier fast-track CI for focused-test commit 10ce6650f5: RUNNING when last inspected (run 33727336193).
+- Full compiled tests: NOT RUN in this run; serial Final gates remain blocked until Stage6-8 production composition is complete.
+- Windows publish/version exact 1.0.0: NOT RUN in this run.
+- Actual CloudScribe.exe acceptance: NOT RUN in this run.
+- Exact-source no-mutation/freeze/strict/full/same-SHA certification: NOT RUN in this run.
+
+REMAINING STAGE6 PRODUCTION GAP
+- CompositionRoot still registers Stage6GoogleGenerationShellBinder but does not call Bind / ConfigureStage6GoogleGeneration because no authoritative production source currently supplies a complete GoogleGenerationProductionRuntimeRequest.
+- The missing source must provide the exact prepared request material rather than manufacture it: durable submission envelope, current compiled provider payload/provider request, UI selection/admitted trust, previous/current persisted queue state, reconciliation evidence when required, pricing provenance/revision/currency/scale/current estimate, and the authorization/currentness booleans that GoogleGenerationProductionUiSnapshotValidator requires.
+- Durable exact-envelope spend authorization exists, but it intentionally does not persist enough of the above material to reconstruct a valid runtime request by itself.
+- Do not wire a dummy source, ambient endpoint/credential/default account, hardcoded booleans, fabricated reconciliation evidence, or a raw provider-submit shortcut.
+
+NEXT EXACT GATE
+1. Inspect run 33727336193 and fix the first exact compiler/analyzer/test failure if it fails.
+2. If green, implement the authoritative Stage6 prepared-runtime-request source/persistence boundary from the real pre-submit preparation workflow, with focused stale/missing/mismatched-evidence rejection tests.
+3. Only after that source is real, call Stage6GoogleGenerationShellBinder.Bind(viewModel, source.ResolveAsync) in CompositionRoot, satisfying the existing FinalReleaseIntegrationContractTests requirement for live ConfigureStage6GoogleGeneration wiring.
+4. Continue Stage7/8 independently if another Stage6 dependency is genuinely unavailable; do not wait on CI.
+5. After all Stage6-8 production composition is green, enter the serial Final gates only in the prescribed order.
