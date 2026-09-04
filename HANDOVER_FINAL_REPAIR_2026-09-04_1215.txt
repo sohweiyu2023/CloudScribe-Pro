@@ -1,0 +1,75 @@
+CloudScribe Pro Final 1.0.0 repair handover
+Date: 2026-09-04
+Controlling baseline: v2.23
+Integration branch: repair/final-stage7-production-parallel
+
+CURRENT SOURCE HEAD BEFORE THIS HANDOVER
+- a6286ff54e0e3e3208654a46328d469dc0010391 — test(final): lock exact Stage6 compile approval composition
+
+LIVE BASE/REPAIR HEADS RE-READ BEFORE HANDOVER
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-1.0.0-session-state-updater: 1bcac65c2bec1f1a189f47e91870943e4fdf944e
+- repair/final-1.0.0-shell-integration: 5c499209793fa6f40c0dad5b4a14669ed81fa50f
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+STAGE COMPLETION
+- Stage6: 96% — exact compile/pending-approval/explicit-approval/runtime chain materially implemented; real upstream current-evidence producer/callsite still open.
+- Stage7: 99% — production composition implemented; exact integrated qualification passed on 4d51636d6c18836db47faa045ed26ae8b5aaaccb; current a6286ff anti-regression source qualification pending.
+- Stage8: 99% — production recovery composition implemented; exact integrated qualification passed on 4d51636d6c18836db47faa045ed26ae8b5aaaccb; current a6286ff anti-regression source qualification pending.
+
+SUBSTANTIVE STAGE6 CHANGES THIS RUN
+- bf0c9f86b044f7649bcb40b290a72b8ab1c96ceb — publish exact compiled submission for approval.
+- a062d26e5895651a8c9dc80a1e03672d5bb9bfe4 — wire explicit spend approval into shell.
+- d7c5de17101e43d702fa7480995c9fa47cd32873 — fail-closed exact pending-approval publisher tests.
+- 2c37c54788d7e96910a35f622c7bda09db297bd2 — define current compile evidence contract.
+- 4dca6b0f9dff70d3ce0e84bf1c30e02aad4cd4ca — perform exact GoogleSpeechPlanCompiler compile before approval and build provider request/snapshot from those exact bytes.
+- bcafb9667e72fdc24fd48b165b9dc52f9ff0ce56 — register exact compile-and-approval producer.
+- 4d51636d6c18836db47faa045ed26ae8b5aaaccb — repair exact analyzer/compiler gate (MA0015 / missing application-generation namespace).
+- a6286ff54e0e3e3208654a46328d469dc0010391 — Final anti-regression contract now locks exact Stage6 compile -> provider request -> snapshot -> pending approval and explicit shell approval composition.
+
+EXACT QUALIFICATION
+- 4d51636d6c18836db47faa045ed26ae8b5aaaccb: Stage7 fast-track PASS, run 33833507112.
+- 4d51636d6c18836db47faa045ed26ae8b5aaaccb: Stage8 fast-track PASS, run 33833507108.
+- a6286ff54e0e3e3208654a46328d469dc0010391: Stage7/Stage8 exact qualification triggered and pending at last inspection. Do not infer PASS until both complete successfully on this exact SHA.
+
+CURRENT STAGE6 PRODUCTION PATH
+real current compile/evidence producer (OPEN)
+ -> GoogleGenerationProductionCompileAndPrepareService
+ -> GoogleSpeechPlanCompiler.Compile exact provider payload
+ -> GoogleGenerationProductionPendingApprovalPublisher
+ -> GoogleGenerationProductionPendingApprovalStateOwner
+ -> explicit user confirmation/authorized ceiling
+ -> GoogleGenerationProductionSpendApprovalService
+ -> durable GoogleGenerationSpendAuthorization + GoogleGenerationProductionSubmissionStateOwner
+ -> GoogleGenerationProductionRuntimeRequestSource
+ -> Stage6GoogleGenerationShellBinder
+ -> GoogleAuthorizedGenerationExecutor
+ -> GoogleGenerationSubmissionCoordinator
+ -> GoogleGenerationQueueCoordinator
+ -> GoogleGenerationBoundQueueCoordinator
+ -> GoogleGenerationUiQueueCoordinator
+
+EXACT REMAINING STAGE6 BLOCKER
+No live production callsite has yet been identified that constructs GoogleGenerationProductionCompileEvidence from the real current UI/session plus persisted account/capability/pricing/project/trust/queue/reconciliation/spend-estimate owners and invokes GoogleGenerationProductionCompileAndPrepareService. The runtime account/capability resolver is genuine and fail-closed, but it is post-approval/runtime evidence and must not be abused as a fabricated pre-approval producer. Do not auto-approve, use ambient endpoints/credentials, reconstruct independent latest state, or fabricate pricing/trust/queue/reconciliation evidence.
+
+MANDATORY FINAL GATES
+- Stage6 production composition: REPAIR (upstream current-evidence compile producer/callsite open)
+- Stage7 production composition: PASS structurally; exact a6286ff qualification pending
+- Stage8 production composition: PASS structurally; exact a6286ff qualification pending
+- full compiled Final tests: NOT RUN
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- actual CloudScribe.exe execution acceptance: NOT RUN
+- exact source no-mutation verification: NOT RUN
+- freeze exact SHA: NOT RUN
+- strict/full certification: NOT RUN
+- exact same-SHA no-change certification: NOT RUN
+- serial Final 1.0.0/main re-promotion: NOT RUN
+
+NEXT EXACT GATE
+1. Inspect Stage7 and Stage8 qualification for exact SHA a6286ff54e0e3e3208654a46328d469dc0010391; repair only the first exact source failure if one exists, or rerun only if infrastructure/test-host transient.
+2. Trace the real current Google generation UI/session compile inputs to their persisted account/capability/pricing/project/trust/queue/reconciliation/current-estimate owners.
+3. Wire that real producer to GoogleGenerationProductionCompileAndPrepareService without fabricating evidence.
+4. Add only focused fail-closed tests required to protect that production seam.
+5. Once Stage6-8 all pass on one exact substantive SHA, start the serial Final gates immediately.
