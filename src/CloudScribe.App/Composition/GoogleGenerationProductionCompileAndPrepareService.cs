@@ -132,6 +132,7 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
             throw new ArgumentException("Google generation compile evidence contains a missing required identity.", nameof(evidence));
         }
 
+        ValidatePrecompileAuthorizationState(evidence);
         evidence.Account.Validate();
         evidence.Capabilities.Validate(evidence.NowUtc).RequireSupported(
             evidence.CompilationOptions.VoiceName,
@@ -141,6 +142,39 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
         evidence.AdmittedTrust.Validate();
         evidence.PreviousState.Validate();
         evidence.CurrentState.Validate();
+    }
+
+    private static void ValidatePrecompileAuthorizationState(GoogleGenerationProductionCompileEvidence evidence)
+    {
+        if (!evidence.AccountAuthorized || !evidence.ProjectAuthorized || !evidence.CapabilityCurrent ||
+            !evidence.PricingCurrent || !evidence.AdmissionCurrent || !evidence.AccountCredentialAvailable ||
+            !evidence.PricingApproved || !evidence.PostCompileLimitsSatisfied)
+        {
+            throw new InvalidOperationException(
+                "Google generation cannot be compiled while authorization, pricing, admission, credential, capability, or limit evidence is not current.");
+        }
+
+        if (evidence.RequestRevision < 0)
+        {
+            throw new InvalidOperationException("Google generation request revision cannot be negative before compilation.");
+        }
+
+        if (evidence.Scale is < 0 or > 9)
+        {
+            throw new InvalidOperationException("Google generation currency scale must be between zero and nine before compilation.");
+        }
+
+        if (evidence.CurrentEstimateMinorUnits < 0)
+        {
+            throw new InvalidOperationException("Google generation current estimate cannot be negative before compilation.");
+        }
+
+        if (evidence.PreviousState.UnresolvedSubmission &&
+            evidence.ResolutionEvidence == GoogleGenerationReconciliationResolutionEvidence.None)
+        {
+            throw new InvalidOperationException(
+                "An unresolved persisted Google submission requires reconciliation evidence before compilation.");
+        }
     }
 
     private static GenerationProviderRequest BuildProviderRequest(
