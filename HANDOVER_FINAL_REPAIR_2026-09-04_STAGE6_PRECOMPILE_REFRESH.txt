@@ -1,0 +1,61 @@
+CloudScribe Pro Final 1.0.0 Repair Handover
+Baseline: v2.23 controlling baseline
+Status: REPAIR — Final 1.0.0 remains reopened.
+
+LIVE HEADS RE-READ BEFORE THIS HANDOVER MUTATION
+main: 14f85105f111d59e9693174153b5236bafe6f990
+repair/final-1.0.0-session-state-updater: 1bcac65c2bec1f1a189f47e91870943e4fdf944e
+repair/final-1.0.0-shell-integration: 5c499209793fa6f40c0dad5b4a14669ed81fa50f
+repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+repair/final-stage7-production-parallel substantive source/test head: 2a7d8c02f4a6441aa1dc2a3497e253e51e92b8f8
+repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+THIS RUN — SUBSTANTIVE STAGE6 WORK
+3e1ac833472d7dfdd1fd98229c03aa47a218a5eb — superseded intermediate only; API-shape assumptions were caught and corrected. Do not qualify this SHA.
+408683216dbb50722fe1dbf77b50ac11e0b8d443 — production compile/prepare now re-reads authoritative persisted Google account + current capability immediately before compilation and rejects account/credential/endpoint/region/capability-provenance drift before any pending spend approval is published. Preserves exact live GoogleSpeechPlanCompiler/provider-request/UI-snapshot/publisher contract. Exact Stage7 PASS and Stage8 PASS.
+2743be74f493559b7533ba714a60f6e65cd4a302 — focused behavioral rejection tests for persisted account binding drift and capability provenance drift; pending approval state must remain absent on rejection. Exact Stage7 PASS and Stage8 PASS.
+3887e2d561b53f512c66440daf154275966296d9 — Final anti-regression contract locks fresh persisted-evidence resolution before compile, exact compilation/provider request/snapshot, and pending approval publication. Exact Stage7 PASS and Stage8 PASS.
+9d8c5771258e5c92933574ba454ea4dfd34c6965 — fail closed if the freshly re-read persisted Google account is disabled before compilation/approval.
+2a7d8c02f4a6441aa1dc2a3497e253e51e92b8f8 — behavioral rejection test for disabled persisted account; pending approval must remain absent. This is the latest substantive source/test SHA before this handover.
+
+LATEST EXACT CI AT HANDOVER CREATION
+Stage7 run 33840907443 on 2a7d8c02f4a6441aa1dc2a3497e253e51e92b8f8: IN PROGRESS at last inspection.
+Stage8 run 33840907437 on 2a7d8c02f4a6441aa1dc2a3497e253e51e92b8f8: IN PROGRESS at last inspection.
+Last exact SHA fully green on both lanes: 3887e2d561b53f512c66440daf154275966296d9.
+
+STAGE STATUS
+Stage6: REPAIR. Runtime authorization, exact submission ownership, deterministic compile-before-approval, explicit spend approval, production shell binding, fresh persisted account/capability precompile revalidation, and fail-closed drift tests exist. Remaining mandatory gap is the genuine production PRE-APPROVAL current-evidence producer/callsite.
+Stage7: production composition structurally PASS; exact qualification PASS at 3887e2d...; 2a7d8c... requalification pending at handover creation.
+Stage8: production composition structurally PASS; exact qualification PASS at 3887e2d...; 2a7d8c... requalification pending at handover creation.
+
+EXACT REMAINING STAGE6 PRODUCTION GAP
+No safe live production owner/callsite has yet been found that assembles GoogleGenerationProductionCompileEvidence from one coherent current request. Do not manufacture this by selecting unrelated latest values.
+The missing production ownership boundary must supply real current evidence for:
+- SpeechPlan/text/language current request state;
+- current compilation options including voice/output encoding/limits;
+- request revision + exact idempotency and persisted queue state;
+- pricing provenance + exact current provider-billed estimate/currency/scale;
+- current project/model authorization;
+- admitted trust/cache context;
+- current reconciliation resolution evidence;
+- a real UI/business workflow callsite invoking GoogleGenerationProductionCompileAndPrepareService.CompileAndPrepareAsync, followed by explicit spend confirmation.
+The post-approval GoogleGenerationProductionRuntimeEvidenceResolver must NOT be reused to fabricate this pre-approval tuple.
+
+MANDATORY FINAL GATES
+Stage6 production composition: REPAIR
+Stage7 production composition: PASS structurally / latest substantive requalification pending at handover creation
+Stage8 production composition: PASS structurally / latest substantive requalification pending at handover creation
+Full compiled Final tests: NOT RUN
+Final source acceptance: NOT RUN
+Windows publish/version exact 1.0.0: NOT RUN
+Actual CloudScribe.exe execution acceptance: NOT RUN
+Exact source no-mutation verification: NOT RUN
+Exact SHA freeze: NOT RUN
+Strict/full certification: NOT RUN
+Exact same-SHA no-change certification: NOT RUN
+Serial Final 1.0.0/main re-promotion: NOT RUN
+
+NEXT EXACT GATE
+1. Inspect Stage7 33840907443 and Stage8 33840907437 for exact 2a7d8c...; if either fails, fix the first exact source/analyzer/test failure after re-reading all live heads.
+2. Continue implementation-first Stage6 tracing for the real pre-approval request/evidence owner. Connect only authoritative current producers; no ambient/hardcoded/fabricated state.
+3. When Stage6 production composition genuinely closes, rerun Stage7+Stage8 exact qualification on one source SHA and then enter the SERIAL Final gates without optional hardening.
