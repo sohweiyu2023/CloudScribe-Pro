@@ -1,0 +1,71 @@
+STATUS: REPAIR
+
+CloudScribe Pro Final 1.0.0 remains reopened.
+
+Progress
+- Stage6: 98.7%
+- Stage7: 99%
+- Stage8: 99%
+
+Live heads re-read immediately before this handover mutation
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-1.0.0-session-state-updater: 67e4053f78c743d413663cc8f7c223e45a07312a
+- repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- repair/final-stage7-production-parallel: d5d7d393d993acfdcc8c261fe6a703678137a4e9
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+Substantive Stage6 changes this run
+1. 77d140c8ac352d6c34d5ce551f80e4afbec22e0d — feat(stage6): bind intent to authoritative compile evidence
+   - Added GoogleGenerationProductionIntentAssemblyCoordinator.
+   - Atomically claims one GoogleGenerationProductionRequestIntent.
+   - Resolves production compile evidence only through IGoogleGenerationProductionIntentEvidenceResolver.
+   - Verifies exact Plan, CompilationOptions, AccountId, ProjectId, ModelId, IdempotencyKey and evidence timestamp binding before publication.
+   - Publishes only validated evidence to GoogleGenerationProductionCurrentRequestStateOwner.
+   - Restores the claimed intent on resolution/binding/cancellation failure instead of losing or fabricating state.
+
+2. Exact Stage7 CI failure on 77d140c8... was MA0048 because IGoogleGenerationProductionIntentEvidenceResolver was declared in the coordinator file; dotnet format --verify-no-changes therefore failed.
+
+3. 0975c01a39722676921f0347e7932a455db9d6a3 — fix(stage6): satisfy assembler analyzer gate
+   - Removed the interface declaration from the coordinator file.
+
+4. d5d7d393d993acfdcc8c261fe6a703678137a4e9 — fix(stage6): split authoritative evidence resolver contract
+   - Added correctly named IGoogleGenerationProductionIntentEvidenceResolver.cs.
+   - This is the newest substantive source SHA.
+
+Newest exact CI
+- Stage7 run 33905824081 on d5d7d393d993acfdcc8c261fe6a703678137a4e9: IN PROGRESS at handover write.
+- Stage8 run 33905824039 on d5d7d393d993acfdcc8c261fe6a703678137a4e9: IN PROGRESS at handover write.
+- Prior exact source 95aa4a26008934a8b7d8c0c6f368d91ab4cd6ef5 was PASS on both Stage7 and Stage8.
+
+Authoritative production evidence map confirmed this run
+- GoogleGenerationProductionEvidenceResolver genuinely reloads persisted Google account and latest capability snapshot and validates them.
+- GoogleGenerationCurrentSpendAuthorizationResolver loads exact approved spend authorization bound to the submission envelope; this is post-approval evidence and must not be reused backwards to fabricate pre-approval state.
+- GoogleGenerationAdmissionPolicy constructs a real GenerationCacheTrustContext from exact identities rather than accepting a boolean trust assertion.
+- GoogleGenerationPersistedQueueState and GoogleGenerationPersistedQueueTransitionPolicy enforce immutable queue identity, append-only provider request identity, and explicit reconciliation-resolution evidence when clearing unresolved submission state.
+- GoogleGenerationReconciliationBarrier forbids duplicate billable submission while an earlier submission remains unresolved.
+
+Remaining Stage6 production blocker
+Implement the concrete production IGoogleGenerationProductionIntentEvidenceResolver and the real request-intent capture callsite. The resolver must source, without independent 'latest' aggregation or fabricated flags: project/model authorization; pricing provenance/current estimate/currency/scale/currentness; request revision and event identity; persisted previous/current queue state; genuine reconciliation resolution evidence; credential availability; and every other GoogleGenerationProductionCompileEvidence field. Existing persisted account/capability and trust/queue/reconciliation policies should be reused. Explicit spend authorization must remain in its current post-prepare lifecycle.
+
+Gate state
+- Stage6 production composition: REPAIR
+- Stage7 production composition: PASS; newest exact SHA qualification IN PROGRESS
+- Stage8 production composition: PASS; newest exact SHA qualification IN PROGRESS
+- Full compiled Final tests on Stage6-complete SHA: NOT RUN
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- Actual CloudScribe.exe acceptance: NOT RUN
+- Exact source no-mutation: NOT RUN
+- SHA freeze: NOT RUN
+- Strict/full certification: NOT RUN
+- Exact same-SHA no-change certification: NOT RUN
+- Final/main re-promotion: NOT RUN
+
+Historical Final candidate 3fc3d854552f00a670cee0ab522591fdf243e656 passed the first full compiled/source/publish/actual-EXE/no-mutation chain, but substantive Stage6 source changes require all Final gates to be rerun on the eventual Stage6-complete exact SHA.
+
+Next exact gate
+1. Inspect Stage7 33905824081 and Stage8 33905824039. If either fails, fix the first exact compiler/analyzer/test failure.
+2. In parallel, implement the concrete authoritative intent-evidence resolver using the real production stores/owners only.
+3. Wire the real request-construction transaction to publish GoogleGenerationProductionRequestIntent, then run the assembler -> compile/prepare -> explicit spend approval path.
+4. Once one exact Stage6-complete SHA passes Stage7/8, immediately run the serial Final gates with no optional hardening.
