@@ -44,6 +44,7 @@ public static class CompositionRoot
         services.AddSingleton<GoogleGenerationProductionTransportFactory>();
         services.AddSingleton<GoogleGenerationProductionRuntimeEvidenceResolver>();
         services.AddSingleton<GoogleGenerationProductionExecutionContextResolver>();
+        services.AddSingleton<GoogleGenerationProductionRequestIntentStateOwner>();
         services.AddSingleton<GoogleGenerationProductionCurrentRequestStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();
