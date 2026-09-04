@@ -1,0 +1,60 @@
+CloudScribe Pro Final 1.0.0 repair handover — 2026-09-05
+
+Controlling baseline: v2.23. Final 1.0.0 remains reopened.
+
+CURRENT ACTIVE SOURCE
+- repair/final-stage7-production-parallel: 95aa4a26008934a8b7d8c0c6f368d91ab4cd6ef5
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+THIS RUN — SUBSTANTIVE STAGE6 WORK
+1. 387d9d74359549a37e68cc4f790336db0ffa0627 — feat(stage6): add atomic production request intent
+   Added GoogleGenerationProductionRequestIntent: one immutable user/request-originated intent carrying Plan, compilation options, account/project/model identity, idempotency identity and capture time, deliberately excluding authorization/pricing-current/trust/queue/reconciliation assertions.
+2. 4864fe1b95ab940d9d3a7205344645128875a330 — feat(stage6): own current request intent atomically
+   Added GoogleGenerationProductionRequestIntentStateOwner with validated publish, destructive claim, and restore-if-unchanged semantics.
+3. e380fb1d62ebf3f2783fe6de75b0aba53adcc927 — feat(stage6): register atomic request intent owner
+   Registered the request-intent owner in production DI.
+4. 006e59cbba2c8f5f9703be56782f1a3118a44da3 — fix(stage6): repair request intent qualification
+   Fixed SpeechPlan namespace and initial strict analyzer issue.
+5. 95aa4a26008934a8b7d8c0c6f368d91ab4cd6ef5 — fix(stage6): satisfy strict intent null guards
+   Fixed exact MA0015 failures on property-expression null guards with explicit fail-closed checks.
+
+EXACT CI
+- e380fb1... failed exact Stage7 qualification due CS0246 SpeechPlan namespace plus MA0015. Both repaired.
+- 006e59c... then failed Stage7 run 33895619156 at formatting/analyzer gate with MA0015 on Plan/CompilationOptions property expressions. Repaired in 95aa4a2....
+- 95aa4a2... Stage7 run 33895850002: IN PROGRESS at handover time.
+- 95aa4a2... Stage8 qualification was triggered by the same push and must be inspected before claiming PASS.
+- Last fully qualified fallback remains 77649f9143985108cd03fd4522a9449f9087e9ea: prior Stage7 PASS and Stage8 PASS.
+
+STAGE STATUS
+- Stage6: ~98.5%, REPAIR. Real upstream atomic request-intent state now exists without permitting callers to inject authorization assertions.
+- Stage7: 99%, production composition previously PASS; newest exact source qualification pending.
+- Stage8: 99%, production composition previously PASS; newest exact source qualification pending.
+
+WHY STAGE6 IS NOT COMPLETE
+The new intent owner is intentionally only the user/request-originated half of the boundary. Production still needs the authoritative intent -> GoogleGenerationProductionCompileEvidence assembler/callsite. That assembler must resolve real production owners for event store/job/request revision, current persisted account/capability/credential/endpoint, project/model authorization, pricing capability/provenance/current estimate/currency/scale, pricing/spend approval, admitted trust, queue transition, previous persisted submission and genuine reconciliation evidence. It must fail closed when any required evidence is absent or stale and then publish the exact full evidence object into GoogleGenerationProductionCurrentRequestStateOwner immediately before existing preparation/explicit spend approval. Do not reconstruct authorization state from diagnostic UI or independent caller-supplied booleans.
+
+KNOWN DOWNSTREAM GOOD PATH
+GoogleGenerationProductionCurrentRequestStateOwner -> GoogleGenerationProductionPreparationCoordinator -> GoogleGenerationProductionCompileAndPrepareService -> exact pending approval -> explicit spend approval -> fresh runtime evidence -> GoogleAuthorizedGenerationExecutor -> GoogleGenerationSubmissionCoordinator -> GoogleGenerationQueueCoordinator -> GoogleGenerationBoundQueueCoordinator -> GoogleGenerationUiQueueCoordinator.
+
+FINAL GATES ON CURRENT SOURCE
+- Stage6 production composition: REPAIR
+- Stage7 exact current-source qualification: IN PROGRESS
+- Stage8 exact current-source qualification: IN PROGRESS / inspect exact run
+- full compiled Final tests: NOT RUN on current source
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- actual CloudScribe.exe acceptance: NOT RUN
+- exact source no-mutation: NOT RUN
+- freeze exact SHA: NOT RUN
+- strict/full certification: NOT RUN
+- exact same-SHA no-change certification: NOT RUN
+- serial Final/main re-promotion: NOT RUN
+
+NEXT EXACT GATE
+1. Inspect Stage7 run 33895850002 and the paired Stage8 run for 95aa4a2; repair first exact failure if any.
+2. Continue implementation-first on the authoritative request-intent -> compile-evidence assembler using real repository owners only.
+3. Wire the real production request capture/assembler into the shell boundary, add focused fail-closed tests, then qualify one exact SHA on Stage7 + Stage8.
+4. Once Stage6-8 composition all pass on one SHA, immediately execute the required serial Final gates; no optional hardening or evidence-only churn.
