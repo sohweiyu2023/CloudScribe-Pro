@@ -103,6 +103,10 @@ public static class CompositionRoot
         serviceProvider.GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(
             viewModel,
             serviceProvider.GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync);
+        GoogleGenerationProductionPreparationCoordinator preparationCoordinator =
+            serviceProvider.GetRequiredService<GoogleGenerationProductionPreparationCoordinator>();
+        viewModel.ConfigureStage6GoogleGenerationPreparation(cancellationToken =>
+            preparationCoordinator.PrepareCurrentAsync(cancellationToken));
         GoogleGenerationProductionSpendApprovalService approvalService =
             serviceProvider.GetRequiredService<GoogleGenerationProductionSpendApprovalService>();
         viewModel.ConfigureStage6GoogleGenerationSpendApproval((maximum, confirmed, cancellationToken) =>
