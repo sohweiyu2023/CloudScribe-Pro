@@ -87,7 +87,7 @@ public sealed class GoogleGenerationProductionSpendApprovalServiceTests
         Assert.Null(await pendingOwner.ResolveCurrentAsync(CancellationToken.None));
         GoogleGenerationProductionSubmissionState? approved = await owner.ResolveCurrentAsync(CancellationToken.None);
         Assert.NotNull(approved);
-        Assert.Equal(pending.Envelope, approved.Envelope);
+        Assert.Equal(pending.Envelope, approved.SubmissionEnvelope);
         Assert.Same(pending.Snapshot, approved.Snapshot);
         Assert.Equal(125, approved.CurrentEstimateMinorUnits);
     }
