@@ -1,0 +1,76 @@
+CloudScribe Pro Final 1.0.0 repair handover — 2026-09-04 21:14 SGT
+
+Controlling baseline: v2.23
+Status: REPAIR
+Stage6: 98%
+Stage7: 99%
+Stage8: 99%
+
+Current exact substantive source SHA:
+77649f9143985108cd03fd4522a9449f9087e9ea
+Branch: repair/final-stage7-production-parallel
+Parent: 805bf485cc4b580c07b825b36e3c4511db9a14e7
+
+Substantive change landed this run:
+- Removed the production shell API that accepted a caller-supplied GoogleGenerationProductionCompileEvidence tuple.
+- Removed ConfigureStage6GoogleGenerationCurrentRequestPublication(Action<GoogleGenerationProductionCompileEvidence>).
+- Removed ApproveGoogleGenerationSpendAsync(GoogleGenerationProductionCompileEvidence currentRequest, ...), which had allowed the caller to supply the complete preassembled authorization tuple immediately before approval.
+- Removed CompositionRoot wiring that treated that caller-supplied tuple as genuine production current-request publication.
+- Preserved GoogleGenerationProductionCurrentRequestStateOwner, GoogleGenerationProductionPreparationCoordinator, deterministic compile/prepare, exact pending approval, explicit spend approval, and the authorized runtime executor/coordinator chain.
+- Replaced the prior reachability contract with an anti-regression contract that forbids caller-supplied full authorization evidence at the production shell boundary while requiring the real downstream owner/preparation/approval services to remain wired.
+
+Why this repair was required:
+805bf485 made the current-request owner reachable only by exposing the entire GoogleGenerationProductionCompileEvidence object to a shell caller. That was not a genuine authoritative production request constructor and could let independently assembled or stale evidence masquerade as a coherent current request. Final must not certify that shortcut.
+
+Safety preserved:
+- No dummy Configure calls.
+- No hardcoded authorization.
+- No fabricated trust/reconciliation/recovery evidence.
+- No ambient credentials/endpoints.
+- No raw provider-submit shortcut.
+- No sync-over-async.
+- GoogleAuthorizedGenerationExecutor -> GoogleGenerationSubmissionCoordinator -> GoogleGenerationQueueCoordinator -> GoogleGenerationBoundQueueCoordinator -> GoogleGenerationUiQueueCoordinator remains preserved.
+- Post-approval runtime evidence revalidation remains intact.
+- Compile/prepare still revalidates persisted account/capability state and constructs the exact provider request/UI snapshot used by explicit spend approval.
+
+Exact qualification for 77649f9143985108cd03fd4522a9449f9087e9ea:
+- Stage7 run 33877615094 — IN PROGRESS during handover creation, strict Windows validation running.
+- Stage8 run 33877615017 — IN PROGRESS during handover creation, strict Windows validation running.
+- Both workflows are attached to the exact source SHA above.
+
+Prior qualification / Final evidence:
+- Parent source 805bf485cc4b580c07b825b36e3c4511db9a14e7 had Stage7 PASS and Stage8 PASS.
+- Prior Final candidate 3fc3d854552f00a670cee0ab522591fdf243e656 had locked restore PASS, strict formatting/Release build PASS, complete compiled solution tests PASS, Final source acceptance PASS, Windows exact 1.0.0 / 1.0.0.0 publish PASS, actual CloudScribe.exe startup smoke PASS, and exact source no-mutation PASS.
+- Because substantive Stage6 source changed after 3fc3d854, all serial Final gates must be rerun on the eventual Stage6-complete exact SHA.
+
+Remaining exact Stage6 blocker:
+There is still no genuine production owner/constructor that atomically owns the complete current generation request before authorization: exact SpeechPlan/content + voice/encoding/compile limits + account/project/model + capability identity/provenance + pricing provenance/current provider-billed estimate/currency/scale + request revision/idempotency + admitted trust + persisted queue transition + genuine reconciliation resolution evidence. Stage4 pricing/provider UI is inspection-oriented and deliberately has no default provider/account selection, so independently reading latest values from it would violate coherent request binding. The post-approval runtime resolver must not be reused backwards to fabricate pre-approval evidence.
+
+Next exact gate:
+1. Inspect Stage7/8 exact qualification for 77649f9143985108cd03fd4522a9449f9087e9ea and fix the first exact compiler/analyzer/test failure if any.
+2. Continue tracing existing production/Stage6 branches for a real coherent generation selection/request owner. If absent, implement that owner at the actual request-construction transaction rather than accepting a full evidence object from UI/caller code.
+3. Publish only that atomically constructed authoritative request into GoogleGenerationProductionCurrentRequestStateOwner, then execute preparation and explicit spend approval.
+4. Re-run Stage7/8 on one exact Stage6-complete SHA.
+5. Then run serial Final gates: full compiled tests -> Final source acceptance -> Windows exact 1.0.0 publish -> actual CloudScribe.exe -> exact source no-mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final 1.0.0/main promotion.
+
+Gate state at handover creation:
+Stage6 production composition/reachability: REPAIR
+Stage7 production composition: PASS structurally; newest exact-SHA qualification IN PROGRESS
+Stage8 production composition: PASS structurally; newest exact-SHA qualification IN PROGRESS
+Full compiled Final tests on 77649f: NOT RUN
+Final source acceptance on 77649f: NOT RUN
+Windows exact 1.0.0 publish on 77649f: NOT RUN
+Actual CloudScribe.exe on 77649f: NOT RUN
+Exact source no-mutation on 77649f: NOT RUN
+Exact SHA freeze: NOT RUN
+Strict/full certification: NOT RUN
+Exact same-SHA no-change certification: NOT RUN
+Final/main re-promotion: NOT RUN
+
+Live heads immediately before this handover mutation:
+main = 14f85105f111d59e9693174153b5236bafe6f990
+repair/final-1.0.0-session-state-updater = 9144b0a2c1947d070f194446dacdaade2c22591e
+repair/final-1.0.0-shell-integration = 3fc3d854552f00a670cee0ab522591fdf243e656
+repair/final-stage6-runtime-restore-helper = 9faef87cc7be2114b2b27076686520c6990738b1
+repair/final-stage7-production-parallel = 77649f9143985108cd03fd4522a9449f9087e9ea
+repair/final-stage8-production-parallel = f1d4e161acedd0ccb17c73de9b724e545f0ff038
