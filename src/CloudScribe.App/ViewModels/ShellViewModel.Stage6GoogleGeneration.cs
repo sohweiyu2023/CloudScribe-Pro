@@ -6,10 +6,15 @@ namespace CloudScribe.App.ViewModels;
 public sealed partial class ShellViewModel
 {
     private Func<CancellationToken, Task<GoogleGenerationUiExecutionContext>>? _resolveGoogleGenerationExecutionContext;
+    private Func<long, bool, CancellationToken, Task>? _approveGoogleGenerationSpend;
     private int _googleGenerationInFlight;
 
     public bool CanGenerateWithGoogle =>
         _resolveGoogleGenerationExecutionContext is not null &&
+        Volatile.Read(ref _googleGenerationInFlight) == 0;
+
+    public bool CanApproveGoogleGenerationSpend =>
+        _approveGoogleGenerationSpend is not null &&
         Volatile.Read(ref _googleGenerationInFlight) == 0;
 
     public void ConfigureStage6GoogleGeneration(
@@ -20,6 +25,46 @@ public sealed partial class ShellViewModel
         OnPropertyChanged(nameof(CanGenerateWithGoogle));
         GenerateWithGoogleCommand.NotifyCanExecuteChanged();
         RefreshGoogleGenerationRouteAction();
+    }
+
+    public void ConfigureStage6GoogleGenerationSpendApproval(
+        Func<long, bool, CancellationToken, Task> approveExplicitSpend)
+    {
+        _approveGoogleGenerationSpend = approveExplicitSpend
+            ?? throw new ArgumentNullException(nameof(approveExplicitSpend));
+        OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
+    }
+
+    public async Task ApproveGoogleGenerationSpendAsync(
+        long authorizedMaximumMinorUnits,
+        bool confirmedByUser,
+        CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.CompareExchange(ref _googleGenerationInFlight, 1, 0) != 0)
+        {
+            throw new InvalidOperationException("A Google generation approval or submission is already in progress.");
+        }
+
+        OnPropertyChanged(nameof(CanGenerateWithGoogle));
+        OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
+        GenerateWithGoogleCommand.NotifyCanExecuteChanged();
+
+        try
+        {
+            var approve = _approveGoogleGenerationSpend
+                ?? throw new InvalidOperationException("Google generation explicit spend approval is not configured.");
+            cancellationToken.ThrowIfCancellationRequested();
+            StatusMessage = "Google generation · confirming exact compiled spend authorization";
+            await approve(authorizedMaximumMinorUnits, confirmedByUser, cancellationToken).ConfigureAwait(true);
+            StatusMessage = "Google generation · exact compiled spend authorized";
+        }
+        finally
+        {
+            Volatile.Write(ref _googleGenerationInFlight, 0);
+            OnPropertyChanged(nameof(CanGenerateWithGoogle));
+            OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
+            GenerateWithGoogleCommand.NotifyCanExecuteChanged();
+        }
     }
 
     private void RefreshGoogleGenerationRouteAction()
@@ -48,6 +93,7 @@ public sealed partial class ShellViewModel
         }
 
         OnPropertyChanged(nameof(CanGenerateWithGoogle));
+        OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
         GenerateWithGoogleCommand.NotifyCanExecuteChanged();
 
         try
@@ -87,6 +133,7 @@ public sealed partial class ShellViewModel
         {
             Volatile.Write(ref _googleGenerationInFlight, 0);
             OnPropertyChanged(nameof(CanGenerateWithGoogle));
+            OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
             GenerateWithGoogleCommand.NotifyCanExecuteChanged();
         }
     }

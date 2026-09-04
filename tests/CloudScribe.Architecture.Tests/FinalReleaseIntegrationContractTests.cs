@@ -6,42 +6,12 @@ public sealed class FinalReleaseIntegrationContractTests
     public void FinalBuildCannotRegressToStagedShellCopyOrDeadStage6To8Composition()
     {
         string repositoryRoot = FindRepositoryRoot();
-        string shell = ReadRepositoryFile(
-            repositoryRoot,
-            "src",
-            "CloudScribe.App",
-            "ViewModels",
-            "ShellViewModel.cs");
-        string stage6Shell = ReadRepositoryFile(
-            repositoryRoot,
-            "src",
-            "CloudScribe.App",
-            "ViewModels",
-            "ShellViewModel.Stage6GoogleGeneration.cs");
-        string stage7Shell = ReadRepositoryFile(
-            repositoryRoot,
-            "src",
-            "CloudScribe.App",
-            "ViewModels",
-            "ShellViewModel.Stage7VoiceLab.cs");
-        string stage8Shell = ReadRepositoryFile(
-            repositoryRoot,
-            "src",
-            "CloudScribe.App",
-            "ViewModels",
-            "ShellViewModel.Stage8RestoreRecovery.cs");
-        string finalPresentation = ReadRepositoryFile(
-            repositoryRoot,
-            "src",
-            "CloudScribe.App",
-            "ViewModels",
-            "ShellViewModel.FinalReleasePresentation.cs");
-        string composition = ReadRepositoryFile(
-            repositoryRoot,
-            "src",
-            "CloudScribe.App",
-            "Composition",
-            "CompositionRoot.cs");
+        string shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.cs");
+        string stage6Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage6GoogleGeneration.cs");
+        string stage7Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage7VoiceLab.cs");
+        string stage8Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage8RestoreRecovery.cs");
+        string finalPresentation = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.FinalReleasePresentation.cs");
+        string composition = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "CompositionRoot.cs");
 
         AssertNoStaleShellCopy(shell);
         AssertLiveStage6Boundary(stage6Shell);
@@ -60,8 +30,7 @@ public sealed class FinalReleaseIntegrationContractTests
 
         foreach (string stale in forbiddenShellCopy)
         {
-            Assert.False(
-                shell.Contains(stale, StringComparison.OrdinalIgnoreCase),
+            Assert.False(shell.Contains(stale, StringComparison.OrdinalIgnoreCase),
                 $"Stale staged lifecycle copy remains in the production shell: {stale}");
         }
     }
@@ -71,6 +40,9 @@ public sealed class FinalReleaseIntegrationContractTests
         string[] requiredLiveResolution =
         [
             "Func<CancellationToken, Task<GoogleGenerationUiExecutionContext>>",
+            "Func<long, bool, CancellationToken, Task>",
+            "ApproveGoogleGenerationSpendAsync(",
+            "await approve(authorizedMaximumMinorUnits, confirmedByUser, cancellationToken)",
             "var resolveContext = _resolveGoogleGenerationExecutionContext",
             "await resolveContext(cancellationToken)",
             "var coordinator = executionContext.Coordinator",
@@ -79,9 +51,8 @@ public sealed class FinalReleaseIntegrationContractTests
 
         foreach (string required in requiredLiveResolution)
         {
-            Assert.True(
-                stage6Shell.Contains(required, StringComparison.Ordinal),
-                $"Final Stage6 runtime and state must be resolved atomically from live, asynchronous, cancellation-aware evidence: {required}");
+            Assert.True(stage6Shell.Contains(required, StringComparison.Ordinal),
+                $"Final Stage6 runtime, explicit approval and state must remain live and cancellation-aware: {required}");
         }
     }
 
@@ -96,8 +67,7 @@ public sealed class FinalReleaseIntegrationContractTests
         ];
         foreach (string required in requiredStage7)
         {
-            Assert.True(
-                stage7Shell.Contains(required, StringComparison.Ordinal),
+            Assert.True(stage7Shell.Contains(required, StringComparison.Ordinal),
                 $"Final Stage7 authorization/trust state must remain live, asynchronous and cancellation-aware: {required}");
         }
 
@@ -108,8 +78,7 @@ public sealed class FinalReleaseIntegrationContractTests
         ];
         foreach (string required in requiredStage8)
         {
-            Assert.True(
-                stage8Shell.Contains(required, StringComparison.Ordinal),
+            Assert.True(stage8Shell.Contains(required, StringComparison.Ordinal),
                 $"Final Stage8 recovery state must remain live, asynchronous and cancellation-aware: {required}");
         }
     }
@@ -129,8 +98,7 @@ public sealed class FinalReleaseIntegrationContractTests
         ];
         foreach (string stale in forbiddenFinalCopy)
         {
-            Assert.False(
-                finalPresentation.Contains(stale, StringComparison.OrdinalIgnoreCase),
+            Assert.False(finalPresentation.Contains(stale, StringComparison.OrdinalIgnoreCase),
                 $"Stale staged copy remains in active Final presentation: {stale}");
         }
 
@@ -142,8 +110,7 @@ public sealed class FinalReleaseIntegrationContractTests
         ];
         foreach (string required in requiredFinalPresentation)
         {
-            Assert.True(
-                finalPresentation.Contains(required, StringComparison.Ordinal),
+            Assert.True(finalPresentation.Contains(required, StringComparison.Ordinal),
                 $"Final presentation repair is incomplete: {required}");
         }
     }
@@ -152,11 +119,16 @@ public sealed class FinalReleaseIntegrationContractTests
     {
         string[] requiredProductionComposition =
         [
+            "AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();",
+            "AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();",
             "AddSingleton<GoogleGenerationProductionSubmissionStateOwner>();",
+            "AddSingleton<GoogleGenerationProductionSpendApprovalService>();",
             "new GoogleGenerationProductionRuntimeRequestSource(",
             "GetRequiredService<GoogleGenerationProductionSubmissionStateOwner>().ResolveCurrentAsync",
             "GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(",
             "GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync",
+            "ConfigureStage6GoogleGenerationSpendApproval",
+            "approvalService.ApproveExplicitAsync(",
             "GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);",
             "GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);",
             "Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(",
@@ -165,8 +137,7 @@ public sealed class FinalReleaseIntegrationContractTests
 
         foreach (string required in requiredProductionComposition)
         {
-            Assert.True(
-                composition.Contains(required, StringComparison.Ordinal),
+            Assert.True(composition.Contains(required, StringComparison.Ordinal),
                 $"Production composition is missing required Final wiring: {required}");
         }
     }
