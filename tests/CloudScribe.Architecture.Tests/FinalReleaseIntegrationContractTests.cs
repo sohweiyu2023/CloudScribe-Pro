@@ -152,10 +152,14 @@ public sealed class FinalReleaseIntegrationContractTests
     {
         string[] requiredProductionComposition =
         [
-            "viewModel.ConfigureStage6GoogleGeneration(",
-            "viewModel.ConfigureStage7VoiceLabCatalog(",
-            "viewModel.ConfigureStage7VoiceLabAudition(",
-            "viewModel.ConfigureStage8RestoreRecovery(",
+            "AddSingleton<GoogleGenerationProductionSubmissionStateOwner>();",
+            "new GoogleGenerationProductionRuntimeRequestSource(",
+            "GetRequiredService<GoogleGenerationProductionSubmissionStateOwner>().ResolveCurrentAsync",
+            "GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(",
+            "GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync",
+            "GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);",
+            "GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);",
+            "Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(",
             "viewModel.ApplyFinalReleasePresentation();",
         ];
 
