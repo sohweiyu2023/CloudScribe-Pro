@@ -5,7 +5,7 @@ namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>
 /// Resolves an explicitly configured provider credential reference from the local credential vault.
-/// This resolver never discovers accounts, performs interactive login, refreshes tokens, or falls back
+/// This resolver never discovers accounts, initiates sign-in, refreshes tokens, or falls back
 /// to ambient credentials. The stored material must already be a currently valid bearer access token.
 /// </summary>
 public sealed class VaultBackedTransientCredentialResolver(ICredentialVault credentialVault) : ITransientCredentialResolver
