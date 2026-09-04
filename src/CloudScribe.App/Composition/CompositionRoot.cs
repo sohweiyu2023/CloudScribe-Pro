@@ -45,6 +45,11 @@ public static class CompositionRoot
         services.AddSingleton<GoogleGenerationProductionRuntimeEvidenceResolver>();
         services.AddSingleton<GoogleGenerationProductionExecutionContextResolver>();
         services.AddSingleton<GoogleGenerationProductionRequestIntentStateOwner>();
+        services.AddSingleton<GoogleGenerationProductionAuthorizationSnapshotStateOwner>();
+        services.AddSingleton<GoogleGenerationProductionIntentEvidenceResolver>();
+        services.AddSingleton<IGoogleGenerationProductionIntentEvidenceResolver>(serviceProvider =>
+            serviceProvider.GetRequiredService<GoogleGenerationProductionIntentEvidenceResolver>());
+        services.AddSingleton<GoogleGenerationProductionIntentAssemblyCoordinator>();
         services.AddSingleton<GoogleGenerationProductionCurrentRequestStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();
