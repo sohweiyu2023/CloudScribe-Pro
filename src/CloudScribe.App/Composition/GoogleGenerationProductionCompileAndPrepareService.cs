@@ -1,4 +1,5 @@
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Generation;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
 
@@ -38,18 +39,39 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService(
 
     private static void ValidateInputs(GoogleGenerationProductionCompileEvidence evidence)
     {
-        ArgumentNullException.ThrowIfNull(evidence.Plan);
-        ArgumentNullException.ThrowIfNull(evidence.CompilationOptions);
-        ArgumentNullException.ThrowIfNull(evidence.Account);
-        ArgumentNullException.ThrowIfNull(evidence.Capabilities);
-        ArgumentNullException.ThrowIfNull(evidence.AdmittedTrust);
-        ArgumentNullException.ThrowIfNull(evidence.PreviousState);
-        ArgumentNullException.ThrowIfNull(evidence.CurrentState);
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidence.PricingProvenanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidence.ProjectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidence.ModelId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidence.IdempotencyKey);
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidence.Currency);
+        if (evidence.Plan is null)
+        {
+            throw new ArgumentException("Google generation compile evidence requires a speech plan.", nameof(evidence));
+        }
+
+        if (evidence.CompilationOptions is null)
+        {
+            throw new ArgumentException("Google generation compile evidence requires compilation options.", nameof(evidence));
+        }
+
+        if (evidence.Account is null)
+        {
+            throw new ArgumentException("Google generation compile evidence requires an account.", nameof(evidence));
+        }
+
+        if (evidence.Capabilities is null)
+        {
+            throw new ArgumentException("Google generation compile evidence requires capability evidence.", nameof(evidence));
+        }
+
+        if (evidence.AdmittedTrust is null || evidence.PreviousState is null || evidence.CurrentState is null)
+        {
+            throw new ArgumentException("Google generation compile evidence requires trust and queue state.", nameof(evidence));
+        }
+
+        if (string.IsNullOrWhiteSpace(evidence.PricingProvenanceId)
+            || string.IsNullOrWhiteSpace(evidence.ProjectId)
+            || string.IsNullOrWhiteSpace(evidence.ModelId)
+            || string.IsNullOrWhiteSpace(evidence.IdempotencyKey)
+            || string.IsNullOrWhiteSpace(evidence.Currency))
+        {
+            throw new ArgumentException("Google generation compile evidence contains a missing required identity.", nameof(evidence));
+        }
 
         evidence.Account.Validate();
         evidence.Capabilities.Validate(evidence.NowUtc).RequireSupported(
