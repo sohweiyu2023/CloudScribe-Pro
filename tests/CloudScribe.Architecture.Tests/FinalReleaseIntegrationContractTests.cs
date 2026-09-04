@@ -58,6 +58,9 @@ public sealed class FinalReleaseIntegrationContractTests
 
         string[] requiredCompileBoundary =
         [
+            "CompileAndPrepareAsync(",
+            "await _productionEvidenceResolver.ResolveAsync(",
+            "ValidateCurrentPersistedEvidence(evidence, currentEvidence)",
             "GoogleSpeechPlanCompiler.Compile(",
             "BuildProviderRequest(evidence, compilation)",
             "BuildSnapshot(evidence, providerRequest)",
@@ -67,7 +70,7 @@ public sealed class FinalReleaseIntegrationContractTests
         foreach (string required in requiredCompileBoundary)
         {
             Assert.True(stage6Compile.Contains(required, StringComparison.Ordinal),
-                $"Final Stage6 must compile the exact provider payload before spend approval: {required}");
+                $"Final Stage6 must refresh persisted evidence and compile the exact provider payload before spend approval: {required}");
         }
     }
 
