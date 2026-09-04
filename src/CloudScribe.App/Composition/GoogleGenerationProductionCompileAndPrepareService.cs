@@ -61,6 +61,12 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
         GoogleGenerationProductionCompileEvidence evidence,
         GoogleGenerationProductionEvidence currentEvidence)
     {
+        if (!currentEvidence.Account.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Current persisted Google account is disabled; generation cannot be compiled for approval.");
+        }
+
         ProviderAccountReference persistedAccount = currentEvidence.Account.Reference;
         ProviderCapabilitySnapshot persistedCapability = currentEvidence.Capability.Snapshot;
 
