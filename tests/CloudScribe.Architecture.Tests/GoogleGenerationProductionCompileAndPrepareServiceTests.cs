@@ -13,6 +13,23 @@ public sealed class GoogleGenerationProductionCompileAndPrepareServiceTests
     private static readonly Uri Endpoint = new("https://texttospeech.googleapis.com/", UriKind.Absolute);
 
     [Fact]
+    public async Task CompileAndPrepareAsyncRejectsDisabledPersistedAccountBeforePublishing()
+    {
+        ProviderAccountSnapshot persisted = CreatePersistedAccount("credential-current", isEnabled: false);
+        var owner = new GoogleGenerationProductionPendingApprovalStateOwner();
+        GoogleGenerationProductionCompileAndPrepareService service = CreateService(owner, persisted, "capability-1");
+        GoogleGenerationProductionCompileEvidence evidence = CreateEvidence(
+            credentialReferenceId: "credential-current",
+            capabilityProvenanceId: "capability-1");
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CompileAndPrepareAsync(evidence, TestContext.Current.CancellationToken)).ConfigureAwait(true);
+
+        Assert.Contains("account is disabled", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(await owner.ResolveCurrentAsync(TestContext.Current.CancellationToken).ConfigureAwait(true));
+    }
+
+    [Fact]
     public async Task CompileAndPrepareAsyncRejectsPersistedAccountBindingDriftBeforePublishing()
     {
         ProviderAccountSnapshot persisted = CreatePersistedAccount("credential-current");
@@ -103,7 +120,9 @@ public sealed class GoogleGenerationProductionCompileAndPrepareServiceTests
         };
     }
 
-    private static ProviderAccountSnapshot CreatePersistedAccount(string credentialReferenceId)
+    private static ProviderAccountSnapshot CreatePersistedAccount(
+        string credentialReferenceId,
+        bool isEnabled = true)
     {
         var reference = new ProviderAccountReference(
             GoogleGenerationProvider.StableProviderId,
@@ -113,7 +132,7 @@ public sealed class GoogleGenerationProductionCompileAndPrepareServiceTests
             "google-tts-v1",
             "global",
             Endpoint);
-        return new ProviderAccountSnapshot(reference, true, 1, Now.AddDays(-1), Now.AddMinutes(-30));
+        return new ProviderAccountSnapshot(reference, isEnabled, 1, Now.AddDays(-1), Now.AddMinutes(-30));
     }
 
     private static StoredProviderCapabilitySnapshot CreatePersistedCapability(
