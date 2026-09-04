@@ -7,11 +7,10 @@ namespace CloudScribe.App.Composition;
 /// <summary>
 /// Owns the single exact pre-authorization Google submission produced by the current compile path.
 /// Approval callers consume this owned state instead of reconstructing envelope, snapshot, or estimate
-/// independently. The state is removed only after the supplied action succeeds.
+/// independently. Failed approval restores the claimed state only when no newer compile replaced it.
 /// </summary>
 public sealed class GoogleGenerationProductionPendingApprovalStateOwner
 {
-    private readonly SemaphoreSlim _gate = new(1, 1);
     private PendingState? _current;
 
     public void Publish(PendingState state)
@@ -26,22 +25,20 @@ public sealed class GoogleGenerationProductionPendingApprovalStateOwner
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        PendingState current = Interlocked.Exchange(ref _current, null)
+            ?? throw new InvalidOperationException(
+                "Google generation has no current compiled submission awaiting explicit spend approval.");
+        current.Validate();
+
         try
         {
-            PendingState current = Volatile.Read(ref _current)
-                ?? throw new InvalidOperationException(
-                    "Google generation has no current compiled submission awaiting explicit spend approval.");
-            current.Validate();
             await action(current, cancellationToken).ConfigureAwait(false);
-            if (ReferenceEquals(Volatile.Read(ref _current), current))
-            {
-                Volatile.Write(ref _current, null);
-            }
         }
-        finally
+        catch
         {
-            _gate.Release();
+            _ = Interlocked.CompareExchange(ref _current, current, null);
+            throw;
         }
     }
 
