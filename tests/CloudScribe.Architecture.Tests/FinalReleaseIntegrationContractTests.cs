@@ -8,13 +8,14 @@ public sealed class FinalReleaseIntegrationContractTests
         string repositoryRoot = FindRepositoryRoot();
         string shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.cs");
         string stage6Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage6GoogleGeneration.cs");
+        string stage6Compile = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "GoogleGenerationProductionCompileAndPrepareService.cs");
         string stage7Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage7VoiceLab.cs");
         string stage8Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage8RestoreRecovery.cs");
         string finalPresentation = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.FinalReleasePresentation.cs");
         string composition = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "CompositionRoot.cs");
 
         AssertNoStaleShellCopy(shell);
-        AssertLiveStage6Boundary(stage6Shell);
+        AssertLiveStage6Boundary(stage6Shell, stage6Compile);
         AssertLiveStage7And8Boundaries(stage7Shell, stage8Shell);
         AssertFinalPresentation(finalPresentation);
         AssertProductionComposition(composition);
@@ -35,7 +36,7 @@ public sealed class FinalReleaseIntegrationContractTests
         }
     }
 
-    private static void AssertLiveStage6Boundary(string stage6Shell)
+    private static void AssertLiveStage6Boundary(string stage6Shell, string stage6Compile)
     {
         string[] requiredLiveResolution =
         [
@@ -53,6 +54,20 @@ public sealed class FinalReleaseIntegrationContractTests
         {
             Assert.True(stage6Shell.Contains(required, StringComparison.Ordinal),
                 $"Final Stage6 runtime, explicit approval and state must remain live and cancellation-aware: {required}");
+        }
+
+        string[] requiredCompileBoundary =
+        [
+            "GoogleSpeechPlanCompiler.Compile(",
+            "BuildProviderRequest(evidence, compilation)",
+            "BuildSnapshot(evidence, providerRequest)",
+            "pendingApprovalPublisher.Publish(",
+        ];
+
+        foreach (string required in requiredCompileBoundary)
+        {
+            Assert.True(stage6Compile.Contains(required, StringComparison.Ordinal),
+                $"Final Stage6 must compile the exact provider payload before spend approval: {required}");
         }
     }
 
@@ -121,6 +136,7 @@ public sealed class FinalReleaseIntegrationContractTests
         [
             "AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();",
             "AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();",
+            "AddSingleton<GoogleGenerationProductionCompileAndPrepareService>();",
             "AddSingleton<GoogleGenerationProductionSubmissionStateOwner>();",
             "AddSingleton<GoogleGenerationProductionSpendApprovalService>();",
             "new GoogleGenerationProductionRuntimeRequestSource(",
