@@ -57,32 +57,32 @@ public sealed class GoogleGenerationProductionSpendApprovalService
         {
             if (Envelope is null)
             {
-                throw new ArgumentNullException(nameof(Envelope));
+                throw new InvalidOperationException("Google generation approval requires a submission envelope.");
             }
 
             if (Snapshot is null)
             {
-                throw new ArgumentNullException(nameof(Snapshot));
+                throw new InvalidOperationException("Google generation approval requires a UI execution snapshot.");
             }
 
             if (string.IsNullOrWhiteSpace(Currency))
             {
-                throw new ArgumentException("Currency is required.", nameof(Currency));
+                throw new InvalidOperationException("Google generation approval currency is required.");
             }
 
             if (Scale is < 0 or > 9)
             {
-                throw new ArgumentOutOfRangeException(nameof(Scale));
+                throw new InvalidOperationException("Google generation approval scale must be between 0 and 9.");
             }
 
             if (CurrentEstimateMinorUnits < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(CurrentEstimateMinorUnits));
+                throw new InvalidOperationException("Google generation current estimate cannot be negative.");
             }
 
             if (AuthorizedMaximumMinorUnits < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(AuthorizedMaximumMinorUnits));
+                throw new InvalidOperationException("Google generation authorized spend ceiling cannot be negative.");
             }
 
             if (CurrentEstimateMinorUnits > AuthorizedMaximumMinorUnits)
