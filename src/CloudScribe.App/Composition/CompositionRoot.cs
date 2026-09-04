@@ -45,6 +45,7 @@ public static class CompositionRoot
         services.AddSingleton<GoogleGenerationProductionRuntimeEvidenceResolver>();
         services.AddSingleton<GoogleGenerationProductionExecutionContextResolver>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();
+        services.AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();
         services.AddSingleton<GoogleGenerationProductionSubmissionStateOwner>();
         services.AddSingleton<GoogleGenerationProductionSpendApprovalService>();
         services.AddSingleton(serviceProvider =>
@@ -99,6 +100,12 @@ public static class CompositionRoot
         serviceProvider.GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(
             viewModel,
             serviceProvider.GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync);
+        GoogleGenerationProductionSpendApprovalService approvalService =
+            serviceProvider.GetRequiredService<GoogleGenerationProductionSpendApprovalService>();
+        viewModel.ConfigureStage6GoogleGenerationSpendApproval((maximum, confirmed, cancellationToken) =>
+            approvalService.ApproveExplicitAsync(
+                new GoogleGenerationProductionSpendApprovalService.ApprovalConfirmation(maximum, confirmed),
+                cancellationToken));
         serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
         serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);
         Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(
