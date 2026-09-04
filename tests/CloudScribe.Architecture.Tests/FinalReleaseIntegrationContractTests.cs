@@ -92,7 +92,7 @@ public sealed class FinalReleaseIntegrationContractTests
         string[] requiredStage8 =
         [
             "Func<CancellationToken, Task<RestoreRecoveryState>>",
-            "await capture(cancellationToken)",
+            "await captureCurrentStateAsync(cancellationToken)",
         ];
         foreach (string required in requiredStage8)
         {
