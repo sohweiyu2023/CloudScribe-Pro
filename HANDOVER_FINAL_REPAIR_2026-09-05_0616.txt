@@ -1,0 +1,81 @@
+CloudScribe Pro Final 1.0.0 repair handover
+2026-09-05 06:16 Asia/Singapore
+
+STATUS: REPAIR
+Controlling baseline: v2.23
+Stage6: 98.7%
+Stage7: 99%
+Stage8: 99%
+
+Qualified substantive source SHA:
+d5d7d393d993acfdcc8c261fe6a703678137a4e9
+
+Exact qualification already PASS on that SHA:
+- Stage7 Windows qualification run 33905824081: PASS
+- Stage8 Windows qualification run 33905824039: PASS
+
+Fresh live heads immediately before this handover mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-1.0.0-session-state-updater: 2a3277acda2e33326281a48f5e83cb6c9ea27d3d
+- repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-stage7-production-parallel: d5d7d393d993acfdcc8c261fe6a703678137a4e9
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+This run's new exact Stage6 finding
+-----------------------------------
+The remaining gap is not another downstream resolver/helper. Production lacks authoritative pre-compile ownership for several mandatory Google generation evidence classes needed by GoogleGenerationProductionCompileEvidence.
+
+Existing genuine production sources verified:
+1. GoogleGenerationProductionEvidenceResolver resolves exact persisted Google account + latest matching persisted capability snapshot using IProviderAccountStore and IProviderCapabilitySnapshotStore, then validates currentness.
+2. GoogleGenerationSpendAuthorization/IGoogleGenerationSpendAuthorizationStore binds spend authorization to an exact already-compiled GoogleGenerationSubmissionEnvelope, currency, scale and estimate. It is correctly downstream/post-compile and cannot be used backwards to synthesize pre-compile approval evidence.
+3. Pricing infrastructure includes pricing catalog admission/history/override/trust services, but no current request-bound Google priced-estimate owner was found.
+4. Queue/reconciliation policy and coordinator types exist, but no production persistence/source API for loading the current and previous GoogleGenerationPersistedQueueState plus genuine reconciliation-resolution evidence for the pre-compile request was found.
+
+Exact missing authoritative production APIs/types/paths after tree/source inspection:
+- No Google project/model authorization store/source equivalent to Stage7's VoiceLab project-authorization store was found.
+- No Google request revision/event identity persistence source/store was found (no IGoogleGenerationEventStore in the source tree).
+- No persisted Google generation queue-state source/store owning request-bound PreviousState + CurrentState was found.
+- No persisted reconciliation-resolution evidence source binding a real resolution to the exact current request was found.
+- No request-bound current Google priced-estimate owner/store was found that supplies PricingProvenanceId + Currency + Scale + CurrentEstimateMinorUnits + currentness as one atomic request tuple.
+- The production Shell Stage6 prepare command is parameterless and currently owns no SpeechPlan/GoogleSpeechCompilationOptions/account/project/model/idempotency request-intent transaction from which GoogleGenerationProductionRequestIntent can be genuinely captured.
+
+Already-safe upstream plumbing on d5d7d393...:
+- GoogleGenerationProductionRequestIntent contains only user/request choices, not caller-supplied authorization/trust/queue/reconciliation assertions.
+- GoogleGenerationProductionRequestIntentStateOwner provides atomic validated publish/claim/restore.
+- GoogleGenerationProductionIntentAssemblyCoordinator atomically claims one intent and rejects resolved evidence unless Plan, CompilationOptions, account/project/model/idempotency and capture time bind back to the exact claimed intent.
+- IGoogleGenerationProductionIntentEvidenceResolver is only an interface; there is no concrete production implementation or DI registration yet.
+- CompositionRoot currently configures Stage6 preparation directly through GoogleGenerationProductionPreparationCoordinator; the intent assembly coordinator is not yet the production preparation edge.
+
+Do NOT close this by:
+- caller-supplied GoogleGenerationProductionCompileEvidence;
+- independent latest-value aggregation from diagnostic UI/stores;
+- fabricated project authorization, request revision, queue/reconciliation, pricing currentness, or trust evidence;
+- running the post-compile spend authorization path backwards;
+- dummy fail-closed Configure calls/resolvers that merely throw.
+
+Shortest safe next implementation path
+--------------------------------------
+1. Define genuine request-bound authoritative ownership at the real generation-request transaction for project/model authorization, request revision/idempotency, priced estimate/provenance/currency/scale, persisted queue transition and reconciliation resolution.
+2. Capture the real SpeechPlan + GoogleSpeechCompilationOptions + account/project/model/idempotency as GoogleGenerationProductionRequestIntent at that same production request-construction boundary.
+3. Implement concrete IGoogleGenerationProductionIntentEvidenceResolver exclusively from those authoritative sources plus existing persisted account/capability/credential sources.
+4. Register resolver + GoogleGenerationProductionIntentAssemblyCoordinator and make Stage6 Prepare execute intent assembly before the already-qualified production prepare/compile/spend path.
+5. Add only focused fail-closed tests needed for mandatory acceptance.
+6. Trigger exact Stage7/Stage8 Windows qualification on the resulting source SHA and fix the first exact failure.
+7. Once Stage6-8 composition is PASS on one exact SHA, run serial Final gates: full compiled tests -> Final source acceptance -> Windows exact 1.0.0 publish -> actual CloudScribe.exe -> source no-mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> Final/main promotion.
+
+Final gates on current d5d7d393... source:
+- Stage6 production composition: REPAIR
+- Stage7 exact qualification: PASS
+- Stage8 exact qualification: PASS
+- Full Final compiled tests: NOT RUN on eventual Stage6-complete SHA
+- Final source acceptance: NOT RUN
+- Windows exact 1.0.0 publish: NOT RUN
+- Actual CloudScribe.exe acceptance: NOT RUN
+- Source no-mutation: NOT RUN
+- Freeze exact SHA: NOT RUN
+- Strict/full certification: NOT RUN
+- Exact same-SHA no-change certification: NOT RUN
+- Final/main re-promotion: NOT RUN
+
+Do not certify Final 1.0.0 until the missing real production ownership is implemented and every serial Final gate passes on one unchanged exact SHA.
