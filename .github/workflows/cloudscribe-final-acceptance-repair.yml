@@ -108,7 +108,7 @@ jobs:
             'ICredentialVault',
             'CredentialReference',
             'CredentialSecret',
-            'string.IsNullOrWhiteSpace'
+            'IsAllWhitespace'
           ) | ForEach-Object {
             if (-not $resolver.Contains($_, [System.StringComparison]::Ordinal)) {
               throw "Stage6 credential resolver lost required fail-closed implementation element: $_"
