@@ -3,7 +3,7 @@ namespace CloudScribe.Architecture.Tests;
 public sealed class Stage6CurrentRequestReachabilityContractTests
 {
     [Fact]
-    public void ProductionShellPublishesOneCoherentCurrentRequestBeforePreparation()
+    public void ProductionShellDoesNotAcceptCallerSuppliedAuthorizationEvidence()
     {
         string repositoryRoot = FindRepositoryRoot();
         string shell = File.ReadAllText(Path.Combine(
@@ -19,24 +19,24 @@ public sealed class Stage6CurrentRequestReachabilityContractTests
             "Composition",
             "CompositionRoot.cs"));
 
-        string[] requiredShellBoundary =
+        string[] forbiddenCallerSuppliedBoundary =
         [
             "Action<GoogleGenerationProductionCompileEvidence>",
             "ConfigureStage6GoogleGenerationCurrentRequestPublication(",
+            "GoogleGenerationProductionCompileEvidence currentRequest",
             "publish(currentRequest);",
-            "await ApproveGoogleGenerationSpendAsync(",
         ];
-        foreach (string required in requiredShellBoundary)
+        foreach (string forbidden in forbiddenCallerSuppliedBoundary)
         {
-            Assert.Contains(required, shell, StringComparison.Ordinal);
+            Assert.DoesNotContain(forbidden, shell, StringComparison.Ordinal);
+            Assert.DoesNotContain(forbidden, composition, StringComparison.Ordinal);
         }
 
         string[] requiredProductionWiring =
         [
-            "GetRequiredService<GoogleGenerationProductionCurrentRequestStateOwner>()",
-            "ConfigureStage6GoogleGenerationCurrentRequestPublication(evidence =>",
-            "currentRequestOwner.Publish(evidence)",
+            "services.AddSingleton<GoogleGenerationProductionCurrentRequestStateOwner>();",
             "preparationCoordinator.PrepareCurrentAsync(cancellationToken)",
+            "approvalService.ApproveExplicitAsync(",
         ];
         foreach (string required in requiredProductionWiring)
         {
