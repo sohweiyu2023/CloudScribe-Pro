@@ -1,4 +1,5 @@
 using CloudScribe.Application.Generation;
+using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.App.Composition;
@@ -38,7 +39,11 @@ public sealed record GoogleGenerationProductionRequestIntent
 
     private static void RequireCanonical(string value, string parameterName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(value, parameterName);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("Google generation request intent identity is required.", parameterName);
+        }
+
         if (!string.Equals(value, value.Trim(), StringComparison.Ordinal)
             || value.Contains('\r')
             || value.Contains('\n')
