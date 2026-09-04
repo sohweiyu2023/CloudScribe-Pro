@@ -7,7 +7,7 @@ namespace CloudScribe.App.Composition;
 /// </summary>
 public sealed class GoogleGenerationProductionCurrentRequestStateOwner
 {
-    private readonly object _gate = new();
+    private readonly System.Threading.Lock _gate = new();
     private GoogleGenerationProductionCompileEvidence? _current;
     private long _version;
 
@@ -63,15 +63,6 @@ public sealed class GoogleGenerationProductionCurrentRequestStateOwner
 
     private static void Validate(GoogleGenerationProductionCompileEvidence evidence)
     {
-        ArgumentNullException.ThrowIfNull(evidence.Plan);
-        ArgumentNullException.ThrowIfNull(evidence.CompilationOptions);
-        ArgumentNullException.ThrowIfNull(evidence.Account);
-        ArgumentNullException.ThrowIfNull(evidence.Capabilities);
-        ArgumentNullException.ThrowIfNull(evidence.AdmittedTrust);
-        ArgumentNullException.ThrowIfNull(evidence.PreviousState);
-        ArgumentNullException.ThrowIfNull(evidence.CurrentState);
-        ArgumentNullException.ThrowIfNull(evidence.ResolutionEvidence);
-
         if (string.IsNullOrWhiteSpace(evidence.PricingProvenanceId)
             || string.IsNullOrWhiteSpace(evidence.ProjectId)
             || string.IsNullOrWhiteSpace(evidence.ModelId)
