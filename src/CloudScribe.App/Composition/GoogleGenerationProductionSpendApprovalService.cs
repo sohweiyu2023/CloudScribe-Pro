@@ -55,13 +55,36 @@ public sealed class GoogleGenerationProductionSpendApprovalService
     {
         public ApprovalRequest Validate()
         {
-            ArgumentNullException.ThrowIfNull(Envelope);
-            ArgumentNullException.ThrowIfNull(Snapshot);
-            ArgumentException.ThrowIfNullOrWhiteSpace(Currency);
-            ArgumentOutOfRangeException.ThrowIfNegative(Scale);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(Scale, 9);
-            ArgumentOutOfRangeException.ThrowIfNegative(CurrentEstimateMinorUnits);
-            ArgumentOutOfRangeException.ThrowIfNegative(AuthorizedMaximumMinorUnits);
+            if (Envelope is null)
+            {
+                throw new ArgumentNullException(nameof(Envelope));
+            }
+
+            if (Snapshot is null)
+            {
+                throw new ArgumentNullException(nameof(Snapshot));
+            }
+
+            if (string.IsNullOrWhiteSpace(Currency))
+            {
+                throw new ArgumentException("Currency is required.", nameof(Currency));
+            }
+
+            if (Scale is < 0 or > 9)
+            {
+                throw new ArgumentOutOfRangeException(nameof(Scale));
+            }
+
+            if (CurrentEstimateMinorUnits < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(CurrentEstimateMinorUnits));
+            }
+
+            if (AuthorizedMaximumMinorUnits < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(AuthorizedMaximumMinorUnits));
+            }
+
             if (CurrentEstimateMinorUnits > AuthorizedMaximumMinorUnits)
             {
                 throw new InvalidOperationException(
