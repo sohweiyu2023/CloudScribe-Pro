@@ -33,6 +33,8 @@ public sealed class Stage3MigrationTests
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
                     Stage6ProviderEndpointOrigin.MigrationId,
                     Stage6GoogleGenerationSpendAuthorization.MigrationId,
+                    Stage7VoiceLabProjectAuthorization.MigrationId,
+                    Stage7VoiceLabAuditionAuthorization.MigrationId,
                 ],
                 migrations);
 
@@ -115,6 +117,8 @@ public sealed class Stage3MigrationTests
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
                     Stage6ProviderEndpointOrigin.MigrationId,
                     Stage6GoogleGenerationSpendAuthorization.MigrationId,
+                    Stage7VoiceLabProjectAuthorization.MigrationId,
+                    Stage7VoiceLabAuditionAuthorization.MigrationId,
                 ],
                 migrations);
             DocumentEntity document = await upgraded.Documents.SingleAsync(TestContext.Current.CancellationToken);
@@ -177,6 +181,8 @@ public sealed class Stage3MigrationTests
                     Stage4ProviderAccountsAndCapabilities.MigrationId,
                     Stage6ProviderEndpointOrigin.MigrationId,
                     Stage6GoogleGenerationSpendAuthorization.MigrationId,
+                    Stage7VoiceLabProjectAuthorization.MigrationId,
+                    Stage7VoiceLabAuditionAuthorization.MigrationId,
                 ],
                 migrations);
             ActivityTimelineEntity preserved = await upgrade.ActivityTimeline.SingleAsync(TestContext.Current.CancellationToken);
