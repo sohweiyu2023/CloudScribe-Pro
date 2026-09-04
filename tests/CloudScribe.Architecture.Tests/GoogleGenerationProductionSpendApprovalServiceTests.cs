@@ -93,7 +93,7 @@ public sealed class GoogleGenerationProductionSpendApprovalServiceTests
     }
 
     [Fact]
-    public void PublishWithCompiledPayloadDigestDriftFailsBeforeBecomingApprovable()
+    public async Task PublishWithCompiledPayloadDigestDriftFailsBeforeBecomingApprovable()
     {
         var pendingOwner = new GoogleGenerationProductionPendingApprovalStateOwner();
         GoogleGenerationProductionPendingApprovalStateOwner.PendingState pending =
@@ -113,7 +113,7 @@ public sealed class GoogleGenerationProductionSpendApprovalServiceTests
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => pendingOwner.Publish(pending));
 
         Assert.Contains("compiled payload", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Null(pendingOwner.ResolveCurrentAsync(CancellationToken.None).GetAwaiter().GetResult());
+        Assert.Null(await pendingOwner.ResolveCurrentAsync(CancellationToken.None));
     }
 
     private static GoogleGenerationProductionPendingApprovalStateOwner.PendingState CreatePendingState(
