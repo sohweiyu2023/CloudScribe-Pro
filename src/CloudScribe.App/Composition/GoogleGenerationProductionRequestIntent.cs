@@ -27,8 +27,16 @@ public sealed record GoogleGenerationProductionRequestIntent
 
     public GoogleGenerationProductionRequestIntent Validate()
     {
-        ArgumentNullException.ThrowIfNull(Plan);
-        ArgumentNullException.ThrowIfNull(CompilationOptions);
+        if (Plan is null)
+        {
+            throw new InvalidOperationException("Google generation request intent requires a speech plan.");
+        }
+
+        if (CompilationOptions is null)
+        {
+            throw new InvalidOperationException("Google generation request intent requires compilation options.");
+        }
+
         RequireCanonical(AccountId, nameof(AccountId));
         RequireCanonical(ProjectId, nameof(ProjectId));
         RequireCanonical(ModelId, nameof(ModelId));
