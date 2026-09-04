@@ -137,13 +137,46 @@ public sealed class GoogleGenerationProductionSpendApprovalServiceTests
             "idempotency-1",
             payload,
             "MP3");
-        GoogleGenerationPersistedQueueState queueState = new(
+        GoogleGenerationPersistedQueueState queueState = CreateQueueState();
+        GoogleGenerationUiExecutionSnapshot snapshot = CreateSnapshot(providerRequest, queueState);
+
+        return new GoogleGenerationProductionPendingApprovalStateOwner.PendingState(
+            envelope,
+            snapshot,
+            "USD",
+            2,
+            currentEstimateMinorUnits);
+    }
+
+    private static GoogleGenerationUiExecutionSnapshot CreateSnapshot(
+        GenerationProviderRequest providerRequest,
+        GoogleGenerationPersistedQueueState queueState) =>
+        new(
+            new GoogleGenerationUiSelection("account-1", "project-1", "voice-1", "model-1", "capability-1", "MP3"),
+            true,
+            true,
+            true,
+            true,
+            providerRequest,
+            CreateTrustContext(),
+            queueState,
+            queueState,
+            GoogleGenerationReconciliationResolutionEvidence.None,
+            true,
+            true,
+            true,
+            true);
+
+    private static GoogleGenerationPersistedQueueState CreateQueueState() =>
+        new(
             "account-1",
             GoogleGenerationProvider.SynthesizeOperationStableId,
             "idempotency-1",
             false,
             null);
-        GenerationCacheTrustContext trust = new(
+
+    private static GenerationCacheTrustContext CreateTrustContext() =>
+        new(
             GoogleGenerationProvider.StableProviderId,
             "account-1",
             "project-1",
@@ -167,29 +200,6 @@ public sealed class GoogleGenerationProductionSpendApprovalServiceTests
             "governance-1",
             "provider-feature-1",
             "account-capability-1");
-        GoogleGenerationUiExecutionSnapshot snapshot = new(
-            new GoogleGenerationUiSelection("account-1", "project-1", "voice-1", "model-1", "capability-1", "MP3"),
-            true,
-            true,
-            true,
-            true,
-            providerRequest,
-            trust,
-            queueState,
-            queueState,
-            GoogleGenerationReconciliationResolutionEvidence.None,
-            true,
-            true,
-            true,
-            true);
-
-        return new GoogleGenerationProductionPendingApprovalStateOwner.PendingState(
-            envelope,
-            snapshot,
-            "USD",
-            2,
-            currentEstimateMinorUnits);
-    }
 
     private sealed class RecordingAuthorizationStore : IGoogleGenerationSpendAuthorizationStore
     {
