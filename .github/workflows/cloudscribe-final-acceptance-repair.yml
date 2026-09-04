@@ -71,10 +71,13 @@ jobs:
           $composition = Get-Content 'src/CloudScribe.App/Composition/CompositionRoot.cs' -Raw
           @(
             'viewModel.ApplyFinalReleasePresentation();',
-            'viewModel.ConfigureStage6GoogleGeneration(',
-            'viewModel.ConfigureStage7VoiceLabCatalog(',
-            'viewModel.ConfigureStage7VoiceLabAudition(',
-            'viewModel.ConfigureStage8RestoreRecovery('
+            'GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(',
+            'ConfigureStage6GoogleGenerationPreparation',
+            'ConfigureStage6GoogleGenerationSpendApproval',
+            'approvalService.ApproveExplicitAsync(',
+            'GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);',
+            'GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);',
+            'Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery('
           ) | ForEach-Object {
             if (-not $composition.Contains($_, [System.StringComparison]::Ordinal)) {
               throw "Production composition is missing required Final wiring: $_"
