@@ -1,0 +1,49 @@
+STATUS: REPAIR — Stage6 99.8% · Stage7 99% · Stage8 99%
+
+Controlling baseline: v2.23. Final 1.0.0 remains reopened.
+
+Fresh live heads immediately before this handover mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage7-production-parallel: 22f029dc56f10dcc29077ef1bb718ac86dec16d3
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-1.0.0-session-state-updater before this file: 57f2fd1d9a0a6677b0303b4727ec452332442d09
+
+Substantive change this run:
+- 22f029dc56f10dcc29077ef1bb718ac86dec16d3 — fix(stage6): keep live evidence resolution analyzer-compliant
+- Reason: exact Stage7 qualification on parent 62e0c5eae39f14c311ac77ac0999c0a5a251386b failed MA0051 because GoogleGenerationProductionIntentEvidenceResolver.ResolveAsync was 70 lines, maximum 60.
+- Repair: factored claimed-evidence resolution/build into private helpers while preserving fail-closed snapshot restore, persisted account/capability reread, live credential-vault validation, active persisted pricing trust/SHA validation, exact request binding, and compile evidence semantics.
+
+Exact CI:
+- Parent 62e0c5eae39f14c311ac77ac0999c0a5a251386b: Stage7 run 33965687659 FAIL (MA0051).
+- New exact SHA 22f029dc56f10dcc29077ef1bb718ac86dec16d3: Stage7 run 33968414192 IN PROGRESS at latest poll; paired Stage8 exact-SHA workflow also triggered and must be checked before any PASS claim.
+
+Stage6 remaining critical path:
+- genuine current project/model authorization
+- request revision/idempotency authoritative ownership
+- exact request pricing estimate/currency/scale from real pricing computation/evidence
+- admitted generation trust ownership/currentness
+- persisted queue transition evidence
+- genuine reconciliation resolution evidence
+These must feed request-bound production capture without caller-built authorization, fabricated evidence, ambient credentials/endpoints, raw provider submit, or sync-over-async.
+
+Next exact gate:
+1. Inspect both exact workflows on 22f029dc56f10dcc29077ef1bb718ac86dec16d3.
+2. If either fails, repair first exact compiler/analyzer/test failure after fresh head reread.
+3. If green, continue direct implementation of genuine persisted/request-bound Stage6 authorization evidence; prefer the shortest existing production-store pattern, but do not invent a store or trust caller booleans.
+4. Once Stage6-8 production composition pass on one exact SHA, enter serial Final gates only.
+
+Mandatory Final gates:
+- Stage6 production composition: REPAIR
+- Stage7 newest exact qualification: IN PROGRESS
+- Stage8 newest exact qualification: IN PROGRESS / exact result not yet carried forward
+- full compiled tests: NOT RUN
+- Final source acceptance: NOT RUN
+- exact Windows publish/version 1.0.0: NOT RUN
+- actual CloudScribe.exe acceptance: NOT RUN
+- exact source no-mutation: NOT RUN
+- freeze exact SHA: NOT RUN
+- strict/full certification: NOT RUN
+- exact same-SHA no-change certification: NOT RUN
+- Final/main serial re-promotion: NOT RUN
