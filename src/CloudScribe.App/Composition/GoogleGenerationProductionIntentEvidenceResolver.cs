@@ -1,5 +1,6 @@
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Security;
+using CloudScribe.Domain.Generation;
 using CloudScribe.Domain.Pricing;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
@@ -85,6 +86,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
                 snapshot.PricingProvenanceId,
                 cancellationToken)
             .ConfigureAwait(false);
+        ValidateAdmittedTrustBinding(intent, snapshot, activePricing, nowUtc);
         cancellationToken.ThrowIfCancellationRequested();
 
         return BuildCompileEvidence(intent, snapshot, persisted, activePricing, accountCredentialAvailable, nowUtc);
@@ -187,6 +189,40 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         {
             throw new InvalidOperationException(
                 "Persisted Google capability evidence changed after the request-bound authorization snapshot was captured.");
+        }
+    }
+
+    private static void ValidateAdmittedTrustBinding(
+        GoogleGenerationProductionRequestIntent intent,
+        GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot,
+        PricingCatalogSnapshot activePricing,
+        DateTimeOffset nowUtc)
+    {
+        GenerationCacheTrustContext admitted = snapshot.AdmittedTrust.Validate();
+        GenerationCacheTrustContext expected = GoogleGenerationCacheTrustContextFactory.Create(
+            snapshot.Account,
+            snapshot.Capabilities,
+            intent.CompilationOptions,
+            intent.ProjectId,
+            intent.ModelId,
+            admitted.VoiceFingerprint,
+            admitted.SpeechPlanIdentity,
+            admitted.SynthesisControlsIdentity,
+            admitted.SampleFormatIdentity,
+            admitted.AdapterVersion,
+            admitted.CompilerVersion,
+            admitted.AstVersion,
+            admitted.NormalizationVersion,
+            activePricing.Sha256,
+            admitted.GovernancePolicyIdentity,
+            admitted.ProviderFeatureIdentity,
+            admitted.AccountCapabilityIdentity,
+            nowUtc);
+
+        if (!Equals(expected, admitted))
+        {
+            throw new InvalidOperationException(
+                "Admitted Google generation trust is no longer bound to the current request evidence.");
         }
     }
 
