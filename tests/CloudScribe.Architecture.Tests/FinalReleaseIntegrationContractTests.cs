@@ -10,6 +10,7 @@ public sealed class FinalReleaseIntegrationContractTests
         string stage6Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage6GoogleGeneration.cs");
         string stage6Compile = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "GoogleGenerationProductionCompileAndPrepareService.cs");
         string stage6IntentOwner = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "GoogleGenerationProductionRequestIntentStateOwner.cs");
+        string stage6IntentEvidence = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "GoogleGenerationProductionIntentEvidenceResolver.cs");
         string stage7Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage7VoiceLab.cs");
         string stage8Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage8RestoreRecovery.cs");
         string finalPresentation = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.FinalReleasePresentation.cs");
@@ -18,6 +19,7 @@ public sealed class FinalReleaseIntegrationContractTests
         AssertNoStaleShellCopy(shell);
         AssertLiveStage6Boundary(stage6Shell, stage6Compile);
         AssertAtomicStage6Capture(stage6IntentOwner, composition);
+        AssertLiveStage6PricingRevalidation(stage6IntentEvidence);
         AssertLiveStage7And8Boundaries(stage7Shell, stage8Shell);
         AssertFinalPresentation(finalPresentation);
         AssertProductionComposition(composition);
@@ -105,6 +107,35 @@ public sealed class FinalReleaseIntegrationContractTests
 
         Assert.False(composition.Contains(".Publish(new GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot", StringComparison.Ordinal),
             "Production composition must not fabricate a caller-built Google generation authorization snapshot.");
+    }
+
+    private static void AssertLiveStage6PricingRevalidation(string stage6IntentEvidence)
+    {
+        string[] requiredPricingRevalidation =
+        [
+            "IPricingCatalogHistoryStore",
+            "GetActiveSnapshotAsync(cancellationToken)",
+            "PricingCatalogTrustState.ValidUnsigned or PricingCatalogTrustState.SignatureVerified",
+            "activePricing.Sha256, pricingProvenanceId, StringComparison.Ordinal",
+        ];
+
+        foreach (string required in requiredPricingRevalidation)
+        {
+            Assert.True(stage6IntentEvidence.Contains(required, StringComparison.Ordinal),
+                $"Final Stage6 must fail closed unless request pricing still matches active admitted persisted pricing: {required}");
+        }
+
+        int credentialValidation = stage6IntentEvidence.IndexOf(
+            "await ValidateCredentialAvailableAsync(snapshot.Account, cancellationToken)",
+            StringComparison.Ordinal);
+        int pricingValidation = stage6IntentEvidence.IndexOf(
+            "await ValidatePricingCurrentAsync(snapshot.PricingProvenanceId, cancellationToken)",
+            StringComparison.Ordinal);
+        int compileEvidence = stage6IntentEvidence.IndexOf(
+            "return new GoogleGenerationProductionCompileEvidence",
+            StringComparison.Ordinal);
+        Assert.True(credentialValidation >= 0 && pricingValidation > credentialValidation && compileEvidence > pricingValidation,
+            "Final Stage6 must revalidate live credential and active persisted pricing before emitting compile evidence.");
     }
 
     private static void AssertLiveStage7And8Boundaries(string stage7Shell, string stage8Shell)
