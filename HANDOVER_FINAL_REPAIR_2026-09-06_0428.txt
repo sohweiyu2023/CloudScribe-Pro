@@ -1,0 +1,51 @@
+CloudScribe Pro Final 1.0.0 Repair Handover
+
+Controlling baseline: v2.23
+Final 1.0.0 status: REOPENED / REPAIR
+
+Live topology immediately before this handover mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- active Stage6/7 repair: 481c0a3eb2916d33deac5dae34807ac39fe2e3fa
+- active Stage8 repair: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- shell integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- Stage6 runtime helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- prior handover lane head: 4667607c21cea41b329489aa85dac588283fedab
+
+Substantive source landed this run:
+481c0a3eb2916d33deac5dae34807ac39fe2e3fa — fix(stage6): revalidate admitted generation trust
+
+Change summary:
+GoogleGenerationProductionIntentEvidenceResolver now reconstructs expected Google GenerationCacheTrustContext before emitting production compile evidence. Expected trust is built through GoogleGenerationCacheTrustContextFactory from the current request intent, current request-bound Google account/capability evidence, and active persisted admitted pricing SHA. Snapshot-carried opaque/version/governance identities are preserved only as inputs for dimensions for which no fresher independent producer exists. Full record equality is required. Mismatched account/project/endpoint/region/model/voice/output/language/pricing/capability trust evidence fails closed and the existing claimed-snapshot restore path remains intact.
+
+Prior exact source qualification:
+67baeabceb02081be2aba08009b692334909a6c1 — Stage7 PASS / Stage8 PASS.
+
+Newest exact source qualification:
+481c0a3eb2916d33deac5dae34807ac39fe2e3fa
+- Stage7 workflow: triggered; not yet declared PASS at handover capture.
+- Stage8 workflow run 33990208802: IN PROGRESS at handover capture.
+Do not carry PASS from the prior SHA.
+
+Remaining Stage6 mandatory production authority gaps:
+1. Genuine current Google project/model authorization producer/verifier (do not derive from bearer credential or fabricate a store).
+2. Authoritative exact request pricing amount/currency/scale derivation rather than snapshot assertion.
+3. Persisted queue-transition evidence.
+4. Genuine reconciliation-resolution evidence.
+Admitted generation trust has now gained request/current-evidence binding but remains subject to exact CI qualification of 481c0a3e.
+
+Gate matrix:
+- Stage6 production composition: REPAIR
+- Stage7 newest exact qualification: IN PROGRESS / NOT YET PASS
+- Stage8 newest exact qualification: IN PROGRESS / NOT YET PASS
+- Full compiled Final tests: NOT RUN
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- Actual CloudScribe.exe acceptance: NOT RUN
+- Exact source no-mutation check: NOT RUN
+- Freeze exact SHA: NOT RUN
+- Strict/full certification: NOT RUN
+- Exact same-SHA no-change certification: NOT RUN
+- Serial Final 1.0.0/main re-promotion: NOT RUN
+
+Next exact gate:
+Inspect both exact qualification workflows for 481c0a3eb2916d33deac5dae34807ac39fe2e3fa. If either fails, fix the first exact compiler/analyzer/test diagnostic after re-reading all live heads. If both pass, proceed immediately to the shortest genuine production owner among Google project/model authorization, authoritative request pricing amount/currency/scale, or durable queue/reconciliation evidence. Never fabricate missing authority.
