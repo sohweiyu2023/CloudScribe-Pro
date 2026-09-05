@@ -118,16 +118,33 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
                 || Capabilities is null
                 || AdmittedTrust is null
                 || PreviousState is null
-                || CurrentState is null)
+                || CurrentState is null
+                || ResolutionEvidence is null)
             {
                 throw new InvalidOperationException(
                     "Request-bound Google authorization snapshot is missing required production evidence.");
             }
 
-            if (RequestRevision < 0 || Scale is < 0 or > 9 || CurrentEstimateMinorUnits < 0)
+            if (!AccountAuthorized
+                || !ProjectAuthorized
+                || !CapabilityCurrent
+                || !PricingCurrent
+                || !AdmissionCurrent
+                || !AccountCredentialAvailable
+                || !PricingApproved
+                || !PostCompileLimitsSatisfied)
             {
                 throw new InvalidOperationException(
-                    "Request-bound Google authorization snapshot contains invalid revision or pricing values.");
+                    "Request-bound Google authorization snapshot contains rejected, stale, or unavailable production authorization evidence.");
+            }
+
+            if (RequestRevision < 0
+                || Scale is < 0 or > 9
+                || CurrentEstimateMinorUnits < 0
+                || CapturedAtUtc == default)
+            {
+                throw new InvalidOperationException(
+                    "Request-bound Google authorization snapshot contains invalid revision, pricing, or capture-time values.");
             }
         }
 
