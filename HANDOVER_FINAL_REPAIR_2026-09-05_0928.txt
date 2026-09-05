@@ -1,0 +1,82 @@
+STATUS: REPAIR
+
+CloudScribe Pro Final 1.0.0 continuation handover
+Controlling baseline: v2.23
+
+Current substantive source branch:
+repair/final-stage7-production-parallel
+Exact source SHA: 666c8321f3123381b8a3d768411ccd1449bb1e87
+
+This run landed:
+1. 84e76d3b341a481f8a63ccbea4a2f12f579b7a0a — fix(stage6): assemble authoritative intent before preparation
+   - CompositionRoot Stage6 approval preparation now resolves GoogleGenerationProductionIntentAssemblyCoordinator and GoogleGenerationProductionPreparationCoordinator.
+   - The configured preparation delegate first awaits intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken), then awaits preparationCoordinator.PrepareCurrentAsync(cancellationToken).
+   - No caller-supplied compile evidence, fabricated authorization, trust, reconciliation, pricing, queue, endpoint, credential, or recovery evidence was introduced.
+   - With no genuine request intent/auth snapshot captured, this path fails closed.
+
+2. 666c8321f3123381b8a3d768411ccd1449bb1e87 — test(stage6): enforce intent assembly before preparation
+   - FinalReleaseIntegrationContractTests now requires production registration and execution of GoogleGenerationProductionIntentAssemblyCoordinator before deterministic preparation.
+   - Exact ordering assertion prevents regression back to direct preparation that bypasses authoritative intent assembly.
+
+Current percentages:
+Stage6: 99.2% — REPAIR
+Stage7: 99% — production composition PASS; newest exact qualification IN PROGRESS
+Stage8: 99% — production composition PASS; newest exact qualification IN PROGRESS
+
+Newest exact qualification on 666c8321f3123381b8a3d768411ccd1449bb1e87:
+Stage7 run 33936117251 — IN PROGRESS in Strict Stage 7 fast-track validation; setup/checkout/setup-dotnet PASS.
+Stage8 run 33936117242 — IN PROGRESS in Strict Stage 8 fast-track validation; setup/checkout/setup-dotnet PASS.
+
+Last exact fully green shared source before this run:
+53972109119ccdf6416fe6f5dfd00c0f7b99521b
+Stage7 33932507127 PASS
+Stage8 33932507213 PASS
+
+Live heads immediately before this handover mutation:
+main: 14f85105f111d59e9693174153b5236bafe6f990
+repair/final-1.0.0-session-state-updater: 68c92a16bf20929c48b0f37cb0db96ca59d0565d
+repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+repair/final-stage7-production-parallel: 666c8321f3123381b8a3d768411ccd1449bb1e87
+repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+Remaining Stage6 mandatory blocker:
+The genuine real request-bound production capture transaction is still missing. It must atomically publish the matching GoogleGenerationProductionRequestIntent plus GoogleGenerationProductionAuthorizationSnapshot from authoritative production ownership of project/model authorization, request revision/idempotency, current pricing estimate/provenance/currentness, admitted trust, persisted queue transition, genuine reconciliation resolution, and relevant credential/capability state. It must not reconstruct authorization from unrelated latest UI state, accept a caller-built full evidence object, or fabricate missing evidence.
+
+Stage6 sequencing after this run is now correct and fail-closed:
+real authoritative capture transaction (still missing)
+-> request intent + auth snapshot
+-> GoogleGenerationProductionIntentAssemblyCoordinator
+-> GoogleGenerationProductionCurrentRequestStateOwner
+-> GoogleGenerationProductionPreparationCoordinator / deterministic compile
+-> exact provider request + UI snapshot
+-> explicit spend approval
+-> authorized runtime resolution
+-> GoogleAuthorizedGenerationExecutor
+-> GoogleGenerationSubmissionCoordinator
+-> GoogleGenerationQueueCoordinator
+-> GoogleGenerationBoundQueueCoordinator
+-> GoogleGenerationUiQueueCoordinator
+
+Mandatory Final gates on newest source SHA:
+Stage6 production composition: REPAIR
+Stage7 production composition: PASS
+Stage8 production composition: PASS
+Newest exact Stage7 qualification: IN PROGRESS
+Newest exact Stage8 qualification: IN PROGRESS
+Full compiled Final tests: NOT RUN
+Final source acceptance: NOT RUN
+Windows publish/version exact 1.0.0: NOT RUN
+Actual CloudScribe.exe acceptance: NOT RUN
+Exact source no-mutation: NOT RUN
+Freeze exact SHA: NOT RUN
+Strict/full certification: NOT RUN
+Exact same-SHA no-change certification: NOT RUN
+Final 1.0.0/main serial re-promotion: NOT RUN
+
+Next exact gate:
+1. Inspect Stage7 33936117251 and Stage8 33936117242; if either fails, fix the first exact compiler/analyzer/test diagnostic.
+2. In parallel, implement the real authoritative request-bound capture producer feeding the already-wired intent assembly path.
+3. When one exact Stage6-complete SHA passes Stage7/Stage8, immediately enter serial Final gates: full compiled tests -> Final source acceptance -> Windows exact 1.0.0 publish/version -> run actual CloudScribe.exe -> exact source no-mutation -> freeze SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final/main promotion.
+
+Do not stop the continuation until Final 1.0.0 is genuinely certified or the user explicitly asks to stop.
