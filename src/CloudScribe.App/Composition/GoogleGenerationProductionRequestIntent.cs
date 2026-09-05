@@ -8,6 +8,8 @@ namespace CloudScribe.App.Composition;
 /// User/request-originated Stage6 generation choices captured as one immutable transaction.
 /// This type intentionally contains no authorization, pricing-current, trust, queue, or
 /// reconciliation assertions; those must be resolved by production owners after capture.
+/// Request revision is request identity, not authorization, so it is captured here rather than
+/// trusted from the downstream authorization snapshot.
 /// </summary>
 public sealed record GoogleGenerationProductionRequestIntent
 {
@@ -22,6 +24,8 @@ public sealed record GoogleGenerationProductionRequestIntent
     public required string ModelId { get; init; }
 
     public required string IdempotencyKey { get; init; }
+
+    public required int RequestRevision { get; init; }
 
     public required DateTimeOffset CapturedAtUtc { get; init; }
 
@@ -41,6 +45,11 @@ public sealed record GoogleGenerationProductionRequestIntent
         RequireCanonical(ProjectId, nameof(ProjectId));
         RequireCanonical(ModelId, nameof(ModelId));
         RequireCanonical(IdempotencyKey, nameof(IdempotencyKey));
+        if (RequestRevision < 0)
+        {
+            throw new InvalidOperationException("Google generation request revision cannot be negative.");
+        }
+
         CompilationOptions.Validate();
         return this;
     }
