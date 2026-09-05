@@ -169,7 +169,9 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             || !string.Equals(
                 persisted.Capability.Snapshot.ProvenanceId,
                 snapshot.Capabilities.ProvenanceId,
-                StringComparison.Ordinal))
+                StringComparison.Ordinal)
+            || persisted.Capability.Snapshot.CapturedAtUtc != snapshot.Capabilities.ObservedAtUtc
+            || persisted.Capability.ExpiresAtUtc != snapshot.Capabilities.ExpiresAtUtc)
         {
             throw new InvalidOperationException(
                 "Persisted Google capability evidence changed after the request-bound authorization snapshot was captured.");
