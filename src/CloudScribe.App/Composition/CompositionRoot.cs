@@ -109,10 +109,15 @@ public static class CompositionRoot
         serviceProvider.GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(
             viewModel,
             serviceProvider.GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync);
+        GoogleGenerationProductionIntentAssemblyCoordinator intentAssemblyCoordinator =
+            serviceProvider.GetRequiredService<GoogleGenerationProductionIntentAssemblyCoordinator>();
         GoogleGenerationProductionPreparationCoordinator preparationCoordinator =
             serviceProvider.GetRequiredService<GoogleGenerationProductionPreparationCoordinator>();
-        viewModel.ConfigureStage6GoogleGenerationPreparation(cancellationToken =>
-            preparationCoordinator.PrepareCurrentAsync(cancellationToken));
+        viewModel.ConfigureStage6GoogleGenerationPreparation(async cancellationToken =>
+        {
+            await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken).ConfigureAwait(false);
+            await preparationCoordinator.PrepareCurrentAsync(cancellationToken).ConfigureAwait(false);
+        });
         GoogleGenerationProductionSpendApprovalService approvalService =
             serviceProvider.GetRequiredService<GoogleGenerationProductionSpendApprovalService>();
         viewModel.ConfigureStage6GoogleGenerationSpendApproval((maximum, confirmed, cancellationToken) =>
