@@ -1,0 +1,35 @@
+CloudScribe Pro Final 1.0.0 REPAIR handover — 2026-09-06 02:16 Asia/Singapore
+Controlling baseline: v2.23
+
+Live heads re-read before source mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- active Stage6/7 repair lane repair/final-stage7-production-parallel: 5b8f6354ad849be42e8adbdaa3d3923a0c0d1aff before mutation
+- legacy agent/stage6-fast-track: 1b3aa9ae406cef3df618540daa877713d517cbb6
+- legacy agent/stage7-fast-track: 7411dd6d2e6ed576c94885fd4fd2a5df539d2181
+- handover lane before this file: 1e5b88cae67d434de1eb442b1f613ceab339c2cb
+
+Prior exact qualification:
+- 5b8f6354ad849be42e8adbdaa3d3923a0c0d1aff: Stage7 run 33980613654 PASS; paired Stage8 qualification also PASS.
+
+Landed this run:
+- 2b34ebaee3fd0725ba553a6fa70ffaa4f4f393b1 — fix(stage6): reject future authorization capture evidence.
+- GoogleGenerationProductionIntentEvidenceResolver now compares the claimed request-bound AuthorizationSnapshot.CapturedAtUtc against the real TimeProvider UTC immediately after persisted production evidence is resolved and fails closed if the authorization snapshot claims a future capture time.
+- Existing claim restoration remains in the outer catch, so a rejected future-dated snapshot does not consume the only request-bound authorization capture.
+- No dummy Configure calls, hardcoded authorization, fabricated trust/reconciliation/recovery evidence, ambient credential/endpoint fallback, raw provider submit, or sync-over-async was introduced.
+
+Exact new-SHA CI:
+- Stage7 run 33983608317: IN PROGRESS at handover write.
+- Paired Stage8 exact-SHA qualification also triggered; inspect both before carrying any PASS forward.
+
+Current completion estimate:
+- Stage6: 99.9% REPAIR. Remaining genuine ownership gaps: current Google project/model authorization; authoritative exact pricing amount/currency/scale; admitted generation trust; persisted queue transition; reconciliation resolution.
+- Stage7: 99%; prior exact qualification PASS, newest exact SHA not yet certified.
+- Stage8: 99%; prior exact qualification PASS, newest exact SHA not yet certified.
+
+Final serial gates remain NOT RUN: full compiled tests; Final source acceptance; Windows exact 1.0.0 publish/version; actual CloudScribe.exe execution; exact source no-mutation; SHA freeze; strict/full certification; exact same-SHA no-change certification; Final/main serial re-promotion.
+
+Next exact gate:
+1. Inspect Stage7 33983608317 and paired Stage8 run for exact SHA 2b34ebaee3fd0725ba553a6fa70ffaa4f4f393b1.
+2. If either fails, repair the first exact compiler/analyzer/test failure after another live-head reread.
+3. If both pass, continue implementation-first with a genuine authoritative Stage6 owner, prioritizing project/model authorization or persisted queue/reconciliation state; do not manufacture authority from the current snapshot booleans.
+4. Only after Stage6-8 production composition all pass may the serial Final gate chain begin.
