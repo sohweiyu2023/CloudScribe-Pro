@@ -1,4 +1,6 @@
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Pricing;
+using CloudScribe.Domain.Pricing;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.App.Composition;
@@ -13,6 +15,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
     private readonly GoogleGenerationProductionEvidenceResolver _productionEvidenceResolver;
     private readonly GoogleGenerationProductionAccountFactory _accountFactory;
     private readonly GoogleGenerationCurrentSpendAuthorizationResolver _spendAuthorizationResolver;
+    private readonly IPricingCatalogHistoryStore _pricingCatalogHistoryStore;
     private readonly GoogleGenerationProductionTransportFactory _transportFactory;
     private readonly TimeProvider _timeProvider;
 
@@ -20,12 +23,14 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
         GoogleGenerationProductionEvidenceResolver productionEvidenceResolver,
         GoogleGenerationProductionAccountFactory accountFactory,
         GoogleGenerationCurrentSpendAuthorizationResolver spendAuthorizationResolver,
+        IPricingCatalogHistoryStore pricingCatalogHistoryStore,
         GoogleGenerationProductionTransportFactory transportFactory,
         TimeProvider timeProvider)
     {
         _productionEvidenceResolver = productionEvidenceResolver ?? throw new ArgumentNullException(nameof(productionEvidenceResolver));
         _accountFactory = accountFactory ?? throw new ArgumentNullException(nameof(accountFactory));
         _spendAuthorizationResolver = spendAuthorizationResolver ?? throw new ArgumentNullException(nameof(spendAuthorizationResolver));
+        _pricingCatalogHistoryStore = pricingCatalogHistoryStore ?? throw new ArgumentNullException(nameof(pricingCatalogHistoryStore));
         _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
@@ -43,6 +48,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
             .ConfigureAwait(false);
         DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
         current.Validate(nowUtc);
+        await ValidatePricingCurrentAsync(request.PricingProvenanceId, cancellationToken).ConfigureAwait(false);
 
         GoogleGenerationAccount account = _accountFactory.Create(current);
         GoogleGenerationSpendAuthorization spendAuthorization = await _spendAuthorizationResolver
@@ -90,5 +96,29 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
             request.Scale,
             request.CurrentEstimateMinorUnits,
             request.Snapshot);
+    }
+
+    private async Task ValidatePricingCurrentAsync(
+        string pricingProvenanceId,
+        CancellationToken cancellationToken)
+    {
+        PricingCatalogSnapshot activePricing = await _pricingCatalogHistoryStore
+            .GetActiveSnapshotAsync(cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                "No active persisted pricing catalog is available at Google generation runtime authorization time.");
+
+        if (activePricing.TrustState is not (
+                PricingCatalogTrustState.ValidUnsigned or PricingCatalogTrustState.SignatureVerified))
+        {
+            throw new InvalidOperationException(
+                "The active persisted pricing catalog is not admitted Google generation runtime pricing evidence.");
+        }
+
+        if (!string.Equals(activePricing.Sha256, pricingProvenanceId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Active persisted pricing provenance changed before Google generation runtime submission.");
+        }
     }
 }
