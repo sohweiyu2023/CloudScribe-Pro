@@ -1,0 +1,45 @@
+STATUS: REPAIR
+
+CloudScribe Pro Final 1.0.0 remains reopened under v2.23 controlling requirements.
+
+Live topology immediately before this handover mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- active Stage6/7 repair: 63275a234acfbf8ab9afb8cd4be813be9b34d2ae
+- Stage8 repair: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- shell integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- Stage6 runtime helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- prior handover lane: 1fc40b43b3682937325860a6751778b5ad65edfa
+
+Substantive source changes landed this run on repair/final-stage7-production-parallel:
+1. 1c95f3bc94b9a0b99a0d5bce011428d381a6fe50 — fix(stage6): resolve durable spend evidence by envelope
+   GoogleGenerationCurrentSpendAuthorizationResolver can now resolve the exact durable approved authorization directly from GoogleGenerationSubmissionEnvelope and defensively rejects envelope mismatch.
+2. 63275a234acfbf8ab9afb8cd4be813be9b34d2ae — fix(stage6): source runtime price from durable approval
+   GoogleGenerationProductionRuntimeEvidenceResolver now sources currency, scale, and approved estimate from the exact durable spend authorization rather than runtime-request-carried price copies, while retaining current account/capability, active pricing provenance/trust, revision, compiled-payload, and production transport/account validation.
+
+Exact CI for 63275a234acfbf8ab9afb8cd4be813be9b34d2ae:
+- Stage7 run 33992739259: PASS.
+- Stage8 run 33992739115: FAIL due xUnit v3 test-process discovery catastrophe, not a source compiler/analyzer error. Strict Release build succeeded with 0 warnings and 0 errors; all 37 selected Stage8 domain tests passed. Infrastructure test discovery then emitted valid assembly-info JSON followed by 'Waiting 10 seconds for foreground threads to exit...', causing xUnit to classify the test-process output as non-object and report no matching Stage8AtomicVerifiedRestoreExecutorTests. Do not modify production behavior to accommodate this runner failure; obtain a fresh exact-SHA qualification through the next substantive source SHA or a genuine exact-SHA rerun mechanism if available.
+
+Remaining Stage6 production authority gaps:
+- genuine current Google project/model authorization producer/verifier;
+- authoritative upstream request-specific pricing calculation/approval provenance (runtime consumption now takes amount/currency/scale from durable approval);
+- persisted queue-transition evidence;
+- genuine reconciliation-resolution evidence.
+Do not fabricate any of these from caller/shell/UI assertions.
+
+Final gates:
+- Stage6 production composition: REPAIR
+- Stage7 exact qualification on current SHA: PASS
+- Stage8 exact qualification on current SHA: FAIL (runner/test-discovery catastrophe after clean build + domain tests)
+- full compiled Final tests: NOT RUN
+- Final source acceptance: NOT RUN
+- exact Windows 1.0.0 publish/version: NOT RUN
+- actual CloudScribe.exe acceptance: NOT RUN
+- exact source no-mutation: NOT RUN
+- SHA freeze: NOT RUN
+- strict/full certification: NOT RUN
+- exact same-SHA no-change certification: NOT RUN
+- Final/main serial re-promotion: NOT RUN
+
+Next exact gate:
+Continue implementation-first on a genuine authoritative Stage6 owner, prioritizing Google project/model authorization or durable queue/reconciliation evidence. Any next source mutation must first re-read main and every active repair head. Trigger/inspect Stage7 and Stage8 exact qualification for the resulting SHA; if a real compiler/analyzer/test assertion fails, repair the first exact diagnostic. Preserve GoogleAuthorizedGenerationExecutor -> GoogleGenerationSubmissionCoordinator -> GoogleGenerationQueueCoordinator -> GoogleGenerationBoundQueueCoordinator -> GoogleGenerationUiQueueCoordinator and all fail-closed requirements.
