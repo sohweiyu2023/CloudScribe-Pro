@@ -87,6 +87,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
                 cancellationToken)
             .ConfigureAwait(false);
         ValidateAdmittedTrustBinding(intent, snapshot, activePricing, nowUtc);
+        ValidateQueueTransition(snapshot);
         cancellationToken.ThrowIfCancellationRequested();
 
         return BuildCompileEvidence(intent, snapshot, persisted, activePricing, accountCredentialAvailable, nowUtc);
@@ -224,6 +225,15 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             throw new InvalidOperationException(
                 "Admitted Google generation trust is no longer bound to the current request evidence.");
         }
+    }
+
+    private static void ValidateQueueTransition(
+        GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot)
+    {
+        GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(
+            snapshot.PreviousState,
+            snapshot.CurrentState,
+            snapshot.ResolutionEvidence);
     }
 
     private async ValueTask<bool> ValidateCredentialAvailableAsync(
