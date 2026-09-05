@@ -124,6 +124,12 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
                     "Request-bound Google authorization snapshot is missing required production evidence.");
             }
 
+            if (ResolutionEvidence == GoogleGenerationReconciliationResolutionEvidence.None)
+            {
+                throw new InvalidOperationException(
+                    "Request-bound Google authorization snapshot is missing reconciliation resolution evidence.");
+            }
+
             if (!AccountAuthorized
                 || !ProjectAuthorized
                 || !CapabilityCurrent
