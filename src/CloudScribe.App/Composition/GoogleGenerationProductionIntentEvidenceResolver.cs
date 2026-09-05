@@ -1,4 +1,6 @@
+using CloudScribe.Application.Security;
 using CloudScribe.Infrastructure.Generation;
+using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.App.Composition;
 
@@ -13,12 +15,14 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
     private readonly GoogleGenerationProductionAuthorizationSnapshotStateOwner _authorizationOwner;
     private readonly GoogleGenerationProductionEvidenceResolver _productionEvidenceResolver;
     private readonly GoogleGenerationProductionAccountFactory _accountFactory;
+    private readonly ICredentialVault _credentialVault;
     private readonly TimeProvider _timeProvider;
 
     public GoogleGenerationProductionIntentEvidenceResolver(
         GoogleGenerationProductionAuthorizationSnapshotStateOwner authorizationOwner,
         GoogleGenerationProductionEvidenceResolver productionEvidenceResolver,
         GoogleGenerationProductionAccountFactory accountFactory,
+        ICredentialVault credentialVault,
         TimeProvider timeProvider)
     {
         _authorizationOwner = authorizationOwner
@@ -26,6 +30,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         _productionEvidenceResolver = productionEvidenceResolver
             ?? throw new ArgumentNullException(nameof(productionEvidenceResolver));
         _accountFactory = accountFactory ?? throw new ArgumentNullException(nameof(accountFactory));
+        _credentialVault = credentialVault ?? throw new ArgumentNullException(nameof(credentialVault));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
@@ -52,6 +57,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
             persisted.Validate(nowUtc);
             ValidatePersistedBinding(snapshot, persisted, nowUtc);
+            await ValidateCredentialAvailableAsync(snapshot.Account, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
             return new GoogleGenerationProductionCompileEvidence
@@ -135,5 +141,17 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             throw new InvalidOperationException(
                 "Persisted Google capability evidence changed after the request-bound authorization snapshot was captured.");
         }
+    }
+
+    private async ValueTask ValidateCredentialAvailableAsync(
+        GoogleGenerationAccount account,
+        CancellationToken cancellationToken)
+    {
+        CredentialReference reference = new(account.CredentialReferenceId);
+        using CredentialSecret credential = await _credentialVault
+            .ReadAsync(reference, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                "Current Google provider account credential is unavailable at request authorization time.");
     }
 }
