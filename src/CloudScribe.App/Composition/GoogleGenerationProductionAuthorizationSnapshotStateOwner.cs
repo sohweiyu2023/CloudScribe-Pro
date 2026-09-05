@@ -1,4 +1,5 @@
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Generation;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
 
@@ -106,22 +107,36 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
 
         public void Validate()
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(AccountId);
-            ArgumentException.ThrowIfNullOrWhiteSpace(ProjectId);
-            ArgumentException.ThrowIfNullOrWhiteSpace(ModelId);
-            ArgumentException.ThrowIfNullOrWhiteSpace(IdempotencyKey);
-            ArgumentException.ThrowIfNullOrWhiteSpace(PricingProvenanceId);
-            ArgumentException.ThrowIfNullOrWhiteSpace(Currency);
-            ArgumentNullException.ThrowIfNull(Account);
-            ArgumentNullException.ThrowIfNull(Capabilities);
-            ArgumentNullException.ThrowIfNull(AdmittedTrust);
-            ArgumentNullException.ThrowIfNull(PreviousState);
-            ArgumentNullException.ThrowIfNull(CurrentState);
+            ValidateRequiredText(AccountId, nameof(AccountId));
+            ValidateRequiredText(ProjectId, nameof(ProjectId));
+            ValidateRequiredText(ModelId, nameof(ModelId));
+            ValidateRequiredText(IdempotencyKey, nameof(IdempotencyKey));
+            ValidateRequiredText(PricingProvenanceId, nameof(PricingProvenanceId));
+            ValidateRequiredText(Currency, nameof(Currency));
+
+            if (Account is null
+                || Capabilities is null
+                || AdmittedTrust is null
+                || PreviousState is null
+                || CurrentState is null)
+            {
+                throw new InvalidOperationException(
+                    "Request-bound Google authorization snapshot is missing required production evidence.");
+            }
 
             if (RequestRevision < 0 || Scale is < 0 or > 9 || CurrentEstimateMinorUnits < 0)
             {
                 throw new InvalidOperationException(
                     "Request-bound Google authorization snapshot contains invalid revision or pricing values.");
+            }
+        }
+
+        private static void ValidateRequiredText(string value, string propertyName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(
+                    $"Request-bound Google authorization snapshot is missing required {propertyName} evidence.");
             }
         }
     }
