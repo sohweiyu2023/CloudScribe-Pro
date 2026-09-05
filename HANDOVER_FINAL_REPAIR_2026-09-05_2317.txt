@@ -1,0 +1,62 @@
+CloudScribe Pro Final 1.0.0 repair handover
+Timestamp: 2026-09-05 23:17 Asia/Singapore
+Controlling baseline: v2.23
+
+STATUS: REPAIR
+Stage6: 99.9%
+Stage7: 99%
+Stage8: 99%
+
+Live topology before source mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- Stage6/7 production repair head before mutation: 312aca49a7a8fe4d080eea09266cf8c980448592
+- Stage8 production repair head: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- Stage6 runtime restore helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- session-state head before this handover: f97f327cddc53bfd9d70bfa53fa8f6fafcd9143a
+
+Previous exact source qualification:
+- 312aca49a7a8fe4d080eea09266cf8c980448592: Stage7 PASS, Stage8 PASS.
+
+Substantive source change landed this run:
+- b5142a89b2f5b389b29576ea84199787fb4c4b02
+- commit: fix(stage6): revalidate pricing before runtime submission
+- GoogleGenerationProductionRuntimeEvidenceResolver now injects the real IPricingCatalogHistoryStore and re-reads the active persisted pricing catalog immediately before durable spend/runtime composition.
+- It fails closed if no active catalog exists, if trust is not ValidUnsigned or SignatureVerified, or if the active SHA differs from the exact request-bound PricingProvenanceId.
+- This closes the post-approval pricing provenance TOCTOU window without trusting shell/UI assertions or weakening the authorized executor chain.
+
+Exact new-source qualification:
+- Stage7 run 33974344372: IN PROGRESS at last poll.
+- Stage8 run 33974344358: queued/started at first poll; inspect exact current state before claiming PASS.
+- Both runs are bound to exact source SHA b5142a89b2f5b389b29576ea84199787fb4c4b02.
+
+Repository evidence investigation while CI runs:
+- Infrastructure/Generation contains the genuine VoiceLab project authorization interface/store/evidence for Stage7.
+- The same directory exposes no Google-specific project authorization store/evidence/producer; Stage6 currently still carries ProjectAuthorized in its internal authorization snapshot.
+- Do not create a Google authorization store unless a genuine verifier/producer can populate it from authoritative production evidence.
+
+Remaining Stage6 mandatory authority surface:
+- genuine current Google project/model authorization producer and persisted/current evidence;
+- exact pricing estimate/currency/scale derived from authoritative current pricing/request facts (pricing provenance is now independently revalidated at intent and runtime boundaries);
+- admitted generation trust from real trust ownership;
+- persisted queue-transition evidence;
+- genuine reconciliation-resolution evidence.
+
+Mandatory gates:
+- Stage6 production composition: REPAIR
+- Stage7 newest exact qualification: IN PROGRESS
+- Stage8 newest exact qualification: IN PROGRESS/queued at last observed poll
+- full compiled Final tests: NOT RUN
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- actual CloudScribe.exe acceptance: NOT RUN
+- exact source no-mutation: NOT RUN
+- freeze exact SHA: NOT RUN
+- strict/full certification: NOT RUN
+- exact same-SHA no-change certification: NOT RUN
+- Final/main serial re-promotion: NOT RUN
+
+Next exact gate:
+1. Inspect Stage7 run 33974344372 and Stage8 run 33974344358 for exact SHA b5142a89b2f5b389b29576ea84199787fb4c4b02.
+2. If either fails, repair the first exact compiler/analyzer/test diagnostic after re-reading live main and all active repair heads.
+3. If both pass, continue Stage6 implementation-first with the next genuine authoritative seam. Prioritize an actual Google project/model authorization verifier/producer if one exists outside Infrastructure/Generation; otherwise advance a real queue/reconciliation or pricing amount owner rather than fabricate authorization.
+4. Do not begin serial Final gates until Stage6-8 production composition is genuinely complete on one exact SHA.
