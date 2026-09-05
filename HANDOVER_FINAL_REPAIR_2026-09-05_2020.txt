@@ -1,0 +1,54 @@
+STATUS: REPAIR — CloudScribe Pro Final 1.0.0 remains reopened.
+
+Controlling baseline: v2.23
+
+Stage progress:
+- Stage6: 99.8% — production intent evidence now derives current account authorization, capability freshness, live credential availability, and active pricing currentness from authoritative current production state instead of trusting request-bound snapshot copies. Remaining request-bound ownership gaps: project/model authorization, request revision/idempotency authority, exact pricing estimate/currency/scale, admitted trust, and persisted queue/reconciliation evidence.
+- Stage7: 99% — production composition remains qualified on prior exact source; qualification for newest Stage6 source is running.
+- Stage8: 99% — production composition remains qualified on prior exact source; qualification for newest Stage6 source is running.
+
+Exact substantive source head:
+62e0c5eae39f14c311ac77ac0999c0a5a251386b — fix(stage6): stop trusting live-state snapshot assertions
+Parent substantive commit:
+6d7df7fa8d09695ef38d6567f9cc57f9fea5be87 — fix(stage6): derive current evidence from live production state
+Last fully qualified predecessor:
+3406ec134401e4c7aff2626bf1189cf1ba9400b2 — Stage7 PASS run 33963357393; Stage8 PASS run 33963357427.
+
+Newest exact qualification:
+- Stage7 run 33965687659 — IN PROGRESS at last inspection, exact SHA 62e0c5eae39f14c311ac77ac0999c0a5a251386b.
+- Stage8 run 33965687665 — IN PROGRESS at last inspection, exact SHA 62e0c5eae39f14c311ac77ac0999c0a5a251386b.
+
+Live heads re-read immediately before this handover mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- Stage6/7 substantive lane repair/final-stage7-production-parallel: 62e0c5eae39f14c311ac77ac0999c0a5a251386b
+- Stage8 repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- shell integration repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- Stage6 runtime helper repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- session-state/handover lane repair/final-1.0.0-session-state-updater: 7f0de33e47715d72cdef41a6e438e1f6ce49ee96 before this file.
+
+This run's production change:
+GoogleGenerationProductionIntentEvidenceResolver now re-reads persisted provider/account/capability evidence, verifies the live credential in ICredentialVault, verifies the admitted active IPricingCatalogHistoryStore snapshot and exact pricing SHA, and passes booleans derived from those just-read values into GoogleGenerationProductionCompileEvidence. It no longer consumes snapshot.AccountAuthorized, snapshot.CapabilityCurrent, snapshot.PricingCurrent, or snapshot.AccountCredentialAvailable as authorization truth.
+
+GoogleGenerationProductionAuthorizationSnapshotStateOwner now stops gating publication on those four compatibility assertions. They remain fields temporarily for caller compatibility, but they are explicitly not authoritative. ProjectAuthorized, AdmissionCurrent, PricingApproved, PostCompileLimitsSatisfied, request revision/pricing values, trust, queue states, and reconciliation resolution remain fail-closed pending genuine owners/revalidation.
+
+Mandatory gates:
+- Stage6 production composition: REPAIR
+- Stage7 prior exact qualification: PASS; newest exact qualification: IN PROGRESS
+- Stage8 prior exact qualification: PASS; newest exact qualification: IN PROGRESS
+- Full compiled Final tests: NOT RUN
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- Actual CloudScribe.exe acceptance: NOT RUN
+- Exact source no-mutation: NOT RUN
+- Freeze exact SHA: NOT RUN
+- Strict/full certification: NOT RUN
+- Exact same-SHA no-change certification: NOT RUN
+- Serial Final/main re-promotion: NOT RUN
+
+Next exact gate:
+1. Inspect Stage7 run 33965687659 and Stage8 run 33965687665. Repair the first exact compiler/analyzer/test failure if either fails.
+2. If green, implement genuine persisted Google project/model authorization ownership using the already-production-proven VoiceLab bounded authorization-store pattern, bind it to account revision + credential reference + capability evidence, and re-read it immediately before compile.
+3. Then close request revision/idempotency, pricing amount/currency/scale, trust, and persisted queue/reconciliation ownership without shell/UI fabricated evidence.
+4. Once one genuinely Stage6-complete SHA passes Stage7/8, begin serial Final gates only.
+
+Do not promote Final/main until every mandatory Final gate succeeds on one frozen exact SHA with no source mutation.
