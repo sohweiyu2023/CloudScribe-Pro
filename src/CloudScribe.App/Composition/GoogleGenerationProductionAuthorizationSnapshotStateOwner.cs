@@ -118,8 +118,7 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
                 || Capabilities is null
                 || AdmittedTrust is null
                 || PreviousState is null
-                || CurrentState is null
-                || ResolutionEvidence is null)
+                || CurrentState is null)
             {
                 throw new InvalidOperationException(
                     "Request-bound Google authorization snapshot is missing required production evidence.");
