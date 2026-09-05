@@ -1,4 +1,6 @@
+using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Security;
+using CloudScribe.Domain.Pricing;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
 
@@ -16,6 +18,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
     private readonly GoogleGenerationProductionEvidenceResolver _productionEvidenceResolver;
     private readonly GoogleGenerationProductionAccountFactory _accountFactory;
     private readonly ICredentialVault _credentialVault;
+    private readonly IPricingCatalogHistoryStore _pricingCatalogHistoryStore;
     private readonly TimeProvider _timeProvider;
 
     public GoogleGenerationProductionIntentEvidenceResolver(
@@ -23,6 +26,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         GoogleGenerationProductionEvidenceResolver productionEvidenceResolver,
         GoogleGenerationProductionAccountFactory accountFactory,
         ICredentialVault credentialVault,
+        IPricingCatalogHistoryStore pricingCatalogHistoryStore,
         TimeProvider timeProvider)
     {
         _authorizationOwner = authorizationOwner
@@ -31,6 +35,8 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             ?? throw new ArgumentNullException(nameof(productionEvidenceResolver));
         _accountFactory = accountFactory ?? throw new ArgumentNullException(nameof(accountFactory));
         _credentialVault = credentialVault ?? throw new ArgumentNullException(nameof(credentialVault));
+        _pricingCatalogHistoryStore = pricingCatalogHistoryStore
+            ?? throw new ArgumentNullException(nameof(pricingCatalogHistoryStore));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
@@ -58,6 +64,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             persisted.Validate(nowUtc);
             ValidatePersistedBinding(snapshot, persisted, nowUtc);
             await ValidateCredentialAvailableAsync(snapshot.Account, cancellationToken).ConfigureAwait(false);
+            await ValidatePricingCurrentAsync(snapshot.PricingProvenanceId, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
             return new GoogleGenerationProductionCompileEvidence
@@ -153,5 +160,29 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException(
                 "Current Google provider account credential is unavailable at request authorization time.");
+    }
+
+    private async ValueTask ValidatePricingCurrentAsync(
+        string pricingProvenanceId,
+        CancellationToken cancellationToken)
+    {
+        PricingCatalogSnapshot activePricing = await _pricingCatalogHistoryStore
+            .GetActiveSnapshotAsync(cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                "No active persisted pricing catalog is available at request authorization time.");
+
+        if (activePricing.TrustState is not (
+                PricingCatalogTrustState.ValidUnsigned or PricingCatalogTrustState.SignatureVerified))
+        {
+            throw new InvalidOperationException(
+                "The active persisted pricing catalog is not admitted production pricing evidence.");
+        }
+
+        if (!string.Equals(activePricing.Sha256, pricingProvenanceId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Active persisted pricing provenance changed after the request-bound authorization snapshot was captured.");
+        }
     }
 }
