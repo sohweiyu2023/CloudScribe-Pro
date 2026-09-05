@@ -103,7 +103,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             Account = snapshot.Account,
             Capabilities = snapshot.Capabilities,
             PricingProvenanceId = snapshot.PricingProvenanceId,
-            RequestRevision = snapshot.RequestRevision,
+            RequestRevision = intent.RequestRevision,
             ProjectId = intent.ProjectId,
             ModelId = intent.ModelId,
             IdempotencyKey = intent.IdempotencyKey,
@@ -135,7 +135,8 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         if (!string.Equals(intent.AccountId, snapshot.AccountId, StringComparison.Ordinal)
             || !string.Equals(intent.ProjectId, snapshot.ProjectId, StringComparison.Ordinal)
             || !string.Equals(intent.ModelId, snapshot.ModelId, StringComparison.Ordinal)
-            || !string.Equals(intent.IdempotencyKey, snapshot.IdempotencyKey, StringComparison.Ordinal))
+            || !string.Equals(intent.IdempotencyKey, snapshot.IdempotencyKey, StringComparison.Ordinal)
+            || intent.RequestRevision != snapshot.RequestRevision)
         {
             throw new InvalidOperationException(
                 "Request-bound Google production authorization snapshot does not match the claimed request intent.");
