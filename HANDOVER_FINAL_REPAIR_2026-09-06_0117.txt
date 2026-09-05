@@ -1,0 +1,49 @@
+CloudScribe Pro Final 1.0.0 repair handover
+Date: 2026-09-06 01:17 SGT
+Controlling baseline: v2.23
+
+STATUS: REPAIR
+Stage6: 99.9%
+Stage7: 99%
+Stage8: 99%
+
+Live main before mutation:
+14f85105f111d59e9693174153b5236bafe6f990
+
+Active Stage6/7 repair branch before mutation:
+repair/final-stage7-production-parallel
+b5142a89b2f5b389b29576ea84199787fb4c4b02
+
+Prior exact qualification on b5142a89b2f5b389b29576ea84199787fb4c4b02:
+Stage7 workflow 33974344372: PASS
+Stage8 paired exact-SHA qualification: PASS
+
+Substantive source change landed this run:
+5b8f6354ad849be42e8adbdaa3d3923a0c0d1aff
+fix(stage6): bind capability freshness to persisted evidence
+
+Change summary:
+GoogleGenerationProductionIntentEvidenceResolver now rejects request-bound Google capability evidence unless its observed timestamp and expiry timestamp exactly match the currently persisted StoredProviderCapabilitySnapshot, in addition to the existing exact account-id and provenance-id binding. This closes a fail-open seam where caller-carried GoogleCapabilitySnapshot freshness metadata could differ while sharing persisted identity/provenance.
+
+No fabricated project/model authorization, trust, reconciliation, queue evidence, ambient credentials/endpoints, raw provider submit, or sync-over-async was introduced.
+
+Remaining Stage6 mandatory production authority surface:
+- genuine current Google project/model authorization
+- authoritative pricing amount/currency/scale derivation
+- admitted generation trust
+- persisted queue-transition evidence
+- genuine reconciliation-resolution evidence
+
+Final serial gates remain NOT RUN until Stage6-8 production composition genuinely passes:
+- full compiled tests
+- Final source acceptance
+- Windows publish/version exact 1.0.0
+- actual CloudScribe.exe acceptance
+- exact source no-mutation
+- freeze exact SHA
+- strict/full certification
+- exact same-SHA no-change certification
+- serial Final/main re-promotion
+
+Next exact gate:
+Inspect both exact qualification workflows for 5b8f6354ad849be42e8adbdaa3d3923a0c0d1aff. Repair the first exact compiler/analyzer/test failure if one occurs. If both pass, continue directly with the next genuine authoritative Stage6 evidence owner; do not fabricate Google project/model authorization merely to close the field.
