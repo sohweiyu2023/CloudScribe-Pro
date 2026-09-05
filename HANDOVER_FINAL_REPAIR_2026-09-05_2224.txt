@@ -1,0 +1,65 @@
+CloudScribe Pro Final 1.0.0 repair handover — 2026-09-05 22:24 SGT
+
+STATUS: REPAIR
+Controlling baseline: v2.23
+Final 1.0.0 remains reopened.
+
+Live heads immediately before this handover mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- Stage6/7 production repair: 312aca49a7a8fe4d080eea09266cf8c980448592
+- Stage8 production repair: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- shell integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- Stage6 runtime helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- prior handover/session head: 0a42cdebf1bccb65d1d97464e3fd80058af574ff
+
+This run landed substantive Stage6 request/revision authority work:
+1. 6655d1fb163a1fe5a9200b9205aad4581e83da24 — fix(stage6): bind request revision to request intent
+   - GoogleGenerationProductionRequestIntent now owns required RequestRevision.
+   - Negative revisions fail closed.
+   - Revision is explicitly classified as request identity, not authorization evidence.
+2. 312aca49a7a8fe4d080eea09266cf8c980448592 — fix(stage6): revalidate request revision binding
+   - compile evidence takes RequestRevision from the claimed immutable request intent, not the authorization snapshot.
+   - request intent and authorization capture must carry the exact same revision or resolution fails closed.
+
+Prior exact SHA 22f029dc56f10dcc29077ef1bb718ac86dec16d3 was PASS on both Stage7 run 33968414192 and Stage8 run 33968414194.
+
+Newest exact-SHA CI at handover creation:
+- Stage7 run 33971675461 on 312aca49a7a8fe4d080eea09266cf8c980448592: IN PROGRESS
+- Stage8 run 33971675486 on 312aca49a7a8fe4d080eea09266cf8c980448592: IN PROGRESS
+Do not promote PASS from the prior SHA to this SHA until both complete successfully.
+
+Stage percentages:
+- Stage6: 99.85% REPAIR
+- Stage7: 99% (prior exact source PASS; newest exact qualification IN PROGRESS)
+- Stage8: 99% (prior exact source PASS; newest exact qualification IN PROGRESS)
+
+Remaining Stage6 mandatory authority surface after this run:
+- genuine current project/model authorization
+- exact pricing estimate/currency/scale from authoritative pricing/calculation ownership
+- admitted generation trust
+- persisted queue transition evidence
+- genuine reconciliation resolution evidence
+Request revision/idempotency are now request-bound identity: idempotency was already emitted from intent, and revision is now emitted from intent with exact snapshot binding.
+
+Important discovered production pattern:
+- Stage7 has IVoiceLabProjectAuthorizationStore / VoiceLabProjectAuthorizationStore with positive-only persisted authorization, account revision, credential reference, capability evidence, bounded UTC capture/expiry.
+- Do not merely create a Google copy unless there is a genuine verified producer/writer for Google project/model authorization; a store with fabricated data is not acceptable.
+
+Final gate state:
+- Stage6 production composition: REPAIR
+- Stage7 production qualification: prior exact SHA PASS; newest exact SHA IN PROGRESS
+- Stage8 production qualification: prior exact SHA PASS; newest exact SHA IN PROGRESS
+- full compiled Final tests: NOT RUN
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- actual CloudScribe.exe acceptance: NOT RUN
+- exact source no-mutation: NOT RUN
+- freeze exact SHA: NOT RUN
+- strict/full certification: NOT RUN
+- exact same-SHA no-change certification: NOT RUN
+- Final/main serial re-promotion: NOT RUN
+
+Next exact gate:
+1. Inspect 33971675461 and 33971675486. If either fails, fix the first exact compiler/analyzer/test diagnostic on the source branch after re-reading live main and all active repair heads.
+2. If both pass, continue directly with genuine Google project/model authorization ownership or the next real authoritative evidence owner; do not fabricate evidence or spend the run on optional hardening.
+3. Once Stage6 production composition is genuinely complete on one exact SHA, requalify Stage7/8 on that same SHA and then begin the serial Final gate chain only.
