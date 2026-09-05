@@ -1,0 +1,32 @@
+CloudScribe Pro Final 1.0.0 repair handover
+Timestamp: 2026-09-05 14:19 SGT
+
+Controlling baseline: v2.23
+Final 1.0.0 remains reopened.
+
+Live heads reread this run:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- Stage6/7 substantive lane before mutation: c0aa136c6b753b68abd75b623610547d3d4a889d
+- Stage8 lane: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- session-state lane before this handover: 5b31bc497c4ffeb3c3ac68facd86cf293068e1ec
+
+Prior exact qualification:
+- Stage7 run 33946791002 on c0aa136c6b753b68abd75b623610547d3d4a889d: PASS
+- Stage8 run 33946791032 on c0aa136c6b753b68abd75b623610547d3d4a889d: PASS
+
+Substantive source landed this run:
+- 9134eb9d974d66eb4ece697ba0af5a2b7be3943a
+- feat(stage6): atomically publish request-bound authorization capture
+
+Change details:
+GoogleGenerationProductionRequestIntentStateOwner now exposes an internal PublishCoherentCapture path that validates the narrow request intent and internal production authorization snapshot, rejects account/project/model/idempotency mismatches and snapshots predating the intent, computes the next intent version before mutation, then publishes the authorization snapshot while holding the same intent gate used by ClaimCurrent. This makes a new intent observable to AssembleCurrentAsync only after its matching authorization snapshot is present, eliminating the interleaving window between separate snapshot and intent publication. It preserves fail-closed behavior and does not allow shell/request callers to publish GoogleGenerationProductionCompileEvidence.
+
+Newest exact CI on 9134eb9d974d66eb4ece697ba0af5a2b7be3943a:
+- Stage7: triggered automatically; inspect first exact failure if any.
+- Stage8 run 33949481359: IN PROGRESS at final inspection.
+
+Remaining Stage6 blocker:
+The capture method now provides an atomic publication boundary, but a genuine producer still must source project/model authorization, request revision/idempotency, current pricing provenance/estimate/currentness/currency/scale, admitted trust, persisted queue transition, reconciliation resolution, and credential/capability facts from authoritative production ownership. Do not call PublishCoherentCapture from shell/UI with fabricated booleans or a caller-assembled full evidence object.
+
+Mandatory gates after Stage6 production composition closes:
+full compiled tests -> Final source acceptance -> Windows publish/version exact 1.0.0 -> run actual CloudScribe.exe -> exact source no-mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final/main promotion.
