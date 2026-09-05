@@ -137,6 +137,7 @@ public sealed class FinalReleaseIntegrationContractTests
     {
         string[] requiredProductionComposition =
         [
+            "AddSingleton<GoogleGenerationProductionIntentAssemblyCoordinator>();",
             "AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();",
             "AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();",
             "AddSingleton<GoogleGenerationProductionCompileAndPrepareService>();",
@@ -146,6 +147,9 @@ public sealed class FinalReleaseIntegrationContractTests
             "GetRequiredService<GoogleGenerationProductionSubmissionStateOwner>().ResolveCurrentAsync",
             "GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(",
             "GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync",
+            "GetRequiredService<GoogleGenerationProductionIntentAssemblyCoordinator>();",
+            "await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken)",
+            "await preparationCoordinator.PrepareCurrentAsync(cancellationToken)",
             "ConfigureStage6GoogleGenerationSpendApproval",
             "approvalService.ApproveExplicitAsync(",
             "GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);",
@@ -159,6 +163,15 @@ public sealed class FinalReleaseIntegrationContractTests
             Assert.True(composition.Contains(required, StringComparison.Ordinal),
                 $"Production composition is missing required Final wiring: {required}");
         }
+
+        int intentAssembly = composition.IndexOf(
+            "await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken)",
+            StringComparison.Ordinal);
+        int preparation = composition.IndexOf(
+            "await preparationCoordinator.PrepareCurrentAsync(cancellationToken)",
+            StringComparison.Ordinal);
+        Assert.True(intentAssembly >= 0 && preparation > intentAssembly,
+            "Final Stage6 preparation must assemble authoritative request intent before deterministic compile preparation.");
     }
 
     private static string ReadRepositoryFile(string repositoryRoot, params string[] pathParts) =>
