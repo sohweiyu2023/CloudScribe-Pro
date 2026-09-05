@@ -1,0 +1,46 @@
+CloudScribe Pro Final 1.0.0 Repair Handover — 2026-09-06 06:17 SGT
+
+STATUS: REPAIR
+Controlling baseline: v2.23
+
+Live heads re-read before mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage7-production-parallel before mutation: 63275a234acfbf8ab9afb8cd4be813be9b34d2ae
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- repair/final-1.0.0-session-state-updater before handover: 929b643202a655cf8bd81e0630340c3ece1ef1a2
+
+Landed source change:
+- 2eca3b4f427fb22e79bf1529d407da63b6607051 — fix(stage6): revalidate capability freshness before compile
+- File: src/CloudScribe.App/Composition/GoogleGenerationProductionCompileAndPrepareService.cs
+- Change: the immediate precompile persisted capability re-read now requires exact equality not only for account id and provenance id, but also persisted CapturedAtUtc == request-bound ObservedAtUtc and persisted ExpiresAtUtc == request-bound ExpiresAtUtc. This closes a capability freshness TOCTOU gap at the compile/spend-approval boundary without fabricating authorization.
+
+CI:
+- No workflow runs were yet visible for exact SHA 2eca3b4f427fb22e79bf1529d407da63b6607051 at the first immediate post-push poll. Treat Stage7/Stage8 exact qualification for this SHA as NOT RUN/NOT OBSERVED until an exact run appears; do not carry prior SHA results forward.
+
+Stage estimates:
+- Stage6: 99.94% — REPAIR
+- Stage7: 99% — production lane remains active; exact qualification for newest SHA not yet observed
+- Stage8: 99% — independent production head remains f1d4e161acedd0ccb17c73de9b724e545f0ff038; exact qualification for newest shared SHA not yet observed
+
+Remaining Stage6 mandatory authority gaps:
+- genuine current Google project/model authorization
+- authoritative request-specific pricing calculation/approval provenance upstream of durable spend authorization
+- persisted queue-transition evidence
+- genuine reconciliation-resolution evidence
+
+Final serial gates remain NOT RUN:
+- full compiled tests
+- Final source acceptance
+- Windows publish/version exact 1.0.0
+- actual CloudScribe.exe acceptance
+- exact source no-mutation
+- freeze exact SHA
+- strict/full certification
+- exact same-SHA no-change certification
+- Final/main serial re-promotion
+
+Next exact gate:
+1. Re-read live main and all active repair heads.
+2. Inspect GitHub Actions for exact SHA 2eca3b4f427fb22e79bf1529d407da63b6607051; repair the first exact compiler/analyzer/test failure if present.
+3. While CI runs or if no exact run is yet visible, continue implementation-first on the shortest genuine Stage6 authority seam, preferring project/model authorization or persisted queue/reconciliation ownership backed by real production state.
+4. Never fabricate project authorization, trust, queue, reconciliation, pricing, credentials, endpoints, or recovery state.
