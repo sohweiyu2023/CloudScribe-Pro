@@ -63,8 +63,20 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
             persisted.Validate(nowUtc);
             ValidatePersistedBinding(snapshot, persisted, nowUtc);
-            await ValidateCredentialAvailableAsync(snapshot.Account, cancellationToken).ConfigureAwait(false);
-            await ValidatePricingCurrentAsync(snapshot.PricingProvenanceId, cancellationToken).ConfigureAwait(false);
+            bool accountAuthorized = persisted.Account.IsEnabled;
+            bool capabilityCurrent = !persisted.Capability.IsStale(nowUtc);
+            bool accountCredentialAvailable = await ValidateCredentialAvailableAsync(
+                    snapshot.Account,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            PricingCatalogSnapshot activePricing = await ValidatePricingCurrentAsync(
+                    snapshot.PricingProvenanceId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            bool pricingCurrent = string.Equals(
+                activePricing.Sha256,
+                snapshot.PricingProvenanceId,
+                StringComparison.Ordinal);
             cancellationToken.ThrowIfCancellationRequested();
 
             return new GoogleGenerationProductionCompileEvidence
@@ -82,12 +94,12 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
                 PreviousState = snapshot.PreviousState,
                 CurrentState = snapshot.CurrentState,
                 ResolutionEvidence = snapshot.ResolutionEvidence,
-                AccountAuthorized = snapshot.AccountAuthorized,
+                AccountAuthorized = accountAuthorized,
                 ProjectAuthorized = snapshot.ProjectAuthorized,
-                CapabilityCurrent = snapshot.CapabilityCurrent,
-                PricingCurrent = snapshot.PricingCurrent,
+                CapabilityCurrent = capabilityCurrent,
+                PricingCurrent = pricingCurrent,
                 AdmissionCurrent = snapshot.AdmissionCurrent,
-                AccountCredentialAvailable = snapshot.AccountCredentialAvailable,
+                AccountCredentialAvailable = accountCredentialAvailable,
                 PricingApproved = snapshot.PricingApproved,
                 PostCompileLimitsSatisfied = snapshot.PostCompileLimitsSatisfied,
                 Currency = snapshot.Currency,
@@ -150,19 +162,23 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         }
     }
 
-    private async ValueTask ValidateCredentialAvailableAsync(
+    private async ValueTask<bool> ValidateCredentialAvailableAsync(
         GoogleGenerationAccount account,
         CancellationToken cancellationToken)
     {
         CredentialReference reference = new(account.CredentialReferenceId);
-        using CredentialSecret credential = await _credentialVault
+        CredentialSecret credential = await _credentialVault
             .ReadAsync(reference, cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException(
                 "Current Google provider account credential is unavailable at request authorization time.");
+        using (credential)
+        {
+            return credential is not null;
+        }
     }
 
-    private async ValueTask ValidatePricingCurrentAsync(
+    private async ValueTask<PricingCatalogSnapshot> ValidatePricingCurrentAsync(
         string pricingProvenanceId,
         CancellationToken cancellationToken)
     {
@@ -184,5 +200,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             throw new InvalidOperationException(
                 "Active persisted pricing provenance changed after the request-bound authorization snapshot was captured.");
         }
+
+        return activePricing;
     }
 }
