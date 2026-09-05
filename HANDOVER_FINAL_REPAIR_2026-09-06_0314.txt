@@ -1,0 +1,48 @@
+STATUS: REPAIR — Stage6 99.9% · Stage7 99% · Stage8 99%
+
+Controlling baseline: v2.23.
+Final 1.0.0 remains reopened.
+
+Fresh live topology before mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage7-production-parallel pre-mutation: 2b34ebaee3fd0725ba553a6fa70ffaa4f4f393b1
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+
+Prior exact qualification for 2b34ebaee3fd0725ba553a6fa70ffaa4f4f393b1:
+- Stage7 run 33983608317: PASS
+- Stage8 run 33983608333: PASS
+
+Substantive Stage6 change landed:
+- 67baeabceb02081be2aba08009b692334909a6c1 — fix(stage6): bind authorization account evidence
+- GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot.Validate now validates the embedded GoogleGenerationAccount and rejects publication unless AccountId matches both Account.AccountId and Capabilities.AccountId.
+- This closes a request-bound identity divergence seam before compile/runtime resolution; it does not fabricate project authorization, trust, pricing, queue, or reconciliation evidence.
+
+Newest exact qualification:
+- Stage7 run 33986589958: IN PROGRESS at handover capture
+- Stage8 exact run for 67baeab...: triggered; inspect current exact status before next mutation.
+
+Remaining Stage6 critical authority surface:
+- genuine current Google project/model authorization
+- authoritative exact pricing amount/currency/scale derivation
+- admitted generation trust
+- persisted queue-transition evidence
+- genuine reconciliation-resolution evidence
+
+Final gates:
+- Stage6 production composition: REPAIR
+- Stage7 newest exact qualification: IN PROGRESS
+- Stage8 newest exact qualification: IN PROGRESS/triggered
+- full compiled Final tests: NOT RUN
+- Final source acceptance: NOT RUN
+- Windows publish/version exact 1.0.0: NOT RUN
+- actual CloudScribe.exe acceptance: NOT RUN
+- exact source no-mutation: NOT RUN
+- freeze exact SHA: NOT RUN
+- strict/full certification: NOT RUN
+- exact same-SHA no-change certification: NOT RUN
+- Final/main serial re-promotion: NOT RUN
+
+Next exact gate:
+Inspect Stage7/8 exact runs for 67baeabceb02081be2aba08009b692334909a6c1 and repair the first exact compiler/analyzer/test failure if any. If both pass, continue with a genuine authoritative Stage6 project/model authorization or persisted queue/reconciliation owner; do not add ambient or fabricated evidence.
