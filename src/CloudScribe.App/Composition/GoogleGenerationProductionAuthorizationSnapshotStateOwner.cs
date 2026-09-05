@@ -81,6 +81,9 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
 
         public required GoogleGenerationReconciliationResolutionEvidence ResolutionEvidence { get; init; }
 
+        // Compatibility fields remain on the request-bound snapshot while production composition
+        // is migrated. ResolveAsync no longer trusts these four assertions; it derives them from
+        // the persisted account/capability state, live credential vault, and active pricing store.
         public required bool AccountAuthorized { get; init; }
 
         public required bool ProjectAuthorized { get; init; }
@@ -130,12 +133,12 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
                     "Request-bound Google authorization snapshot is missing reconciliation resolution evidence.");
             }
 
-            if (!AccountAuthorized
-                || !ProjectAuthorized
-                || !CapabilityCurrent
-                || !PricingCurrent
+            // Account authorization, capability freshness, pricing currentness, and credential
+            // availability are re-established from authoritative live production state by the
+            // intent resolver immediately before compile evidence is emitted. Do not gate this
+            // snapshot on caller-carried copies of those assertions.
+            if (!ProjectAuthorized
                 || !AdmissionCurrent
-                || !AccountCredentialAvailable
                 || !PricingApproved
                 || !PostCompileLimitsSatisfied)
             {
