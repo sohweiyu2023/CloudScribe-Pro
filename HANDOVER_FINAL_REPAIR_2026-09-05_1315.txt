@@ -1,0 +1,53 @@
+CloudScribe Pro Final 1.0.0 repair handover
+Controlling baseline: v2.23
+Status: REPAIR
+
+STAGE STATUS
+Stage6: 99.3% — production composition still incomplete at the authoritative request-bound capture producer.
+Stage7: 99% — production composition previously qualified; newest exact source qualification is currently IN PROGRESS.
+Stage8: 99% — production composition previously qualified; newest exact source qualification is currently IN PROGRESS.
+
+LIVE HEADS RE-READ BEFORE THIS HANDOVER MUTATION
+main: 14f85105f111d59e9693174153b5236bafe6f990
+repair/final-1.0.0-session-state-updater: d5ca2b96523b8482142b66f7b4fe7c3a408a0f41 (parent of this handover commit)
+repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+repair/final-stage7-production-parallel: c0aa136c6b753b68abd75b623610547d3d4a889d
+repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+THIS RUN — EXACT SOURCE REPAIR
+Prior source 98cd227d71994faf4169d834407fb88c6816f0ff failed both Stage7 and Stage8 strict validation.
+Exact first compiler failure from Stage7 job 101247189173: CS0037, caused by checking `ResolutionEvidence is null` even though GoogleGenerationReconciliationResolutionEvidence is a non-nullable value type.
+Landed source repair:
+  c0aa136c6b753b68abd75b623610547d3d4a889d
+  fix(stage6): validate reconciliation evidence as value type
+The repair removes only the invalid null comparison. All other fail-closed authorization/currentness/credential/pricing/limit validation remains intact.
+
+EXACT NEWEST CI
+Stage7 run 33946791002 — IN PROGRESS on exact SHA c0aa136c6b753b68abd75b623610547d3d4a889d.
+Stage8 run 33946791032 — IN PROGRESS on exact SHA c0aa136c6b753b68abd75b623610547d3d4a889d.
+Do not claim newest exact qualification PASS until these finish successfully.
+
+STAGE6 ARCHITECTURE / REMAINING CRITICAL PATH
+GoogleGenerationProductionIntentEvidenceResolver already claims one request-bound authorization snapshot, binds it to the exact request intent, rereads persisted account/capability evidence, and restores on failure. The remaining production gap is still upstream: a genuine atomic capture transaction must create/publish the narrow GoogleGenerationProductionRequestIntent plus matching authoritative authorization facts from real project/model authorization, revision/idempotency, current pricing provenance/estimate/currentness/currency/scale, admitted trust, persisted queue transition, reconciliation resolution, and credential/capability evidence. Do not accept a caller-built full authorization snapshot and do not aggregate unrelated UI/latest state.
+
+NEXT EXACT GATE
+1. Inspect Stage7 33946791002 and Stage8 33946791032. If either fails, repair the first exact compiler/analyzer/test diagnostic before any other source work.
+2. If both pass, continue the genuine request-bound authoritative capture producer and connect it to the existing intent assembly -> preparation -> deterministic compile -> explicit spend authorization -> preserved authorized executor/coordinator chain.
+3. Once one exact Stage6-complete SHA passes Stage7/8, enter SERIAL Final gates only: full compiled tests -> Final source acceptance -> Windows exact 1.0.0 publish/version -> run actual CloudScribe.exe -> exact source no-mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial re-promotion of Final 1.0.0/main.
+
+FINAL GATES
+Stage6 production composition: REPAIR
+Stage7 newest exact qualification: IN PROGRESS
+Stage8 newest exact qualification: IN PROGRESS
+Full compiled Final tests: NOT RUN
+Final source acceptance: NOT RUN
+Windows exact 1.0.0 publish/version: NOT RUN
+Actual CloudScribe.exe acceptance: NOT RUN
+Exact source no-mutation: NOT RUN
+SHA freeze: NOT RUN
+Strict/full certification: NOT RUN
+Exact same-SHA no-change certification: NOT RUN
+Final/main re-promotion: NOT RUN
+
+Keep continuation enabled. Final 1.0.0 remains reopened and is not certified.
