@@ -9,6 +9,7 @@ public sealed class FinalReleaseIntegrationContractTests
         string shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.cs");
         string stage6Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage6GoogleGeneration.cs");
         string stage6Compile = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "GoogleGenerationProductionCompileAndPrepareService.cs");
+        string stage6IntentOwner = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "GoogleGenerationProductionRequestIntentStateOwner.cs");
         string stage7Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage7VoiceLab.cs");
         string stage8Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage8RestoreRecovery.cs");
         string finalPresentation = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.FinalReleasePresentation.cs");
@@ -16,6 +17,7 @@ public sealed class FinalReleaseIntegrationContractTests
 
         AssertNoStaleShellCopy(shell);
         AssertLiveStage6Boundary(stage6Shell, stage6Compile);
+        AssertAtomicStage6Capture(stage6IntentOwner, composition);
         AssertLiveStage7And8Boundaries(stage7Shell, stage8Shell);
         AssertFinalPresentation(finalPresentation);
         AssertProductionComposition(composition);
@@ -72,6 +74,37 @@ public sealed class FinalReleaseIntegrationContractTests
             Assert.True(stage6Compile.Contains(required, StringComparison.Ordinal),
                 $"Final Stage6 must refresh persisted evidence and compile the exact provider payload before spend approval: {required}");
         }
+    }
+
+    private static void AssertAtomicStage6Capture(string stage6IntentOwner, string composition)
+    {
+        string[] requiredAtomicCapture =
+        [
+            "PublishCoherentCapture(",
+            "authorizationOwner.Publish(authorizationSnapshot);",
+            "_current = intent;",
+            "ValidateCaptureBinding(intent, authorizationSnapshot);",
+            "authorizationSnapshot.CapturedAtUtc < intent.CapturedAtUtc",
+        ];
+
+        foreach (string required in requiredAtomicCapture)
+        {
+            Assert.True(stage6IntentOwner.Contains(required, StringComparison.Ordinal),
+                $"Final Stage6 request intent and authorization must remain coherently bound and fail closed: {required}");
+        }
+
+        int publishAuthorization = stage6IntentOwner.IndexOf(
+            "authorizationOwner.Publish(authorizationSnapshot);",
+            StringComparison.Ordinal);
+        int publishIntent = stage6IntentOwner.IndexOf(
+            "_current = intent;",
+            publishAuthorization,
+            StringComparison.Ordinal);
+        Assert.True(publishAuthorization >= 0 && publishIntent > publishAuthorization,
+            "Final Stage6 must publish matching authorization before exposing the new request intent.");
+
+        Assert.False(composition.Contains(".Publish(new GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot", StringComparison.Ordinal),
+            "Production composition must not fabricate a caller-built Google generation authorization snapshot.");
     }
 
     private static void AssertLiveStage7And8Boundaries(string stage7Shell, string stage8Shell)
