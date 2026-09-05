@@ -73,6 +73,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             .ResolveAsync(intent.AccountId, cancellationToken)
             .ConfigureAwait(false);
         DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
+        ValidateCaptureTime(snapshot, nowUtc);
         persisted.Validate(nowUtc);
         ValidatePersistedBinding(snapshot, persisted, nowUtc);
 
@@ -146,6 +147,17 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         {
             throw new InvalidOperationException(
                 "Request-bound Google production authorization snapshot predates the claimed request intent.");
+        }
+    }
+
+    private static void ValidateCaptureTime(
+        GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot,
+        DateTimeOffset nowUtc)
+    {
+        if (snapshot.CapturedAtUtc > nowUtc)
+        {
+            throw new InvalidOperationException(
+                "Request-bound Google production authorization snapshot was captured in the future.");
         }
     }
 
