@@ -53,60 +53,8 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
 
         try
         {
-            GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot =
-                claimed.Snapshot;
-            ValidateIntentBinding(intent, snapshot);
-
-            GoogleGenerationProductionEvidence persisted = await _productionEvidenceResolver
-                .ResolveAsync(intent.AccountId, cancellationToken)
+            return await ResolveClaimedAsync(intent, claimed.Snapshot, cancellationToken)
                 .ConfigureAwait(false);
-            DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
-            persisted.Validate(nowUtc);
-            ValidatePersistedBinding(snapshot, persisted, nowUtc);
-            bool accountAuthorized = persisted.Account.IsEnabled;
-            bool capabilityCurrent = !persisted.Capability.IsStale(nowUtc);
-            bool accountCredentialAvailable = await ValidateCredentialAvailableAsync(
-                    snapshot.Account,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            PricingCatalogSnapshot activePricing = await ValidatePricingCurrentAsync(
-                    snapshot.PricingProvenanceId,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            bool pricingCurrent = string.Equals(
-                activePricing.Sha256,
-                snapshot.PricingProvenanceId,
-                StringComparison.Ordinal);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            return new GoogleGenerationProductionCompileEvidence
-            {
-                Plan = intent.Plan,
-                CompilationOptions = intent.CompilationOptions,
-                Account = snapshot.Account,
-                Capabilities = snapshot.Capabilities,
-                PricingProvenanceId = snapshot.PricingProvenanceId,
-                RequestRevision = snapshot.RequestRevision,
-                ProjectId = intent.ProjectId,
-                ModelId = intent.ModelId,
-                IdempotencyKey = intent.IdempotencyKey,
-                AdmittedTrust = snapshot.AdmittedTrust,
-                PreviousState = snapshot.PreviousState,
-                CurrentState = snapshot.CurrentState,
-                ResolutionEvidence = snapshot.ResolutionEvidence,
-                AccountAuthorized = accountAuthorized,
-                ProjectAuthorized = snapshot.ProjectAuthorized,
-                CapabilityCurrent = capabilityCurrent,
-                PricingCurrent = pricingCurrent,
-                AdmissionCurrent = snapshot.AdmissionCurrent,
-                AccountCredentialAvailable = accountCredentialAvailable,
-                PricingApproved = snapshot.PricingApproved,
-                PostCompileLimitsSatisfied = snapshot.PostCompileLimitsSatisfied,
-                Currency = snapshot.Currency,
-                Scale = snapshot.Scale,
-                CurrentEstimateMinorUnits = snapshot.CurrentEstimateMinorUnits,
-                NowUtc = nowUtc,
-            };
         }
         catch
         {
@@ -114,6 +62,71 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             throw;
         }
     }
+
+    private async Task<GoogleGenerationProductionCompileEvidence> ResolveClaimedAsync(
+        GoogleGenerationProductionRequestIntent intent,
+        GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        ValidateIntentBinding(intent, snapshot);
+        GoogleGenerationProductionEvidence persisted = await _productionEvidenceResolver
+            .ResolveAsync(intent.AccountId, cancellationToken)
+            .ConfigureAwait(false);
+        DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
+        persisted.Validate(nowUtc);
+        ValidatePersistedBinding(snapshot, persisted, nowUtc);
+
+        bool accountCredentialAvailable = await ValidateCredentialAvailableAsync(
+                snapshot.Account,
+                cancellationToken)
+            .ConfigureAwait(false);
+        PricingCatalogSnapshot activePricing = await ValidatePricingCurrentAsync(
+                snapshot.PricingProvenanceId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return BuildCompileEvidence(intent, snapshot, persisted, activePricing, accountCredentialAvailable, nowUtc);
+    }
+
+    private static GoogleGenerationProductionCompileEvidence BuildCompileEvidence(
+        GoogleGenerationProductionRequestIntent intent,
+        GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot,
+        GoogleGenerationProductionEvidence persisted,
+        PricingCatalogSnapshot activePricing,
+        bool accountCredentialAvailable,
+        DateTimeOffset nowUtc) =>
+        new()
+        {
+            Plan = intent.Plan,
+            CompilationOptions = intent.CompilationOptions,
+            Account = snapshot.Account,
+            Capabilities = snapshot.Capabilities,
+            PricingProvenanceId = snapshot.PricingProvenanceId,
+            RequestRevision = snapshot.RequestRevision,
+            ProjectId = intent.ProjectId,
+            ModelId = intent.ModelId,
+            IdempotencyKey = intent.IdempotencyKey,
+            AdmittedTrust = snapshot.AdmittedTrust,
+            PreviousState = snapshot.PreviousState,
+            CurrentState = snapshot.CurrentState,
+            ResolutionEvidence = snapshot.ResolutionEvidence,
+            AccountAuthorized = persisted.Account.IsEnabled,
+            ProjectAuthorized = snapshot.ProjectAuthorized,
+            CapabilityCurrent = !persisted.Capability.IsStale(nowUtc),
+            PricingCurrent = string.Equals(
+                activePricing.Sha256,
+                snapshot.PricingProvenanceId,
+                StringComparison.Ordinal),
+            AdmissionCurrent = snapshot.AdmissionCurrent,
+            AccountCredentialAvailable = accountCredentialAvailable,
+            PricingApproved = snapshot.PricingApproved,
+            PostCompileLimitsSatisfied = snapshot.PostCompileLimitsSatisfied,
+            Currency = snapshot.Currency,
+            Scale = snapshot.Scale,
+            CurrentEstimateMinorUnits = snapshot.CurrentEstimateMinorUnits,
+            NowUtc = nowUtc,
+        };
 
     private static void ValidateIntentBinding(
         GoogleGenerationProductionRequestIntent intent,
