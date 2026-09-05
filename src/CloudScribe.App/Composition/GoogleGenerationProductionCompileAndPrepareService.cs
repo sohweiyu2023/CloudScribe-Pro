@@ -89,7 +89,9 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
         }
 
         if (!string.Equals(persistedCapability.Account.AccountId, evidence.Capabilities.AccountId, StringComparison.Ordinal)
-            || !string.Equals(persistedCapability.ProvenanceId, evidence.Capabilities.ProvenanceId, StringComparison.Ordinal))
+            || !string.Equals(persistedCapability.ProvenanceId, evidence.Capabilities.ProvenanceId, StringComparison.Ordinal)
+            || persistedCapability.CapturedAtUtc != evidence.Capabilities.ObservedAtUtc
+            || currentEvidence.Capability.ExpiresAtUtc != evidence.Capabilities.ExpiresAtUtc)
         {
             throw new InvalidOperationException(
                 "Current persisted Google capability evidence changed before compilation; refresh the generation request before approval.");
