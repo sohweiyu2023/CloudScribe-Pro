@@ -255,6 +255,8 @@ public sealed class Stage3MigrationTests
                 Stage6GoogleGenerationSpendAuthorization.MigrationId,
                 Stage7VoiceLabProjectAuthorization.MigrationId,
                 Stage7VoiceLabAuditionAuthorization.MigrationId,
+                Stage6GoogleGenerationQueueState.MigrationId,
+                Stage6GoogleGenerationProjectAuthorization.MigrationId,
             ],
             migrations);
     }
