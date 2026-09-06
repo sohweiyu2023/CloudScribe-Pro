@@ -51,12 +51,10 @@ public static class GoogleGenerationProductionUiSnapshotValidator
 
         ValidateQueueState(snapshot.PreviousState, snapshot.ProviderRequest);
         ValidateQueueState(snapshot.CurrentState, snapshot.ProviderRequest);
-
-        if (snapshot.PreviousState.UnresolvedSubmission &&
-            snapshot.ResolutionEvidence == Application.Generation.GoogleGenerationReconciliationResolutionEvidence.None)
-        {
-            throw new InvalidOperationException("An unresolved persisted Google submission requires genuine reconciliation evidence before retry.");
-        }
+        Application.Generation.GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(
+            snapshot.PreviousState,
+            snapshot.CurrentState,
+            snapshot.ResolutionEvidence);
 
         if (!snapshot.AccountAuthorized || !snapshot.ProjectAuthorized || !snapshot.CapabilityCurrent ||
             !snapshot.PricingCurrent || !snapshot.AdmissionCurrent || !snapshot.AccountCredentialAvailable ||
