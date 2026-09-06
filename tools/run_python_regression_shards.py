@@ -162,6 +162,7 @@ def build_checks(root: Path) -> list[Check]:
         (current_stage == 2 and version.startswith("0.3.48-"))
         or (current_stage == 3 and version.startswith("0.4.0-stage3"))
         or (current_stage == 4 and version.startswith("0.5.0-stage4"))
+        or (current_stage == 8 and version == "1.0.0")
     )
     promotion_state_ok = (
         current_stage == 2
@@ -169,7 +170,7 @@ def build_checks(root: Path) -> list[Check]:
         and state.get("stage2_manual_visual_acceptance") is False
         and state.get("stage2_user_clicked_editor_retest") is False
     ) or (
-        current_stage in (3, 4)
+        current_stage in (3, 4, 8)
         and state.get("stage2_promotion_blocked") is False
         and state.get("stage2_promoted") is True
         and state.get("stage2_manual_visual_acceptance") is True
@@ -177,7 +178,7 @@ def build_checks(root: Path) -> list[Check]:
     )
     session_specs = (
         (state.get("project") == "CloudScribe Pro", "project identity"),
-        (current_stage in (2, 3, 4), "current stage"),
+        (current_stage in (2, 3, 4, 8), "current stage"),
         (stage_lineage_ok, "repository version"),
         (state.get("required_dotnet_sdk") == "10.0.400", "required SDK"),
         (global_json.get("sdk", {}).get("version") == state.get("required_dotnet_sdk"), "global/session SDK consistency"),
