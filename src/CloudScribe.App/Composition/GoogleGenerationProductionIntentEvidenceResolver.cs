@@ -84,7 +84,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         ValidatePersistedBinding(snapshot, persisted, nowUtc);
 
         GoogleGenerationProjectAuthorizationEvidence projectAuthorization =
-            await LoadProjectAuthorizationAsync(intent, snapshot, nowUtc, cancellationToken).ConfigureAwait(false);
+            await LoadProjectAuthorizationAsync(intent, persisted, nowUtc, cancellationToken).ConfigureAwait(false);
         bool accountCredentialAvailable = await ValidateCredentialAvailableAsync(
                 snapshot.Account,
                 cancellationToken)
@@ -149,7 +149,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
 
     private async Task<GoogleGenerationProjectAuthorizationEvidence> LoadProjectAuthorizationAsync(
         GoogleGenerationProductionRequestIntent intent,
-        GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot,
+        GoogleGenerationProductionEvidence persisted,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
@@ -166,18 +166,19 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         if (!authorization.IsCurrent(nowUtc))
             throw new InvalidOperationException("Current Google project/model authorization is rejected or expired.");
 
-        string expectedOrigin = snapshot.Account.Endpoint.GetLeftPart(UriPartial.Authority);
-        if (!string.Equals(authorization.AccountId, snapshot.Account.AccountId, StringComparison.Ordinal)
+        ProviderAccountReference persistedAccount = persisted.Account.Reference;
+        string expectedOrigin = persistedAccount.EndpointOrigin!.GetLeftPart(UriPartial.Authority);
+        if (!string.Equals(authorization.AccountId, persistedAccount.AccountId, StringComparison.Ordinal)
             || !string.Equals(authorization.ProjectId, intent.ProjectId, StringComparison.Ordinal)
             || !string.Equals(authorization.ModelId, intent.ModelId, StringComparison.Ordinal)
-            || !string.Equals(authorization.CredentialReferenceId, snapshot.Account.CredentialReferenceId, StringComparison.Ordinal)
-            || !string.Equals(authorization.CapabilityProvenanceId, snapshot.Capabilities.ProvenanceId, StringComparison.Ordinal)
-            || !string.Equals(authorization.EndpointId, snapshot.Account.Endpoint.Host, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(authorization.RegionId, snapshot.Account.Region, StringComparison.Ordinal)
+            || !string.Equals(authorization.CredentialReferenceId, persistedAccount.CredentialReference!.TargetName, StringComparison.Ordinal)
+            || !string.Equals(authorization.CapabilityProvenanceId, persisted.Capability.Snapshot.ProvenanceId, StringComparison.Ordinal)
+            || !string.Equals(authorization.EndpointId, persistedAccount.EndpointId, StringComparison.Ordinal)
+            || !string.Equals(authorization.RegionId, persistedAccount.RegionId, StringComparison.Ordinal)
             || !string.Equals(authorization.EndpointOrigin, expectedOrigin, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "Current Google project/model authorization is not bound to the exact account, credential, endpoint, region, capability, project, and model evidence.");
+                "Current Google project/model authorization is not bound to the exact persisted account, credential, endpoint, region, capability, project, and model evidence.");
         }
 
         return authorization;
