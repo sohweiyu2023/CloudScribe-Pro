@@ -1,4 +1,5 @@
 using CloudScribe.App.ViewModels;
+using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.App.Composition;
 
@@ -9,14 +10,18 @@ namespace CloudScribe.App.Composition;
 public sealed class GoogleGenerationProductionExecutionContextResolver
 {
     private readonly GoogleGenerationProductionRuntimeEvidenceResolver _runtimeEvidenceResolver;
+    private readonly IGoogleGenerationPersistedQueueStateStore _persistedQueueStateStore;
     private readonly TimeProvider _timeProvider;
 
     public GoogleGenerationProductionExecutionContextResolver(
         GoogleGenerationProductionRuntimeEvidenceResolver runtimeEvidenceResolver,
+        IGoogleGenerationPersistedQueueStateStore persistedQueueStateStore,
         TimeProvider timeProvider)
     {
         _runtimeEvidenceResolver = runtimeEvidenceResolver
             ?? throw new ArgumentNullException(nameof(runtimeEvidenceResolver));
+        _persistedQueueStateStore = persistedQueueStateStore
+            ?? throw new ArgumentNullException(nameof(persistedQueueStateStore));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
@@ -49,6 +54,9 @@ public sealed class GoogleGenerationProductionExecutionContextResolver
                 "Stage6 runtime authorization evidence is not bound to the exact validated UI snapshot.");
         }
 
-        return GoogleGenerationUiExecutionContextFactory.Create(evidence, _timeProvider);
+        return GoogleGenerationUiExecutionContextFactory.Create(
+            evidence,
+            _persistedQueueStateStore,
+            _timeProvider);
     }
 }
