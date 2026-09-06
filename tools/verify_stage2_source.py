@@ -117,7 +117,7 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         return fail(f"SESSION_STATE.json invalid: {exc}")
     stage = state.get("current_stage")
-    if stage not in (2, 3, 4) or state.get("stage2_source_implemented") is not True:
+    if stage not in (2, 3, 4, 8) or state.get("stage2_source_implemented") is not True:
         return fail("SESSION_STATE.json does not identify a checkpoint that preserves implemented Stage 2 source")
     version = str(state.get("repository_version", ""))
     if stage == 2 and not version.startswith("0.3.48-"):
@@ -126,6 +126,8 @@ def main() -> int:
         return fail(f"Stage 3 source version does not preserve the expected checkpoint lineage: {version!r}")
     if stage == 4 and not version.startswith("0.5.0-stage4"):
         return fail(f"Stage 4 source version does not preserve the expected checkpoint lineage: {version!r}")
+    if stage == 8 and version != "1.0.0":
+        return fail(f"Stage 8 Final source must preserve exact 1.0.0 identity: {version!r}")
 
     if state.get("stage2_runtime_tested") is not True or state.get("stage2_windows_ui_tested") is not True:
         return fail("SESSION_STATE.json does not record completed automated/native Windows Stage 2 engineering verification")
@@ -133,7 +135,8 @@ def main() -> int:
         if state.get("stage2_manual_visual_acceptance") is not False or state.get("stage2_user_clicked_editor_retest") is not False:
             return fail("SESSION_STATE.json must keep real-user Stage 2 acceptance pending until the user verifies the repaired editor")
     elif (
-        state.get("stage2_promoted") is not True
+        state.get("stage2_promotion_blocked") is not False
+        or state.get("stage2_promoted") is not True
         or state.get("stage2_manual_visual_acceptance") is not True
         or state.get("stage2_user_clicked_editor_retest") is not True
     ):

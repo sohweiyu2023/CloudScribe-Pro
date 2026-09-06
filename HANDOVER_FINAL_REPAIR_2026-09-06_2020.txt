@@ -1,0 +1,34 @@
+STATUS: REPAIR — CloudScribe Pro Final 1.0.0 certification remains reopened.
+
+Controlling baseline: v2.23.
+Live main before this repair: 14f85105f111d59e9693174153b5236bafe6f990.
+Integrated pre-repair Stage8/Final candidate: 7091dec0e596c50735f5a64d5b0bad2f19677b0a.
+Legacy Stage6/7 fast-track refs remain stale and must not overwrite the integrated Stage8 line.
+
+This repair addresses the first exact remaining strict/full-certification blocker only:
+- Stage2-preservation verifier semantics still assumed current_stage must be 2, 3, or 4.
+- Final Stage8 source is current_stage=8 and repository_version=1.0.0 while preserving the already promoted and real-user-accepted Stage2 source/contracts.
+- tools/verify_stage2_source.py now admits Stage8 only with exact repository_version 1.0.0 and still requires stage2_source_implemented, runtime/Windows verification, stage2_promoted, stage2_promotion_blocked=false, manual visual acceptance=true, and clicked-editor retest=true.
+- tools/run_python_regression_shards.py applies the identical exact Stage8 identity and preserved Stage2 promotion/acceptance requirements; arbitrary future stages or 1.x versions remain rejected.
+
+Already established before this repair:
+- Stage6 production composition: implementation complete on integrated line.
+- Stage7 production composition: implementation complete on integrated line.
+- Stage8 persisted recovery production composition: implementation complete on integrated line.
+- Final Windows acceptance run 34032470426 on immediate prior exact SHA 6df4dd41243b21ae010af45d9132813d587e05c4: PASS end-to-end, including locked restore, strict Release build, complete compiled suite, Final source acceptance, Windows publish/version 1.0.0, actual CloudScribe.exe startup, and exact source no-mutation.
+- Full-cert preflight on 7091dec0e596c50735f5a64d5b0bad2f19677b0a: locked restore/build and all 634 compiled tests PASS; RepositoryVerifierTests and SourceArchiveCliTests PASS; first remaining failure was legacy Stage2-preservation semantics.
+
+Safety invariants preserved:
+- No production Stage6/7/8 behavior changed by this repair.
+- No authorization, credential, endpoint, trust, reconciliation, recovery, pricing, spend, queue, or provider-submit semantics were weakened.
+- No fabricated evidence, ambient credentials/endpoints, raw provider submit shortcut, dummy Configure call, or sync-over-async was introduced.
+
+Mandatory Final gates after this source-changing repair:
+1. Deterministic manifest refresh/refreeze on agent/stage8-fast-track.
+2. Strict Stage8 validation on the refreshed exact SHA.
+3. Final Windows acceptance on the same exact SHA: full compiled tests -> Final source acceptance -> exact Windows publish/version 1.0.0 -> actual CloudScribe.exe -> exact source no-mutation.
+4. Strict/full certification on that same exact SHA.
+5. Exact same-SHA no-change certification rerun.
+6. Only then serially promote Stage8/Final/main and reconcile the v1.0.0 release ref as required.
+
+Do not declare FINAL until every gate above passes on the exact unchanged SHA.
