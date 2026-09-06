@@ -7,7 +7,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage8RestoreRecoveryTerminalVerifierTests
 {
     [Fact]
-    public async Task VerifyAsync_CommittedJournalRequiresExactDestinationBytes()
+    public async Task VerifyAsyncCommittedJournalRequiresExactDestinationBytes()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var temp = new TemporaryDirectory();
@@ -24,16 +24,104 @@ public sealed class Stage8RestoreRecoveryTerminalVerifierTests
             .MarkCopied(plan, relative, now)
             .BeginVerification(plan, now)
             .Commit(plan, now);
-        var verifier = new RestoreRecoveryTerminalVerifier();
 
-        Assert.True(await verifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
+        Assert.True(await RestoreRecoveryTerminalVerifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
 
         await File.WriteAllBytesAsync(destination, [9, 9, 9, 9], cancellationToken);
-        Assert.False(await verifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
+        Assert.False(await RestoreRecoveryTerminalVerifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
     }
 
     [Fact]
-    public async Task VerifyAsync_RolledBackJournalRequiresTransactionOutputsAbsent()
+    public async Task VerifyAsyncCommittedJournalRejectsMissingDestination()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var temp = new TemporaryDirectory();
+        byte[] payload = [10, 11, 12];
+        string relative = "library/missing.bin";
+        string destination = Path.Combine(temp.Path, "library", "missing.bin");
+        var plan = CreatePlan(temp.Path, relative, destination, payload);
+        var now = DateTimeOffset.UtcNow;
+        var journal = RestoreTransactionJournal.Start(plan, now)
+            .BeginCopy(plan, now)
+            .MarkCopied(plan, relative, now)
+            .BeginVerification(plan, now)
+            .Commit(plan, now);
+
+        Assert.False(await RestoreRecoveryTerminalVerifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
+    }
+
+    [Fact]
+    public async Task VerifyAsyncRejectsReparsePointInsideRestoreRoot()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var temp = new TemporaryDirectory();
+        using var external = new TemporaryDirectory();
+        byte[] payload = [21, 22, 23, 24];
+        string linkedDirectory = Path.Combine(temp.Path, "library");
+
+        try
+        {
+            Directory.CreateSymbolicLink(linkedDirectory, external.Path);
+        }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or UnauthorizedAccessException or IOException)
+        {
+            return;
+        }
+
+        string relative = "library/item.bin";
+        string destination = Path.Combine(temp.Path, relative);
+        await File.WriteAllBytesAsync(Path.Combine(external.Path, "item.bin"), payload, cancellationToken);
+
+        var plan = CreatePlan(temp.Path, relative, destination, payload);
+        var now = DateTimeOffset.UtcNow;
+        var journal = RestoreTransactionJournal.Start(plan, now)
+            .BeginCopy(plan, now)
+            .MarkCopied(plan, relative, now)
+            .BeginVerification(plan, now)
+            .Commit(plan, now);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RestoreRecoveryTerminalVerifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
+        Assert.Contains("reparse-point destination path", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VerifyAsyncRejectsReparsePointRestoreRoot()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var parent = new TemporaryDirectory();
+        using var external = new TemporaryDirectory();
+        byte[] payload = [25, 26, 27, 28];
+        string linkedRoot = Path.Combine(parent.Path, "restore-root");
+
+        try
+        {
+            Directory.CreateSymbolicLink(linkedRoot, external.Path);
+        }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or UnauthorizedAccessException or IOException)
+        {
+            return;
+        }
+
+        string relative = "item.bin";
+        string destination = Path.Combine(linkedRoot, relative);
+        await File.WriteAllBytesAsync(Path.Combine(external.Path, relative), payload, cancellationToken);
+
+        var plan = CreatePlan(linkedRoot, relative, destination, payload);
+        var now = DateTimeOffset.UtcNow;
+        var journal = RestoreTransactionJournal.Start(plan, now)
+            .BeginCopy(plan, now)
+            .MarkCopied(plan, relative, now)
+            .BeginVerification(plan, now)
+            .Commit(plan, now);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RestoreRecoveryTerminalVerifier.VerifyAsync("verified-apply-resumed", plan, journal, cancellationToken));
+        Assert.Contains("reparse-point directory", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VerifyAsyncRolledBackJournalRequiresTransactionOutputsAbsent()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var temp = new TemporaryDirectory();
@@ -47,12 +135,26 @@ public sealed class Stage8RestoreRecoveryTerminalVerifierTests
             .MarkCopied(plan, relative, now)
             .RequireRollback(plan, now)
             .CompleteRollback(plan, now);
-        var verifier = new RestoreRecoveryTerminalVerifier();
 
-        Assert.True(await verifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken));
+        Assert.True(await RestoreRecoveryTerminalVerifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken));
 
         await File.WriteAllBytesAsync(destination, payload, cancellationToken);
-        Assert.False(await verifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken));
+        Assert.False(await RestoreRecoveryTerminalVerifier.VerifyAsync("rollback-completed", plan, journal, cancellationToken));
+    }
+
+    [Fact]
+    public async Task VerifyAsyncRejectsUnsupportedTerminalOutcome()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var temp = new TemporaryDirectory();
+        byte[] payload = [13, 14];
+        string relative = "unsupported.bin";
+        string destination = Path.Combine(temp.Path, relative);
+        var plan = CreatePlan(temp.Path, relative, destination, payload);
+        var journal = RestoreTransactionJournal.Start(plan, DateTimeOffset.UtcNow);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RestoreRecoveryTerminalVerifier.VerifyAsync("fabricated-success", plan, journal, cancellationToken));
     }
 
     private static RestoreExecutionPlan CreatePlan(

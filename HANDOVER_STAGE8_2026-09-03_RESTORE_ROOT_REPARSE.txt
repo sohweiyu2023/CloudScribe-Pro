@@ -1,0 +1,28 @@
+CloudScribe Pro Final 1.0.0 repair handover — Stage8 restore-root reparse coverage
+
+Current integration lane after substantive source/test mutation:
+- branch: repair/final-stage7-production-parallel
+- source/test commit: 43ae1d56f7bcdd9074c9b2e006b3ed663b0ca9a3
+- change: added focused Stage8 terminal-recovery rejection coverage proving a restore root that is itself a filesystem symbolic link/reparse point is rejected before committed recovery can be certified.
+- exact workflow: CloudScribe Stage 7 fast-track check run 33714796322 (#286), triggered by the source/test commit; inspect its exact first compiler/analyzer/test failure if not green.
+
+Fresh pre-mutation heads read before this handover write:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- integration repair/final-stage7-production-parallel: 43ae1d56f7bcdd9074c9b2e006b3ed663b0ca9a3
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+Freshly confirmed prior gate:
+- Stage8 reparse-destination analyzer fix exact source a3a8cb7989a8fc52d59666816d6eaa15623f9deb passed replacement workflow run 33711185620.
+
+Stage status:
+- Stage6: 93%. Runtime evidence/execution-context production path exists, but CompositionRoot still does not bind Stage6GoogleGenerationShellBinder because no authoritative production runtime-request source has yet been located that supplies the complete current durable envelope/pricing/revision/estimate/UI snapshot bundle. Do not fabricate or source this from ambient credentials/endpoints.
+- Stage7: 98%. Request-bound authorized audition/catalog production path and immediate selected-voice revalidation remain intact; prior exact focused/integrated CI passed.
+- Stage8: 98%. Persisted recovery composition, terminal byte verification, bound destination verification and reparse-point rejection are implemented; this commit adds restore-root symlink/reparse rejection coverage.
+
+Final gates remain unopened because Stage6 production composition is incomplete. Do not run/promote Final serial gates until Stage6-8 production composition all pass.
+
+Next exact action:
+1. Inspect workflow run 33714796322 for commit 43ae1d56f7bcdd9074c9b2e006b3ed663b0ca9a3; fix the first exact compiler/analyzer/test failure if any.
+2. In parallel inspect the integration head for a genuine current GoogleGenerationProductionRuntimeRequest authority. Only if real account/submission/pricing/revision/estimate/UI snapshot evidence exists should Stage6GoogleGenerationShellBinder be bound in CompositionRoot with focused fail-closed tests.
+3. Otherwise continue a genuinely independent Stage7/8 production safety lane; do not create dummy composition or fabricated evidence.

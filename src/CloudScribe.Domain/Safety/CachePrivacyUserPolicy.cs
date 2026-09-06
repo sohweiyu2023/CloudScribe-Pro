@@ -26,20 +26,15 @@ public static class CachePrivacyUserPolicy
         {
             throw new ArgumentException("Currency must be a three-letter uppercase provider-billed code.", nameof(currencyCode));
         }
-        if (scaledUnits < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(scaledUnits));
-        }
-        if (scale is < 0 or > 9)
-        {
-            throw new ArgumentOutOfRangeException(nameof(scale));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(scaledUnits);
+        ArgumentOutOfRangeException.ThrowIfNegative(scale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(scale, 9);
 
         var divisor = Pow10(scale);
         var amount = scaledUnits / divisor;
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"Estimated provider-billed cost avoided by eligible cache reuse: {currencyCode} {amount:F{scale}}. This is an estimate, not a guarantee of money saved.");
+        var format = "F" + scale.ToString(CultureInfo.InvariantCulture);
+        var formattedAmount = amount.ToString(format, CultureInfo.InvariantCulture);
+        return $"Estimated provider-billed cost avoided by eligible cache reuse: {currencyCode} {formattedAmount}. This is an estimate, not a guarantee of money saved.";
     }
 
     private static decimal Pow10(int scale)

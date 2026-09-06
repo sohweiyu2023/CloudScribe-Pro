@@ -343,10 +343,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public string LifecycleDescription => LifecycleState switch
     {
-        WorkspaceLifecycleState.Empty => "No document is selected. Durable document creation arrives in Stage 3.",
+        WorkspaceLifecycleState.Empty => "No document is selected. Create or import a local document to begin.",
         WorkspaceLifecycleState.Loading => "Local state is being prepared. Provider access is not required.",
         WorkspaceLifecycleState.Offline => "Cloud features are unavailable or not configured; local reading and editing continue.",
-        WorkspaceLifecycleState.Error => "Your temporary text remains in the editor. Retry and recovery actions become durable in Stage 3.",
+        WorkspaceLifecycleState.Error => "Your local text remains available. Retry the workspace operation; provider access stays blocked until current safety gates pass.",
         _ => string.Empty,
     };
 

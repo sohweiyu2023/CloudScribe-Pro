@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage8AccessiblePlaybackStateTests
 {
     [Fact]
-    public void DescribeTransition_AnnouncesPlaybackChapterAndSpeedChanges()
+    public void DescribeTransitionAnnouncesPlaybackChapterAndSpeedChanges()
     {
         var previous = new AccessiblePlaybackSnapshot(
             false, false, 0.5, 1.0, TimeSpan.Zero, TimeSpan.FromMinutes(10), "Intro", "Segment 1");
@@ -21,7 +21,7 @@ public sealed class Stage8AccessiblePlaybackStateTests
     }
 
     [Fact]
-    public void Snapshot_RejectsPositionBeyondDuration()
+    public void SnapshotRejectsPositionBeyondDuration()
     {
         var snapshot = new AccessiblePlaybackSnapshot(
             false, false, 0.5, 1.0, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(1), null, null);

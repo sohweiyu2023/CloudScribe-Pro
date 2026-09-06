@@ -15,6 +15,7 @@ using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Persistence;
 using CloudScribe.Infrastructure.Pricing;
 using CloudScribe.Infrastructure.Providers;
+using CloudScribe.Infrastructure.Safety;
 using CloudScribe.Infrastructure.Security;
 using CloudScribe.Providers.Abstractions;
 using Microsoft.Data.Sqlite;
@@ -36,6 +37,7 @@ public static class ServiceCollectionExtensions
         AddPersistenceServices(services);
         AddProviderAndTrustServices(services, configuration);
         AddGenerationSupportServices(services);
+        AddSafetyServices(services, configuration);
         return services;
     }
 
@@ -89,6 +91,34 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProviderFactoryRegistry, ProviderFactoryRegistry>();
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
+        services.AddSingleton<VoiceLabProviderAdapterResolver>();
+        services.AddSingleton<IVoiceLabProjectAuthorizationStore, VoiceLabProjectAuthorizationStore>();
+        services.AddSingleton<IVoiceLabAuditionAuthorizationStore, VoiceLabAuditionAuthorizationStore>();
+        services.AddSingleton<VoiceLabCatalogCurrentEvidenceResolver>();
+        services.AddSingleton<VoiceLabAuditionCurrentEvidenceResolver>();
+        services.AddSingleton(serviceProvider =>
+            new VoiceLabProductionCatalogTransport(
+                serviceProvider.GetRequiredService<IProviderAccountStore>(),
+                serviceProvider.GetRequiredService<IProviderCapabilitySnapshotStore>(),
+                serviceProvider.GetRequiredService<VoiceLabCatalogCurrentEvidenceResolver>().ResolveAsync,
+                serviceProvider.GetRequiredService<VoiceLabProviderAdapterResolver>(),
+                serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(serviceProvider =>
+            new VoiceLabCatalogQueryService(
+                serviceProvider.GetRequiredService<VoiceLabProductionCatalogTransport>().QueryAsync));
+        services.AddSingleton(serviceProvider =>
+            new VoiceLabProductionAuthorizedAuditionExecutorFactory(
+                serviceProvider.GetRequiredService<IProviderAccountStore>(),
+                serviceProvider.GetRequiredService<IProviderCapabilitySnapshotStore>(),
+                serviceProvider.GetRequiredService<VoiceLabAuditionCurrentEvidenceResolver>().ResolveAsync,
+                serviceProvider.GetRequiredService<TimeProvider>(),
+                serviceProvider.GetRequiredService<IProviderFactoryRegistry>()));
+        services.AddSingleton<GoogleGenerationProductionEvidenceResolver>();
+        services.AddSingleton<GoogleGenerationProductionAccountFactory>();
+        services.AddSingleton<IGoogleGenerationSpendAuthorizationStore, GoogleGenerationSpendAuthorizationStore>();
+        services.AddSingleton<IGoogleGenerationPersistedQueueStateStore, GoogleGenerationPersistedQueueStateStore>();
+        services.AddSingleton<IGoogleGenerationProjectAuthorizationStore, GoogleGenerationProjectAuthorizationStore>();
+        services.AddSingleton<GoogleGenerationCurrentSpendAuthorizationResolver>();
         services.AddSingleton<StrictJsonObjectReader>();
         services.AddSingleton<ExactPricingControlMaterialInspector>();
         services.AddSingleton<V222ControlSet>();
@@ -100,6 +130,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
         services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
+        services.AddSingleton<ITransientCredentialResolver, VaultBackedTransientCredentialResolver>();
         services.AddSingleton<IGenerationPrivateCacheKeyProvider, VaultBackedGenerationPrivateCacheKeyProvider>();
     }
 
@@ -111,5 +142,16 @@ public static class ServiceCollectionExtensions
             new GenerationSupportBundleExportCoordinator(
                 serviceProvider.GetRequiredService<GenerationSupportBundleService>(),
                 serviceProvider.GetRequiredService<GenerationSupportBundleMetadataFileStore>().PersistAsync));
+    }
+
+    private static void AddSafetyServices(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddSingleton<AtomicVerifiedRestoreExecutor>();
+        services.AddSingleton<RestoreRecoveryExecutionCompositionFactory>();
+        services.AddSingleton(serviceProvider =>
+            new RestoreRecoveryProductionConfigurationResolver(
+                serviceProvider.GetRequiredService<AppPaths>(),
+                configuration["CloudScribe:RestoreRecoveryAuthenticationKeyTargetName"]));
+        services.AddSingleton<RestoreRecoveryProductionRuntime>();
     }
 }

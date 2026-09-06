@@ -1,0 +1,5 @@
+CloudScribe Final 1.0.0 reopened acceptance
+Certified Stage6 source restored from: 8e1398a0b3dbcaaf7d8f8cf6c600c78d6ad60da2
+Restoration commit parent: 37bda74fd4ad78417feb9be84445b8f1b49607ab
+Restoration commit: 19e34d0044fe3e67762ae150a37ff55953a60acc
+Purpose: force strict Windows build/test acceptance of the combined Stage6+7+8 repair tree before production composition.

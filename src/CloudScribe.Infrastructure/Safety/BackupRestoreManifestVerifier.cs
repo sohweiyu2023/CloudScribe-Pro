@@ -19,8 +19,8 @@ public static class BackupRestoreManifestVerifier
             throw new InvalidDataException("Backup manifest signature size is invalid.");
         if (string.IsNullOrWhiteSpace(trustedPublicKeyPem))
             throw new ArgumentException("A trusted backup-signing public key is required.", nameof(trustedPublicKeyPem));
-        if (maximumManifestBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumManifestBytes));
-        if (maximumSignatureBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumSignatureBytes));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumManifestBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumSignatureBytes);
 
         using var verifier = ECDsa.Create();
         try

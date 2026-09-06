@@ -6,7 +6,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage8BackupRestoreArchiveInspectorTests
 {
     [Fact]
-    public void Oversized_declared_entry_fails_archive_structure_admission()
+    public void OversizedDeclaredEntryFailsArchiveStructureAdmission()
     {
         using var temp = new TempDirectory();
         var archivePath = Path.Combine(temp.Path, "backup.zip");
@@ -27,7 +27,7 @@ public sealed class Stage8BackupRestoreArchiveInspectorTests
     }
 
     [Fact]
-    public void Excessive_compression_ratio_fails_closed()
+    public void ExcessiveCompressionRatioFailsClosed()
     {
         using var temp = new TempDirectory();
         var archivePath = Path.Combine(temp.Path, "backup.zip");

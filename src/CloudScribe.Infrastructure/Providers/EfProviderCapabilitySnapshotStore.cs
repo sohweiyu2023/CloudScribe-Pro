@@ -38,6 +38,7 @@ public sealed class EfProviderCapabilitySnapshotStore(
                 CredentialTargetName = snapshot.Account.CredentialReference?.TargetName,
                 EndpointId = snapshot.Account.EndpointId,
                 RegionId = snapshot.Account.RegionId,
+                EndpointOrigin = snapshot.Account.EndpointOrigin?.AbsoluteUri,
                 CapturedAtUnixMilliseconds = snapshot.CapturedAtUtc.ToUnixTimeMilliseconds(),
                 ExpiresAtUnixMilliseconds = expiresAtUtc.ToUnixTimeMilliseconds(),
                 ProvenanceId = snapshot.ProvenanceId,
@@ -122,7 +123,8 @@ public sealed class EfProviderCapabilitySnapshotStore(
             entity.AccountDisplayName,
             entity.CredentialTargetName is null ? null : new CredentialReference(entity.CredentialTargetName),
             entity.EndpointId,
-            entity.RegionId);
+            entity.RegionId,
+            string.IsNullOrWhiteSpace(entity.EndpointOrigin) ? null : new Uri(entity.EndpointOrigin, UriKind.Absolute));
         ProviderCapabilitySnapshot snapshot = new(
             account,
             DateTimeOffset.FromUnixTimeMilliseconds(entity.CapturedAtUnixMilliseconds),

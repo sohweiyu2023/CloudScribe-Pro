@@ -1,0 +1,70 @@
+CloudScribe Pro Final 1.0.0 repair handover
+Controlling baseline: v2.23
+Status: REPAIR — Final 1.0.0 remains reopened.
+
+Live heads re-read immediately before this handover mutation:
+main = 14f85105f111d59e9693174153b5236bafe6f990
+repair/final-1.0.0-session-state-updater = 1bcac65c2bec1f1a189f47e91870943e4fdf944e
+repair/final-1.0.0-shell-integration = 5c499209793fa6f40c0dad5b4a14669ed81fa50f
+repair/final-stage6-runtime-restore-helper = 9faef87cc7be2114b2b27076686520c6990738b1
+repair/final-stage7-production-parallel substantive head = 378150968d8f8246490df37d097c6598685c3797
+repair/final-stage8-production-parallel = f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+Substantive changes landed this run on repair/final-stage7-production-parallel:
+354a679456d301b7b3548344099c3558681093f5 feat(stage6): own exact pending spend approval state
+b3cfb7077f4adda95c497ee4a0084b961dc337ab feat(stage6): approve only owned pending submission
+30e99e17475d6630a38c68272f43d86f30758786 feat(stage6): register pending approval ownership
+97c63678b95f4bead58382fe630f7afa0ea7060e test(stage6): fail closed around owned pending approval
+8beffbc586f93483f95007b2d483a0cb40ae0745 fix(stage6): keep approval tests fully async
+dab1eb1633276dc976658b9d9d6d79fe28b5e24e fix(stage6): atomically claim pending approval state
+c72a8dcc4fd57663c439d870b4c3f884f50b4cf5 fix(stage6): split approval test fixture for strict analyzer
+49586bfdb3e69c1f195cb8d4f56a99b53d478660 ci(stage8): qualify integration repair head in parallel
+378150968d8f8246490df37d097c6598685c3797 fix(stage6): assert approved submission envelope contract
+
+Stage6 exact pending-approval design now landed:
+- GoogleGenerationProductionPendingApprovalStateOwner owns one exact pre-authorization tuple: GoogleGenerationSubmissionEnvelope + matching GoogleGenerationUiExecutionSnapshot + currency/scale + current provider-billed estimate.
+- Publish fails closed unless UI execution evidence is valid and envelope account/capability/pricing/voice/encoding and compiled provider payload SHA256/length match the snapshot exactly.
+- Approval atomically claims the exact pending tuple. Failure restores it only if no newer compile replaced it; successful durable approval consumes it.
+- GoogleGenerationProductionSpendApprovalService now accepts only user confirmation + authorized maximum. It cannot accept/reconstruct caller-supplied envelope/snapshot/current estimate.
+- Authorization is still persisted by GoogleGenerationProductionSubmissionStateOwner before executable approved state is published.
+- CompositionRoot registers the pending-state owner; authorized runtime source and Stage6 binder remain production-wired.
+
+Focused failure history and repairs:
+- Exact CI run 33829269024 exposed MA0051: CreatePendingState fixture was 71 lines vs 60. Repaired by c72a8dcc4fd57663c439d870b4c3f884f50b4cf5.
+- Successor run 33829646833 passed formatting and production assembly build, then exposed one CS1061 assertion typo: approved state contract is SubmissionEnvelope rather than Envelope. Repaired by 378150968d8f8246490df37d097c6598685c3797.
+
+Exact same-source qualification at substantive SHA 378150968d8f8246490df37d097c6598685c3797:
+- CloudScribe Stage 7 fast-track run 33829922769: PASS.
+- CloudScribe Stage 8 fast-track run 33829922724: PASS.
+- Both check runs completed successfully on the same substantive SHA.
+
+Current honest completion:
+Stage6 = 95% — authorized runtime/shell composition, exact pending ownership, explicit approval service, durable post-approval state and focused fail-closed tests are landed and exact CI-qualified. Remaining production gap is the real pre-authorization compile producer + explicit UI approval callsite.
+Stage7 = 99% — production catalog/request-bound authorized audition composition structurally present and same-SHA fast-track qualification PASS; Final serial certification still pending.
+Stage8 = 99% — persisted recovery/coordinator/atomic terminal verification composition structurally present and dedicated same-SHA fast-track qualification PASS; Final serial certification still pending.
+
+Exact remaining Stage6 blocker:
+The live production shell has no genuine compile/pre-approval producer or explicit approval command. It currently enters generation by resolving an already-authorized GoogleGenerationUiExecutionContext. The repository still needs a real producer that constructs the exact current compiled Google generation submission from real account/project/credential/fresh capability/pricing revision/voice/encoding/provider payload/current estimate/trust/queue/reconciliation evidence, then publishes that exact tuple to GoogleGenerationProductionPendingApprovalStateOwner. A real UI confirmation action must consume only that owned tuple through GoogleGenerationProductionSpendApprovalService.ApproveExplicitAsync. Do not auto-approve, use ambient credentials/endpoints, fabricate evidence, or independently select latest values.
+
+Next exact gate:
+1. Trace/implement the genuine Stage6 production compile/current-evidence producer that creates GoogleGenerationSubmissionEnvelope and matching GoogleGenerationUiExecutionSnapshot/current estimate.
+2. Publish that exact tuple to GoogleGenerationProductionPendingApprovalStateOwner at the producer boundary.
+3. Add explicit shell spend-confirmation command wired to GoogleGenerationProductionSpendApprovalService, with rejection tests for stale/replaced pending state and lack of explicit confirmation.
+4. Run Stage7 + Stage8 exact-head qualification in parallel and fix first exact failure.
+5. Once Stage6-8 production composition all pass, enter serial Final gates only: full compiled tests -> Final source acceptance -> Windows publish/version exact 1.0.0 -> run actual CloudScribe.exe -> exact source no-mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final 1.0.0/main promotion.
+
+Mandatory Final gate state at handover:
+Stage6 production composition = REPAIR (pre-authorization producer/callsite missing)
+Stage7 production composition = PASS structurally + exact fast-track PASS
+Stage8 production composition = PASS structurally + exact fast-track PASS
+Full compiled Final tests = NOT RUN
+Final source acceptance = NOT RUN
+Windows publish/version exact 1.0.0 = NOT RUN
+Actual CloudScribe.exe acceptance = NOT RUN
+Exact source no-mutation = NOT RUN
+Exact SHA freeze = NOT RUN
+Strict/full certification = NOT RUN
+Exact same-SHA no-change certification = NOT RUN
+Final 1.0.0/main re-promotion = NOT RUN
+
+Do not declare Final until every mandatory serial gate actually passes on the required exact SHA.

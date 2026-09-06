@@ -234,6 +234,12 @@ public sealed class DatabaseRecoveryTests
                 Stage4PricingCatalogHistory.MigrationId,
                 Stage4PricingContractOverrides.MigrationId,
                 Stage4ProviderAccountsAndCapabilities.MigrationId,
+                Stage6ProviderEndpointOrigin.MigrationId,
+                Stage6GoogleGenerationSpendAuthorization.MigrationId,
+                Stage7VoiceLabProjectAuthorization.MigrationId,
+                Stage7VoiceLabAuditionAuthorization.MigrationId,
+                Stage6GoogleGenerationQueueState.MigrationId,
+                Stage6GoogleGenerationProjectAuthorization.MigrationId,
             ],
             currentMigrations);
     }

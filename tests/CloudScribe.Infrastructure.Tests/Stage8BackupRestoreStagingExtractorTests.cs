@@ -7,7 +7,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class Stage8BackupRestoreStagingExtractorTests
 {
     [Fact]
-    public void Admitted_archive_extracts_only_inside_new_staging_directory()
+    public void AdmittedArchiveExtractsOnlyInsideNewStagingDirectory()
     {
         var root = Path.Combine(Path.GetTempPath(), "cloudscribe-stage8-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -39,7 +39,7 @@ public sealed class Stage8BackupRestoreStagingExtractorTests
     }
 
     [Fact]
-    public void Non_admitted_archive_never_extracts()
+    public void NonAdmittedArchiveNeverExtracts()
     {
         var denied = new BackupRestoreDecision(false, "restore-manifest-not-authenticated");
         Assert.Throws<InvalidOperationException>(() => BackupRestoreStagingExtractor.ExtractAdmittedArchive(

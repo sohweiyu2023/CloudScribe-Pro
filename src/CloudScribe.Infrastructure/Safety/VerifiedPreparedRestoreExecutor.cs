@@ -87,7 +87,7 @@ public sealed class VerifiedPreparedRestoreExecutor
             maximumFiles);
         rollbackJournal.EnsurePlan(plan);
 
-        await _executor.RollbackAsync(plan, rollbackJournal, cancellationToken).ConfigureAwait(false);
+        await AtomicVerifiedRestoreExecutor.RollbackAsync(plan, rollbackJournal, cancellationToken).ConfigureAwait(false);
         var now = _timeProvider.GetUtcNow().ToUniversalTime();
         if (now < rollbackJournal.UpdatedAtUtc) now = rollbackJournal.UpdatedAtUtc;
         return rollbackJournal.CompleteRollback(plan, now);

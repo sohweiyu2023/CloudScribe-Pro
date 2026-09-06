@@ -4,7 +4,7 @@ namespace CloudScribe.Infrastructure.Safety;
 
 public sealed class RestoreRecoveryTerminalVerifier
 {
-    public async Task<bool> VerifyAsync(
+    public static async Task<bool> VerifyAsync(
         string outcome,
         RestoreExecutionPlan plan,
         RestoreTransactionJournal journal,
@@ -95,7 +95,36 @@ public sealed class RestoreRecoveryTerminalVerifier
             throw new InvalidOperationException("Restore recovery verification path escapes the restore root.");
         if (!string.Equals(expected, Path.GetFullPath(step.DestinationPath), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Restore recovery verification destination differs from the bound plan.");
+
+        RequirePhysicalDestinationPath(root, expected);
         return expected;
+    }
+
+    private static void RequirePhysicalDestinationPath(string restoreRoot, string destinationPath)
+    {
+        string relative = Path.GetRelativePath(restoreRoot, destinationPath);
+        string current = restoreRoot;
+        char[] separators = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+        foreach (string component in relative.Split(separators, StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, component);
+            try
+            {
+                if (File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    throw new InvalidOperationException(
+                        $"Restore recovery verification may not traverse a reparse-point destination path: {current}");
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                // A rolled-back or interrupted restore can legitimately leave this component absent.
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // Once a parent is absent, deeper destination components are absent as well.
+            }
+        }
     }
 
     private static void RequirePhysicalRestoreRoot(string restoreRoot)

@@ -1,0 +1,49 @@
+CloudScribe Pro — Stage 8 pre-write reparse hardening handover
+Date: 2026-09-03
+Controlling baseline: v2.23
+Final 1.0.0 status: REOPENED / NOT CERTIFIED
+
+Production integration branch:
+  repair/final-stage7-production-parallel
+
+Substantive source commit:
+  3658b4db69651083377376aef812e180ebe13a57
+  fix(stage8): reject reparse ancestors before restore writes
+
+Focused test commit:
+  382fdde589529618eb9770b0f1809d6043b05f3a
+  test(stage8): reject reparse ancestor before restore creation
+
+What changed
+------------
+AtomicVerifiedRestoreExecutor now fails closed before creating or writing a restore destination when the configured restore root traverses an existing symbolic-link/reparse-point ancestor. If the restore root does not yet exist, the executor walks to its nearest existing ancestor, validates that ancestor and every filesystem ancestor as physical/non-reparse, and only then creates the restore directory. It revalidates the resulting restore root after creation.
+
+Focused regression coverage creates a restore root beneath a directory symbolic link to an external directory and verifies that execution throws before the external restore directory or restored file can be created.
+
+Why this matters
+----------------
+RestoreRecoveryTerminalVerifier already rejects reparse-point ancestors at terminal verification. The write executor previously validated the restore root itself but not all pre-existing ancestors before Directory.CreateDirectory/write publication. The new boundary check prevents any restore-side effect from crossing an ancestor reparse point instead of relying on the later terminal verifier to catch it.
+
+Exact CI
+--------
+Previous Stage 8 terminal-verifier reparse CI run 33714796322: PASS.
+Current exact source/test run for 382fdde589529618eb9770b0f1809d6043b05f3a: 33722573580, still IN PROGRESS when this handover was written. Inspect this exact run first next time; if it fails, repair the first exact compiler/analyzer/test failure before doing unrelated Stage 8 work.
+
+Parallel lanes
+--------------
+Stage 6 remains the principal production-composition gap. Stage6GoogleGenerationShellBinder.Bind requires a genuine asynchronous Func<CancellationToken, Task<GoogleGenerationProductionRuntimeRequest>>. The live CompositionRoot registers the production resolver/binder but does not currently bind a durable production request producer. Do not synthesize this request from ambient UI/provider/credential/pricing state. The producer must preserve the real account, durable submission envelope, pricing provenance, request revision, currency/scale/current estimate, and bound UI execution snapshot.
+
+Stage 7 request-bound authorized audition/catalog paths remain active and previously passed focused/integrated CI. Preserve immediate current provider/account/project/voice/capability/credential/pricing/spend revalidation and never wire raw provider submit.
+
+Final serial gates remain NOT RUN until Stage 6-8 production composition is complete and green:
+  full compiled tests
+  Final source acceptance
+  Windows publish/version exact 1.0.0
+  run actual CloudScribe.exe
+  exact source no-mutation
+  freeze exact SHA
+  strict/full certification
+  exact same-SHA no-change certification
+  serial Final 1.0.0/main re-promotion
+
+Do not promote Final or main until all of those gates pass on the exact frozen source SHA.

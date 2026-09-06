@@ -5,7 +5,7 @@ namespace CloudScribe.Application.Tests;
 public sealed class Stage8RestoreRecoveryConcurrencyTests
 {
     [Fact]
-    public async Task Concurrent_recovery_attempt_is_rejected_and_success_is_verified()
+    public async Task ConcurrentRecoveryAttemptIsRejectedAndSuccessIsVerified()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -46,7 +46,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
     }
 
     [Fact]
-    public async Task Recovery_action_cannot_report_success_when_terminal_verification_fails()
+    public async Task RecoveryActionCannotReportSuccessWhenTerminalVerificationFails()
     {
         var coordinator = new RestoreRecoveryCoordinator(_ => Task.CompletedTask, _ => Task.CompletedTask);
         var rollbackState = new RestoreRecoveryState(true, true, true, true, true, false);
@@ -58,7 +58,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
     }
 
     [Fact]
-    public async Task Already_rolled_back_no_op_still_requires_terminal_filesystem_verification()
+    public async Task AlreadyRolledBackNoOpStillRequiresTerminalFilesystemVerification()
     {
         var rollbackCalls = 0;
         var resumeCalls = 0;
@@ -92,7 +92,7 @@ public sealed class Stage8RestoreRecoveryConcurrencyTests
     }
 
     [Fact]
-    public async Task Cancellation_during_terminal_verification_cannot_return_success()
+    public async Task CancellationDuringTerminalVerificationCannotReturnSuccess()
     {
         using var cancellation = new CancellationTokenSource();
         var coordinator = new RestoreRecoveryCoordinator(_ => Task.CompletedTask, _ => Task.CompletedTask);

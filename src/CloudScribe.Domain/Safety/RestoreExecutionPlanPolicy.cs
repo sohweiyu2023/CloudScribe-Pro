@@ -32,7 +32,7 @@ public static class RestoreExecutionPlanPolicy
         {
             if (!bindingByPath.TryGetValue(step.RelativePath, out var binding))
                 throw new InvalidOperationException("Restore plan contains a file that was not verified in staged content.");
-            if (binding.Length != step.Length || !string.Equals(binding.Sha256, step.Sha256, StringComparison.OrdinalIgnoreCase))
+            if (binding.LengthBytes != step.Length || !string.Equals(binding.Sha256Hex, step.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Restore plan metadata differs from the verified staged-content binding.");
         }
 

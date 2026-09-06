@@ -1,0 +1,63 @@
+CloudScribe Pro Final 1.0.0 repair handover — 2026-09-03 20:26 SGT
+
+CONTROLLING BASELINE
+- v2.23 remains controlling baseline.
+- Final 1.0.0 remains reopened. Do not promote until Stage6-8 production composition and the required serial Final gates pass on the exact same source SHA.
+
+LIVE HEADS READ IMMEDIATELY BEFORE THIS HANDOVER MUTATION
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+- repair/final-stage7-production-parallel: 9664c830d53f2c8c46cb3b94f03699766cba0fd2
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- repair/final-1.0.0-session-state-updater: 1bcac65c2bec1f1a189f47e91870943e4fdf944e
+- repair/final-1.0.0-shell-integration: 5c499209793fa6f40c0dad5b4a14669ed81fa50f
+
+SUBSTANTIVE STAGE7 CHANGES THIS RUN
+- 71c283737d6f1bb754a1a17b3fd7057cd160fecb — deepest VoiceLabEvidenceAuthorizedAuditionExecutor now independently rejects cache-eligible or non-fresh production audition requests and rejects noncanonical/empty output format before authorization/provider resolution. This prevents a direct/internal caller from bypassing the production fresh-only audition contract.
+- c02d07bafbb818e2ef3d1ce21d5e163c58ff2fa4 — introduced fresh-only regression tests, but also contained a malformed adapter-return line in an existing test and is superseded.
+- 9664c830d53f2c8c46cb3b94f03699766cba0fd2 — repaired that malformed regression test while preserving the new fail-closed coverage. New tests verify cache-eligible and non-fresh requests are rejected before any current-evidence read or adapter resolution. Existing evidence-drift-before-submit test was restored to assert two evidence reads, zero provider submissions, and adapter disposal.
+
+STAGE7 CURRENT VALIDATION
+- Exact corrected source/test head: 9664c830d53f2c8c46cb3b94f03699766cba0fd2.
+- GitHub Actions run 33755174842 (CloudScribe Stage 7 fast-track check, run 310) was IN PROGRESS at the latest inspection; no compiler/analyzer/test failure had been exposed yet.
+- Do not count Stage7 as PASS until that exact corrected source/test head completes successfully. This handover-only commit does not alter those source/test files.
+
+STAGE6 EXACT REMAINING BLOCKER
+- GoogleGenerationProductionRuntimeEvidenceResolver, GoogleGenerationProductionExecutionContextResolver, and Stage6GoogleGenerationShellBinder are production-shaped and fail closed.
+- CompositionRoot still cannot safely bind Stage6 because no authoritative production producer is registered for:
+  Func<CancellationToken, Task<GoogleGenerationProductionRuntimeRequest>>
+- The durable spend-authorization store is insufficient because it does not retain the exact GenerationProviderRequest.CompiledPayload bytes plus the complete current GoogleGenerationUiExecutionSnapshot/trust/queue/reconciliation evidence required by GoogleGenerationProductionRuntimeRequest.Validate and the execution-context resolver.
+- The required producer must originate at the real compile/approval/pre-submit workflow and preserve the exact compiled provider request plus exact current account/capability/endpoint/credential/request/revision/pricing/spend/trust/queue/reconciliation evidence. Do not reconstruct payload bytes from hashes, fabricate trust/reconciliation/queue evidence, use ambient endpoint/credentials, or wire a dummy/throwing ConfigureStage6GoogleGeneration source.
+- Once this producer exists, preserve the mandatory chain:
+  GoogleAuthorizedGenerationExecutor -> GoogleGenerationSubmissionCoordinator -> GoogleGenerationQueueCoordinator -> GoogleGenerationBoundQueueCoordinator -> GoogleGenerationUiQueueCoordinator
+
+STAGE7 / STAGE8 PRODUCTION COMPOSITION ALREADY PRESENT ON ACTIVE CARRIER
+- CompositionRoot resolves and binds Stage7VoiceLabCatalogShellBinder and Stage7VoiceLabAuditionShellBinder.
+- Stage7 production path uses VoiceLabProductionCatalogTransport / VoiceLabCatalogQueryService and VoiceLabProductionAuthorizedAuditionExecutorFactory; the evidence-authorized executor re-reads authorization before adapter resolution and immediately before submission and revalidates current voice selection before provider submission.
+- CompositionRoot configures persisted Stage8 recovery using Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery, RestoreRecoveryExecutionCompositionFactory, RestoreRecoveryProductionConfigurationResolver, and AtomicVerifiedRestoreExecutor.
+- Stage8 terminal/filesystem verification work exists on repair/final-stage8-production-parallel at f1d4e161acedd0ccb17c73de9b724e545f0ff038.
+
+ESTIMATED COMPLETION
+- Stage6: 88% — core production resolvers/binder exist; authoritative prepared-runtime-request producer plus safe root binding remain mandatory.
+- Stage7: 97% — production catalog/audition composition exists and the deepest authorization boundary is now hardened; exact corrected-head CI is still pending.
+- Stage8: 97% — persisted production recovery composition and terminal/filesystem verification exist; integrated exact-head Final validation remains pending.
+
+MANDATORY GATES
+- Stage6 production composition: FAIL / NOT PASS (authoritative runtime-request producer and root binding missing).
+- Stage7 exact corrected-head fast-track CI: IN PROGRESS at last inspection.
+- Stage8 production composition: IMPLEMENTED; integrated Final validation NOT RUN on a certified Final SHA.
+- Full compiled Final tests: NOT RUN.
+- Final source acceptance: NOT RUN.
+- Windows publish/version exact 1.0.0: NOT RUN.
+- Actual CloudScribe.exe execution acceptance: NOT RUN.
+- Exact source no-mutation verification: NOT RUN.
+- Exact SHA freeze: NOT RUN.
+- Strict/full certification: NOT RUN.
+- Exact same-SHA no-change certification: NOT RUN.
+- Serial Final 1.0.0/main re-promotion: NOT RUN.
+
+NEXT EXACT GATE
+1. Inspect exact corrected Stage7 CI run 33755174842. If failed, repair the first exact compiler/analyzer/test failure before anything else on that lane.
+2. In parallel, implement the authoritative Stage6 GoogleGenerationProductionRuntimeRequest ownership/source at the actual compile/approval/pre-submit producer, with missing/stale/mismatch fail-closed tests; then wire Stage6GoogleGenerationShellBinder/ConfigureStage6GoogleGeneration only when that source is genuine.
+3. Keep Stage8 validation advancing independently if a mandatory integrated failure appears.
+4. Once Stage6/7/8 production composition all pass, begin the serial Final gate chain only: full compiled tests -> Final source acceptance -> exact Windows 1.0.0 publish -> run actual CloudScribe.exe -> verify no source mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification -> serial Final/main promotion.

@@ -8,6 +8,7 @@ public sealed class ProviderAccountEntity
     public string? CredentialTargetName { get; set; }
     public string? EndpointId { get; set; }
     public string? RegionId { get; set; }
+    public string? EndpointOrigin { get; set; }
     public bool IsEnabled { get; set; }
     public long Revision { get; set; }
     public long CreatedAtUnixMilliseconds { get; set; }

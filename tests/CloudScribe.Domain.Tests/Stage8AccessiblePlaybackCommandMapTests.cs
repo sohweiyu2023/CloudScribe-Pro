@@ -5,7 +5,7 @@ namespace CloudScribe.Domain.Tests;
 public sealed class Stage8AccessiblePlaybackCommandMapTests
 {
     [Fact]
-    public void DefaultMap_CoversCoreKeyboardCommands_AndNormalizesKeys()
+    public void DefaultMapCoversCoreKeyboardCommandsAndNormalizesKeys()
     {
         var map = AccessiblePlaybackCommandMap.CreateDefault();
         map.EnsureCoreKeyboardCoverage();
@@ -15,7 +15,7 @@ public sealed class Stage8AccessiblePlaybackCommandMapTests
     }
 
     [Fact]
-    public void Constructor_RejectsDuplicateNormalizedGesture()
+    public void ConstructorRejectsDuplicateNormalizedGesture()
     {
         var pairs = new[]
         {
@@ -26,7 +26,7 @@ public sealed class Stage8AccessiblePlaybackCommandMapTests
     }
 
     [Fact]
-    public void EnsureCoreKeyboardCoverage_FailsClosedWhenIncomplete()
+    public void EnsureCoreKeyboardCoverageFailsClosedWhenIncomplete()
     {
         var map = new AccessiblePlaybackCommandMap(new[]
         {

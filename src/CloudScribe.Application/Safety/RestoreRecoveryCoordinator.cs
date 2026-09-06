@@ -1,6 +1,6 @@
 namespace CloudScribe.Application.Safety;
 
-public sealed class RestoreRecoveryCoordinator
+public sealed class RestoreRecoveryCoordinator : IDisposable
 {
     private readonly Func<CancellationToken, Task> _rollbackAsync;
     private readonly Func<CancellationToken, Task> _resumeVerifiedApplyAsync;
@@ -58,5 +58,11 @@ public sealed class RestoreRecoveryCoordinator
         {
             _recoveryGate.Release();
         }
+    }
+
+    public void Dispose()
+    {
+        _recoveryGate.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

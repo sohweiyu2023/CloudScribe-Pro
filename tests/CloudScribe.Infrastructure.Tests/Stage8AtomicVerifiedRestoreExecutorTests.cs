@@ -68,6 +68,49 @@ public sealed class Stage8AtomicVerifiedRestoreExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsyncRejectsReparseAncestorBeforeCreatingRestoreRoot()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = NewTempDirectory();
+        var external = NewTempDirectory();
+        try
+        {
+            var backup = Path.Combine(root, "backup");
+            Directory.CreateDirectory(backup);
+            var approved = new byte[] { 8, 6, 7, 5 };
+            await File.WriteAllBytesAsync(Path.Combine(backup, "db.bin"), approved, cancellationToken);
+
+            var linkedParent = Path.Combine(root, "linked-parent");
+            try
+            {
+                Directory.CreateSymbolicLink(linkedParent, external);
+            }
+            catch (Exception ex) when (ex is PlatformNotSupportedException or UnauthorizedAccessException or IOException)
+            {
+                return;
+            }
+
+            var restore = Path.Combine(linkedParent, "restore");
+            var manifest = Manifest("db.bin", approved);
+            var plan = RestoreExecutionPlan.Create(restore, manifest, 1024, 10);
+            var journal = RestoreTransactionJournal.Start(plan, DateTimeOffset.UtcNow.AddSeconds(-1));
+            var executor = new AtomicVerifiedRestoreExecutor();
+
+            InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => executor.ExecuteAsync(backup, plan, journal, cancellationToken));
+
+            Assert.Contains("reparse-point directory", error.Message, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(Path.Combine(external, "restore")));
+            Assert.False(File.Exists(Path.Combine(external, "restore", "db.bin")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(external, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsyncPreexistingDestinationIsNeverOverwrittenOrDeleted()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

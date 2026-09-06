@@ -19,7 +19,7 @@ public sealed record DatabaseMigrationStep(
         bool requiresBackup = true,
         bool transactional = true)
     {
-        if (fromVersion < 0) throw new ArgumentOutOfRangeException(nameof(fromVersion));
+        ArgumentOutOfRangeException.ThrowIfNegative(fromVersion);
         if (toVersion <= fromVersion) throw new ArgumentOutOfRangeException(nameof(toVersion), "Migrations must move strictly forward.");
         ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(migrationScript);

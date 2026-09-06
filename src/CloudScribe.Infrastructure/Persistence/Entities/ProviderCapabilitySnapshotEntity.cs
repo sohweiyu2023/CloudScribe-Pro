@@ -9,6 +9,7 @@ public sealed class ProviderCapabilitySnapshotEntity
     public string? CredentialTargetName { get; set; }
     public string? EndpointId { get; set; }
     public string? RegionId { get; set; }
+    public string? EndpointOrigin { get; set; }
     public long CapturedAtUnixMilliseconds { get; set; }
     public long ExpiresAtUnixMilliseconds { get; set; }
     public string ProvenanceId { get; set; } = string.Empty;

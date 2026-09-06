@@ -1,0 +1,55 @@
+CloudScribe Pro Final 1.0.0 — Stage6 production fast-track handover
+Date: 2026-09-03
+Controlling baseline: v2.23
+Carrier branch: repair/final-stage7-production-parallel
+Status: REPAIR
+
+LIVE HEADS RE-READ BEFORE MUTATION
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage7-production-parallel: ef3ff35f57b9910da3060ee5022e7811382468b4 before this run
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+CI RECHECK
+- Prior failing run 33727336193 at 10ce6650f549f47f5f2ae35b28bfbac0d09a0888: FAIL.
+- Newer repair head ef3ff35f57b9910da3060ee5022e7811382468b4: Stage 7 fast-track run 33727913304 PASS.
+- New source commit 18ccd2590f3263a0ce6fd015494825916495bc70: fast-track run 33732359537 was IN PROGRESS when inspected.
+- Test commit 451d4bd8c1de23668d6d2a8756add48a29640085 follows the source commit and has been pushed; inspect its exact run next.
+
+LANDED THIS RUN
+1. 18ccd2590f3263a0ce6fd015494825916495bc70 — fix(stage6): bind runtime request to exact UI and provider identity
+   - Fail closed when UI account, voice, output format, or capability evidence differs from the durable submission envelope.
+   - Fail closed when provider identity is not GoogleGenerationProvider.StableProviderId.
+   - Fail closed when operation is not GoogleGenerationProvider.SynthesizeOperationStableId.
+   - Fail closed when provider output format differs from the durable envelope.
+   - Existing exact account/pricing/revision/payload SHA+length validation remains intact.
+   - No authorization/trust/reconciliation evidence is synthesized.
+
+2. 451d4bd8c1de23668d6d2a8756add48a29640085 — test(stage6): reject UI and provider identity drift
+   - Adds focused rejection coverage for UI voice drift, UI capability drift, provider identity drift, provider operation drift, and provider output-format drift.
+
+CURRENT STAGE ESTIMATES
+- Stage6 production composition: 94%
+- Stage7 production composition: 98%
+- Stage8 production composition: 98%
+- Final 1.0.0 serial certification: 84%
+
+GATES
+- Stage6/7 carrier fast-track at ef3ff35f57b9910da3060ee5022e7811382468b4: PASS.
+- Stage6 source hardening commit 18ccd2590f3263a0ce6fd015494825916495bc70: RUNNING when last inspected.
+- Stage6 focused-test commit 451d4bd8c1de23668d6d2a8756add48a29640085: pushed; exact CI result must be inspected next.
+- Full compiled tests: NOT RUN; blocked until Stage6-8 production composition is complete.
+- Final source acceptance: NOT RUN.
+- Windows publish/version exact 1.0.0: NOT RUN.
+- Actual CloudScribe.exe acceptance: NOT RUN.
+- Exact source no-mutation/freeze/strict/full/same-SHA certification: NOT RUN.
+
+REMAINING STAGE6 PRODUCTION GAP
+- CompositionRoot still does not bind Stage6 because no authoritative production source yet supplies a complete GoogleGenerationProductionRuntimeRequest from the real pre-submit preparation workflow.
+- The source must carry exact durable envelope + compiled provider request + current UI selection/admitted trust + persisted queue transition/reconciliation + pricing/revision/estimate evidence; it must not reconstruct or fabricate authorization/currentness evidence from defaults.
+
+NEXT EXACT GATE
+1. Inspect exact CI for 451d4bd8c1de23668d6d2a8756add48a29640085 and fix the first exact failure if any.
+2. Implement the authoritative Stage6 prepared-runtime-request source/persistence boundary from the real pre-submit workflow, with stale/missing/mismatched evidence rejection tests.
+3. Only then bind Stage6GoogleGenerationShellBinder in CompositionRoot and satisfy live ConfigureStage6GoogleGeneration integration contracts.
+4. Continue Stage7/8 independently while any Stage6 dependency is unavailable.
+5. Only after all Stage6-8 production composition passes, enter serial Final gates in prescribed order.
