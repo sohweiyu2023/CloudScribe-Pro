@@ -126,16 +126,21 @@ public sealed class FinalReleaseIntegrationContractTests
         }
 
         int credentialValidation = stage6IntentEvidence.IndexOf(
-            "await ValidateCredentialAvailableAsync(snapshot.Account, cancellationToken)",
+            "ValidateCredentialAvailableAsync(",
             StringComparison.Ordinal);
         int pricingValidation = stage6IntentEvidence.IndexOf(
-            "await ValidatePricingCurrentAsync(snapshot.PricingProvenanceId, cancellationToken)",
+            "ValidatePricingCurrentAsync(",
             StringComparison.Ordinal);
         int compileEvidence = stage6IntentEvidence.IndexOf(
-            "return new GoogleGenerationProductionCompileEvidence",
+            "return BuildCompileEvidence(",
+            StringComparison.Ordinal);
+        int buildCompileEvidence = stage6IntentEvidence.IndexOf(
+            "private static GoogleGenerationProductionCompileEvidence BuildCompileEvidence(",
             StringComparison.Ordinal);
         Assert.True(credentialValidation >= 0 && pricingValidation > credentialValidation && compileEvidence > pricingValidation,
             "Final Stage6 must revalidate live credential and active persisted pricing before emitting compile evidence.");
+        Assert.True(buildCompileEvidence > compileEvidence,
+            "Final Stage6 compile evidence must be emitted only through the post-revalidation evidence builder.");
     }
 
     private static void AssertLiveStage7And8Boundaries(string stage7Shell, string stage8Shell)
