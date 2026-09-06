@@ -1,0 +1,154 @@
+name: CloudScribe Final 1.0.0 exact-SHA repromotion
+
+on:
+  push:
+    branches:
+      - agent/final-1.0.0-tag-promotion
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  repromote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TARGET_SHA: ddf5bd8ed8982f7e4b7090b4857d4a813adaa6af
+      SUPERSEDED_SHA: a7e46638df3982f8c3c285100d99c049b1240dee
+      WINDOWS_ACCEPTANCE_RUN_ID: '34038800127'
+      FINAL_CERT_RUN_ID: '34035853037'
+      RELEASE_TAG: v1.0.0
+      FINAL_BRANCH: cloudscribe-final-1.0.0
+      MAIN_BRANCH: main
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout isolated promotion branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Require auxiliary branch delta to be only this promotion workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$TARGET_SHA" HEAD
+          mapfile -t changed < <(git diff --name-only "$TARGET_SHA" HEAD)
+          if [[ ${#changed[@]} -ne 1 || "${changed[0]}" != '.github/workflows/cloudscribe-final-1.0.0-repromotion.yml' ]]; then
+            printf 'Refusing release: auxiliary branch delta is not exactly the isolated promotion workflow.\nChanged paths:\n%s\n' "${changed[*]:-<none>}" >&2
+            exit 1
+          fi
+
+      - name: Require exact Final and main refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          final_sha="$(git ls-remote origin "refs/heads/$FINAL_BRANCH" | awk '{print $1}')"
+          main_sha="$(git ls-remote origin "refs/heads/$MAIN_BRANCH" | awk '{print $1}')"
+          [[ "$final_sha" == "$TARGET_SHA" ]] || { echo "Refusing release: $FINAL_BRANCH=$final_sha expected $TARGET_SHA" >&2; exit 1; }
+          [[ "$main_sha" == "$TARGET_SHA" ]] || { echo "Refusing release: $MAIN_BRANCH=$main_sha expected $TARGET_SHA" >&2; exit 1; }
+
+      - name: Require exact successful Windows executable acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${WINDOWS_ACCEPTANCE_RUN_ID}" --jq '[.head_sha,.status,.conclusion] | @tsv')"
+          expected="${TARGET_SHA}"$'\t''completed'$'\t''success'
+          if [[ "$actual" != "$expected" ]]; then
+            printf 'Refusing release: Windows executable acceptance is not exact green evidence.\nActual: %q\n' "$actual" >&2
+            exit 1
+          fi
+
+      - name: Require post-Windows strict/full and same-SHA no-change certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          attempt2="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${FINAL_CERT_RUN_ID}/attempts/2" --jq '[.head_sha, (.run_attempt|tostring), .status, .conclusion] | @tsv')"
+          attempt3="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${FINAL_CERT_RUN_ID}/attempts/3" --jq '[.head_sha, (.run_attempt|tostring), .status, .conclusion] | @tsv')"
+          expected2="${TARGET_SHA}"$'\t''2'$'\t''completed'$'\t''success'
+          expected3="${TARGET_SHA}"$'\t''3'$'\t''completed'$'\t''success'
+          [[ "$attempt2" == "$expected2" ]] || { printf 'Refusing release: post-Windows strict/full certification is not exact green evidence.\nActual: %q\n' "$attempt2" >&2; exit 1; }
+          [[ "$attempt3" == "$expected3" ]] || { printf 'Refusing release: exact-SHA no-change certification is not exact green evidence.\nActual: %q\n' "$attempt3" >&2; exit 1; }
+
+      - name: Reconcile only the known superseded mutable v1.0.0 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing_tag="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | awk '{print $1}')"
+          if [[ -n "$existing_tag" && "$existing_tag" != "$SUPERSEDED_SHA" && "$existing_tag" != "$TARGET_SHA" ]]; then
+            echo "Refusing release: unexpected $RELEASE_TAG target $existing_tag." >&2
+            exit 1
+          fi
+
+          release_exists=false
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            release_exists=true
+            release_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .tag_name)"
+            immutable="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .immutable)"
+            [[ "$release_tag" == "$RELEASE_TAG" ]] || { echo 'Refusing release: unexpected existing release tag.' >&2; exit 1; }
+            if [[ "$immutable" == 'true' ]]; then
+              if [[ "$existing_tag" == "$TARGET_SHA" ]]; then
+                echo 'Exact immutable release already exists; no destructive reconciliation required.'
+                exit 0
+              fi
+              echo 'BLOCKED: superseded v1.0.0 release is immutable and cannot be safely replaced.' >&2
+              exit 1
+            fi
+          fi
+
+          if [[ "$release_exists" == true ]]; then
+            gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes
+          fi
+          if [[ -n "$existing_tag" ]]; then
+            git push origin ":refs/tags/$RELEASE_TAG"
+          fi
+
+      - name: Create exact v1.0.0 tag and final GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | awk '{print $1}')"
+          if [[ -z "$current" ]]; then
+            git tag "$RELEASE_TAG" "$TARGET_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
+          elif [[ "$current" != "$TARGET_SHA" ]]; then
+            echo "Refusing release: $RELEASE_TAG unexpectedly resolves to $current." >&2
+            exit 1
+          fi
+
+          cat > "$RUNNER_TEMP/release-notes.txt" <<EOF
+          CloudScribe Pro 1.0.0
+
+          Exact certified source SHA: $TARGET_SHA
+          Windows executable acceptance run: $WINDOWS_ACCEPTANCE_RUN_ID — PASS
+          Post-Windows strict/full certification: run $FINAL_CERT_RUN_ID attempt 2 — PASS
+          Exact-SHA no-change certification: run $FINAL_CERT_RUN_ID attempt 3 — PASS
+          Final ref: $FINAL_BRANCH -> $TARGET_SHA
+          Main ref: $MAIN_BRANCH -> $TARGET_SHA
+
+          This release pins the exact twice-certified Final 1.0.0 source tree. It does not claim live-provider acceptance beyond the evidence represented by the certified repository state.
+          EOF
+
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title 'CloudScribe Pro 1.0.0' --notes-file "$RUNNER_TEMP/release-notes.txt"
+          fi
+
+      - name: Require exact immutable release and unchanged refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_sha="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | awk '{print $1}')"
+          release_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .tag_name)"
+          draft="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .draft)"
+          prerelease="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .prerelease)"
+          immutable="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .immutable)"
+          final_sha="$(git ls-remote origin "refs/heads/$FINAL_BRANCH" | awk '{print $1}')"
+          main_sha="$(git ls-remote origin "refs/heads/$MAIN_BRANCH" | awk '{print $1}')"
+          [[ "$tag_sha" == "$TARGET_SHA" ]] || { echo "Tag verification failed: $tag_sha != $TARGET_SHA" >&2; exit 1; }
+          [[ "$release_tag" == "$RELEASE_TAG" && "$draft" == 'false' && "$prerelease" == 'false' ]] || { echo 'Final release metadata verification failed.' >&2; exit 1; }
+          [[ "$final_sha" == "$TARGET_SHA" && "$main_sha" == "$TARGET_SHA" ]] || { echo 'Final/main refs mutated during release promotion.' >&2; exit 1; }
+          if [[ "$immutable" != 'true' ]]; then
+            echo 'BLOCKED: newly published v1.0.0 is not immutable. Enable repository release immutability in Settings > General > Releases, then rerun this exact workflow; immutability applies only to future releases.' >&2
+            exit 1
+          fi
+          echo "FINAL 1.0.0 immutable release verified at $TARGET_SHA"
