@@ -49,7 +49,6 @@ public sealed class GoogleGenerationUiQueueCoordinator
             ArgumentNullException.ThrowIfNull(admittedTrust);
             ArgumentNullException.ThrowIfNull(previousState);
             ArgumentNullException.ThrowIfNull(currentState);
-            ArgumentNullException.ThrowIfNull(resolutionEvidence);
 
             if (!string.Equals(admittedTrust.ProviderStableId, GoogleProviderStableId, StringComparison.Ordinal) ||
                 !string.Equals(admittedTrust.OperationStableId, GoogleOperationStableId, StringComparison.Ordinal))

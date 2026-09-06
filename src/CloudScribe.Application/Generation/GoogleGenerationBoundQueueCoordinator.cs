@@ -21,7 +21,12 @@ public sealed class GoogleGenerationBoundQueueCoordinator
     {
         _queueCoordinator = queueCoordinator ?? throw new ArgumentNullException(nameof(queueCoordinator));
         if ((loadPersistedState is null) != (savePersistedState is null))
-            throw new ArgumentException("Durable Google queue-state load and save delegates must be configured together.");
+        {
+            throw new ArgumentException(
+                "Durable Google queue-state load and save delegates must be configured together.",
+                nameof(loadPersistedState));
+        }
+
         _loadPersistedState = loadPersistedState;
         _savePersistedState = savePersistedState;
     }
@@ -103,24 +108,10 @@ public sealed class GoogleGenerationBoundQueueCoordinator
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(admittedTrust);
-        var load = _loadPersistedState
-            ?? throw new InvalidOperationException("Durable Google queue-state loading is not configured.");
         var save = _savePersistedState
             ?? throw new InvalidOperationException("Durable Google queue-state persistence is not configured.");
 
-        cancellationToken.ThrowIfCancellationRequested();
-        GoogleGenerationPersistedQueueState previous = await load(
-            request.AccountId,
-            request.OperationStableId,
-            request.IdempotencyKey,
-            cancellationToken).ConfigureAwait(false)
-            ?? new GoogleGenerationPersistedQueueState(
-                request.AccountId,
-                request.OperationStableId,
-                request.IdempotencyKey,
-                UnresolvedSubmission: false,
-                ProviderRequestId: null).Validate();
-
+        GoogleGenerationPersistedQueueState previous = await LoadCurrentStateAsync(request, cancellationToken).ConfigureAwait(false);
         GoogleGenerationPersistedQueueStatePolicy.RequireCompatible(
             previous,
             request.AccountId,
@@ -140,25 +131,8 @@ public sealed class GoogleGenerationBoundQueueCoordinator
         if (outcome.Response is null)
             return outcome;
 
-        GenerationProviderResponse response = outcome.Response;
-        string? providerRequestId = string.IsNullOrWhiteSpace(response.ProviderRequestId)
-            ? previous.ProviderRequestId
-            : response.ProviderRequestId.Trim();
-        bool unresolved = response.Disposition == SubmissionDisposition.UnknownRequiresReconciliation;
-        if (unresolved && string.IsNullOrWhiteSpace(providerRequestId))
-        {
-            throw new InvalidOperationException(
-                "An ambiguous Google provider outcome cannot be persisted without a genuine provider request identity.");
-        }
-
-        var next = new GoogleGenerationPersistedQueueState(
-            previous.AccountId,
-            previous.OperationStableId,
-            previous.IdempotencyKey,
-            unresolved,
-            providerRequestId).Validate();
+        GoogleGenerationPersistedQueueState next = CreateNextPersistedState(previous, outcome.Response);
         GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(previous, next);
-
         cancellationToken.ThrowIfCancellationRequested();
         await save(next, cancellationToken).ConfigureAwait(false);
         return outcome;
@@ -212,5 +186,47 @@ public sealed class GoogleGenerationBoundQueueCoordinator
             pricingApproved,
             postCompileLimitsSatisfied,
             cancellationToken);
+    }
+
+    private async Task<GoogleGenerationPersistedQueueState> LoadCurrentStateAsync(
+        GenerationProviderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var load = _loadPersistedState
+            ?? throw new InvalidOperationException("Durable Google queue-state loading is not configured.");
+        cancellationToken.ThrowIfCancellationRequested();
+        return await load(
+            request.AccountId,
+            request.OperationStableId,
+            request.IdempotencyKey,
+            cancellationToken).ConfigureAwait(false)
+            ?? new GoogleGenerationPersistedQueueState(
+                request.AccountId,
+                request.OperationStableId,
+                request.IdempotencyKey,
+                UnresolvedSubmission: false,
+                ProviderRequestId: null).Validate();
+    }
+
+    private static GoogleGenerationPersistedQueueState CreateNextPersistedState(
+        GoogleGenerationPersistedQueueState previous,
+        GenerationProviderResponse response)
+    {
+        string? providerRequestId = string.IsNullOrWhiteSpace(response.ProviderRequestId)
+            ? previous.ProviderRequestId
+            : response.ProviderRequestId.Trim();
+        bool unresolved = response.Disposition == SubmissionDisposition.UnknownRequiresReconciliation;
+        if (unresolved && string.IsNullOrWhiteSpace(providerRequestId))
+        {
+            throw new InvalidOperationException(
+                "An ambiguous Google provider outcome cannot be persisted without a genuine provider request identity.");
+        }
+
+        return new GoogleGenerationPersistedQueueState(
+            previous.AccountId,
+            previous.OperationStableId,
+            previous.IdempotencyKey,
+            unresolved,
+            providerRequestId).Validate();
     }
 }

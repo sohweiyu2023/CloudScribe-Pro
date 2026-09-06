@@ -18,11 +18,11 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
         RequireCanonical(operationStableId, nameof(operationStableId));
         RequireCanonical(idempotencyKey, nameof(idempotencyKey));
 
-        await using CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        using CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         SqliteConnection connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-        await using SqliteCommand command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT AccountId, OperationStableId, IdempotencyKey, UnresolvedSubmission, ProviderRequestId
             FROM google_generation_queue_states
@@ -35,7 +35,7 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
         command.Parameters.AddWithValue("$operationStableId", operationStableId);
         command.Parameters.AddWithValue("$idempotencyKey", idempotencyKey);
 
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             return null;
 
@@ -54,12 +54,12 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
         ArgumentNullException.ThrowIfNull(state);
         state.Validate();
 
-        await using CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        using CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         SqliteConnection connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using SqliteTransaction transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-        await using SqliteCommand command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO google_generation_queue_states
