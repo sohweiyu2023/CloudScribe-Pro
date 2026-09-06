@@ -13,6 +13,7 @@ public sealed class FinalReleaseIntegrationContractTests
         string stage6IntentEvidence = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "GoogleGenerationProductionIntentEvidenceResolver.cs");
         string stage7Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage7VoiceLab.cs");
         string stage8Shell = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.Stage8RestoreRecovery.cs");
+        string stage8Binder = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "Stage8RestoreRecoveryShellBinder.cs");
         string finalPresentation = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "ViewModels", "ShellViewModel.FinalReleasePresentation.cs");
         string composition = ReadRepositoryFile(repositoryRoot, "src", "CloudScribe.App", "Composition", "CompositionRoot.cs");
 
@@ -20,7 +21,7 @@ public sealed class FinalReleaseIntegrationContractTests
         AssertLiveStage6Boundary(stage6Shell, stage6Compile);
         AssertAtomicStage6Capture(stage6IntentOwner, composition);
         AssertLiveStage6PricingRevalidation(stage6IntentEvidence);
-        AssertLiveStage7And8Boundaries(stage7Shell, stage8Shell);
+        AssertLiveStage7And8Boundaries(stage7Shell, stage8Shell, stage8Binder);
         AssertFinalPresentation(finalPresentation);
         AssertProductionComposition(composition);
     }
@@ -143,7 +144,7 @@ public sealed class FinalReleaseIntegrationContractTests
             "Final Stage6 compile evidence must be emitted only through the post-revalidation evidence builder.");
     }
 
-    private static void AssertLiveStage7And8Boundaries(string stage7Shell, string stage8Shell)
+    private static void AssertLiveStage7And8Boundaries(string stage7Shell, string stage8Shell, string stage8Binder)
     {
         string[] requiredStage7 =
         [
@@ -167,6 +168,21 @@ public sealed class FinalReleaseIntegrationContractTests
         {
             Assert.True(stage8Shell.Contains(required, StringComparison.Ordinal),
                 $"Final Stage8 recovery state must remain live, asynchronous and cancellation-aware: {required}");
+        }
+
+        string[] requiredPersistedRecovery =
+        [
+            "RestoreRecoveryProductionConfiguration configuration = configurationResolver.Resolve();",
+            "configuration.AuthenticationKeyReference",
+            "configuration.JournalPath",
+            "configuration.StagingRoot",
+            "configuration.BackupRoot",
+            ".RecoverPersistedAsync(cancellationToken)",
+        ];
+        foreach (string required in requiredPersistedRecovery)
+        {
+            Assert.True(stage8Binder.Contains(required, StringComparison.Ordinal),
+                $"Final Stage8 production recovery must load persisted configuration/state and fail closed rather than fabricating a current recovery plan: {required}");
         }
     }
 
