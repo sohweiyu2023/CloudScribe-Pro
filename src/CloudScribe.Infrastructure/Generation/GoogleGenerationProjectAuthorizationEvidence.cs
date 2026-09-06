@@ -15,14 +15,14 @@ public sealed record GoogleGenerationProjectAuthorizationEvidence(
 {
     public GoogleGenerationProjectAuthorizationEvidence Validate(DateTimeOffset nowUtc)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(AccountId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(ProjectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(ModelId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(CredentialReferenceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(CapabilityProvenanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(EndpointId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(RegionId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(EndpointOrigin);
+        ValidateRequiredText(AccountId, nameof(AccountId));
+        ValidateRequiredText(ProjectId, nameof(ProjectId));
+        ValidateRequiredText(ModelId, nameof(ModelId));
+        ValidateRequiredText(CredentialReferenceId, nameof(CredentialReferenceId));
+        ValidateRequiredText(CapabilityProvenanceId, nameof(CapabilityProvenanceId));
+        ValidateRequiredText(EndpointId, nameof(EndpointId));
+        ValidateRequiredText(RegionId, nameof(RegionId));
+        ValidateRequiredText(EndpointOrigin, nameof(EndpointOrigin));
         if (!Uri.TryCreate(EndpointOrigin, UriKind.Absolute, out Uri? endpoint)
             || !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
             || !string.IsNullOrEmpty(endpoint.UserInfo)
@@ -40,4 +40,10 @@ public sealed record GoogleGenerationProjectAuthorizationEvidence(
 
     public bool IsCurrent(DateTimeOffset nowUtc) =>
         Authorized && CapturedAtUtc <= nowUtc && nowUtc < ExpiresAtUtc;
+
+    private static void ValidateRequiredText(string value, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"Google project/model authorization is missing {propertyName}.");
+    }
 }
