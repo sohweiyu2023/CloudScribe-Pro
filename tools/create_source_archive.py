@@ -31,6 +31,19 @@ def releasable(root: Path) -> list[Path]:
     return sorted(files, key=lambda p: p.relative_to(root).as_posix())
 
 
+def supported_source_identity(state: dict[str, object], version: str) -> bool:
+    stage = state.get("current_stage")
+    if stage == 2:
+        return version.startswith("0.3.48-")
+    if stage == 3:
+        return version.startswith("0.4.0-stage3")
+    if stage == 4:
+        return version.startswith("0.5.0-stage4")
+    if stage == 8:
+        return version == "1.0.0"
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create a deterministic, no-overwrite CloudScribe source ZIP bound to SESSION_STATE.json.")
     parser.add_argument("--output-directory", default=".")
@@ -43,8 +56,11 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         return fail(f"cannot read SESSION_STATE.json: {exc}")
     version = str(state.get("repository_version", "")).strip()
-    if not (version.startswith("0.3.48-") or version.startswith("0.4.0-stage3") or version.startswith("0.5.0-stage4")):
-        return fail(f"refusing archive for unexpected repository version: {version!r}")
+    if not supported_source_identity(state, version):
+        return fail(
+            f"refusing archive for unexpected repository stage/version identity: "
+            f"stage={state.get('current_stage')!r} version={version!r}"
+        )
     expected_name = f"CloudScribe_Pro_Source_{version}"
     name = args.name or expected_name
     if name != expected_name:
