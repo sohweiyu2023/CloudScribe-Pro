@@ -1,0 +1,55 @@
+STATUS: REPAIR
+
+CloudScribe Pro Final 1.0.0 remains reopened under v2.23 controlling baseline.
+
+Live heads freshly observed before the Stage6 mutation:
+- main: 14f85105f111d59e9693174153b5236bafe6f990
+- repair/final-stage7-production-parallel before mutation: 836910b6e91f02b583aa3cc607a316d99c2e3c27
+- repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+- repair/final-1.0.0-session-state-updater before handover mutation: 87e512bab12357a9cd7fc178915482b48b69a6f0
+
+Landed this run:
+- 237f981f7947c49218e3d639c0f617a2225fe25a — fix(stage6): enforce queue transition policy at runtime composition
+- File: src/CloudScribe.App/Composition/GoogleGenerationProductionUiSnapshotValidator.cs
+- Change: final Stage6 runtime UI snapshot validation now invokes GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(previous,current,resolutionEvidence). This enforces immutable queue identity, append-only provider request identity, and reconciliation evidence validity at runtime composition instead of relying only on the earlier approval-time validation. The prior ad-hoc unresolved-submission check was replaced by the full domain transition policy.
+
+Exact qualification:
+- Previous source 836910b6e91f02b583aa3cc607a316d99c2e3c27: no PR workflow run surfaced through the exact-SHA workflow query during this run.
+- New source 237f981f7947c49218e3d639c0f617a2225fe25a: no PR workflow run surfaced at first exact-SHA poll; combined commit status is pending with zero attached statuses. Do not carry any older PASS forward.
+
+Stage estimates:
+- Stage6: 99.96% REPAIR
+- Stage7: 99% (production composition present on active parallel head; newest Stage6 source qualification NOT YET OBSERVED)
+- Stage8: 99% (independent production recovery head unchanged; newest Stage6 source qualification NOT YET OBSERVED)
+
+Important exact Stage6 architecture evidence established this run:
+- ShellViewModel.GenerateWithGoogleAsync still passes snapshot PreviousState, CurrentState and ResolutionEvidence directly to GoogleGenerationUiQueueCoordinator.
+- GoogleGenerationUiQueueCoordinator forwards those values into GoogleGenerationBoundQueueCoordinator.
+- GoogleGenerationBoundQueueCoordinator validates the transition but performs no durable load/save.
+- Infrastructure contains GooglePersistedQueueEnvelope but there is no registered durable Google queue-state store in ServiceCollectionExtensions; only the durable Google spend-authorization store is registered.
+- GoogleGenerationProductionSubmissionStateOwner is in-memory for the executable submission state and persists only spend authorization.
+Therefore genuine durable queue ownership/loading remains a mandatory Stage6 gap. Do not fabricate it by treating snapshot state as persisted evidence.
+
+Remaining Stage6 mandatory authority gaps:
+1. Genuine current Google project/model authorization producer/owner.
+2. Authoritative upstream request-specific pricing calculation/approval provenance (runtime consumption is already sourced from durable spend approval).
+3. Durable Google queue-state ownership/loading at the actual transition/submission boundary.
+4. Genuine reconciliation-resolution evidence producer/owner tied to durable queue state.
+
+Final serial gates remain NOT RUN:
+- full compiled tests
+- Final source acceptance
+- exact Windows publish/version 1.0.0
+- run actual CloudScribe.exe
+- exact source no-mutation
+- freeze exact SHA
+- strict/full certification
+- exact same-SHA no-change certification
+- serial Final/main re-promotion
+
+Next exact gate:
+1. Re-read main and every active repair head.
+2. Inspect exact-SHA CI/status for 237f981f7947c49218e3d639c0f617a2225fe25a and repair the first genuine compiler/analyzer/test failure if present.
+3. Implement the shortest safe durable Google queue-state owner at the real Stage6 transition boundary, with authoritative load-before-transition and durable save/update semantics; wire runtime composition to consume that state rather than snapshot-carried queue assertions. Preserve the mandated executor/coordinator chain and fail closed on missing/mismatched persisted state.
+4. Add only focused rejection tests required to prove the durable queue/reconciliation boundary.
+5. Requalify the resulting exact SHA on Stage7/Stage8 before advancing any Final gate.
