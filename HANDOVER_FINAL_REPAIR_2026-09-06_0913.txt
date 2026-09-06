@@ -1,0 +1,48 @@
+STATUS: REPAIR — Stage6 99.97% · Stage7 99% · Stage8 99%
+
+Controlling baseline: v2.23.
+Final 1.0.0 remains reopened.
+
+LIVE TOPOLOGY READ BEFORE SOURCE MUTATION
+main: 14f85105f111d59e9693174153b5236bafe6f990
+repair/final-stage7-production-parallel pre-mutation: 237f981f7947c49218e3d639c0f617a2225fe25a
+repair/final-stage8-production-parallel: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+repair/final-stage6-runtime-restore-helper: 9faef87cc7be2114b2b27076686520c6990738b1
+repair/final-1.0.0-shell-integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+repair/final-1.0.0-session-state-updater pre-handover: 03a5c2fba48cf417d6ca8f37be37e76b10d66639
+
+LANDED SOURCE
+fbe188187457b9fe2f0dcef011e31551d88dadf0 — feat(stage6): persist Google generation queue state
+
+SUBSTANTIVE CHANGE
+Added IGoogleGenerationPersistedQueueStateStore and SQLite-backed GoogleGenerationPersistedQueueStateStore. The store validates canonical account/operation/idempotency identities, loads persisted queue state by exact identity, preserves unresolved provider-request identity through GoogleGenerationPersistedQueueState.Validate(), and atomically upserts queue state. Added Stage6GoogleGenerationQueueState migration with composite primary key (AccountId, OperationStableId, IdempotencyKey). Registered the production store in infrastructure DI.
+
+WHY THIS MATTERS
+The previous Stage6 path had a real queue transition model/policy but no durable queue-state owner. This commit establishes genuine persisted ownership rather than trusting snapshot-carried queue assertions. It deliberately does not yet claim runtime composition is complete: current runtime evidence must next load this durable state at the actual submission/transition boundary and stop accepting queue state solely from the authorization snapshot.
+
+QUALIFICATION
+Exact source SHA fbe188187457b9fe2f0dcef011e31551d88dadf0: no pull-request workflow runs observed after publish; branch currently has no open PR. Stage7 exact qualification: NOT RUN / NOT YET OBSERVED. Stage8 exact qualification: NOT RUN / NOT YET OBSERVED. No previous-SHA PASS carried forward.
+
+GATES
+Stage6 production composition: REPAIR
+Stage7 exact qualification: NOT RUN / NOT YET OBSERVED
+Stage8 exact qualification: NOT RUN / NOT YET OBSERVED
+Full compiled Final tests: NOT RUN
+Final source acceptance: NOT RUN
+Windows publish/version exact 1.0.0: NOT RUN
+Actual CloudScribe.exe acceptance: NOT RUN
+Exact source no-mutation: NOT RUN
+Freeze exact SHA: NOT RUN
+Strict/full certification: NOT RUN
+Exact same-SHA no-change certification: NOT RUN
+Final/main serial re-promotion: NOT RUN
+
+REMAINING STAGE6 CRITICAL PATH
+1. Wire durable queue-state load-before-transition/runtime composition and durable save/update at the real submission outcome boundary.
+2. Establish a genuine reconciliation-resolution producer/owner tied to persisted queue state; never fabricate resolution evidence.
+3. Establish genuine current Google project/model authorization.
+4. Close authoritative upstream request-specific pricing calculation/approval provenance if still not independently owned.
+5. Add focused fail-closed tests required by those seams and qualify exact SHA.
+
+NEXT EXACT GATE
+Re-read live main and every active repair head. Then wire IGoogleGenerationPersistedQueueStateStore into the production Stage6 execution path so the current persisted state is loaded by exact account/operation/idempotency identity before transition validation/submission, and persisted state is updated only from genuine queue/submission outcomes. Trigger/inspect exact CI and repair the first exact compiler/analyzer/test diagnostic.
