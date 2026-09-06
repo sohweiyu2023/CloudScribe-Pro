@@ -102,6 +102,7 @@ jobs:
           if [[ -n "$existing_tag" ]]; then
             git push origin ":refs/tags/$RELEASE_TAG"
           fi
+          git tag -d "$RELEASE_TAG" >/dev/null 2>&1 || true
 
       - name: Create exact v1.0.0 tag and final GitHub Release
         shell: bash
