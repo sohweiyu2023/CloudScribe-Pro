@@ -55,7 +55,7 @@ def main() -> int:
         return fail(f"invalid repository JSON contract: {exc}")
 
     stage = session.get("current_stage")
-    if session.get("project") != "CloudScribe Pro" or stage not in (2, 3, 4):
+    if session.get("project") != "CloudScribe Pro" or stage not in (2, 3, 4, 8):
         return fail("SESSION_STATE.json does not identify a supported CloudScribe Pro staged checkpoint")
     version = str(session.get("repository_version", ""))
     if stage == 2 and not version.startswith("0.3.48-"):
@@ -64,6 +64,8 @@ def main() -> int:
         return fail(f"unexpected Stage 3 repository version: {version!r}")
     if stage == 4 and not version.startswith("0.5.0-stage4"):
         return fail(f"unexpected Stage 4 repository version: {version!r}")
+    if stage == 8 and version != "1.0.0":
+        return fail(f"unexpected Stage 8/Final repository version: {version!r}")
 
     sdk_contract = global_json.get("sdk")
     if not isinstance(sdk_contract, dict):
@@ -79,18 +81,27 @@ def main() -> int:
 
     if session.get("stage1_checkpoint_promoted") is not True or session.get("stage2_source_implemented") is not True:
         return fail("stage checkpoint/source-state flags are inconsistent")
-    if stage in (3, 4):
+    if stage in (3, 4, 8):
         if session.get("stage2_promoted") is not True:
-            return fail("Stage 3 requires a promoted Stage 2 checkpoint")
+            return fail("Stage 3+ requires a promoted Stage 2 checkpoint")
         if session.get("stage2_manual_visual_acceptance") is not True or session.get("stage2_user_clicked_editor_retest") is not True:
-            return fail("Stage 3 requires truthful real-user Stage 2 visual acceptance")
+            return fail("Stage 3+ requires truthful real-user Stage 2 visual acceptance")
         if session.get("stage3_slice1_started") is not True:
-            return fail("Stage 3 Slice 1 is not marked as started")
-    if stage == 4:
+            return fail("Stage 3+ requires Stage 3 Slice 1 to be marked as started")
+    if stage in (4, 8):
         if session.get("stage3_complete") is not True or session.get("stage3_promoted") is not True:
-            return fail("Stage 4 requires a complete promoted Stage 3 checkpoint")
+            return fail("Stage 4+ requires a complete promoted Stage 3 checkpoint")
         if session.get("stage3_promoted_commit") != "beb186bc57f30f3f308e398085bc3af3c94f4020":
-            return fail("Stage 4 does not preserve the authoritative Stage 3 promoted commit")
+            return fail("Stage 4+ does not preserve the authoritative Stage 3 promoted commit")
+    if stage == 8:
+        if session.get("stage4_foundation_batch16") is not True:
+            return fail("Stage 8/Final repair must preserve the latest Stage 4 foundation lineage")
+        if session.get("stage_title") != "Stage 8 complete; Final 1.0.0 end-user integration acceptance reopened":
+            return fail("Stage 8/Final session state does not identify the reopened Final 1.0.0 acceptance checkpoint")
+        if session.get("next_stage") != 8:
+            return fail("Stage 8/Final repair must remain pinned to the Stage 8/Final acceptance checkpoint")
+        if session.get("stage_gate_passed") is not False:
+            return fail("Stage 8/Final repair source must not self-certify its current gate")
     if session.get("whole_application_final_claimed") is not False:
         return fail("source incorrectly claims the whole application is final")
 
@@ -98,9 +109,20 @@ def main() -> int:
     context_manifest = session.get("controlling_context_manifest")
     immutable_package = session.get("immutable_master_package_present")
     if self_contained is True:
-        if not isinstance(context_manifest, str) or not context_manifest.strip() or not (root / context_manifest).is_file():
-            return fail("SESSION_STATE.json claims self-contained controlling context but its manifest is missing")
-        if immutable_package is not True:
+        if immutable_package is True:
+            if not isinstance(context_manifest, str) or not context_manifest.strip() or not (root / context_manifest).is_file():
+                return fail("SESSION_STATE.json claims self-contained controlling context but its manifest is missing")
+        elif stage == 8 and immutable_package is False:
+            if (
+                not isinstance(context_manifest, str)
+                or "v2.23" not in context_manifest
+                or "repository history and certification evidence" not in context_manifest
+            ):
+                return fail(
+                    "Stage 8/Final self-contained controlling context must identify the v2.23 baseline "
+                    "and repository-history certification evidence"
+                )
+        else:
             return fail("self-contained controlling context requires immutable_master_package_present=true")
     elif self_contained is False:
         if context_manifest not in (None, ""):
