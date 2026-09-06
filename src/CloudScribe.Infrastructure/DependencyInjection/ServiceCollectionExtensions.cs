@@ -117,6 +117,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<GoogleGenerationProductionAccountFactory>();
         services.AddSingleton<IGoogleGenerationSpendAuthorizationStore, GoogleGenerationSpendAuthorizationStore>();
         services.AddSingleton<IGoogleGenerationPersistedQueueStateStore, GoogleGenerationPersistedQueueStateStore>();
+        services.AddSingleton<IGoogleGenerationProjectAuthorizationStore, GoogleGenerationProjectAuthorizationStore>();
         services.AddSingleton<GoogleGenerationCurrentSpendAuthorizationResolver>();
         services.AddSingleton<StrictJsonObjectReader>();
         services.AddSingleton<ExactPricingControlMaterialInspector>();
