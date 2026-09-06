@@ -5,11 +5,8 @@ on:
   push:
     branches:
       - agent/stage8-fast-track
-    paths:
-      - '.github/workflows/cloudscribe-stage8-manifest-sync.yml'
-      - 'tools/verify_repository.py'
-      - 'tests/test_verification_tools.py'
-      - 'SESSION_STATE.json'
+    paths-ignore:
+      - 'SHA256SUMS.txt'
 
 permissions:
   actions: write
