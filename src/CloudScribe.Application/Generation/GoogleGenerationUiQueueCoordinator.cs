@@ -47,6 +47,9 @@ public sealed class GoogleGenerationUiQueueCoordinator
 
             ArgumentNullException.ThrowIfNull(request);
             ArgumentNullException.ThrowIfNull(admittedTrust);
+            ArgumentNullException.ThrowIfNull(previousState);
+            ArgumentNullException.ThrowIfNull(currentState);
+            ArgumentNullException.ThrowIfNull(resolutionEvidence);
 
             if (!string.Equals(admittedTrust.ProviderStableId, GoogleProviderStableId, StringComparison.Ordinal) ||
                 !string.Equals(admittedTrust.OperationStableId, GoogleOperationStableId, StringComparison.Ordinal))
@@ -61,13 +64,19 @@ public sealed class GoogleGenerationUiQueueCoordinator
             if (!string.Equals(currentSelection.OutputFormat, request.OutputFormat, StringComparison.Ordinal))
                 throw new InvalidOperationException("Google UI output format differs from the bound provider request.");
 
-            cancellationToken.ThrowIfCancellationRequested();
-            return await _boundQueue.ProcessPersistedTransitionAsync(
-                request,
-                admittedTrust,
+            // The authorization-time transition is still validated as evidence, but it is never
+            // treated as the production queue state. The bound coordinator reloads the durable
+            // state immediately before submission and persists only a state derived from the
+            // genuine provider outcome.
+            GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(
                 previousState,
                 currentState,
-                resolutionEvidence,
+                resolutionEvidence);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return await _boundQueue.ProcessDurableAsync(
+                request,
+                admittedTrust,
                 admissionCurrent,
                 accountCredentialAvailable,
                 pricingApproved,
