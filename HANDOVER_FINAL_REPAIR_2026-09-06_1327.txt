@@ -1,0 +1,32 @@
+STATUS: REPAIR
+
+Active source lane: repair/final-stage7-production-parallel
+Exact source SHA: f4214b310e281467f59daaeab15c2bad8f44b084
+Main: 14f85105f111d59e9693174153b5236bafe6f990
+Independent Stage8 head: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+
+This run closed the snapshot-carried Google ProjectAuthorized authority seam at the resolver boundary.
+
+Landed source sequence:
+- 9261c9654c43edfd31bd7388839b2061390b1d58 add bounded Google project/model authorization evidence
+- 933e2d119bd73a63e4ff2a2a8e8918e19fe81ec7 add durable authorization store contract
+- c6565a7311f9e4a3aa01f632a80c29718d36dde9 add SQLite migration
+- 87ae1f76c8427783013e36a9da486fe0cf2bc980 add SQLite authorization store
+- aa97ec979129ba9f511f016e956033c4cf7b7319 register store in production DI
+- cabac7dc8fcc6887b461d9bc7e61618217fdf8d3 make production intent resolver load and require current persisted project/model authorization
+- f4214b310e281467f59daaeab15c2bad8f44b084 stop trusting snapshot ProjectAuthorized during snapshot validation
+
+The persisted evidence is bound to account/project/model, credential reference, capability provenance, endpoint identity/origin, region and a bounded UTC validity window. Resolver fails closed when evidence is absent, rejected, expired, or mismatched. The legacy snapshot ProjectAuthorized boolean can no longer grant compile evidence.
+
+Exact-SHA Stage7/Stage8 fast-track workflows for f4214b310e281467f59daaeab15c2bad8f44b084 were IN PROGRESS at handover creation and must be inspected before carrying PASS.
+
+Remaining Stage6 mandatory authority seams after this repair:
+1. A genuine producer that writes GoogleGenerationProjectAuthorizationEvidence only after actual provider-side project/model verification. The repository has no Google project/model verification API path identified yet; do not fabricate authorization from credentials or capability presence.
+2. Genuine reconciliation-resolution ownership for unresolved durable submissions. ProcessDurableAsync persists unknown outcomes and blocks duplicate submission, but the inspected path has no provider-status/receipt reconciliation producer that can truthfully emit ProviderConfirmedTerminal or DurableProviderReceiptReconciled.
+3. Authoritative request-specific pricing derivation/provenance remains snapshot-carried before durable spend authorization; do not treat active pricing catalog SHA alone as a calculated estimate.
+
+Next exact gate:
+- Inspect Stage7 run 34013645958 and Stage8 run 34013645954 for f4214b310e281467f59daaeab15c2bad8f44b084.
+- Repair first exact compiler/analyzer/test diagnostic if either fails.
+- If green, implement the shortest genuine remaining authority producer, preferably project/model verification if a real provider API owner exists; otherwise close pricing derivation from the admitted catalog and compiled request without inventing rates.
+- Final gates remain NOT RUN until Stage6-8 production composition genuinely passes.
