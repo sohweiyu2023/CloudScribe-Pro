@@ -1,0 +1,46 @@
+STATUS: REPAIR — CloudScribe Pro Final 1.0.0 remains reopened.
+
+Controlling baseline: v2.23.
+Live main re-read before mutation: 14f85105f111d59e9693174153b5236bafe6f990.
+Legacy active lane heads re-read before mutation:
+- agent/stage6-fast-track: 1b3aa9ae406cef3df618540daa877713d517cbb6
+- agent/stage7-fast-track: 7411dd6d2e6ed576c94885fd4fd2a5df539d2181
+- agent/stage8-fast-track integration head before mutation: a68898b008195fcf068b67dd031c4eb59c7fb133
+
+Important topology note: agent/stage8-fast-track is the live integrated repair line and already contains newer Stage6/7/8 production-composition work than the legacy Stage6/7 lane refs. Do not regress it by promoting either stale legacy lane head over this integrated history.
+
+This run landed substantive Final/Stage8 anti-regression coverage:
+- 02d2fbc08934928190cad81a55359ec654ccd59d — test(stage8): lock persisted recovery production composition.
+- FinalReleaseIntegrationContractTests now reads Stage8RestoreRecoveryShellBinder.cs and requires the production persisted-recovery route to resolve RestoreRecoveryProductionConfiguration, carry its explicit authentication-key/journal/staging/backup bindings into composition, and invoke RecoverPersistedAsync rather than fabricating a current restore plan.
+
+Verified pre-mutation CI evidence:
+- a68898b008195fcf068b67dd031c4eb59c7fb133 — CloudScribe Stage 8 fast-track check run 34028802166: PASS on windows-2025; Strict Stage 8 fast-track validation PASS.
+- New substantive SHA 02d2fbc08934928190cad81a55359ec654ccd59d: exact post-change CI not yet surfaced at handover creation; do not infer PASS until a run/check explicitly reports success for this SHA or its handover child.
+
+Safety invariants preserved:
+- No raw provider-submit shortcut introduced.
+- No hardcoded authorization, ambient credentials/endpoints, fabricated trust/reconciliation/recovery evidence, dummy Configure call, or sync-over-async introduced.
+- Stage8 Final production composition remains pinned to ConfigurePersistedRecovery and RecoverPersistedAsync.
+
+Completion estimate on the live integrated repair line:
+- Stage0-5: 100%.
+- Stage6: 99% — production composition is present on the integrated repair line and Final anti-regression/acceptance tests cover current credential, active pricing, request/authorization coherence, deterministic compile/prepare, explicit spend approval, and runtime request resolution; exact Final serial certification still remains.
+- Stage7: 99% — production catalog/audition shell binders are present on the integrated repair line; exact Final serial certification still remains.
+- Stage8: 100% implementation/composition target on the integrated repair line — persisted recovery composition is wired and the previous exact Windows Stage8 fast-track check is green; this run adds a mandatory anti-regression guard for persisted recovery. Final certification remains separate.
+
+Mandatory Final gates:
+- Stage6/7/8 production composition acceptance: PASS on the pre-mutation integrated head; revalidation required for the new exact SHA.
+- Full compiled tests: NOT RUN as a serial Final gate on the new exact SHA.
+- Final source acceptance: NOT RUN as a serial Final gate on the new exact SHA.
+- Windows publish/version exact 1.0.0: NOT RUN as a serial Final gate on the new exact SHA.
+- Actual CloudScribe.exe execution: NOT RUN as a serial Final gate on the new exact SHA.
+- Exact source no-mutation check: NOT RUN.
+- Frozen exact SHA: NOT YET.
+- Strict/full certification: NOT RUN on the frozen exact SHA.
+- Exact same-SHA no-change certification: NOT RUN.
+- Final/main re-promotion: PROHIBITED until every gate above passes serially.
+
+Next exact gate:
+1. Inspect the exact Stage8 fast-track run for the current handover head. If it fails, repair the first concrete formatter/compiler/test failure only.
+2. If green, begin the serial Final gates on that exact SHA: full compiled tests -> Final source acceptance -> Windows publish/version exact 1.0.0 -> actual CloudScribe.exe execution -> exact source no-mutation -> freeze exact SHA -> strict/full certification -> exact same-SHA no-change certification.
+3. Only after all serial gates pass may Final 1.0.0 and main be re-promoted.
