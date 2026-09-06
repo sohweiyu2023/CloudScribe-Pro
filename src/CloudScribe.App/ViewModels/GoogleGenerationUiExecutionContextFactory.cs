@@ -8,9 +8,11 @@ public static class GoogleGenerationUiExecutionContextFactory
 {
     public static GoogleGenerationUiExecutionContext Create(
         GoogleGenerationAuthorizedRuntimeEvidence evidence,
+        IGoogleGenerationPersistedQueueStateStore persistedQueueStateStore,
         TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(evidence);
+        ArgumentNullException.ThrowIfNull(persistedQueueStateStore);
         ValidateRequiredEvidence(evidence);
 
         TimeProvider clock = timeProvider ?? TimeProvider.System;
@@ -20,7 +22,7 @@ public static class GoogleGenerationUiExecutionContextFactory
         GenerationProviderRequest request = ValidateCurrentRequest(evidence, account);
         RevalidateAuthorization(evidence, account, capabilities, request, nowUtc);
 
-        return BuildContext(evidence, account, capabilities, clock);
+        return BuildContext(evidence, account, capabilities, persistedQueueStateStore, clock);
     }
 
     private static void ValidateRequiredEvidence(GoogleGenerationAuthorizedRuntimeEvidence evidence)
@@ -121,6 +123,7 @@ public static class GoogleGenerationUiExecutionContextFactory
         GoogleGenerationAuthorizedRuntimeEvidence evidence,
         GoogleGenerationAccount account,
         GoogleCapabilitySnapshot capabilities,
+        IGoogleGenerationPersistedQueueStateStore persistedQueueStateStore,
         TimeProvider clock)
     {
         var provider = new GoogleGenerationProvider(account, evidence.Transport);
@@ -137,7 +140,10 @@ public static class GoogleGenerationUiExecutionContextFactory
             clock);
         var submission = new GoogleGenerationSubmissionCoordinator(executor);
         var queue = new GoogleGenerationQueueCoordinator(submission.SubmitAsync);
-        var boundQueue = new GoogleGenerationBoundQueueCoordinator(queue);
+        var boundQueue = new GoogleGenerationBoundQueueCoordinator(
+            queue,
+            persistedQueueStateStore.LoadAsync,
+            persistedQueueStateStore.SaveAsync);
         var uiQueue = new GoogleGenerationUiQueueCoordinator(boundQueue);
 
         return new GoogleGenerationUiExecutionContext(uiQueue, evidence.Snapshot);
