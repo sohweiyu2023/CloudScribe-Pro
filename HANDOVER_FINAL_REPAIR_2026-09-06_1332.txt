@@ -1,0 +1,47 @@
+STATUS: REPAIR
+
+Main: 14f85105f111d59e9693174153b5236bafe6f990
+Active Stage6/7 source lane: repair/final-stage7-production-parallel
+Exact active source SHA: d116f7a82233182fdc702504d0a8d55d0c111178
+Independent Stage8 head: f1d4e161acedd0ccb17c73de9b724e545f0ff038
+Stage6 runtime helper: 9faef87cc7be2114b2b27076686520c6990738b1
+Shell integration: 3fc3d854552f00a670cee0ab522591fdf243e656
+
+This run landed a durable fail-closed Google project+model authorization consumer/store path.
+
+Source sequence landed this run:
+9261c9654c43edfd31bd7388839b2061390b1d58 feat(stage6): add durable project model authorization evidence
+933e2d119bd73a63e4ff2a2a8e8918e19fe81ec7 feat(stage6): add project model authorization store contract
+c6565a7311f9e4a3aa01f632a80c29718d36dde9 feat(stage6): persist project model authorization
+87ae1f76c8427783013e36a9da486fe0cf2bc980 feat(stage6): add durable project model authorization store
+aa97ec979129ba9f511f016e956033c4cf7b7319 feat(stage6): register project model authorization store
+cabac7dc8fcc6887b461d9bc7e61618217fdf8d3 fix(stage6): resolve project model authorization from durable evidence
+f4214b310e281467f59daaeab15c2bad8f44b084 fix(stage6): stop trusting snapshot project authorization
+a2a743f411b2bf51a1a2ca6719cc4df3aca22ee1 fix(stage6): satisfy project authorization analyzers
+bac2acae277c5a3f0be4e151fb1a0e4f05048f83 fix(stage6): restore infrastructure final newline
+d116f7a82233182fdc702504d0a8d55d0c111178 fix(stage6): bind project authorization to persisted account evidence
+
+Exact qualification for d116f7a82233182fdc702504d0a8d55d0c111178:
+Stage7 run 34013969817 PASS.
+Stage8 run 34013969790 PASS.
+
+What is genuinely closed:
+- Request snapshot ProjectAuthorized no longer grants runtime authorization.
+- Runtime authorization is loaded from durable SQLite evidence keyed by exact account/project/model.
+- Resolver requires positive current bounded evidence and binds it to independently persisted account identity, credential reference, endpoint ID/origin, region, capability provenance, exact project and exact model.
+- Missing/rejected/expired/mismatched evidence fails closed.
+
+What remains genuinely open:
+1. Google project/model authorization PRODUCER. The consumer/store exists, but repository searches have not identified a provider-side verification/status API that can truthfully write GoogleGenerationProjectAuthorizationEvidence. Do not derive authorization merely from credential presence, account enabled state, capability presence, or endpoint reachability.
+2. Reconciliation-resolution PRODUCER/owner. Durable queue execution persists unknown submission outcomes and prevents duplicate raw submission, but repository searches have not identified a Google provider request-status or durable receipt reconciliation API that can truthfully produce ProviderConfirmedTerminal or DurableProviderReceiptReconciled.
+3. Authoritative request-specific pricing derivation. Current persisted active catalog trust/provenance and durable spend authorization are real, but the pre-approval request estimate/currency/scale still originates from request-bound composition. PricingCostEngine inspected so far compares money/selection values and is not itself a provider-rate cost calculator. Do not fabricate rates from catalog SHA.
+
+Therefore Stage6 production composition remains REPAIR, not complete.
+Stage7/Stage8 exact qualification on active source is PASS/PASS, but their full Final production-composition certification and all serial Final gates remain NOT RUN.
+
+Next exact gate:
+- Re-read main/all repair heads.
+- Inspect concrete Google provider adapter/factory interfaces and pricing catalog material for an existing genuine provider-side project/model verification, status reconciliation, or rate derivation seam.
+- Implement the shortest genuine producer if one exists, then qualify exact SHA and fix the first exact compiler/analyzer/test diagnostic.
+- If the repository truly lacks those provider APIs/types, record the exact absent interface/path evidence and advance another independent mandatory Stage7/8 composition lane rather than fabricating authority.
+- Only after Stage6-8 composition passes: full compiled tests -> Final source acceptance -> Windows exact 1.0.0 publish/version -> actual CloudScribe.exe -> exact no-mutation -> SHA freeze -> strict/full certification -> same-SHA no-change certification -> serial Final/main promotion.
