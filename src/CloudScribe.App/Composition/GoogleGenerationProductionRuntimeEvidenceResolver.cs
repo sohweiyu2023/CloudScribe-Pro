@@ -52,7 +52,12 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
 
         GoogleGenerationAccount account = _accountFactory.Create(current);
         GoogleGenerationSpendAuthorization spendAuthorization = await _spendAuthorizationResolver
-            .ResolveAsync(request.SubmissionEnvelope, cancellationToken)
+            .ResolveAsync(
+                request.SubmissionEnvelope,
+                request.Currency,
+                request.Scale,
+                request.CurrentEstimateMinorUnits,
+                cancellationToken)
             .ConfigureAwait(false);
         GoogleCapabilitySnapshot capabilities = GoogleGenerationApprovedCapabilityProjection.Create(
             current,
@@ -68,9 +73,9 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
             nowUtc);
         spendAuthorization.EnsureStillAuthorized(
             request.SubmissionEnvelope,
-            spendAuthorization.Currency,
-            spendAuthorization.Scale,
-            spendAuthorization.ApprovedEstimateMinorUnits);
+            request.Currency,
+            request.Scale,
+            request.CurrentEstimateMinorUnits);
 
         GoogleGenerationProductionTransport productionTransport = _transportFactory.Create(current);
         if (!Equals(productionTransport.Account, account))
@@ -87,9 +92,9 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
             spendAuthorization,
             request.PricingProvenanceId,
             request.RequestRevision,
-            spendAuthorization.Currency,
-            spendAuthorization.Scale,
-            spendAuthorization.ApprovedEstimateMinorUnits,
+            request.Currency,
+            request.Scale,
+            request.CurrentEstimateMinorUnits,
             request.Snapshot);
     }
 
