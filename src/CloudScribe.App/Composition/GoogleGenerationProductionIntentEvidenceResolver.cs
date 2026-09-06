@@ -10,8 +10,8 @@ namespace CloudScribe.App.Composition;
 
 /// <summary>
 /// Resolves one claimed request intent from one atomic request-bound authorization snapshot while
-/// re-reading persisted Google account/capability evidence. The resolver never grants missing
-/// authorization by default and never assembles authorization from unrelated UI "latest" state.
+/// re-reading persisted Google account/capability/project-model evidence. The resolver never grants
+/// missing authorization by default and never assembles authorization from unrelated UI "latest" state.
 /// </summary>
 internal sealed class GoogleGenerationProductionIntentEvidenceResolver
     : IGoogleGenerationProductionIntentEvidenceResolver
@@ -19,6 +19,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
     private readonly GoogleGenerationProductionAuthorizationSnapshotStateOwner _authorizationOwner;
     private readonly GoogleGenerationProductionEvidenceResolver _productionEvidenceResolver;
     private readonly GoogleGenerationProductionAccountFactory _accountFactory;
+    private readonly IGoogleGenerationProjectAuthorizationStore _projectAuthorizationStore;
     private readonly ICredentialVault _credentialVault;
     private readonly IPricingCatalogHistoryStore _pricingCatalogHistoryStore;
     private readonly TimeProvider _timeProvider;
@@ -27,6 +28,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         GoogleGenerationProductionAuthorizationSnapshotStateOwner authorizationOwner,
         GoogleGenerationProductionEvidenceResolver productionEvidenceResolver,
         GoogleGenerationProductionAccountFactory accountFactory,
+        IGoogleGenerationProjectAuthorizationStore projectAuthorizationStore,
         ICredentialVault credentialVault,
         IPricingCatalogHistoryStore pricingCatalogHistoryStore,
         TimeProvider timeProvider)
@@ -36,6 +38,8 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         _productionEvidenceResolver = productionEvidenceResolver
             ?? throw new ArgumentNullException(nameof(productionEvidenceResolver));
         _accountFactory = accountFactory ?? throw new ArgumentNullException(nameof(accountFactory));
+        _projectAuthorizationStore = projectAuthorizationStore
+            ?? throw new ArgumentNullException(nameof(projectAuthorizationStore));
         _credentialVault = credentialVault ?? throw new ArgumentNullException(nameof(credentialVault));
         _pricingCatalogHistoryStore = pricingCatalogHistoryStore
             ?? throw new ArgumentNullException(nameof(pricingCatalogHistoryStore));
@@ -79,6 +83,8 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         persisted.Validate(nowUtc);
         ValidatePersistedBinding(snapshot, persisted, nowUtc);
 
+        GoogleGenerationProjectAuthorizationEvidence projectAuthorization =
+            await LoadProjectAuthorizationAsync(intent, snapshot, nowUtc, cancellationToken).ConfigureAwait(false);
         bool accountCredentialAvailable = await ValidateCredentialAvailableAsync(
                 snapshot.Account,
                 cancellationToken)
@@ -91,7 +97,14 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         ValidateQueueTransition(snapshot);
         cancellationToken.ThrowIfCancellationRequested();
 
-        return BuildCompileEvidence(intent, snapshot, persisted, activePricing, accountCredentialAvailable, nowUtc);
+        return BuildCompileEvidence(
+            intent,
+            snapshot,
+            persisted,
+            activePricing,
+            projectAuthorization,
+            accountCredentialAvailable,
+            nowUtc);
     }
 
     private static GoogleGenerationProductionCompileEvidence BuildCompileEvidence(
@@ -99,6 +112,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
         GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot,
         GoogleGenerationProductionEvidence persisted,
         PricingCatalogSnapshot activePricing,
+        GoogleGenerationProjectAuthorizationEvidence projectAuthorization,
         bool accountCredentialAvailable,
         DateTimeOffset nowUtc) =>
         new()
@@ -117,7 +131,7 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             CurrentState = snapshot.CurrentState,
             ResolutionEvidence = snapshot.ResolutionEvidence,
             AccountAuthorized = persisted.Account.IsEnabled,
-            ProjectAuthorized = snapshot.ProjectAuthorized,
+            ProjectAuthorized = projectAuthorization.IsCurrent(nowUtc),
             CapabilityCurrent = !persisted.Capability.IsStale(nowUtc),
             PricingCurrent = string.Equals(
                 activePricing.Sha256,
@@ -132,6 +146,42 @@ internal sealed class GoogleGenerationProductionIntentEvidenceResolver
             CurrentEstimateMinorUnits = snapshot.CurrentEstimateMinorUnits,
             NowUtc = nowUtc,
         };
+
+    private async Task<GoogleGenerationProjectAuthorizationEvidence> LoadProjectAuthorizationAsync(
+        GoogleGenerationProductionRequestIntent intent,
+        GoogleGenerationProductionAuthorizationSnapshotStateOwner.AuthorizationSnapshot snapshot,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        GoogleGenerationProjectAuthorizationEvidence authorization =
+            await _projectAuthorizationStore.LoadCurrentAsync(
+                intent.AccountId,
+                intent.ProjectId,
+                intent.ModelId,
+                cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                "Current persisted Google project/model authorization evidence is unavailable.");
+
+        authorization.Validate(nowUtc);
+        if (!authorization.IsCurrent(nowUtc))
+            throw new InvalidOperationException("Current Google project/model authorization is rejected or expired.");
+
+        string expectedOrigin = snapshot.Account.Endpoint.GetLeftPart(UriPartial.Authority);
+        if (!string.Equals(authorization.AccountId, snapshot.Account.AccountId, StringComparison.Ordinal)
+            || !string.Equals(authorization.ProjectId, intent.ProjectId, StringComparison.Ordinal)
+            || !string.Equals(authorization.ModelId, intent.ModelId, StringComparison.Ordinal)
+            || !string.Equals(authorization.CredentialReferenceId, snapshot.Account.CredentialReferenceId, StringComparison.Ordinal)
+            || !string.Equals(authorization.CapabilityProvenanceId, snapshot.Capabilities.ProvenanceId, StringComparison.Ordinal)
+            || !string.Equals(authorization.EndpointId, snapshot.Account.Endpoint.Host, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(authorization.RegionId, snapshot.Account.Region, StringComparison.Ordinal)
+            || !string.Equals(authorization.EndpointOrigin, expectedOrigin, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Current Google project/model authorization is not bound to the exact account, credential, endpoint, region, capability, project, and model evidence.");
+        }
+
+        return authorization;
+    }
 
     private static void ValidateIntentBinding(
         GoogleGenerationProductionRequestIntent intent,
