@@ -1,3 +1,4 @@
+using CloudScribe.Application.Generation;
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Security;
 using CloudScribe.Domain.Generation;
