@@ -48,6 +48,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         AddCatalogControls(host, viewModel);
         AddOutputAndSpendControls(host, viewModel);
         AddGenerateControls(host, viewModel);
+        AddVerifiedOutputControls(host, viewModel);
         return true;
     }
 
@@ -236,6 +237,33 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             Text = "Generate uses the existing fail-closed Stage6 authorization, persisted queue, guarded executor and current pricing evidence. This panel never submits directly to Google.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
+    }
+
+    private static void AddVerifiedOutputControls(StackPanel host, ShellViewModel viewModel)
+    {
+        TextBlock outputPath = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+        Button play = new() { Content = "Play verified MP3" };
+        play.Click += (_, _) =>
+        {
+            if (viewModel.PlayLastGeneratedGoogleMp3Command.CanExecute(null))
+                viewModel.PlayLastGeneratedGoogleMp3Command.Execute(null);
+        };
+        void Refresh()
+        {
+            outputPath.Text = string.IsNullOrWhiteSpace(viewModel.LastGeneratedGoogleMp3Path)
+                ? "No accepted Google MP3 has been exposed yet."
+                : $"Verified MP3 · {viewModel.LastGeneratedGoogleMp3Path}";
+            play.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3;
+        }
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(ShellViewModel.LastGeneratedGoogleMp3Path)
+                or nameof(ShellViewModel.CanPlayLastGeneratedGoogleMp3))
+                Refresh();
+        };
+        Refresh();
+        host.Children.Add(outputPath);
+        host.Children.Add(play);
     }
 
     private static TextBox NewTextBox(string placeholder) => new()
