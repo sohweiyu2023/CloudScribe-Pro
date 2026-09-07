@@ -109,11 +109,10 @@ public sealed class GoogleVoiceLabProviderAdapterFactory(
                     voice.Name,
                     CreateVoiceFingerprint(snapshot.ProvenanceId, voice),
                     VoiceEnabled: true,
-                    // This does not invent project trust: QueryVoiceLabCatalogAsync is reachable in
-                    // production only after VoiceLabProductionCatalogTransport has loaded and validated
-                    // the exact persisted account/project/capability authorization, and it revalidates
-                    // those bindings after this provider call before returning the selection.
-                    AccountProjectAuthorized: true))
+                    // Google voices:list does not return a project-authorization assertion.
+                    // The outer production catalog transport derives final project trust only from
+                    // current persisted authorization evidence and revalidates it after this call.
+                    AccountProjectAuthorized: false))
                 .ToArray();
         }
 
