@@ -8,7 +8,9 @@ namespace CloudScribe.Infrastructure.Generation;
 /// Imports a Google service-account JSON credential into Windows-backed secret storage without
 /// persisting the source JSON or an OAuth bearer token. The private key and non-secret identity
 /// metadata are stored as separate credential entries so the private key remains below the
-/// Windows Credential Manager blob limit.
+/// Windows Credential Manager blob limit. For v1.0.1 onboarding, the exact user-supplied voice
+/// catalog endpoint is persisted with the credential metadata so later real-catalog refreshes
+/// reuse the same authenticated, previously observed endpoint instead of a hidden second setting.
 /// </summary>
 public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialVault credentialVault)
 {
@@ -19,10 +21,71 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
 
     private readonly ICredentialVault _credentialVault = credentialVault ?? throw new ArgumentNullException(nameof(credentialVault));
 
-    public async Task<GoogleServiceAccountCredentialIdentity> ImportAsync(
+    public Task<GoogleServiceAccountCredentialIdentity> ImportAsync(
         string credentialReferenceId,
         ReadOnlyMemory<char> serviceAccountJson,
+        CancellationToken cancellationToken = default) =>
+        ImportCoreAsync(credentialReferenceId, serviceAccountJson, voiceCatalogEndpoint: null, cancellationToken);
+
+    public Task<GoogleServiceAccountCredentialIdentity> ImportAsync(
+        string credentialReferenceId,
+        ReadOnlyMemory<char> serviceAccountJson,
+        Uri voiceCatalogEndpoint,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(voiceCatalogEndpoint);
+        ValidateVoiceCatalogEndpoint(voiceCatalogEndpoint);
+        return ImportCoreAsync(credentialReferenceId, serviceAccountJson, voiceCatalogEndpoint, cancellationToken);
+    }
+
+    public async Task<Uri> ResolveVoiceCatalogEndpointAsync(
+        string credentialReferenceId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(credentialReferenceId))
+            throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
+
+        using CredentialSecret? secret = await _credentialVault.ReadAsync(
+            new CredentialReference(credentialReferenceId + MetadataSuffix),
+            cancellationToken).ConfigureAwait(false);
+        if (secret is null)
+            throw new InvalidOperationException("Google service-account metadata is unavailable for the configured credential.");
+
+        GoogleServiceAccountCredentialMetadata metadata;
+        try
+        {
+            string metadataJson = new(secret.Value.Span);
+            metadata = JsonSerializer.Deserialize<GoogleServiceAccountCredentialMetadata>(metadataJson)
+                ?? throw new InvalidDataException("Google service-account metadata is empty.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("Google service-account metadata is malformed.", exception);
+        }
+
+        Uri endpoint = metadata.VoiceCatalogEndpoint
+            ?? throw new InvalidOperationException(
+                "Google service-account metadata has no persisted voice-catalog endpoint; reconfigure Google TTS through the 1.0.1 onboarding flow.");
+        ValidateVoiceCatalogEndpoint(endpoint);
+        return endpoint;
+    }
+
+    public async Task<bool> RemoveAsync(string credentialReferenceId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(credentialReferenceId))
+            throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
+
+        bool marker = await _credentialVault.DeleteAsync(new CredentialReference(credentialReferenceId), cancellationToken).ConfigureAwait(false);
+        bool metadata = await _credentialVault.DeleteAsync(new CredentialReference(credentialReferenceId + MetadataSuffix), cancellationToken).ConfigureAwait(false);
+        bool key = await _credentialVault.DeleteAsync(new CredentialReference(credentialReferenceId + PrivateKeySuffix), cancellationToken).ConfigureAwait(false);
+        return marker || metadata || key;
+    }
+
+    private async Task<GoogleServiceAccountCredentialIdentity> ImportCoreAsync(
+        string credentialReferenceId,
+        ReadOnlyMemory<char> serviceAccountJson,
+        Uri? voiceCatalogEndpoint,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(credentialReferenceId))
             throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
@@ -40,7 +103,8 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
             material.ProjectId,
             material.ClientEmail,
             material.PrivateKeyId,
-            material.TokenUri));
+            material.TokenUri,
+            voiceCatalogEndpoint));
 
         bool keyStored = false;
         bool metadataStored = false;
@@ -68,17 +132,6 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
             material.ClientEmail,
             material.PrivateKeyId,
             material.TokenUri);
-    }
-
-    public async Task<bool> RemoveAsync(string credentialReferenceId, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(credentialReferenceId))
-            throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
-
-        bool marker = await _credentialVault.DeleteAsync(new CredentialReference(credentialReferenceId), cancellationToken).ConfigureAwait(false);
-        bool metadata = await _credentialVault.DeleteAsync(new CredentialReference(credentialReferenceId + MetadataSuffix), cancellationToken).ConfigureAwait(false);
-        bool key = await _credentialVault.DeleteAsync(new CredentialReference(credentialReferenceId + PrivateKeySuffix), cancellationToken).ConfigureAwait(false);
-        return marker || metadata || key;
     }
 
     private async Task TryDeleteAsync(CredentialReference reference)
@@ -150,6 +203,24 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
                host.Length > GoogleApisDnsSuffix.Length;
     }
 
+    private static void ValidateVoiceCatalogEndpoint(Uri endpoint)
+    {
+        if (!endpoint.IsAbsoluteUri ||
+            !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            !endpoint.IsDefaultPort ||
+            !string.IsNullOrEmpty(endpoint.UserInfo) ||
+            !string.IsNullOrEmpty(endpoint.Fragment) ||
+            !IsGoogleApisHost(endpoint.DnsSafeHost))
+        {
+            throw new InvalidDataException(
+                "Google voice-catalog endpoint must be a credential-free absolute HTTPS Google APIs URI on the default port without a fragment.");
+        }
+    }
+
+    private static bool IsGoogleApisHost(string host) =>
+        string.Equals(host, "googleapis.com", StringComparison.OrdinalIgnoreCase) ||
+        host.EndsWith(GoogleApisDnsSuffix, StringComparison.OrdinalIgnoreCase);
+
     private static string RequiredString(JsonElement root, string propertyName)
     {
         if (!root.TryGetProperty(propertyName, out JsonElement value) || value.ValueKind != JsonValueKind.String)
@@ -171,5 +242,6 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         string ProjectId,
         string ClientEmail,
         string PrivateKeyId,
-        Uri TokenUri);
+        Uri TokenUri,
+        Uri? VoiceCatalogEndpoint = null);
 }
