@@ -14,7 +14,7 @@ namespace CloudScribe.Infrastructure.Generation;
 /// service-account references are converted to short-lived OAuth access tokens on demand and
 /// the resulting bearer token is never persisted.
 /// </summary>
-public sealed class VaultBackedTransientCredentialResolver : ITransientCredentialResolver
+public sealed class VaultBackedTransientCredentialResolver : ITransientCredentialResolver, IDisposable
 {
     private const string CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform";
     private const string JwtBearerGrantType = "urn:ietf:params:oauth:grant-type:jwt-bearer";
@@ -26,6 +26,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly ConcurrentDictionary<string, CachedAccessToken> _cache = new(StringComparer.Ordinal);
+    private bool _disposed;
 
     public VaultBackedTransientCredentialResolver(
         ICredentialVault credentialVault,
@@ -41,6 +42,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         string credentialReferenceId,
         CancellationToken cancellationToken)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (string.IsNullOrWhiteSpace(credentialReferenceId))
             throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
 
@@ -59,12 +61,21 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         return await ResolveServiceAccountAccessTokenAsync(credentialReferenceId, cancellationToken).ConfigureAwait(false);
     }
 
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        _refreshGate.Dispose();
+        _cache.Clear();
+    }
+
     private async Task<string> ResolveServiceAccountAccessTokenAsync(
         string credentialReferenceId,
         CancellationToken cancellationToken)
     {
         DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
-        if (TryGetCached(credentialReferenceId, nowUtc, out string? cached))
+        if (TryGetCached(credentialReferenceId, nowUtc, out string cached))
             return cached;
 
         await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -81,7 +92,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
                 cancellationToken).ConfigureAwait(false);
 
             string assertion = CreateSignedAssertion(metadata, privateKey.Value.Span, nowUtc);
-            using FormUrlEncodedContent form = new(new Dictionary<string, string>
+            using FormUrlEncodedContent form = new(new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["grant_type"] = JwtBearerGrantType,
                 ["assertion"] = assertion,
@@ -146,13 +157,13 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
     {
         long issuedAt = nowUtc.ToUnixTimeSeconds();
         long expiresAt = nowUtc.Add(AssertionLifetime).ToUnixTimeSeconds();
-        byte[] header = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string>
+        byte[] header = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["alg"] = "RS256",
             ["typ"] = "JWT",
             ["kid"] = metadata.PrivateKeyId,
         });
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object>
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["iss"] = metadata.ClientEmail,
             ["scope"] = CloudPlatformScope,
@@ -191,7 +202,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         }
     }
 
-    private bool TryGetCached(string credentialReferenceId, DateTimeOffset nowUtc, out string? token)
+    private bool TryGetCached(string credentialReferenceId, DateTimeOffset nowUtc, out string token)
     {
         if (_cache.TryGetValue(credentialReferenceId, out CachedAccessToken? cached) &&
             cached.ExpiresUtc - RefreshSkew > nowUtc)
@@ -201,7 +212,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         }
 
         _cache.TryRemove(credentialReferenceId, out _);
-        token = null;
+        token = string.Empty;
         return false;
     }
 

@@ -51,8 +51,8 @@ public sealed class GoogleVoiceCatalogClient(
                 response.StatusCode);
         }
 
-        IReadOnlyList<GoogleVoiceCatalogEntry> voices = ParseVoices(body);
-        if (voices.Count == 0)
+        GoogleVoiceCatalogEntry[] voices = ParseVoices(body);
+        if (voices.Length == 0)
         {
             throw new InvalidOperationException("Google returned a successful voice catalog response without any usable voices.");
         }
@@ -66,7 +66,7 @@ public sealed class GoogleVoiceCatalogClient(
             voices);
     }
 
-    private static IReadOnlyList<GoogleVoiceCatalogEntry> ParseVoices(byte[] json)
+    private static GoogleVoiceCatalogEntry[] ParseVoices(byte[] json)
     {
         using JsonDocument document = JsonDocument.Parse(json);
         if (!document.RootElement.TryGetProperty("voices", out JsonElement voicesElement)
@@ -150,22 +150,3 @@ public sealed class GoogleVoiceCatalogClient(
         }
     }
 }
-
-public sealed record GoogleVoiceCatalogSnapshot(
-    ProviderAccountReference Account,
-    DateTimeOffset ObservedAtUtc,
-    Uri Endpoint,
-    string ProvenanceId,
-    IReadOnlyList<GoogleVoiceCatalogEntry> Voices)
-{
-    public IReadOnlySet<string> VoiceNames => Voices.Select(item => item.Name).ToHashSet(StringComparer.Ordinal);
-    public IReadOnlySet<string> LanguageCodes => Voices
-        .SelectMany(item => item.LanguageCodes)
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-}
-
-public sealed record GoogleVoiceCatalogEntry(
-    string Name,
-    IReadOnlyList<string> LanguageCodes,
-    string SsmlGender,
-    int NaturalSampleRateHertz);
