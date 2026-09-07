@@ -258,7 +258,8 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
                 StringComparison.OrdinalIgnoreCase) != 0)
         {
             throw new ArgumentException(
-                "Google voice-catalog and synthesis endpoints must use the same admitted Google API origin.");
+                "Google voice-catalog and synthesis endpoints must use the same admitted Google API origin.",
+                nameof(synthesisOrigin));
         }
     }
 
