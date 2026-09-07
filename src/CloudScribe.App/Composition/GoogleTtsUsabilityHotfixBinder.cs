@@ -15,6 +15,8 @@ namespace CloudScribe.App.Composition;
 public sealed class GoogleTtsUsabilityHotfixBinder(
     GoogleTextToSpeechCatalogBootstrapService bootstrapService)
 {
+    private static readonly string[] Mp3OutputOptions = ["MP3 · preserve accepted provider bytes"];
+
     private readonly GoogleTextToSpeechCatalogBootstrapService _bootstrapService =
         bootstrapService ?? throw new ArgumentNullException(nameof(bootstrapService));
 
@@ -184,7 +186,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         host.Children.Add(new TextBlock { Text = "Output" });
         host.Children.Add(new ComboBox
         {
-            ItemsSource = new[] { "MP3 · preserve accepted provider bytes" },
+            ItemsSource = Mp3OutputOptions,
             SelectedIndex = 0,
         });
         host.Children.Add(new TextBlock
