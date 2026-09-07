@@ -53,7 +53,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
 
         string storedMaterial = new(secret.Value.Span);
         if (string.IsNullOrWhiteSpace(storedMaterial))
-            throw new InvalidOperationException("The explicitly configured provider credential contains no authentication material.");
+            throw new InvalidOperationException("The explicitly configured provider credential contains no bearer access token or service-account marker.");
 
         if (!string.Equals(storedMaterial, GoogleServiceAccountCredentialOnboardingService.ServiceAccountMarker, StringComparison.Ordinal))
             return storedMaterial;
