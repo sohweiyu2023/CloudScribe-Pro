@@ -65,9 +65,10 @@ jobs:
             'src/CloudScribe.App/Composition/GoogleGenerationAcceptedMp3OutputService.cs',
             'src/CloudScribe.App/ViewModels/ShellViewModel.GoogleTtsStudio.cs',
             'src/CloudScribe.App/ViewModels/ShellViewModel.Stage6GoogleGeneration.cs',
-            'src/CloudScribe.Infrastructure/VoiceLab/GoogleServiceAccountCredentialOnboardingService.cs',
-            'src/CloudScribe.Infrastructure/VoiceLab/GoogleServiceAccountTokenClient.cs',
-            'src/CloudScribe.Infrastructure/VoiceLab/GoogleTextToSpeechCatalogClient.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleServiceAccountCredentialOnboardingService.cs',
+            'src/CloudScribe.Infrastructure/Generation/VaultBackedTransientCredentialResolver.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleVoiceCatalogClient.cs',
+            'src/CloudScribe.Infrastructure/Generation/GoogleTextToSpeechCatalogBootstrapService.cs',
             'src/CloudScribe.Infrastructure/Generation/GoogleGenerationProvider.cs',
             'src/CloudScribe.Infrastructure/Generation/GoogleGenerationHttpTransport.cs'
           ) | ForEach-Object {
@@ -78,26 +79,36 @@ jobs:
 
           $binder = Get-Content 'src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.cs' -Raw
           @(
-            'ConfigureGoogleTtsUsabilityHotfix',
-            'ConfigureGoogleTtsCredentialOnboarding',
-            'ConfigureGoogleTtsCatalogRefresh',
-            'ConfigureGoogleGenerationOutputPlayback'
+            'Configure Google TTS securely',
+            'Refresh real Google voices',
+            'Compile and approve spend',
+            'Generate with Google',
+            'Play verified MP3'
           ) | ForEach-Object {
             if (-not $binder.Contains($_, [System.StringComparison]::Ordinal)) {
-              throw "Google TTS usability binder lost required production wiring: $_"
+              throw "Google TTS usability binder lost required visible production control: $_"
             }
           }
 
           $stage6 = Get-Content 'src/CloudScribe.App/ViewModels/ShellViewModel.Stage6GoogleGeneration.cs' -Raw
           @(
-            'ApproveAndGenerateWithGoogleAsync',
-            'ConfirmGenerationSpendAsync',
-            'PersistApprovedGoogleGenerationAsync',
-            'PersistAcceptedAsync'
+            'ApproveGoogleGenerationSpendAsync',
+            'GenerateWithGoogleAsync',
+            'ProcessPersistedTransitionAsync',
+            'PlayLastGeneratedGoogleMp3Async'
           ) | ForEach-Object {
             if (-not $stage6.Contains($_, [System.StringComparison]::Ordinal)) {
               throw "Stage6 guarded Google generation path lost required element: $_"
             }
+          }
+
+          $bootstrap = Get-Content 'src/CloudScribe.Infrastructure/Generation/GoogleTextToSpeechCatalogBootstrapService.cs' -Raw
+          if (-not $bootstrap.Contains('IsGoogleApisHost', [System.StringComparison]::Ordinal)) {
+            throw 'Google catalog onboarding lost its pre-credential Google API destination admission guard.'
+          }
+          $transport = Get-Content 'src/CloudScribe.Infrastructure/Generation/GoogleGenerationHttpTransport.cs' -Raw
+          if (-not $transport.Contains('IsGoogleApisHost', [System.StringComparison]::Ordinal)) {
+            throw 'Google synthesis transport lost its Google API destination admission guard.'
           }
 
           $output = Get-Content 'src/CloudScribe.App/Composition/GoogleGenerationAcceptedMp3OutputService.cs' -Raw
