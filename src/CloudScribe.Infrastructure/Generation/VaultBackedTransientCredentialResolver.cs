@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
@@ -24,7 +25,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
     private readonly HttpClient _httpClient;
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
-    private readonly Dictionary<string, CachedAccessToken> _cache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CachedAccessToken> _cache = new(StringComparer.Ordinal);
 
     public VaultBackedTransientCredentialResolver(
         ICredentialVault credentialVault,
@@ -199,7 +200,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
             return true;
         }
 
-        _cache.Remove(credentialReferenceId);
+        _cache.TryRemove(credentialReferenceId, out _);
         token = null;
         return false;
     }
