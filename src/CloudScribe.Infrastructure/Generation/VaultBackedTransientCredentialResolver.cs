@@ -48,12 +48,12 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         if (secret is null)
             throw new InvalidOperationException("The explicitly configured provider credential reference is unavailable.");
 
-        ReadOnlySpan<char> value = secret.Value.Span;
-        if (value.IsEmpty || IsAllWhitespace(value))
+        string storedMaterial = new(secret.Value.Span);
+        if (string.IsNullOrWhiteSpace(storedMaterial))
             throw new InvalidOperationException("The explicitly configured provider credential contains no authentication material.");
 
-        if (!value.SequenceEqual(GoogleServiceAccountCredentialOnboardingService.ServiceAccountMarker))
-            return new string(value);
+        if (!string.Equals(storedMaterial, GoogleServiceAccountCredentialOnboardingService.ServiceAccountMarker, StringComparison.Ordinal))
+            return storedMaterial;
 
         return await ResolveServiceAccountAccessTokenAsync(credentialReferenceId, cancellationToken).ConfigureAwait(false);
     }
@@ -122,7 +122,8 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
             cancellationToken).ConfigureAwait(false);
         try
         {
-            return JsonSerializer.Deserialize<GoogleServiceAccountCredentialOnboardingService.GoogleServiceAccountCredentialMetadata>(secret.Value.Span)
+            string metadataJson = new(secret.Value.Span);
+            return JsonSerializer.Deserialize<GoogleServiceAccountCredentialOnboardingService.GoogleServiceAccountCredentialMetadata>(metadataJson)
                 ?? throw new InvalidDataException("Google service-account metadata is empty.");
         }
         catch (JsonException exception)
@@ -205,16 +206,6 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
 
     private static string Base64Url(ReadOnlySpan<byte> value) =>
         Convert.ToBase64String(value).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    private static bool IsAllWhitespace(ReadOnlySpan<char> value)
-    {
-        foreach (char character in value)
-        {
-            if (!char.IsWhiteSpace(character))
-                return false;
-        }
-        return true;
-    }
 
     private sealed record CachedAccessToken(string Token, DateTimeOffset ExpiresUtc);
 
