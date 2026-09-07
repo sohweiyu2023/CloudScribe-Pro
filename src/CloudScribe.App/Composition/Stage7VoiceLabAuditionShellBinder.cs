@@ -15,7 +15,8 @@ public sealed class Stage7VoiceLabAuditionShellBinder(
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         viewModel.ConfigureStage7VoiceLabAudition(
-            CreateExecutionServiceAsync,
+            (selected, request, cancellationToken) =>
+                CreateExecutionServiceAsync(viewModel, selected, request, cancellationToken),
             CaptureCurrentRequestAsync,
             (selected, cancellationToken) => RefreshCurrentSelectionAsync(viewModel, selected, cancellationToken));
     }
@@ -74,10 +75,12 @@ public sealed class Stage7VoiceLabAuditionShellBinder(
     }
 
     private async Task<VoiceLabAuditionExecutionService> CreateExecutionServiceAsync(
+        ShellViewModel viewModel,
         VoiceLabCatalogSelection selected,
         VoiceLabAuditionRequest request,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(selected);
         ArgumentNullException.ThrowIfNull(request);
         selected.Validate();
@@ -89,7 +92,8 @@ public sealed class Stage7VoiceLabAuditionShellBinder(
         IVoiceLabAuthorizedAuditionExecutor executor = await executorFactory
             .CreateAsync(
                 request,
-                (currentSelection, refreshToken) => RefreshCurrentSelectionAsync(viewModel: throw new InvalidOperationException("Voice Lab refresh requires a bound shell view model."), currentSelection, refreshToken),
+                (currentSelection, refreshToken) =>
+                    RefreshCurrentSelectionAsync(viewModel, currentSelection, refreshToken),
                 cancellationToken)
             .ConfigureAwait(false);
         var coordinator = new VoiceLabAuditionCoordinator(FailClosedCacheReadAsync, executor);
