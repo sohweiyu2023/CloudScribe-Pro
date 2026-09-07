@@ -43,11 +43,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
 
       - name: Complete compiled solution tests
+        id: solution_tests
+        continue-on-error: true
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
-          if ($LASTEXITCODE -ne 0) { throw 'Complete compiled solution test suite failed.' }
+          $ErrorActionPreference = 'Continue'
+          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false --logger "console;verbosity=detailed"
+          if ($LASTEXITCODE -ne 0) { throw 'Complete compiled solution test suite failed; continuing only to collect the remaining comprehensive acceptance evidence.' }
 
       - name: Google TTS 1.0.1 source acceptance
         shell: pwsh
@@ -169,4 +171,13 @@ jobs:
           if (git status --porcelain=v1) {
             git status --short
             throw 'Validation mutated the checked-out source tree.'
+          }
+
+      - name: Enforce comprehensive result
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ('${{ steps.solution_tests.outcome }}' -ne 'success') {
+            throw 'Comprehensive Windows acceptance remains failed because the complete compiled solution test suite did not pass.'
           }
