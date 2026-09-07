@@ -7,7 +7,7 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class GoogleGenerationProductionTransportFactoryTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 30, 0, 0, 0, TimeSpan.Zero);
-    private static readonly Uri EndpointOrigin = new("https://speech.example.test/", UriKind.Absolute);
+    private static readonly Uri EndpointOrigin = new("https://texttospeech.googleapis.com/", UriKind.Absolute);
 
     [Fact]
     public void CreateMaterializesValidatedAccountAndPinnedTransport()
@@ -45,7 +45,7 @@ public sealed class GoogleGenerationProductionTransportFactoryTests
     public void CreateRejectsEndpointSubstitutionBeforeTransportConstruction()
     {
         ProviderAccountSnapshot current = CreateAccount(EndpointOrigin);
-        ProviderAccountSnapshot captured = CreateAccount(new Uri("https://old-speech.example.test/", UriKind.Absolute));
+        ProviderAccountSnapshot captured = CreateAccount(new Uri("https://us-texttospeech.googleapis.com/", UriKind.Absolute));
         GoogleGenerationProductionEvidence evidence = new(
             current,
             CreateCapability(captured.Reference, Now.AddHours(1)));
