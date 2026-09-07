@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using CloudScribe.Application.Generation;
-using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.App.Composition;
 
@@ -64,6 +63,9 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string fullPath = Path.GetFullPath(path);
+        string outputRoot = Path.GetFullPath(_outputDirectory) + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(outputRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Google MP3 playback is restricted to CloudScribe's verified generated-output directory.");
         if (!File.Exists(fullPath) || !string.Equals(Path.GetExtension(fullPath), ".mp3", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Verified Google MP3 output is no longer available.");
         _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true })
@@ -102,8 +104,3 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
         }
     }
 }
-
-public sealed record GoogleGenerationAcceptedMp3Output(
-    string Path,
-    int ByteCount,
-    string Sha256);
