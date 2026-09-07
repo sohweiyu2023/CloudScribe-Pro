@@ -60,13 +60,17 @@ public sealed class GoogleGenerationHttpTransport
     private void ValidateEndpoint(Uri endpoint)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        if (!endpoint.IsAbsoluteUri || !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Google generation endpoint must be absolute HTTPS.");
+        if (!endpoint.IsAbsoluteUri ||
+            !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(endpoint.UserInfo) ||
+            !string.IsNullOrEmpty(endpoint.Fragment) ||
+            !IsGoogleApisHost(endpoint.Host))
+        {
+            throw new InvalidOperationException("Google generation endpoint must be a credential-free absolute HTTPS Google APIs URI without a fragment.");
+        }
         if (!string.Equals(endpoint.Scheme, _allowedOrigin.Scheme, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(endpoint.Host, _allowedOrigin.Host, StringComparison.OrdinalIgnoreCase) || endpoint.Port != _allowedOrigin.Port)
             throw new InvalidOperationException("Google generation endpoint origin is not the pinned account origin.");
-        if (!string.IsNullOrEmpty(endpoint.UserInfo))
-            throw new InvalidOperationException("Credentials must never be embedded in the endpoint URI.");
     }
 
     private static Uri ValidateOrigin(Uri origin)
@@ -74,10 +78,18 @@ public sealed class GoogleGenerationHttpTransport
         ArgumentNullException.ThrowIfNull(origin);
         if (!origin.IsAbsoluteUri ||
             !string.Equals(origin.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
-            !string.IsNullOrEmpty(origin.UserInfo))
-            throw new ArgumentException("Allowed origin must be credential-free absolute HTTPS.", nameof(origin));
+            !string.IsNullOrEmpty(origin.UserInfo) ||
+            !string.IsNullOrEmpty(origin.Fragment) ||
+            !IsGoogleApisHost(origin.Host))
+        {
+            throw new ArgumentException("Allowed origin must be a credential-free absolute HTTPS Google APIs URI without a fragment.", nameof(origin));
+        }
         return origin;
     }
+
+    private static bool IsGoogleApisHost(string host) =>
+        string.Equals(host, "googleapis.com", StringComparison.OrdinalIgnoreCase) ||
+        host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase);
 
     private static TimeSpan? ParseRetryAfter(RetryConditionHeaderValue? retry)
     {
