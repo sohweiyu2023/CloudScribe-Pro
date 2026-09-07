@@ -3,22 +3,19 @@ using System.Text;
 using CloudScribe.Application.Providers;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
-using Microsoft.Extensions.Configuration;
 
 namespace CloudScribe.Infrastructure.Providers;
 
 /// <summary>
 /// Resolves the Google Voice Lab adapter from the exact persisted provider account.
-/// The voice-catalog endpoint is configuration supplied and is still origin-pinned by
-/// <see cref="GoogleVoiceCatalogClient"/>; no endpoint or authorization is inferred here.
+/// The voice-catalog endpoint is recovered from credential-bound onboarding metadata and remains
+/// origin-pinned by <see cref="GoogleVoiceCatalogClient"/>; no endpoint or authorization is inferred here.
 /// </summary>
 public sealed class GoogleVoiceLabProviderAdapterFactory(
     IProviderAccountStore accounts,
     GoogleVoiceCatalogClient catalogClient,
-    IConfiguration configuration) : IProviderAdapterFactory
+    GoogleServiceAccountCredentialOnboardingService credentialOnboarding) : IProviderAdapterFactory
 {
-    internal const string CatalogEndpointConfigurationKey = "CloudScribe:GoogleTextToSpeech:VoiceCatalogEndpoint";
-
     private static readonly ProviderDescriptor GoogleDescriptor = new(
         GoogleGenerationProvider.StableProviderId,
         "Google Cloud Text-to-Speech",
@@ -27,7 +24,8 @@ public sealed class GoogleVoiceLabProviderAdapterFactory(
 
     private readonly IProviderAccountStore _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
     private readonly GoogleVoiceCatalogClient _catalogClient = catalogClient ?? throw new ArgumentNullException(nameof(catalogClient));
-    private readonly IConfiguration _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+    private readonly GoogleServiceAccountCredentialOnboardingService _credentialOnboarding =
+        credentialOnboarding ?? throw new ArgumentNullException(nameof(credentialOnboarding));
 
     public ProviderDescriptor Descriptor => GoogleDescriptor;
 
@@ -45,16 +43,26 @@ public sealed class GoogleVoiceLabProviderAdapterFactory(
             ?? throw new InvalidOperationException("Google Voice Lab provider account is unavailable.");
         if (!account.IsEnabled)
             throw new InvalidOperationException("Google Voice Lab provider account is disabled.");
-        if (account.Reference.CredentialReference is null)
-            throw new InvalidOperationException("Google Voice Lab provider account has no credential reference.");
-        if (account.Reference.EndpointOrigin is null)
-            throw new InvalidOperationException("Google Voice Lab provider account has no admitted endpoint origin.");
 
-        string endpointText = _configuration[CatalogEndpointConfigurationKey]
-            ?? throw new InvalidOperationException(
-                $"Google Voice Lab requires an explicitly configured '{CatalogEndpointConfigurationKey}'.");
-        if (!Uri.TryCreate(endpointText, UriKind.Absolute, out Uri? endpoint))
-            throw new InvalidOperationException("Configured Google Voice Lab catalog endpoint is not an absolute URI.");
+        CredentialReference credentialReference = account.Reference.CredentialReference
+            ?? throw new InvalidOperationException("Google Voice Lab provider account has no credential reference.");
+        Uri expectedOrigin = account.Reference.EndpointOrigin
+            ?? throw new InvalidOperationException("Google Voice Lab provider account has no admitted endpoint origin.");
+
+        Uri endpoint = await _credentialOnboarding.ResolveVoiceCatalogEndpointAsync(
+            credentialReference.TargetName,
+            cancellationToken).ConfigureAwait(false);
+        Uri resolvedOrigin = new(endpoint.GetLeftPart(UriPartial.Authority), UriKind.Absolute);
+        if (Uri.Compare(
+                resolvedOrigin,
+                expectedOrigin,
+                UriComponents.SchemeAndServer,
+                UriFormat.SafeUnescaped,
+                StringComparison.OrdinalIgnoreCase) != 0)
+        {
+            throw new InvalidOperationException(
+                "Google Voice Lab persisted voice-catalog endpoint no longer matches the admitted provider-account origin.");
+        }
 
         return new GoogleVoiceLabProviderAdapter(account.Reference, endpoint, _catalogClient);
     }
