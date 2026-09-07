@@ -64,6 +64,7 @@ public static class CompositionRoot
         services.AddSingleton<Stage6GoogleGenerationShellBinder>();
         services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
         services.AddSingleton<Stage7VoiceLabAuditionShellBinder>();
+        services.AddSingleton<GoogleTtsUsabilityHotfixBinder>();
     }
 
     private static void RegisterShell(IServiceCollection services)
@@ -82,6 +83,9 @@ public static class CompositionRoot
         {
             MainWindow window = ActivatorUtilities.CreateInstance<MainWindow>(serviceProvider);
             DocumentWindowBehavior.Attach(window);
+            serviceProvider.GetRequiredService<GoogleTtsUsabilityHotfixBinder>().Attach(
+                window,
+                serviceProvider.GetRequiredService<ShellViewModel>());
             return window;
         });
     }
