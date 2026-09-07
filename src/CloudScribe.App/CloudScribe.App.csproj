@@ -6,10 +6,10 @@
     <ApplicationTitle>CloudScribe Pro</ApplicationTitle>
     <Product>CloudScribe Pro</Product>
     <Description>Local-first long-form text-to-speech production studio.</Description>
-    <Version>1.0.0</Version>
-    <InformationalVersion>1.0.0</InformationalVersion>
+    <Version>1.0.1</Version>
+    <InformationalVersion>1.0.1</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <FileVersion>1.0.1.0</FileVersion>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
