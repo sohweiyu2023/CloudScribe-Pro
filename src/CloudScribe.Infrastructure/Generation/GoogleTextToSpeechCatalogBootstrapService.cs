@@ -52,6 +52,7 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
             GoogleServiceAccountCredentialIdentity identity = await _credentialOnboarding.ImportAsync(
                 credentialReferenceId,
                 serviceAccountJson,
+                catalogEndpoint,
                 cancellationToken).ConfigureAwait(false);
             credentialImported = true;
             return await ObserveAndPersistAsync(
@@ -222,12 +223,13 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
     {
         if (!endpoint.IsAbsoluteUri ||
             !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            !endpoint.IsDefaultPort ||
             !string.IsNullOrEmpty(endpoint.UserInfo) ||
             !string.IsNullOrEmpty(endpoint.Fragment) ||
             !IsGoogleApisHost(endpoint.Host))
         {
             throw new ArgumentException(
-                "Google voice catalog endpoint must be a credential-free absolute HTTPS Google APIs URI without a fragment.",
+                "Google voice catalog endpoint must be a credential-free absolute HTTPS Google APIs URI on the default port without a fragment.",
                 nameof(endpoint));
         }
         return new Uri(endpoint.GetLeftPart(UriPartial.Authority), UriKind.Absolute);
