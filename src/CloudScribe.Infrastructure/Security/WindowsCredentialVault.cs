@@ -108,7 +108,9 @@ public sealed class WindowsCredentialVault : ICredentialVault
             char[] secret;
             if (credentialBytes.AsSpan().StartsWith(Utf8EnvelopePrefix))
             {
-                secret = Encoding.UTF8.GetChars(credentialBytes.AsSpan(Utf8EnvelopePrefix.Length));
+                ReadOnlySpan<byte> utf8Secret = credentialBytes.AsSpan(Utf8EnvelopePrefix.Length);
+                secret = new char[Encoding.UTF8.GetCharCount(utf8Secret)];
+                _ = Encoding.UTF8.GetChars(utf8Secret, secret);
             }
             else
             {

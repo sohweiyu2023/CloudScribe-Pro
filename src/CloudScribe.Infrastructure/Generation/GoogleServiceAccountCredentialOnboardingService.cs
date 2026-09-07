@@ -173,10 +173,3 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         string PrivateKeyId,
         Uri TokenUri);
 }
-
-public sealed record GoogleServiceAccountCredentialIdentity(
-    string CredentialReferenceId,
-    string ProjectId,
-    string ClientEmail,
-    string PrivateKeyId,
-    Uri TokenUri);
