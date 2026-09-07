@@ -1,0 +1,43 @@
+name: CloudScribe 1.0.1 Google TTS focused check
+
+on:
+  push:
+    branches:
+      - hotfix/1.0.1-google-tts-usability
+
+permissions:
+  contents: read
+
+jobs:
+  focused-build:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.400'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Locked restore
+        shell: pwsh
+        run: dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+      - name: Focused production compile
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet build src/CloudScribe.Infrastructure/CloudScribe.Infrastructure.csproj -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Infrastructure focused build failed.' }
+          dotnet build src/CloudScribe.App/CloudScribe.App.csproj -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'App focused build failed.' }
+      - name: Google credential and catalog smoke tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~GoogleServiceAccount|FullyQualifiedName~GoogleVoiceCatalog|FullyQualifiedName~VaultBackedTransientCredentialResolver|FullyQualifiedName~WindowsCredentialVault"
+          if ($LASTEXITCODE -ne 0) { throw 'Google credential/catalog focused tests failed.' }
