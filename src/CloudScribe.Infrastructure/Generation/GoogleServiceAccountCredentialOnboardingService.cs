@@ -8,9 +8,8 @@ namespace CloudScribe.Infrastructure.Generation;
 /// Imports a Google service-account JSON credential into Windows-backed secret storage without
 /// persisting the source JSON or an OAuth bearer token. The private key and non-secret identity
 /// metadata are stored as separate credential entries so the private key remains below the
-/// Windows Credential Manager blob limit. For v1.0.1 onboarding, the exact user-supplied voice
-/// catalog endpoint is persisted with the credential metadata so later real-catalog refreshes
-/// reuse the same authenticated, previously observed endpoint instead of a hidden second setting.
+/// Windows Credential Manager blob limit. The exact user-supplied catalog and synthesis endpoints
+/// are persisted with the credential binding so later requests reuse only previously admitted paths.
 /// </summary>
 public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialVault credentialVault)
 {
@@ -25,7 +24,12 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         string credentialReferenceId,
         ReadOnlyMemory<char> serviceAccountJson,
         CancellationToken cancellationToken = default) =>
-        ImportCoreAsync(credentialReferenceId, serviceAccountJson, voiceCatalogEndpoint: null, cancellationToken);
+        ImportCoreAsync(
+            credentialReferenceId,
+            serviceAccountJson,
+            voiceCatalogEndpoint: null,
+            synthesisEndpoint: null,
+            cancellationToken);
 
     public Task<GoogleServiceAccountCredentialIdentity> ImportAsync(
         string credentialReferenceId,
@@ -35,38 +39,64 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
     {
         ArgumentNullException.ThrowIfNull(voiceCatalogEndpoint);
         ValidateVoiceCatalogEndpoint(voiceCatalogEndpoint);
-        return ImportCoreAsync(credentialReferenceId, serviceAccountJson, voiceCatalogEndpoint, cancellationToken);
+        return ImportCoreAsync(
+            credentialReferenceId,
+            serviceAccountJson,
+            voiceCatalogEndpoint,
+            synthesisEndpoint: null,
+            cancellationToken);
+    }
+
+    public Task<GoogleServiceAccountCredentialIdentity> ImportAsync(
+        string credentialReferenceId,
+        ReadOnlyMemory<char> serviceAccountJson,
+        Uri voiceCatalogEndpoint,
+        Uri synthesisEndpoint,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(voiceCatalogEndpoint);
+        ArgumentNullException.ThrowIfNull(synthesisEndpoint);
+        ValidateVoiceCatalogEndpoint(voiceCatalogEndpoint);
+        ValidateSynthesisEndpoint(synthesisEndpoint);
+        RequireSameOrigin(voiceCatalogEndpoint, synthesisEndpoint);
+        return ImportCoreAsync(
+            credentialReferenceId,
+            serviceAccountJson,
+            voiceCatalogEndpoint,
+            synthesisEndpoint,
+            cancellationToken);
     }
 
     public async Task<Uri> ResolveVoiceCatalogEndpointAsync(
         string credentialReferenceId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(credentialReferenceId))
-            throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
-
-        using CredentialSecret? secret = await _credentialVault.ReadAsync(
-            new CredentialReference(credentialReferenceId + MetadataSuffix),
+        GoogleServiceAccountCredentialMetadata metadata = await ResolveMetadataAsync(
+            credentialReferenceId,
             cancellationToken).ConfigureAwait(false);
-        if (secret is null)
-            throw new InvalidOperationException("Google service-account metadata is unavailable for the configured credential.");
-
-        GoogleServiceAccountCredentialMetadata metadata;
-        try
-        {
-            string metadataJson = new(secret.Value.Span);
-            metadata = JsonSerializer.Deserialize<GoogleServiceAccountCredentialMetadata>(metadataJson)
-                ?? throw new InvalidDataException("Google service-account metadata is empty.");
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("Google service-account metadata is malformed.", exception);
-        }
-
         Uri endpoint = metadata.VoiceCatalogEndpoint
             ?? throw new InvalidOperationException(
                 "Google service-account metadata has no persisted voice-catalog endpoint; reconfigure Google TTS through the 1.0.1 onboarding flow.");
         ValidateVoiceCatalogEndpoint(endpoint);
+        return endpoint;
+    }
+
+    public async Task<Uri> ResolveSynthesisEndpointAsync(
+        string credentialReferenceId,
+        CancellationToken cancellationToken = default)
+    {
+        GoogleServiceAccountCredentialMetadata metadata = await ResolveMetadataAsync(
+            credentialReferenceId,
+            cancellationToken).ConfigureAwait(false);
+        Uri endpoint = metadata.SynthesisEndpoint
+            ?? throw new InvalidOperationException(
+                "Google service-account metadata has no persisted synthesis endpoint; reconfigure Google TTS through the 1.0.1 onboarding flow.");
+        ValidateSynthesisEndpoint(endpoint);
+        if (metadata.VoiceCatalogEndpoint is not null)
+        {
+            ValidateVoiceCatalogEndpoint(metadata.VoiceCatalogEndpoint);
+            RequireSameOrigin(metadata.VoiceCatalogEndpoint, endpoint);
+        }
         return endpoint;
     }
 
@@ -81,10 +111,36 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         return marker || metadata || key;
     }
 
+    private async Task<GoogleServiceAccountCredentialMetadata> ResolveMetadataAsync(
+        string credentialReferenceId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(credentialReferenceId))
+            throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
+
+        using CredentialSecret? secret = await _credentialVault.ReadAsync(
+            new CredentialReference(credentialReferenceId + MetadataSuffix),
+            cancellationToken).ConfigureAwait(false);
+        if (secret is null)
+            throw new InvalidOperationException("Google service-account metadata is unavailable for the configured credential.");
+
+        try
+        {
+            string metadataJson = new(secret.Value.Span);
+            return JsonSerializer.Deserialize<GoogleServiceAccountCredentialMetadata>(metadataJson)
+                ?? throw new InvalidDataException("Google service-account metadata is empty.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("Google service-account metadata is malformed.", exception);
+        }
+    }
+
     private async Task<GoogleServiceAccountCredentialIdentity> ImportCoreAsync(
         string credentialReferenceId,
         ReadOnlyMemory<char> serviceAccountJson,
         Uri? voiceCatalogEndpoint,
+        Uri? synthesisEndpoint,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(credentialReferenceId))
@@ -104,7 +160,8 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
             material.ClientEmail,
             material.PrivateKeyId,
             material.TokenUri,
-            voiceCatalogEndpoint));
+            voiceCatalogEndpoint,
+            synthesisEndpoint));
 
         bool keyStored = false;
         bool metadataStored = false;
@@ -205,6 +262,20 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
 
     private static void ValidateVoiceCatalogEndpoint(Uri endpoint)
     {
+        ValidateGoogleApiEndpoint(endpoint, "voice-catalog");
+    }
+
+    private static void ValidateSynthesisEndpoint(Uri endpoint)
+    {
+        ValidateGoogleApiEndpoint(endpoint, "synthesis");
+        if (!string.IsNullOrEmpty(endpoint.Query))
+            throw new InvalidDataException("Google synthesis endpoint must not contain query data.");
+        if (string.IsNullOrWhiteSpace(endpoint.AbsolutePath) || string.Equals(endpoint.AbsolutePath, "/", StringComparison.Ordinal))
+            throw new InvalidDataException("Google synthesis endpoint must identify an explicit API path, not only an origin.");
+    }
+
+    private static void ValidateGoogleApiEndpoint(Uri endpoint, string label)
+    {
         if (!endpoint.IsAbsoluteUri ||
             !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
             !endpoint.IsDefaultPort ||
@@ -213,7 +284,21 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
             !IsGoogleApisHost(endpoint.DnsSafeHost))
         {
             throw new InvalidDataException(
-                "Google voice-catalog endpoint must be a credential-free absolute HTTPS Google APIs URI on the default port without a fragment.");
+                $"Google {label} endpoint must be a credential-free absolute HTTPS Google APIs URI on the default port without a fragment.");
+        }
+    }
+
+    private static void RequireSameOrigin(Uri left, Uri right)
+    {
+        if (Uri.Compare(
+                left,
+                right,
+                UriComponents.SchemeAndServer,
+                UriFormat.SafeUnescaped,
+                StringComparison.OrdinalIgnoreCase) != 0)
+        {
+            throw new InvalidDataException(
+                "Google voice-catalog and synthesis endpoints must use the same admitted Google API origin for this provider account.");
         }
     }
 
@@ -243,5 +328,6 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         string ClientEmail,
         string PrivateKeyId,
         Uri TokenUri,
-        Uri? VoiceCatalogEndpoint = null);
+        Uri? VoiceCatalogEndpoint = null,
+        Uri? SynthesisEndpoint = null);
 }
