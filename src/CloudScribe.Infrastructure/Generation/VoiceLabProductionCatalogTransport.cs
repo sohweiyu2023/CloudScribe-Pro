@@ -55,6 +55,7 @@ public sealed class VoiceLabProductionCatalogTransport
             credentialReferenceId,
             capabilityEvidenceId,
             endpointOrigin,
+            evidence.ProjectAuthorized,
             cancellationToken).ConfigureAwait(false);
         await RevalidateCurrentBindingsAsync(query, evidence, cancellationToken).ConfigureAwait(false);
         ValidateResults(results, query, capabilityEvidenceId, cancellationToken);
@@ -145,8 +146,12 @@ public sealed class VoiceLabProductionCatalogTransport
         string credentialReferenceId,
         string capabilityEvidenceId,
         Uri endpointOrigin,
+        bool projectAuthorized,
         CancellationToken cancellationToken)
     {
+        if (!projectAuthorized)
+            throw new InvalidOperationException("Voice Lab catalog project authorization is not current.");
+
         IVoiceLabProviderAdapter adapter = await _adapters.ResolveAsync(
             query.ProviderId,
             query.AccountId,
@@ -185,7 +190,7 @@ public sealed class VoiceLabProductionCatalogTransport
                     providerVoice.VoiceFingerprint,
                     CapabilityCurrent: true,
                     providerVoice.VoiceEnabled,
-                    providerVoice.AccountProjectAuthorized));
+                    AccountProjectAuthorized: projectAuthorized));
             }
 
             return results;
