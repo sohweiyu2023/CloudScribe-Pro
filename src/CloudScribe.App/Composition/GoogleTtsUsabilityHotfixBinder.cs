@@ -96,7 +96,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             string account = Require(controls.AccountId.Text, "account ID");
             string name = Require(controls.DisplayName.Text, "display name");
             string credential = Require(controls.CredentialReference.Text, "credential reference ID");
-            string json = Require(controls.ServiceAccountJson.Text, "service-account JSON");
+            string json = RequireServiceAccountJson(controls.ServiceAccountJson.Text);
             Uri endpoint = RequireHttpsEndpoint(controls.CatalogEndpoint.Text);
             viewModel.StatusMessage = "Google TTS · authenticating service account and verifying real voice catalog";
             GoogleTextToSpeechCatalogBootstrapResult result = await _bootstrapService.ConfigureFreshAsync(
@@ -280,6 +280,15 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             throw new InvalidOperationException("Google voice catalog endpoint must be an absolute HTTPS URI.");
         }
         return endpoint;
+    }
+
+    private static string RequireServiceAccountJson(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException("Google TTS service-account JSON is required.");
+        if (value.Contains('\0'))
+            throw new InvalidOperationException("Google TTS service-account JSON contains a forbidden NUL character.");
+        return value.Trim();
     }
 
     private static string Require(string? value, string label)
