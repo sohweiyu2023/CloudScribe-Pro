@@ -98,6 +98,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<VoiceLabCatalogCurrentEvidenceResolver>();
         services.AddSingleton<VoiceLabAuditionCurrentEvidenceResolver>();
         services.AddSingleton<GoogleVoiceCatalogClient>();
+        services.AddSingleton<GoogleTextToSpeechCatalogBootstrapService>();
         services.AddSingleton(serviceProvider =>
             new VoiceLabProductionCatalogTransport(
                 serviceProvider.GetRequiredService<IProviderAccountStore>(),

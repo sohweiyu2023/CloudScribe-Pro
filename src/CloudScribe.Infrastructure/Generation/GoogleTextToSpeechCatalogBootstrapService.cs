@@ -160,11 +160,3 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         return new Uri(endpoint.GetLeftPart(UriPartial.Authority), UriKind.Absolute);
     }
 }
-
-public sealed record GoogleTextToSpeechCatalogBootstrapResult(
-    ProviderAccountSnapshot Account,
-    StoredProviderCapabilitySnapshot CapabilityEvidence,
-    string ProjectId,
-    string CatalogProvenanceId,
-    IReadOnlyList<GoogleVoiceCatalogEntry> Voices,
-    DateTimeOffset ExpiresAtUtc);
