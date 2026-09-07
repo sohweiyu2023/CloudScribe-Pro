@@ -178,6 +178,6 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if ('${{ steps.solution_tests.outcome }}' -ne 'success') {
+          if ('${{ steps.solution_tests.conclusion }}' -ne 'success') {
             throw 'Comprehensive Windows acceptance remains failed because the complete compiled solution test suite did not pass.'
           }
