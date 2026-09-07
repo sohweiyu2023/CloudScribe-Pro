@@ -88,6 +88,7 @@ public static class ServiceCollectionExtensions
 
     private static void AddProviderAndTrustServices(IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSingleton<IProviderAdapterFactory, GoogleVoiceLabProviderAdapterFactory>();
         services.AddSingleton<IProviderFactoryRegistry, ProviderFactoryRegistry>();
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
@@ -96,6 +97,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IVoiceLabAuditionAuthorizationStore, VoiceLabAuditionAuthorizationStore>();
         services.AddSingleton<VoiceLabCatalogCurrentEvidenceResolver>();
         services.AddSingleton<VoiceLabAuditionCurrentEvidenceResolver>();
+        services.AddSingleton<GoogleVoiceCatalogClient>();
         services.AddSingleton(serviceProvider =>
             new VoiceLabProductionCatalogTransport(
                 serviceProvider.GetRequiredService<IProviderAccountStore>(),
