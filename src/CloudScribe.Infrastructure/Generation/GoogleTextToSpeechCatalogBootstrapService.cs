@@ -37,15 +37,20 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         string credentialReferenceId,
         ReadOnlyMemory<char> serviceAccountJson,
         Uri catalogEndpoint,
+        Uri synthesisEndpoint,
+        string regionId,
         CancellationToken cancellationToken = default)
     {
-        ValidateInputs(accountId, displayName, credentialReferenceId, catalogEndpoint);
+        ValidateInputs(accountId, displayName, credentialReferenceId, catalogEndpoint, synthesisEndpoint, regionId);
         cancellationToken.ThrowIfCancellationRequested();
         await RequireFreshAccountAsync(accountId, cancellationToken).ConfigureAwait(false);
 
-        // Admit the destination before importing or resolving any credential. A user-supplied
-        // HTTPS URI must never be able to self-authorize an arbitrary bearer-token destination.
-        Uri endpointOrigin = GetGoogleApiOrigin(catalogEndpoint);
+        // Admit both destinations before importing or resolving any credential. The generation
+        // account is pinned to the synthesis origin, while the catalog observation is required to
+        // use that same admitted Google APIs origin.
+        Uri catalogOrigin = GetGoogleApiOrigin(catalogEndpoint);
+        Uri synthesisOrigin = GetGoogleApiOrigin(synthesisEndpoint);
+        RequireSameOrigin(catalogOrigin, synthesisOrigin);
         bool credentialImported = false;
         try
         {
@@ -53,13 +58,15 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
                 credentialReferenceId,
                 serviceAccountJson,
                 catalogEndpoint,
+                synthesisEndpoint,
                 cancellationToken).ConfigureAwait(false);
             credentialImported = true;
             return await ObserveAndPersistAsync(
                 accountId,
                 displayName,
                 catalogEndpoint,
-                endpointOrigin,
+                synthesisOrigin,
+                regionId,
                 identity,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -77,7 +84,8 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         string accountId,
         string displayName,
         Uri catalogEndpoint,
-        Uri endpointOrigin,
+        Uri synthesisOrigin,
+        string regionId,
         GoogleServiceAccountCredentialIdentity identity,
         CancellationToken cancellationToken)
     {
@@ -86,7 +94,8 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
             accountId,
             displayName,
             new CredentialReference(identity.CredentialReferenceId),
-            endpointOrigin: endpointOrigin);
+            regionId: regionId,
+            endpointOrigin: synthesisOrigin);
 
         // This direct bootstrap observation is intentionally narrower than Stage6. The real
         // authenticated response must succeed before any account/catalog evidence is persisted.
@@ -211,12 +220,16 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         string accountId,
         string displayName,
         string credentialReferenceId,
-        Uri catalogEndpoint)
+        Uri catalogEndpoint,
+        Uri synthesisEndpoint,
+        string regionId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
         ArgumentException.ThrowIfNullOrWhiteSpace(credentialReferenceId);
         ArgumentNullException.ThrowIfNull(catalogEndpoint);
+        ArgumentNullException.ThrowIfNull(synthesisEndpoint);
+        ArgumentException.ThrowIfNullOrWhiteSpace(regionId);
     }
 
     private static Uri GetGoogleApiOrigin(Uri endpoint)
@@ -229,10 +242,24 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
             !IsGoogleApisHost(endpoint.Host))
         {
             throw new ArgumentException(
-                "Google voice catalog endpoint must be a credential-free absolute HTTPS Google APIs URI on the default port without a fragment.",
+                "Google endpoint must be a credential-free absolute HTTPS Google APIs URI on the default port without a fragment.",
                 nameof(endpoint));
         }
         return new Uri(endpoint.GetLeftPart(UriPartial.Authority), UriKind.Absolute);
+    }
+
+    private static void RequireSameOrigin(Uri catalogOrigin, Uri synthesisOrigin)
+    {
+        if (Uri.Compare(
+                catalogOrigin,
+                synthesisOrigin,
+                UriComponents.SchemeAndServer,
+                UriFormat.SafeUnescaped,
+                StringComparison.OrdinalIgnoreCase) != 0)
+        {
+            throw new ArgumentException(
+                "Google voice-catalog and synthesis endpoints must use the same admitted Google API origin.");
+        }
     }
 
     private static bool IsGoogleApisHost(string host) =>
