@@ -15,6 +15,7 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
     internal const string ServiceAccountMarker = "google-service-account:v1";
     internal const string MetadataSuffix = "/google-service-account-metadata";
     internal const string PrivateKeySuffix = "/google-service-account-private-key";
+    private const string GoogleApisDnsSuffix = ".googleapis.com";
 
     private readonly ICredentialVault _credentialVault = credentialVault ?? throw new ArgumentNullException(nameof(credentialVault));
 
@@ -118,9 +119,8 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
             if (!privateKey.Contains("BEGIN PRIVATE KEY", StringComparison.Ordinal) ||
                 !privateKey.Contains("END PRIVATE KEY", StringComparison.Ordinal))
                 throw new InvalidDataException("Google service-account private key is not a PKCS#8 PEM key.");
-            if (!Uri.TryCreate(tokenUriText, UriKind.Absolute, out Uri? tokenUri) ||
-                !string.Equals(tokenUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Google service-account token URI must be an absolute HTTPS URI.");
+            if (!Uri.TryCreate(tokenUriText, UriKind.Absolute, out Uri? tokenUri) || !IsTrustedGoogleOAuthTokenUri(tokenUri))
+                throw new InvalidDataException("Google service-account token URI must use a trusted Google HTTPS API origin.");
 
             return new GoogleServiceAccountCredentialMaterial(projectId, clientEmail, privateKeyId, privateKey, tokenUri);
         }
@@ -132,6 +132,22 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         {
             Array.Clear(utf8);
         }
+    }
+
+    private static bool IsTrustedGoogleOAuthTokenUri(Uri tokenUri)
+    {
+        if (!string.Equals(tokenUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            !tokenUri.IsDefaultPort ||
+            !string.IsNullOrEmpty(tokenUri.UserInfo) ||
+            !string.IsNullOrEmpty(tokenUri.Query) ||
+            !string.IsNullOrEmpty(tokenUri.Fragment))
+        {
+            return false;
+        }
+
+        string host = tokenUri.DnsSafeHost;
+        return host.EndsWith(GoogleApisDnsSuffix, StringComparison.OrdinalIgnoreCase) &&
+               host.Length > GoogleApisDnsSuffix.Length;
     }
 
     private static string RequiredString(JsonElement root, string propertyName)
