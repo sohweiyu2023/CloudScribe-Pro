@@ -13,6 +13,7 @@ public sealed class WindowsCredentialVault : ICredentialVault
     private const int MaximumCredentialBlobBytes = 5 * 512;
     private const int ErrorNotFound = 1168;
     private const string TargetPrefix = "CloudScribePro/";
+    private static ReadOnlySpan<byte> Utf8EnvelopePrefix => "CSU8"u8;
 
     public ValueTask StoreAsync(
         CredentialReference reference,
@@ -27,13 +28,16 @@ public sealed class WindowsCredentialVault : ICredentialVault
             throw new ArgumentException("Credential secret cannot be empty.", nameof(secret));
         }
 
-        byte[] credentialBytes = new byte[Encoding.Unicode.GetByteCount(secret.Span)];
-        _ = Encoding.Unicode.GetBytes(secret.Span, credentialBytes);
-        if (credentialBytes.Length > MaximumCredentialBlobBytes)
+        int payloadLength = Encoding.UTF8.GetByteCount(secret.Span);
+        int blobLength = checked(Utf8EnvelopePrefix.Length + payloadLength);
+        if (blobLength > MaximumCredentialBlobBytes)
         {
-            Array.Clear(credentialBytes);
             throw new ArgumentOutOfRangeException(nameof(secret), "Credential secret exceeds the Windows Credential Manager blob limit.");
         }
+
+        byte[] credentialBytes = new byte[blobLength];
+        Utf8EnvelopePrefix.CopyTo(credentialBytes);
+        _ = Encoding.UTF8.GetBytes(secret.Span, credentialBytes.AsSpan(Utf8EnvelopePrefix.Length));
 
         IntPtr targetPointer = IntPtr.Zero;
         GCHandle pinnedSecret = default;
@@ -94,13 +98,29 @@ public sealed class WindowsCredentialVault : ICredentialVault
             {
                 return ValueTask.FromResult<CredentialSecret?>(null);
             }
-            if (credential.CredentialBlobSize > MaximumCredentialBlobBytes || credential.CredentialBlobSize % 2 != 0)
+            if (credential.CredentialBlobSize > MaximumCredentialBlobBytes)
             {
                 throw new InvalidDataException("Windows Credential Manager returned an invalid CloudScribe credential blob.");
             }
             credentialBytes = new byte[checked((int)credential.CredentialBlobSize)];
             Marshal.Copy(credential.CredentialBlob, credentialBytes, 0, credentialBytes.Length);
-            char[] secret = Encoding.Unicode.GetChars(credentialBytes);
+
+            char[] secret;
+            if (credentialBytes.AsSpan().StartsWith(Utf8EnvelopePrefix))
+            {
+                secret = Encoding.UTF8.GetChars(credentialBytes.AsSpan(Utf8EnvelopePrefix.Length));
+            }
+            else
+            {
+                // v1.0.0 stored UTF-16LE without an envelope. Preserve read compatibility so
+                // immutable historical installs can upgrade without rewriting existing secrets.
+                if (credentialBytes.Length % 2 != 0)
+                {
+                    throw new InvalidDataException("Windows Credential Manager returned an invalid legacy CloudScribe credential blob.");
+                }
+                secret = Encoding.Unicode.GetChars(credentialBytes);
+            }
+
             return ValueTask.FromResult<CredentialSecret?>(new CredentialSecret(secret));
         }
         finally
