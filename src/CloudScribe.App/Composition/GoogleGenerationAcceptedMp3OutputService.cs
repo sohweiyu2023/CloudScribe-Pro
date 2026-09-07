@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using CloudScribe.Application.Generation;
@@ -7,12 +8,15 @@ namespace CloudScribe.App.Composition;
 /// <summary>
 /// Persists only a genuinely accepted Stage6 Google response. The accepted provider bytes are
 /// written without transformation, read back, and SHA-256 compared before the path is exposed.
+/// Playback revalidates the current file against the exact accepted bytes recorded at persistence time.
 /// This is output-integrity handling only; it never creates authorization or reconciliation evidence.
 /// </summary>
 public sealed class GoogleGenerationAcceptedMp3OutputService
 {
     private const string ExpectedContentType = "audio/mpeg";
     private readonly string _outputDirectory;
+    private readonly ConcurrentDictionary<string, AcceptedPlaybackIntegrity> _acceptedPlaybackIntegrity =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public GoogleGenerationAcceptedMp3OutputService()
     {
@@ -40,7 +44,7 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
 
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(_outputDirectory);
-        string path = CreateUniquePath(response.ProviderRequestId);
+        string path = Path.GetFullPath(CreateUniquePath(response.ProviderRequestId));
         byte[] expectedHash = SHA256.HashData(response.MediaBytes.Span);
         try
         {
@@ -49,16 +53,19 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
             byte[] persistedHash = SHA256.HashData(persisted);
             if (persisted.Length != response.MediaBytes.Length || !CryptographicOperations.FixedTimeEquals(expectedHash, persistedHash))
                 throw new InvalidOperationException("Persisted Google MP3 bytes differ from the accepted provider bytes.");
+
+            _acceptedPlaybackIntegrity[path] = new AcceptedPlaybackIntegrity(persisted.LongLength, expectedHash.ToArray());
             return new GoogleGenerationAcceptedMp3Output(path, persisted.Length, Convert.ToHexString(expectedHash));
         }
         catch
         {
+            _acceptedPlaybackIntegrity.TryRemove(path, out _);
             TryDelete(path);
             throw;
         }
     }
 
-    public Task PlayAsync(string path, CancellationToken cancellationToken = default)
+    public async Task PlayAsync(string path, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -68,9 +75,20 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
             throw new InvalidOperationException("Google MP3 playback is restricted to CloudScribe's verified generated-output directory.");
         if (!File.Exists(fullPath) || !string.Equals(Path.GetExtension(fullPath), ".mp3", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Verified Google MP3 output is no longer available.");
+        if (!_acceptedPlaybackIntegrity.TryGetValue(fullPath, out AcceptedPlaybackIntegrity? expected))
+            throw new InvalidOperationException("Google MP3 playback requires accepted-byte integrity evidence from this application session.");
+
+        byte[] currentBytes = await File.ReadAllBytesAsync(fullPath, cancellationToken).ConfigureAwait(false);
+        byte[] currentHash = SHA256.HashData(currentBytes);
+        if (currentBytes.LongLength != expected.ByteLength || !CryptographicOperations.FixedTimeEquals(currentHash, expected.Sha256))
+        {
+            _acceptedPlaybackIntegrity.TryRemove(fullPath, out _);
+            throw new InvalidOperationException("Verified Google MP3 output changed after acceptance and will not be played.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true })
             ?? throw new InvalidOperationException("Windows could not open the verified Google MP3 output.");
-        return Task.CompletedTask;
     }
 
     private string CreateUniquePath(string? providerRequestId)
@@ -103,4 +121,6 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
         {
         }
     }
+
+    private sealed record AcceptedPlaybackIntegrity(long ByteLength, byte[] Sha256);
 }
