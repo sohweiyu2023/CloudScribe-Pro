@@ -61,7 +61,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         });
         host.Children.Add(new TextBlock
         {
-            Text = "Paste service-account JSON only for onboarding. CloudScribe imports it into the Windows credential vault, clears the field, obtains short-lived OAuth, and persists catalog trust only after a real authenticated voice-list response succeeds.",
+            Text = "Paste service-account JSON only for onboarding. CloudScribe imports it into the Windows credential vault, clears the field, obtains short-lived OAuth, and persists catalog trust only after a real authenticated voice-list response succeeds. Catalog and synthesis endpoints remain explicit user configuration and must share the same admitted Google API origin.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
     }
@@ -72,7 +72,9 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             NewTextBox("Account ID (new, local CloudScribe identity)"),
             NewTextBox("Display name"),
             NewTextBox("Credential reference ID (new vault target)"),
+            NewTextBox("Google region identity (for example global)"),
             NewTextBox("Google voice catalog HTTPS endpoint"),
+            NewTextBox("Google synthesis HTTPS endpoint"),
             NewTextBox("Paste service-account JSON (cleared after Configure)"),
             new Button { Content = "Configure Google TTS securely" });
         controls.ServiceAccountJson.AcceptsReturn = true;
@@ -80,7 +82,9 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         host.Children.Add(controls.AccountId);
         host.Children.Add(controls.DisplayName);
         host.Children.Add(controls.CredentialReference);
+        host.Children.Add(controls.RegionId);
         host.Children.Add(controls.CatalogEndpoint);
+        host.Children.Add(controls.SynthesisEndpoint);
         host.Children.Add(controls.ServiceAccountJson);
         controls.Configure.Click += async (_, _) => await ConfigureFreshAsync(viewModel, controls).ConfigureAwait(true);
         host.Children.Add(controls.Configure);
@@ -96,15 +100,19 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             string account = Require(controls.AccountId.Text, "account ID");
             string name = Require(controls.DisplayName.Text, "display name");
             string credential = Require(controls.CredentialReference.Text, "credential reference ID");
+            string region = Require(controls.RegionId.Text, "region identity");
             string json = RequireServiceAccountJson(controls.ServiceAccountJson.Text);
-            Uri endpoint = RequireHttpsEndpoint(controls.CatalogEndpoint.Text);
+            Uri catalogEndpoint = RequireHttpsEndpoint(controls.CatalogEndpoint.Text, "voice catalog endpoint");
+            Uri synthesisEndpoint = RequireHttpsEndpoint(controls.SynthesisEndpoint.Text, "synthesis endpoint");
             viewModel.StatusMessage = "Google TTS · authenticating service account and verifying real voice catalog";
             GoogleTextToSpeechCatalogBootstrapResult result = await _bootstrapService.ConfigureFreshAsync(
                 account,
                 name,
                 credential,
                 json.AsMemory(),
-                endpoint,
+                catalogEndpoint,
+                synthesisEndpoint,
+                region,
                 CancellationToken.None).ConfigureAwait(true);
             viewModel.StatusMessage = $"Google TTS configured · project {result.ProjectId} · {result.Voices.Count} observed voices";
             viewModel.RefreshVoiceLabCatalogCommand.Execute(null);
@@ -271,13 +279,13 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         PlaceholderText = placeholder,
     };
 
-    private static Uri RequireHttpsEndpoint(string? value)
+    private static Uri RequireHttpsEndpoint(string? value, string label)
     {
-        string endpointText = Require(value, "voice catalog endpoint");
+        string endpointText = Require(value, label);
         if (!Uri.TryCreate(endpointText, UriKind.Absolute, out Uri? endpoint)
             || !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Google voice catalog endpoint must be an absolute HTTPS URI.");
+            throw new InvalidOperationException($"Google TTS {label} must be an absolute HTTPS URI.");
         }
         return endpoint;
     }
@@ -305,7 +313,9 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         TextBox AccountId,
         TextBox DisplayName,
         TextBox CredentialReference,
+        TextBox RegionId,
         TextBox CatalogEndpoint,
+        TextBox SynthesisEndpoint,
         TextBox ServiceAccountJson,
         Button Configure);
 }
