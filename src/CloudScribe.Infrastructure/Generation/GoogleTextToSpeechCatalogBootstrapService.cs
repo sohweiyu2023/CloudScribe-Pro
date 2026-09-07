@@ -43,7 +43,9 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         cancellationToken.ThrowIfCancellationRequested();
         await RequireFreshAccountAsync(accountId, cancellationToken).ConfigureAwait(false);
 
-        Uri endpointOrigin = GetHttpsOrigin(catalogEndpoint);
+        // Admit the destination before importing or resolving any credential. A user-supplied
+        // HTTPS URI must never be able to self-authorize an arbitrary bearer-token destination.
+        Uri endpointOrigin = GetGoogleApiOrigin(catalogEndpoint);
         bool credentialImported = false;
         try
         {
@@ -216,19 +218,24 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         ArgumentNullException.ThrowIfNull(catalogEndpoint);
     }
 
-    private static Uri GetHttpsOrigin(Uri endpoint)
+    private static Uri GetGoogleApiOrigin(Uri endpoint)
     {
         if (!endpoint.IsAbsoluteUri ||
             !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
             !string.IsNullOrEmpty(endpoint.UserInfo) ||
-            !string.IsNullOrEmpty(endpoint.Fragment))
+            !string.IsNullOrEmpty(endpoint.Fragment) ||
+            !IsGoogleApisHost(endpoint.Host))
         {
             throw new ArgumentException(
-                "Google voice catalog endpoint must be an absolute HTTPS URI without credentials or a fragment.",
+                "Google voice catalog endpoint must be a credential-free absolute HTTPS Google APIs URI without a fragment.",
                 nameof(endpoint));
         }
         return new Uri(endpoint.GetLeftPart(UriPartial.Authority), UriKind.Absolute);
     }
+
+    private static bool IsGoogleApisHost(string host) =>
+        string.Equals(host, "googleapis.com", StringComparison.OrdinalIgnoreCase) ||
+        host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase);
 
     private sealed record EvidenceWindow(
         DateTimeOffset NowUtc,
