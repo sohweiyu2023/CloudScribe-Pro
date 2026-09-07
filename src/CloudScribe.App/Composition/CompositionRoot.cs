@@ -65,6 +65,7 @@ public static class CompositionRoot
         services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
         services.AddSingleton<Stage7VoiceLabAuditionShellBinder>();
         services.AddSingleton<GoogleTtsUsabilityHotfixBinder>();
+        services.AddSingleton<GoogleGenerationAcceptedMp3OutputService>();
     }
 
     private static void RegisterShell(IServiceCollection services)
@@ -113,6 +114,21 @@ public static class CompositionRoot
         serviceProvider.GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(
             viewModel,
             serviceProvider.GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync);
+        ConfigureGooglePreparationAndSpend(viewModel, serviceProvider);
+        ConfigureGoogleOutput(viewModel, serviceProvider);
+        serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
+        serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);
+        Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(
+            viewModel,
+            serviceProvider.GetRequiredService<RestoreRecoveryExecutionCompositionFactory>(),
+            serviceProvider.GetRequiredService<RestoreRecoveryProductionConfigurationResolver>(),
+            serviceProvider.GetRequiredService<AtomicVerifiedRestoreExecutor>());
+    }
+
+    private static void ConfigureGooglePreparationAndSpend(
+        ShellViewModel viewModel,
+        IServiceProvider serviceProvider)
+    {
         GoogleGenerationProductionIntentAssemblyCoordinator intentAssemblyCoordinator =
             serviceProvider.GetRequiredService<GoogleGenerationProductionIntentAssemblyCoordinator>();
         GoogleGenerationProductionPreparationCoordinator preparationCoordinator =
@@ -128,12 +144,20 @@ public static class CompositionRoot
             approvalService.ApproveExplicitAsync(
                 new GoogleGenerationProductionSpendApprovalService.ApprovalConfirmation(maximum, confirmed),
                 cancellationToken));
-        serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
-        serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);
-        Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(
-            viewModel,
-            serviceProvider.GetRequiredService<RestoreRecoveryExecutionCompositionFactory>(),
-            serviceProvider.GetRequiredService<RestoreRecoveryProductionConfigurationResolver>(),
-            serviceProvider.GetRequiredService<AtomicVerifiedRestoreExecutor>());
+    }
+
+    private static void ConfigureGoogleOutput(ShellViewModel viewModel, IServiceProvider serviceProvider)
+    {
+        GoogleGenerationAcceptedMp3OutputService output =
+            serviceProvider.GetRequiredService<GoogleGenerationAcceptedMp3OutputService>();
+        viewModel.ConfigureStage6GoogleGenerationOutput(
+            async (outcome, cancellationToken) =>
+            {
+                GoogleGenerationAcceptedMp3Output persisted = await output
+                    .PersistAcceptedAsync(outcome, cancellationToken)
+                    .ConfigureAwait(false);
+                return persisted.Path;
+            },
+            output.PlayAsync);
     }
 }
