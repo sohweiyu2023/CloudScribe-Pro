@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using CloudScribe.Providers.Abstractions;
 
@@ -67,7 +66,7 @@ public sealed class GoogleVoiceCatalogClient(
             voices);
     }
 
-    private static IReadOnlyList<GoogleVoiceCatalogEntry> ParseVoices(ReadOnlySpan<byte> json)
+    private static IReadOnlyList<GoogleVoiceCatalogEntry> ParseVoices(byte[] json)
     {
         using JsonDocument document = JsonDocument.Parse(json);
         if (!document.RootElement.TryGetProperty("voices", out JsonElement voicesElement)
@@ -98,10 +97,12 @@ public sealed class GoogleVoiceCatalogClient(
             {
                 foreach (JsonElement languageCodeElement in languageCodesElement.EnumerateArray())
                 {
-                    if (languageCodeElement.ValueKind == JsonValueKind.String
-                        && !string.IsNullOrWhiteSpace(languageCodeElement.GetString()))
+                    string? languageCode = languageCodeElement.ValueKind == JsonValueKind.String
+                        ? languageCodeElement.GetString()
+                        : null;
+                    if (!string.IsNullOrWhiteSpace(languageCode))
                     {
-                        languageCodes.Add(languageCodeElement.GetString()!);
+                        languageCodes.Add(languageCode);
                     }
                 }
             }
@@ -138,7 +139,12 @@ public sealed class GoogleVoiceCatalogClient(
         Uri admittedOrigin = account.EndpointOrigin
             ?? throw new InvalidOperationException("Google voice discovery requires an admitted provider endpoint origin.");
         Uri suppliedOrigin = new(catalogEndpoint.GetLeftPart(UriPartial.Authority), UriKind.Absolute);
-        if (!Uri.Compare(admittedOrigin, suppliedOrigin, UriComponents.SchemeAndServer, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase).Equals(0))
+        if (Uri.Compare(
+                admittedOrigin,
+                suppliedOrigin,
+                UriComponents.SchemeAndServer,
+                UriFormat.SafeUnescaped,
+                StringComparison.OrdinalIgnoreCase) != 0)
         {
             throw new InvalidOperationException("Google voice catalog endpoint origin does not match the admitted provider account origin.");
         }
