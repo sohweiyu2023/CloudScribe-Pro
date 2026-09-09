@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.Globalization;
 using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
@@ -13,7 +14,8 @@ namespace CloudScribe.App.Composition;
 /// catalog-evidence bootstrap; generation remains exclusively behind the existing Stage6 command.
 /// </summary>
 public sealed class GoogleTtsUsabilityHotfixBinder(
-    GoogleTextToSpeechCatalogBootstrapService bootstrapService)
+    GoogleTextToSpeechCatalogBootstrapService bootstrapService,
+    GoogleGenerationAcceptedMp3OutputService acceptedMp3OutputService)
 {
     private static readonly string[] ProviderControlHostNames =
     [
@@ -22,9 +24,16 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
     ];
 
     private static readonly string[] Mp3OutputOptions = ["MP3 · preserve accepted provider bytes"];
+    private static readonly FilePickerFileType Mp3FileType = new("MP3 audio")
+    {
+        Patterns = ["*.mp3"],
+        MimeTypes = ["audio/mpeg"],
+    };
 
     private readonly GoogleTextToSpeechCatalogBootstrapService _bootstrapService =
         bootstrapService ?? throw new ArgumentNullException(nameof(bootstrapService));
+    private readonly GoogleGenerationAcceptedMp3OutputService _acceptedMp3OutputService =
+        acceptedMp3OutputService ?? throw new ArgumentNullException(nameof(acceptedMp3OutputService));
 
     public void Attach(MainWindow window, ShellViewModel viewModel)
     {
@@ -50,14 +59,14 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             if (host is null)
                 continue;
 
-            MountHost(host, viewModel);
+            MountHost(window, host, viewModel);
             mounted = true;
         }
 
         return mounted;
     }
 
-    private void MountHost(StackPanel host, ShellViewModel viewModel)
+    private void MountHost(MainWindow window, StackPanel host, ShellViewModel viewModel)
     {
         host.Children.Clear();
         host.Spacing = 8;
@@ -66,7 +75,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         AddCatalogControls(host, viewModel);
         AddOutputAndSpendControls(host, viewModel);
         AddGenerateControls(host, viewModel);
-        AddVerifiedOutputControls(host, viewModel);
+        AddVerifiedOutputControls(window, host, viewModel);
     }
 
     private static void AddIntro(StackPanel host)
@@ -264,21 +273,25 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         });
     }
 
-    private static void AddVerifiedOutputControls(StackPanel host, ShellViewModel viewModel)
+    private void AddVerifiedOutputControls(MainWindow window, StackPanel host, ShellViewModel viewModel)
     {
         TextBlock outputPath = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
         Button play = new() { Content = "Play verified MP3" };
+        Button export = new() { Content = "Export verified MP3…" };
         play.Click += (_, _) =>
         {
             if (viewModel.PlayLastGeneratedGoogleMp3Command.CanExecute(null))
                 viewModel.PlayLastGeneratedGoogleMp3Command.Execute(null);
         };
+        export.Click += async (_, _) => await ExportVerifiedAsync(window, viewModel).ConfigureAwait(true);
+
         void Refresh()
         {
             outputPath.Text = string.IsNullOrWhiteSpace(viewModel.LastGeneratedGoogleMp3Path)
                 ? "No accepted Google MP3 has been exposed yet."
                 : $"Verified MP3 · {viewModel.LastGeneratedGoogleMp3Path}";
             play.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3;
+            export.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3 && window.StorageProvider.CanSave;
         }
         viewModel.PropertyChanged += (_, args) =>
         {
@@ -289,6 +302,42 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         Refresh();
         host.Children.Add(outputPath);
         host.Children.Add(play);
+        host.Children.Add(export);
+    }
+
+    private async Task ExportVerifiedAsync(MainWindow window, ShellViewModel viewModel)
+    {
+        try
+        {
+            string sourcePath = viewModel.LastGeneratedGoogleMp3Path
+                ?? throw new InvalidOperationException("No verified Google MP3 is available to export.");
+            if (!window.StorageProvider.CanSave)
+                throw new InvalidOperationException("This Windows storage provider cannot choose an MP3 export destination.");
+
+            IStorageFile? destination = await window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export verified Google MP3",
+                SuggestedFileName = Path.GetFileName(sourcePath),
+                DefaultExtension = "mp3",
+                FileTypeChoices = [Mp3FileType],
+                ShowOverwritePrompt = true,
+            }).ConfigureAwait(true);
+            if (destination is null)
+                return;
+            if (!destination.Path.IsFile)
+                throw new InvalidOperationException("The selected MP3 export destination is not a local Windows file.");
+
+            viewModel.StatusMessage = "Google generation · exporting verified accepted MP3 bytes";
+            string exportedPath = await _acceptedMp3OutputService.ExportVerifiedAsync(
+                sourcePath,
+                destination.Path.LocalPath,
+                CancellationToken.None).ConfigureAwait(true);
+            viewModel.StatusMessage = $"Google generation · verified MP3 exported · {exportedPath}";
+        }
+        catch (Exception ex)
+        {
+            viewModel.StatusMessage = $"Google MP3 export failed safely · {ex.Message}";
+        }
     }
 
     private static TextBox NewTextBox(string placeholder) => new()
