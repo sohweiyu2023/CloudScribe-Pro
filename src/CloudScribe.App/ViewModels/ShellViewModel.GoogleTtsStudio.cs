@@ -1,4 +1,5 @@
 using CloudScribe.Application.Generation;
+using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.App.ViewModels;
 
@@ -27,10 +28,12 @@ public sealed partial class ShellViewModel
     }
 
     /// <summary>
-    /// Captures only what the user can currently see/select in Studio: the open local document,
-    /// its exact current text, and the selected authenticated catalog voice. This is deliberately
-    /// request intent, not provider authorization or trust evidence. Stage6 must independently
-    /// resolve those production facts after this capture.
+    /// Captures only what the user can currently see/select in Studio plus the canonical identities
+    /// attached to that authenticated catalog selection: open local document, exact current text,
+    /// provider/account/project, selected voice, capability-evidence identity and voice fingerprint.
+    /// These identifiers let Stage6 re-resolve current production evidence without guessing. The
+    /// capture itself still makes no synthesis-authorization, pricing-current, trust-current,
+    /// queue, spend, or reconciliation assertion.
     /// </summary>
     public GoogleTtsStudioRequestSelection CaptureGoogleTtsStudioRequestSelection()
     {
@@ -44,13 +47,26 @@ public sealed partial class ShellViewModel
             ?? throw new InvalidOperationException("Select a verified Google voice before preparing generation.");
         voice.Validate();
 
+        string providerStableId = RequireCanonical(voice.ProviderStableId, "selected Google provider identity");
+        string accountStableId = RequireCanonical(voice.AccountStableId, "selected Google account identity");
+        string projectStableId = RequireCanonical(voice.ProjectStableId, "selected Google project identity");
         string voiceStableId = RequireCanonical(voice.VoiceStableId, "selected Google voice identity");
+        string capabilityEvidenceId = RequireCanonical(
+            voice.CapabilityEvidenceId,
+            "selected Google capability evidence identity");
+        string voiceFingerprint = RequireCanonical(voice.VoiceFingerprint, "selected Google voice fingerprint");
         string? locale = NormalizeOptional(VoiceLabLocaleFilter);
+
         return new GoogleTtsStudioRequestSelection(
             documentId,
             CurrentRevisionId,
             text,
+            providerStableId,
+            accountStableId,
+            projectStableId,
             voiceStableId,
+            capabilityEvidenceId,
+            voiceFingerprint,
             locale,
             DateTimeOffset.UtcNow);
     }
@@ -85,7 +101,12 @@ public sealed partial class ShellViewModel
         Guid DocumentId,
         Guid? RevisionId,
         string ExactText,
+        string ProviderStableId,
+        string AccountStableId,
+        string ProjectStableId,
         string VoiceStableId,
+        string CapabilityEvidenceId,
+        string VoiceFingerprint,
         string? Locale,
         DateTimeOffset CapturedAtUtc);
 }
