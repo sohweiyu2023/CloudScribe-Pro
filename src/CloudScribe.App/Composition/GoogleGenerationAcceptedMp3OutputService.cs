@@ -8,8 +8,9 @@ namespace CloudScribe.App.Composition;
 /// <summary>
 /// Persists only a genuinely accepted Stage6 Google response. The accepted provider bytes are
 /// written without transformation, read back, and SHA-256 compared before the path is exposed.
-/// Playback revalidates the current file against the exact accepted bytes recorded at persistence time.
-/// This is output-integrity handling only; it never creates authorization or reconciliation evidence.
+/// Playback and export revalidate the current file against the exact accepted bytes recorded at
+/// persistence time. This is output-integrity handling only; it never creates authorization,
+/// pricing, or reconciliation evidence.
 /// </summary>
 public sealed class GoogleGenerationAcceptedMp3OutputService
 {
@@ -67,28 +68,92 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
 
     public async Task PlayAsync(string path, CancellationToken cancellationToken = default)
     {
+        string fullPath = await RequireVerifiedAcceptedFileAsync(path, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true })
+            ?? throw new InvalidOperationException("Windows could not open the verified Google MP3 output.");
+    }
+
+    public async Task<string> ExportVerifiedAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken = default)
+    {
+        string sourceFullPath = await RequireVerifiedAcceptedFileAsync(sourcePath, cancellationToken).ConfigureAwait(false);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        string destinationFullPath = Path.GetFullPath(destinationPath);
+        if (!string.Equals(Path.GetExtension(destinationFullPath), ".mp3", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Verified Google output may only be exported as an .mp3 file.");
+        if (string.Equals(sourceFullPath, destinationFullPath, StringComparison.OrdinalIgnoreCase))
+            return destinationFullPath;
+
+        AcceptedPlaybackIntegrity expected = _acceptedPlaybackIntegrity[sourceFullPath];
+        string? destinationDirectory = Path.GetDirectoryName(destinationFullPath);
+        if (string.IsNullOrWhiteSpace(destinationDirectory))
+            throw new InvalidOperationException("MP3 export destination has no valid parent directory.");
+        Directory.CreateDirectory(destinationDirectory);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        byte[] acceptedBytes = await File.ReadAllBytesAsync(sourceFullPath, cancellationToken).ConfigureAwait(false);
+        VerifyBytes(acceptedBytes, expected, "Verified Google MP3 output changed before export and will not be copied.");
+
+        string temporaryPath = Path.Combine(
+            destinationDirectory,
+            $".{Path.GetFileName(destinationFullPath)}.{Guid.NewGuid():N}.cloudscribe-exporting");
+        try
+        {
+            await File.WriteAllBytesAsync(temporaryPath, acceptedBytes, cancellationToken).ConfigureAwait(false);
+            byte[] exportedBytes = await File.ReadAllBytesAsync(temporaryPath, cancellationToken).ConfigureAwait(false);
+            VerifyBytes(exportedBytes, expected, "Exported Google MP3 bytes differ from the accepted provider bytes.");
+
+            File.Move(temporaryPath, destinationFullPath, overwrite: true);
+            byte[] finalBytes = await File.ReadAllBytesAsync(destinationFullPath, cancellationToken).ConfigureAwait(false);
+            VerifyBytes(finalBytes, expected, "Final exported Google MP3 bytes differ from the accepted provider bytes.");
+            return destinationFullPath;
+        }
+        catch
+        {
+            TryDelete(temporaryPath);
+            throw;
+        }
+    }
+
+    private async Task<string> RequireVerifiedAcceptedFileAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string fullPath = Path.GetFullPath(path);
         string outputRoot = Path.GetFullPath(_outputDirectory) + Path.DirectorySeparatorChar;
         if (!fullPath.StartsWith(outputRoot, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Google MP3 playback is restricted to CloudScribe's verified generated-output directory.");
+            throw new InvalidOperationException("Google MP3 access is restricted to CloudScribe's verified generated-output directory.");
         if (!File.Exists(fullPath) || !string.Equals(Path.GetExtension(fullPath), ".mp3", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Verified Google MP3 output is no longer available.");
         if (!_acceptedPlaybackIntegrity.TryGetValue(fullPath, out AcceptedPlaybackIntegrity? expected))
-            throw new InvalidOperationException("Google MP3 playback requires accepted-byte integrity evidence from this application session.");
+            throw new InvalidOperationException("Google MP3 access requires accepted-byte integrity evidence from this application session.");
 
         byte[] currentBytes = await File.ReadAllBytesAsync(fullPath, cancellationToken).ConfigureAwait(false);
-        byte[] currentHash = SHA256.HashData(currentBytes);
-        if (currentBytes.LongLength != expected.ByteLength || !CryptographicOperations.FixedTimeEquals(currentHash, expected.Sha256))
+        try
+        {
+            VerifyBytes(currentBytes, expected, "Verified Google MP3 output changed after acceptance and will not be used.");
+        }
+        catch
         {
             _acceptedPlaybackIntegrity.TryRemove(fullPath, out _);
-            throw new InvalidOperationException("Verified Google MP3 output changed after acceptance and will not be played.");
+            throw;
         }
+        return fullPath;
+    }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true })
-            ?? throw new InvalidOperationException("Windows could not open the verified Google MP3 output.");
+    private static void VerifyBytes(
+        byte[] bytes,
+        AcceptedPlaybackIntegrity expected,
+        string failureMessage)
+    {
+        byte[] currentHash = SHA256.HashData(bytes);
+        if (bytes.LongLength != expected.ByteLength || !CryptographicOperations.FixedTimeEquals(currentHash, expected.Sha256))
+            throw new InvalidOperationException(failureMessage);
     }
 
     private string CreateUniquePath(string? providerRequestId)
