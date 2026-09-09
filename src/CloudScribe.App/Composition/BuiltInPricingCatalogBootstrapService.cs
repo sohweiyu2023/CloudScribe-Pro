@@ -32,7 +32,7 @@ public sealed class BuiltInPricingCatalogBootstrapService(
         if (dryRun.TrustState != PricingCatalogTrustState.ValidUnsigned)
         {
             throw new InvalidOperationException(
-                $"Authenticated built-in pricing seed is not admissible as the expected unsigned catalog: {dryRun.TrustState} · {dryRun.Summary}");
+                $"Authenticated built-in pricing seed is not admissible as the expected unsigned catalog: {dryRun.TrustState} · {dryRun.StatusReason}");
         }
 
         PricingCatalogSnapshot snapshot = await _history.SaveSnapshotAsync(
