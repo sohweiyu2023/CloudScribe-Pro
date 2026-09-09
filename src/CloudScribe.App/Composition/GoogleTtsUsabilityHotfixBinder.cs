@@ -15,6 +15,12 @@ namespace CloudScribe.App.Composition;
 public sealed class GoogleTtsUsabilityHotfixBinder(
     GoogleTextToSpeechCatalogBootstrapService bootstrapService)
 {
+    private static readonly string[] ProviderControlHostNames =
+    [
+        "ProviderControlPreview",
+        "InspectorDrawerProviderControlPreview",
+    ];
+
     private static readonly string[] Mp3OutputOptions = ["MP3 · preserve accepted provider bytes"];
 
     private readonly GoogleTextToSpeechCatalogBootstrapService _bootstrapService =
@@ -37,10 +43,22 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
 
     private bool TryMount(MainWindow window, ShellViewModel viewModel)
     {
-        StackPanel? host = window.FindControl<StackPanel>("InspectorDrawerProviderControlPreview");
-        if (host is null)
-            return false;
+        bool mounted = false;
+        foreach (string hostName in ProviderControlHostNames)
+        {
+            StackPanel? host = window.FindControl<StackPanel>(hostName);
+            if (host is null)
+                continue;
 
+            MountHost(host, viewModel);
+            mounted = true;
+        }
+
+        return mounted;
+    }
+
+    private void MountHost(StackPanel host, ShellViewModel viewModel)
+    {
         host.Children.Clear();
         host.Spacing = 8;
         AddIntro(host);
@@ -49,7 +67,6 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         AddOutputAndSpendControls(host, viewModel);
         AddGenerateControls(host, viewModel);
         AddVerifiedOutputControls(host, viewModel);
-        return true;
     }
 
     private static void AddIntro(StackPanel host)
