@@ -64,6 +64,7 @@ public static class CompositionRoot
         services.AddSingleton<Stage6GoogleGenerationShellBinder>();
         services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
         services.AddSingleton<Stage7VoiceLabAuditionShellBinder>();
+        services.AddSingleton<BuiltInPricingCatalogBootstrapService>();
         services.AddSingleton<GoogleTtsUsabilityHotfixBinder>();
         services.AddSingleton<GoogleGenerationAcceptedMp3OutputService>();
     }
