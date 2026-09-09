@@ -9,7 +9,7 @@ rem PowerShell is invoked with a process-scoped execution-policy override so an
 rem Internet-downloaded source ZIP can run the repository's reviewed publish script
 rem without changing the user's persistent PowerShell policy.
 
-set "REQUIRED_DOTNET=10.0.400"
+set "REQUIRED_DOTNET=10.0.401"
 set "ROOT=%~dp0"
 pushd "%ROOT%.." >nul 2>nul
 if errorlevel 1 goto :invalid_root
