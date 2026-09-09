@@ -30,10 +30,10 @@ public sealed partial class ShellViewModel
     /// <summary>
     /// Captures only what the user can currently see/select in Studio plus the canonical identities
     /// attached to that authenticated catalog selection: open local document, exact current text,
-    /// provider/account/project, selected voice, capability-evidence identity and voice fingerprint.
-    /// These identifiers let Stage6 re-resolve current production evidence without guessing. The
-    /// capture itself still makes no synthesis-authorization, pricing-current, trust-current,
-    /// queue, spend, or reconciliation assertion.
+    /// provider/account/project, selected voice, authoritative provider-returned language code,
+    /// capability-evidence identity and voice fingerprint. These identifiers let Stage6 re-resolve
+    /// current production evidence without guessing. The capture itself still makes no synthesis-
+    /// authorization, pricing-current, trust-current, queue, spend, or reconciliation assertion.
     /// </summary>
     public GoogleTtsStudioRequestSelection CaptureGoogleTtsStudioRequestSelection()
     {
@@ -56,6 +56,7 @@ public sealed partial class ShellViewModel
             "selected Google capability evidence identity");
         string voiceFingerprint = RequireCanonical(voice.VoiceFingerprint, "selected Google voice fingerprint");
         string? locale = NormalizeOptional(VoiceLabLocaleFilter);
+        string languageCode = ResolveAuthoritativeLanguageCode(voice, locale);
 
         return new GoogleTtsStudioRequestSelection(
             documentId,
@@ -67,9 +68,60 @@ public sealed partial class ShellViewModel
             voiceStableId,
             capabilityEvidenceId,
             voiceFingerprint,
+            languageCode,
             locale,
             DateTimeOffset.UtcNow);
     }
+
+    private static string ResolveAuthoritativeLanguageCode(
+        VoiceLabCatalogSelection voice,
+        string? requestedLocale)
+    {
+        IReadOnlyList<string> languageCodes = voice.LanguageCodes
+            ?? throw new InvalidOperationException(
+                "The selected Google voice has no provider-returned language metadata. Refresh the authenticated voice catalog.");
+        if (languageCodes.Count == 0)
+            throw new InvalidOperationException(
+                "The selected Google voice has no provider-returned language metadata. Refresh the authenticated voice catalog.");
+
+        string[] canonical = languageCodes
+            .Select(code => RequireCanonical(code, "selected Google voice language code"))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (!string.IsNullOrWhiteSpace(requestedLocale))
+        {
+            string? exact = canonical.SingleOrDefault(code =>
+                string.Equals(code, requestedLocale, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null)
+                return exact;
+
+            string[] compatible = canonical
+                .Where(code => LocaleMatches(code, requestedLocale))
+                .ToArray();
+            if (compatible.Length == 1)
+                return compatible[0];
+            if (compatible.Length > 1)
+            {
+                throw new InvalidOperationException(
+                    "The selected Google voice supports multiple languages compatible with the locale filter. Select a specific locale before generation.");
+            }
+
+            throw new InvalidOperationException(
+                "The selected Google voice no longer supports the requested locale. Refresh the authenticated voice catalog.");
+        }
+
+        if (canonical.Length == 1)
+            return canonical[0];
+
+        throw new InvalidOperationException(
+            "The selected Google voice supports multiple languages. Select a specific locale before generation.");
+    }
+
+    private static bool LocaleMatches(string languageCode, string requestedLocale) =>
+        string.Equals(languageCode, requestedLocale, StringComparison.OrdinalIgnoreCase) ||
+        languageCode.StartsWith(requestedLocale + "-", StringComparison.OrdinalIgnoreCase) ||
+        requestedLocale.StartsWith(languageCode + "-", StringComparison.OrdinalIgnoreCase);
 
     private static string? NormalizeOptional(string? value)
     {
@@ -107,6 +159,7 @@ public sealed partial class ShellViewModel
         string VoiceStableId,
         string CapabilityEvidenceId,
         string VoiceFingerprint,
+        string LanguageCode,
         string? Locale,
         DateTimeOffset CapturedAtUtc);
 }
