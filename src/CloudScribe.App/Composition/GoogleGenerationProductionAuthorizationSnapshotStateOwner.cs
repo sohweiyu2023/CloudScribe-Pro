@@ -109,11 +109,20 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
                     "Request-bound Google authorization snapshot account and capability evidence do not match its account identity.");
             }
 
-            if (ResolutionEvidence == GoogleGenerationReconciliationResolutionEvidence.None)
+            if (!Enum.IsDefined(ResolutionEvidence))
             {
                 throw new InvalidOperationException(
-                    "Request-bound Google authorization snapshot is missing reconciliation resolution evidence.");
+                    "Request-bound Google authorization snapshot contains unknown reconciliation evidence.");
             }
+
+            // A clean initial request legitimately carries no reconciliation resolution evidence.
+            // Non-None evidence is permitted only when the persisted transition actually clears an
+            // unresolved provider submission. The transition policy is the sole authority here so
+            // callers can never invent terminal/reconciled evidence merely to satisfy this snapshot.
+            GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(
+                PreviousState,
+                CurrentState,
+                ResolutionEvidence);
 
             // Project authorization is deliberately excluded here: the production resolver now
             // requires independently persisted project+model authorization bound to live evidence.
