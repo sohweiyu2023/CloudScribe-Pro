@@ -1,3 +1,5 @@
+using CloudScribe.Application.Generation;
+
 namespace CloudScribe.App.ViewModels;
 
 public sealed partial class ShellViewModel
