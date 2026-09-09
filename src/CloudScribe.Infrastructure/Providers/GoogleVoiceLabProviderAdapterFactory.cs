@@ -112,7 +112,8 @@ public sealed class GoogleVoiceLabProviderAdapterFactory(
                     // Google voices:list does not return a project-authorization assertion.
                     // The outer production catalog transport derives final project trust only from
                     // current persisted authorization evidence and revalidates it after this call.
-                    AccountProjectAuthorized: false))
+                    AccountProjectAuthorized: false,
+                    LanguageCodes: voice.LanguageCodes.ToArray()))
                 .ToArray();
         }
 
