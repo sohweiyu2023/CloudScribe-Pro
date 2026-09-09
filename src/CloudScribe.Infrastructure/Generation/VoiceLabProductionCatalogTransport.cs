@@ -190,7 +190,8 @@ public sealed class VoiceLabProductionCatalogTransport
                     providerVoice.VoiceFingerprint,
                     CapabilityCurrent: true,
                     providerVoice.VoiceEnabled,
-                    AccountProjectAuthorized: projectAuthorized));
+                    AccountProjectAuthorized: projectAuthorized,
+                    LanguageCodes: providerVoice.LanguageCodes?.ToArray()));
             }
 
             return results;
