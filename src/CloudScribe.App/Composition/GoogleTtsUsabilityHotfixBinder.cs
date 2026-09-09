@@ -15,6 +15,7 @@ namespace CloudScribe.App.Composition;
 /// </summary>
 public sealed class GoogleTtsUsabilityHotfixBinder(
     GoogleTextToSpeechCatalogBootstrapService bootstrapService,
+    BuiltInPricingCatalogBootstrapService builtInPricing,
     GoogleGenerationAcceptedMp3OutputService acceptedMp3OutputService)
 {
     private static readonly string[] ProviderControlHostNames =
@@ -32,6 +33,8 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
 
     private readonly GoogleTextToSpeechCatalogBootstrapService _bootstrapService =
         bootstrapService ?? throw new ArgumentNullException(nameof(bootstrapService));
+    private readonly BuiltInPricingCatalogBootstrapService _builtInPricing =
+        builtInPricing ?? throw new ArgumentNullException(nameof(builtInPricing));
     private readonly GoogleGenerationAcceptedMp3OutputService _acceptedMp3OutputService =
         acceptedMp3OutputService ?? throw new ArgumentNullException(nameof(acceptedMp3OutputService));
 
@@ -216,7 +219,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             viewModel.SelectedVoiceLabVoice = viewModel.VoiceLabCatalogResults[index];
     }
 
-    private static void AddOutputAndSpendControls(StackPanel host, ShellViewModel viewModel)
+    private void AddOutputAndSpendControls(StackPanel host, ShellViewModel viewModel)
     {
         host.Children.Add(new TextBlock { Text = "Output" });
         host.Children.Add(new ComboBox
@@ -224,6 +227,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             ItemsSource = Mp3OutputOptions,
             SelectedIndex = 0,
         });
+        AddPricingActivationControls(host, viewModel);
         host.Children.Add(new TextBlock
         {
             Text = "Spend approval is bound to the exact compiled request. Enter the maximum in the pricing currency's minor units and explicitly confirm before generation.",
@@ -239,6 +243,49 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         host.Children.Add(spendMaximum);
         host.Children.Add(spendConfirmed);
         host.Children.Add(approveSpend);
+    }
+
+    private void AddPricingActivationControls(StackPanel host, ShellViewModel viewModel)
+    {
+        host.Children.Add(new TextBlock
+        {
+            Text = "Pricing",
+            FontWeight = Avalonia.Media.FontWeight.SemiBold,
+        });
+        host.Children.Add(new TextBlock
+        {
+            Text = "CloudScribe carries an authenticated v2.22 pricing seed. It remains unsigned pricing evidence and is never activated silently; you must explicitly activate it before billable generation can be approved.",
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+        });
+        CheckBox confirmed = new()
+        {
+            Content = "I explicitly activate the authenticated built-in pricing catalog",
+        };
+        Button activate = new() { Content = "Activate built-in pricing" };
+        activate.Click += async (_, _) =>
+        {
+            if (!activate.IsEnabled)
+                return;
+            activate.IsEnabled = false;
+            try
+            {
+                var snapshot = await _builtInPricing
+                    .ActivateAsync(confirmed.IsChecked == true, CancellationToken.None)
+                    .ConfigureAwait(true);
+                viewModel.StatusMessage =
+                    $"Pricing active · authenticated built-in catalog · {snapshot.Sha256[..12]}… · manual activation recorded";
+            }
+            catch (Exception ex)
+            {
+                viewModel.StatusMessage = $"Pricing activation failed safely · {ex.Message}";
+            }
+            finally
+            {
+                activate.IsEnabled = true;
+            }
+        };
+        host.Children.Add(confirmed);
+        host.Children.Add(activate);
     }
 
     private static async Task ApproveSpendAsync(
