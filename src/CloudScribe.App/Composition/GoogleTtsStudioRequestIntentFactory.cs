@@ -22,15 +22,24 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
 
     public async Task<GoogleGenerationProductionRequestIntent> CreateAsync(
         ShellViewModel.GoogleTtsStudioRequestSelection selection,
-        int maximumPayloadBytes,
+        GoogleCapabilitySnapshot currentCapability,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(selection);
-        if (maximumPayloadBytes <= 0)
-            throw new ArgumentOutOfRangeException(nameof(maximumPayloadBytes));
+        ArgumentNullException.ThrowIfNull(currentCapability);
 
         cancellationToken.ThrowIfCancellationRequested();
         DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
+        currentCapability.Validate(nowUtc);
+        if (currentCapability.IsStale(nowUtc))
+            throw new InvalidOperationException("Current Google capability evidence is stale. Refresh the authenticated voice catalog before preparing generation.");
+        if (!string.Equals(currentCapability.AccountId, selection.AccountStableId, StringComparison.Ordinal)
+            || !string.Equals(currentCapability.ProvenanceId, selection.CapabilityEvidenceId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The current Google capability evidence is not bound to the selected authenticated account and catalog evidence.");
+        }
+
         GoogleGenerationProjectAuthorizationEvidence authorization =
             await _projectAuthorizationStore.LoadSingleCurrentForProjectAsync(
                 selection.AccountStableId,
@@ -52,6 +61,8 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
 
         string languageCode = RequireCanonical(selection.LanguageCode, nameof(selection.LanguageCode));
         string voiceName = RequireCanonical(selection.VoiceStableId, nameof(selection.VoiceStableId));
+        currentCapability.RequireSupported(voiceName, "MP3", compiledPayloadBytes: 256, nowUtc);
+
         string provenanceId = BuildSpeechPlanProvenance(selection);
         var plan = new SpeechPlan(
             languageCode,
@@ -61,7 +72,7 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
             languageCode,
             voiceName,
             "MP3",
-            maximumPayloadBytes).Validate();
+            currentCapability.MaximumCompiledPayloadBytes).Validate();
 
         RequestIdentity requestIdentity = BuildRequestIdentity(selection, authorization.ModelId, compilationOptions);
         return new GoogleGenerationProductionRequestIntent
