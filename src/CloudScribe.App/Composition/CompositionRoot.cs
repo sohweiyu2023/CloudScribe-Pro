@@ -50,6 +50,7 @@ public static class CompositionRoot
         services.AddSingleton<IGoogleGenerationProductionIntentEvidenceResolver>(serviceProvider =>
             serviceProvider.GetRequiredService<GoogleGenerationProductionIntentEvidenceResolver>());
         services.AddSingleton<GoogleGenerationProductionIntentAssemblyCoordinator>();
+        services.AddSingleton<GoogleTtsStudioRequestIntentFactory>();
         services.AddSingleton<GoogleGenerationProductionCurrentRequestStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();
