@@ -73,6 +73,9 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
         // Compatibility fields remain while production composition is migrated. ResolveAsync no
         // longer trusts account/project authorization, capability/pricing currentness, or live
         // credential availability; those are independently re-established from production state.
+        // PricingApproved and PostCompileLimitsSatisfied are deliberately allowed to be false at
+        // this precompile boundary: exact spend approval and compiled-payload limits cannot exist
+        // until after compilation. The post-compile pending/runtime boundaries must establish them.
         public required bool AccountAuthorized { get; init; }
         public required bool ProjectAuthorized { get; init; }
         public required bool CapabilityCurrent { get; init; }
@@ -124,12 +127,13 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
                 CurrentState,
                 ResolutionEvidence);
 
-            // Project authorization is deliberately excluded here: the production resolver now
-            // requires independently persisted project+model authorization bound to live evidence.
-            if (!AdmissionCurrent || !PricingApproved || !PostCompileLimitsSatisfied)
+            // Admission is a genuine precompile gate. Spend approval and post-compile limits are
+            // intentionally not required here because requiring them would make compilation depend
+            // on evidence that can only be created from the compiled provider request.
+            if (!AdmissionCurrent)
             {
                 throw new InvalidOperationException(
-                    "Request-bound Google authorization snapshot contains rejected, stale, or unavailable production authorization evidence.");
+                    "Request-bound Google authorization snapshot contains rejected or stale precompile admission evidence.");
             }
 
             if (RequestRevision < 0 || Scale is < 0 or > 9 || CurrentEstimateMinorUnits < 0 || CapturedAtUtc == default)
