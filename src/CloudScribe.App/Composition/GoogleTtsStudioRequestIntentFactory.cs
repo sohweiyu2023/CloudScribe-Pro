@@ -8,9 +8,10 @@ namespace CloudScribe.App.Composition;
 
 /// <summary>
 /// Converts the exact current Studio selection into Stage6 request intent while resolving the
-/// synthesis model only from current persisted project/model authorization. This factory creates
-/// request intent only; it never grants authorization, pricing, trust, spend, queue, or
-/// reconciliation state.
+/// selected provider-returned voice only from current persisted project/model authorization. The
+/// Voice Lab snapshot ID and the capability provenance are deliberately kept as separate identity
+/// domains: the former proves which authenticated catalog selection the user saw, while the latter
+/// binds Stage6 to the current persisted provider capability evidence.
 /// </summary>
 public sealed class GoogleTtsStudioRequestIntentFactory(
     IGoogleGenerationProjectAuthorizationStore projectAuthorizationStore,
@@ -33,37 +34,37 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
         currentCapability.Validate(nowUtc);
         if (currentCapability.IsStale(nowUtc))
             throw new InvalidOperationException("Current Google capability evidence is stale. Refresh the authenticated voice catalog before preparing generation.");
-        if (!string.Equals(currentCapability.AccountId, selection.AccountStableId, StringComparison.Ordinal)
-            || !string.Equals(currentCapability.ProvenanceId, selection.CapabilityEvidenceId, StringComparison.Ordinal))
+        if (!string.Equals(currentCapability.AccountId, selection.AccountStableId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "The current Google capability evidence is not bound to the selected authenticated account and catalog evidence.");
-        }
-
-        GoogleGenerationProjectAuthorizationEvidence authorization =
-            await _projectAuthorizationStore.LoadSingleCurrentForProjectAsync(
-                selection.AccountStableId,
-                selection.ProjectStableId,
-                nowUtc,
-                cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException(
-                "No single current persisted Google synthesis model authorization is available for the selected account and project.");
-
-        authorization.Validate(nowUtc);
-        if (!authorization.IsCurrent(nowUtc)
-            || !string.Equals(authorization.AccountId, selection.AccountStableId, StringComparison.Ordinal)
-            || !string.Equals(authorization.ProjectId, selection.ProjectStableId, StringComparison.Ordinal)
-            || !string.Equals(authorization.CapabilityProvenanceId, selection.CapabilityEvidenceId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                "The current Google synthesis authorization is not bound to the selected authenticated account, project, and capability evidence.");
+                "The current Google capability evidence is not bound to the selected authenticated account.");
         }
 
         string languageCode = RequireCanonical(selection.LanguageCode, nameof(selection.LanguageCode));
         string voiceName = RequireCanonical(selection.VoiceStableId, nameof(selection.VoiceStableId));
         currentCapability.RequireSupported(voiceName, "MP3", compiledPayloadBytes: 256, nowUtc);
 
-        string provenanceId = BuildSpeechPlanProvenance(selection);
+        GoogleGenerationProjectAuthorizationEvidence authorization =
+            await _projectAuthorizationStore.LoadCurrentAsync(
+                selection.AccountStableId,
+                selection.ProjectStableId,
+                voiceName,
+                cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                "No current persisted Google synthesis authorization is available for the selected real voice.");
+
+        authorization.Validate(nowUtc);
+        if (!authorization.IsCurrent(nowUtc)
+            || !string.Equals(authorization.AccountId, selection.AccountStableId, StringComparison.Ordinal)
+            || !string.Equals(authorization.ProjectId, selection.ProjectStableId, StringComparison.Ordinal)
+            || !string.Equals(authorization.ModelId, voiceName, StringComparison.Ordinal)
+            || !string.Equals(authorization.CapabilityProvenanceId, currentCapability.ProvenanceId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The current Google synthesis authorization is not bound to the selected account, project, real voice, and current capability provenance.");
+        }
+
+        string provenanceId = BuildSpeechPlanProvenance(selection, currentCapability.ProvenanceId);
         var plan = new SpeechPlan(
             languageCode,
             [new SpeechText(selection.ExactText)],
@@ -74,7 +75,11 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
             "MP3",
             currentCapability.MaximumCompiledPayloadBytes).Validate();
 
-        RequestIdentity requestIdentity = BuildRequestIdentity(selection, authorization.ModelId, compilationOptions);
+        RequestIdentity requestIdentity = BuildRequestIdentity(
+            selection,
+            authorization.ModelId,
+            currentCapability.ProvenanceId,
+            compilationOptions);
         return new GoogleGenerationProductionRequestIntent
         {
             Plan = plan,
@@ -91,6 +96,7 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
     private static RequestIdentity BuildRequestIdentity(
         ShellViewModel.GoogleTtsStudioRequestSelection selection,
         string modelId,
+        string capabilityProvenanceId,
         GoogleSpeechCompilationOptions options)
     {
         string revision = selection.RevisionId?.ToString("N") ?? "unsaved";
@@ -103,6 +109,7 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
             selection.ProjectStableId,
             modelId,
             selection.CapabilityEvidenceId,
+            capabilityProvenanceId,
             selection.VoiceStableId,
             selection.VoiceFingerprint,
             options.LanguageCode,
@@ -111,20 +118,16 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
             selection.ExactText);
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         string digest = Convert.ToHexString(hash).ToLowerInvariant();
-
-        // The full SHA-256 digest is the idempotency identity. RequestRevision is only a bounded
-        // monotonic-domain discriminator required by the existing Stage6 contract; it is not used
-        // as a security identity and therefore may safely be derived from the exact request digest.
         int requestRevision = (int)(BitConverter.ToUInt32(hash, 0) & 0x7fffffffU);
         return new RequestIdentity($"studio-google-tts:{digest}", requestRevision);
     }
 
-    private static string BuildSpeechPlanProvenance(ShellViewModel.GoogleTtsStudioRequestSelection selection)
+    private static string BuildSpeechPlanProvenance(
+        ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        string capabilityProvenanceId)
     {
-        // Provenance identifies the exact local document revision and authenticated voice/capability
-        // selection. It is request identity only and is never interpreted as authorization evidence.
         string revision = selection.RevisionId?.ToString("N") ?? "unsaved";
-        return $"studio:{selection.DocumentId:N}:{revision}:{selection.VoiceFingerprint}:{selection.CapabilityEvidenceId}";
+        return $"studio:{selection.DocumentId:N}:{revision}:{selection.VoiceFingerprint}:{selection.CapabilityEvidenceId}:{capabilityProvenanceId}";
     }
 
     private static string RequireCanonical(string? value, string parameterName)
