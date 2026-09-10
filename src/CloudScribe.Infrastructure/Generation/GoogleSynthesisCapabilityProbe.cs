@@ -84,7 +84,7 @@ public sealed class GoogleSynthesisCapabilityProbe(
         if (response.Content.Headers.ContentLength is long length && length > MaximumEvidenceBodyBytes)
             throw new InvalidDataException("Google synthesis capability probe response exceeded the evidence size limit.");
 
-        await using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using MemoryStream destination = new();
         byte[] buffer = new byte[8192];
         while (true)
@@ -147,7 +147,3 @@ public sealed class GoogleSynthesisCapabilityProbe(
         }
     }
 }
-
-public sealed record GoogleSynthesisCapabilityEvidence(
-    DateTimeOffset CapturedAtUtc,
-    string ProvenanceId);
