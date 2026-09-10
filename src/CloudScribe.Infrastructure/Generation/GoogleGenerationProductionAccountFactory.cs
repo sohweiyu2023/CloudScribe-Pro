@@ -17,12 +17,36 @@ public sealed class GoogleGenerationProductionAccountFactory
     }
 
     /// <summary>
+    /// Creates the persisted account-identity projection used by precompile evidence and trust
+    /// binding. It intentionally uses only the admitted origin; it is never a submission target.
+    /// </summary>
+    public GoogleGenerationAccount Create(GoogleGenerationProductionEvidence evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        GoogleGenerationProductionEvidence validated = evidence.Validate(_timeProvider.GetUtcNow());
+        ProviderAccountReference account = validated.Account.Reference;
+
+        CredentialReference credential = account.CredentialReference
+            ?? throw new InvalidOperationException("Current Google provider account has no credential reference.");
+        Uri endpointOrigin = account.EndpointOrigin
+            ?? throw new InvalidOperationException("Current Google provider account has no admitted endpoint origin.");
+        string region = account.RegionId
+            ?? throw new InvalidOperationException("Current Google provider account has no admitted region identity.");
+
+        return new GoogleGenerationAccount(
+            account.AccountId,
+            credential.TargetName,
+            endpointOrigin,
+            region).Validate();
+    }
+
+    /// <summary>
     /// Resolves the exact synthesis endpoint that was admitted and persisted with the Windows
     /// credential during onboarding. Provider-account persistence intentionally retains only the
     /// non-secret origin for identity comparisons; production submission must never reconstruct
     /// or hard-code an API path from that origin.
     /// </summary>
-    public async Task<GoogleGenerationAccount> CreateAsync(
+    public async Task<GoogleGenerationAccount> CreateSubmissionAccountAsync(
         GoogleGenerationProductionEvidence evidence,
         CancellationToken cancellationToken = default)
     {
