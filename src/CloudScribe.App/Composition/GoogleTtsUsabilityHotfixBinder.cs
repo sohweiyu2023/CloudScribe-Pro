@@ -230,19 +230,97 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         AddPricingActivationControls(host, viewModel);
         host.Children.Add(new TextBlock
         {
-            Text = "Spend approval is bound to the exact compiled request. Enter the maximum in the pricing currency's minor units and explicitly confirm before generation.",
+            Text = "Prepare the exact current document + selected real voice first. CloudScribe will display the estimate and its bound pricing/request evidence before you can separately approve a spend ceiling. Approval never recompiles the request.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
+
+        TextBlock review = new()
+        {
+            Text = "No compiled Google request is awaiting spend review.",
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+        };
+        Button prepareSpend = new() { Content = "Prepare exact request and show price" };
         TextBox spendMaximum = NewTextBox("Authorized maximum minor units");
-        CheckBox spendConfirmed = new() { Content = "I explicitly approve this exact compiled spend ceiling" };
-        Button approveSpend = new() { Content = "Compile and approve spend" };
-        approveSpend.Click += async (_, _) => await ApproveSpendAsync(
-            viewModel,
-            spendMaximum.Text,
-            spendConfirmed.IsChecked == true).ConfigureAwait(true);
+        CheckBox spendConfirmed = new() { Content = "I explicitly approve this displayed exact compiled request and spend ceiling" };
+        Button approveSpend = new() { Content = "Approve displayed spend" };
+
+        void RefreshReview()
+        {
+            ShellViewModel.GoogleGenerationSpendReview? current = viewModel.PreparedGoogleGenerationSpendReview;
+            if (current is null)
+            {
+                review.Text = "No compiled Google request is awaiting spend review.";
+                spendMaximum.IsEnabled = false;
+                spendConfirmed.IsEnabled = false;
+                approveSpend.IsEnabled = false;
+                return;
+            }
+
+            string digest = current.CompiledPayloadSha256.Length > 16
+                ? current.CompiledPayloadSha256[..16] + "…"
+                : current.CompiledPayloadSha256;
+            string approvalState = viewModel.PreparedGoogleGenerationSpendApproved
+                ? "APPROVED for this exact compiled request"
+                : "NOT YET APPROVED";
+            review.Text =
+                $"Exact compiled estimate: {FormatEstimate(current)} ({current.CurrentEstimateMinorUnits} minor units)\n" +
+                $"Voice: {current.VoiceName}\n" +
+                $"Pricing provenance: {current.PricingProvenanceId}\n" +
+                $"Compiled payload SHA-256: {digest}\n" +
+                $"Spend state: {approvalState}";
+            bool canApprove = viewModel.CanApproveGoogleGenerationSpend;
+            spendMaximum.IsEnabled = canApprove;
+            spendConfirmed.IsEnabled = canApprove;
+            approveSpend.IsEnabled = canApprove;
+            if (canApprove && string.IsNullOrWhiteSpace(spendMaximum.Text))
+                spendMaximum.Text = current.CurrentEstimateMinorUnits.ToString(CultureInfo.InvariantCulture);
+        }
+
+        prepareSpend.Click += async (_, _) =>
+        {
+            if (!prepareSpend.IsEnabled)
+                return;
+            prepareSpend.IsEnabled = false;
+            try
+            {
+                await viewModel.PrepareGoogleGenerationSpendReviewAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                viewModel.StatusMessage = $"Google spend preparation failed safely · {ex.Message}";
+            }
+            finally
+            {
+                prepareSpend.IsEnabled = viewModel.CanPrepareGoogleGenerationSpend;
+                RefreshReview();
+            }
+        };
+        approveSpend.Click += async (_, _) =>
+        {
+            await ApproveSpendAsync(
+                viewModel,
+                spendMaximum.Text,
+                spendConfirmed.IsChecked == true).ConfigureAwait(true);
+            RefreshReview();
+        };
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(ShellViewModel.PreparedGoogleGenerationSpendReview)
+                or nameof(ShellViewModel.PreparedGoogleGenerationSpendApproved)
+                or nameof(ShellViewModel.CanApproveGoogleGenerationSpend)
+                or nameof(ShellViewModel.CanPrepareGoogleGenerationSpend))
+            {
+                prepareSpend.IsEnabled = viewModel.CanPrepareGoogleGenerationSpend;
+                RefreshReview();
+            }
+        };
+
+        host.Children.Add(prepareSpend);
+        host.Children.Add(review);
         host.Children.Add(spendMaximum);
         host.Children.Add(spendConfirmed);
         host.Children.Add(approveSpend);
+        RefreshReview();
     }
 
     private void AddPricingActivationControls(StackPanel host, ShellViewModel viewModel)
@@ -308,10 +386,23 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         }
     }
 
+    private static string FormatEstimate(ShellViewModel.GoogleGenerationSpendReview review)
+    {
+        decimal divisor = 1m;
+        for (int index = 0; index < review.Scale; index++)
+            divisor *= 10m;
+        decimal amount = review.CurrentEstimateMinorUnits / divisor;
+        return $"{review.Currency} {amount.ToString($"F{review.Scale}", CultureInfo.InvariantCulture)}";
+    }
+
     private static void AddGenerateControls(StackPanel host, ShellViewModel viewModel)
     {
         Button generate = new() { Content = "Generate with Google" };
-        generate.Click += (_, _) => viewModel.GenerateWithGoogleCommand.Execute(null);
+        generate.Click += (_, _) =>
+        {
+            if (viewModel.GenerateWithGoogleCommand.CanExecute(null))
+                viewModel.GenerateWithGoogleCommand.Execute(null);
+        };
         host.Children.Add(generate);
         host.Children.Add(new TextBlock
         {
