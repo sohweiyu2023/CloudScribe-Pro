@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
@@ -20,15 +22,12 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
 
     public async Task<GoogleGenerationProductionRequestIntent> CreateAsync(
         ShellViewModel.GoogleTtsStudioRequestSelection selection,
-        string idempotencyKey,
-        int requestRevision,
         int maximumPayloadBytes,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(selection);
-        RequireCanonical(idempotencyKey, nameof(idempotencyKey));
-        if (requestRevision < 0)
-            throw new ArgumentOutOfRangeException(nameof(requestRevision));
+        if (maximumPayloadBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maximumPayloadBytes));
 
         cancellationToken.ThrowIfCancellationRequested();
         DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
@@ -64,6 +63,7 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
             "MP3",
             maximumPayloadBytes).Validate();
 
+        RequestIdentity requestIdentity = BuildRequestIdentity(selection, authorization.ModelId, compilationOptions);
         return new GoogleGenerationProductionRequestIntent
         {
             Plan = plan,
@@ -71,10 +71,41 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
             AccountId = selection.AccountStableId,
             ProjectId = selection.ProjectStableId,
             ModelId = authorization.ModelId,
-            IdempotencyKey = idempotencyKey,
-            RequestRevision = requestRevision,
+            IdempotencyKey = requestIdentity.IdempotencyKey,
+            RequestRevision = requestIdentity.RequestRevision,
             CapturedAtUtc = selection.CapturedAtUtc,
         }.Validate();
+    }
+
+    private static RequestIdentity BuildRequestIdentity(
+        ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        string modelId,
+        GoogleSpeechCompilationOptions options)
+    {
+        string revision = selection.RevisionId?.ToString("N") ?? "unsaved";
+        string canonical = string.Join('\n',
+            "cloudscribe-google-tts-v1",
+            selection.DocumentId.ToString("N"),
+            revision,
+            selection.ProviderStableId,
+            selection.AccountStableId,
+            selection.ProjectStableId,
+            modelId,
+            selection.CapabilityEvidenceId,
+            selection.VoiceStableId,
+            selection.VoiceFingerprint,
+            options.LanguageCode,
+            options.AudioEncoding,
+            options.MaximumPayloadBytes.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            selection.ExactText);
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
+        string digest = Convert.ToHexString(hash).ToLowerInvariant();
+
+        // The full SHA-256 digest is the idempotency identity. RequestRevision is only a bounded
+        // monotonic-domain discriminator required by the existing Stage6 contract; it is not used
+        // as a security identity and therefore may safely be derived from the exact request digest.
+        int requestRevision = (int)(BitConverter.ToUInt32(hash, 0) & 0x7fffffffU);
+        return new RequestIdentity($"studio-google-tts:{digest}", requestRevision);
     }
 
     private static string BuildSpeechPlanProvenance(ShellViewModel.GoogleTtsStudioRequestSelection selection)
@@ -99,4 +130,6 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
         }
         return normalized;
     }
+
+    private sealed record RequestIdentity(string IdempotencyKey, int RequestRevision);
 }
