@@ -50,7 +50,9 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
         current.Validate(nowUtc);
         await ValidatePricingCurrentAsync(request.PricingProvenanceId, cancellationToken).ConfigureAwait(false);
 
-        GoogleGenerationAccount account = _accountFactory.Create(current);
+        GoogleGenerationAccount account = await _accountFactory
+            .CreateSubmissionAccountAsync(current, cancellationToken)
+            .ConfigureAwait(false);
         GoogleGenerationSpendAuthorization spendAuthorization = await _spendAuthorizationResolver
             .ResolveAsync(
                 request.SubmissionEnvelope,
@@ -77,7 +79,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
             request.Scale,
             request.CurrentEstimateMinorUnits);
 
-        GoogleGenerationProductionTransport productionTransport = _transportFactory.Create(current);
+        GoogleGenerationProductionTransport productionTransport = _transportFactory.Create(current, account);
         if (!Equals(productionTransport.Account, account))
         {
             throw new InvalidOperationException(
