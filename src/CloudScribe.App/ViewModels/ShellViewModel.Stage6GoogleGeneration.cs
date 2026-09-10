@@ -7,10 +7,12 @@ namespace CloudScribe.App.ViewModels;
 public sealed partial class ShellViewModel
 {
     private Func<CancellationToken, Task<GoogleGenerationUiExecutionContext>>? _resolveGoogleGenerationExecutionContext;
-    private Func<CancellationToken, Task>? _prepareGoogleGenerationForApproval;
+    private Func<CancellationToken, Task<GoogleGenerationSpendReview>>? _prepareGoogleGenerationForApproval;
     private Func<long, bool, CancellationToken, Task>? _approveGoogleGenerationSpend;
     private Func<GoogleGenerationQueueOutcome, CancellationToken, Task<string>>? _persistAcceptedGoogleMp3;
     private Func<string, CancellationToken, Task>? _playVerifiedGoogleMp3;
+    private GoogleGenerationSpendReview? _preparedGoogleGenerationSpendReview;
+    private bool _preparedGoogleGenerationSpendApproved;
     private string? _lastGeneratedGoogleMp3Path;
     private int _googleGenerationInFlight;
 
@@ -19,10 +21,37 @@ public sealed partial class ShellViewModel
         _persistAcceptedGoogleMp3 is not null &&
         Volatile.Read(ref _googleGenerationInFlight) == 0;
 
-    public bool CanApproveGoogleGenerationSpend =>
+    public bool CanPrepareGoogleGenerationSpend =>
         _prepareGoogleGenerationForApproval is not null &&
-        _approveGoogleGenerationSpend is not null &&
         Volatile.Read(ref _googleGenerationInFlight) == 0;
+
+    public bool CanApproveGoogleGenerationSpend =>
+        _approveGoogleGenerationSpend is not null &&
+        PreparedGoogleGenerationSpendReview is not null &&
+        !PreparedGoogleGenerationSpendApproved &&
+        Volatile.Read(ref _googleGenerationInFlight) == 0;
+
+    public GoogleGenerationSpendReview? PreparedGoogleGenerationSpendReview
+    {
+        get => _preparedGoogleGenerationSpendReview;
+        private set
+        {
+            if (!SetProperty(ref _preparedGoogleGenerationSpendReview, value))
+                return;
+            OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
+        }
+    }
+
+    public bool PreparedGoogleGenerationSpendApproved
+    {
+        get => _preparedGoogleGenerationSpendApproved;
+        private set
+        {
+            if (!SetProperty(ref _preparedGoogleGenerationSpendApproved, value))
+                return;
+            OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
+        }
+    }
 
     public string? LastGeneratedGoogleMp3Path
     {
@@ -51,11 +80,11 @@ public sealed partial class ShellViewModel
     }
 
     public void ConfigureStage6GoogleGenerationPreparation(
-        Func<CancellationToken, Task> prepareCurrentRequestForApproval)
+        Func<CancellationToken, Task<GoogleGenerationSpendReview>> prepareCurrentRequestForApproval)
     {
         _prepareGoogleGenerationForApproval = prepareCurrentRequestForApproval
             ?? throw new ArgumentNullException(nameof(prepareCurrentRequestForApproval));
-        OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
+        RefreshGoogleGenerationCommands();
     }
 
     public void ConfigureStage6GoogleGenerationSpendApproval(
@@ -63,7 +92,7 @@ public sealed partial class ShellViewModel
     {
         _approveGoogleGenerationSpend = approveExplicitSpend
             ?? throw new ArgumentNullException(nameof(approveExplicitSpend));
-        OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
+        RefreshGoogleGenerationCommands();
     }
 
     public void ConfigureStage6GoogleGenerationOutput(
@@ -77,6 +106,31 @@ public sealed partial class ShellViewModel
         RefreshGoogleGenerationCommands();
     }
 
+    public async Task<GoogleGenerationSpendReview> PrepareGoogleGenerationSpendReviewAsync(
+        CancellationToken cancellationToken = default)
+    {
+        EnterGoogleGenerationOperation();
+        try
+        {
+            var prepare = _prepareGoogleGenerationForApproval
+                ?? throw new InvalidOperationException("Google generation production preparation is not configured.");
+            PreparedGoogleGenerationSpendReview = null;
+            PreparedGoogleGenerationSpendApproved = false;
+            cancellationToken.ThrowIfCancellationRequested();
+            StatusMessage = "Google generation · compiling exact current request for spend review";
+            GoogleGenerationSpendReview review = await prepare(cancellationToken).ConfigureAwait(true)
+                ?? throw new InvalidOperationException("Google generation preparation returned no spend review.");
+            review.Validate();
+            PreparedGoogleGenerationSpendReview = review;
+            StatusMessage = "Google generation · exact compiled estimate ready for explicit review";
+            return review;
+        }
+        finally
+        {
+            ExitGoogleGenerationOperation();
+        }
+    }
+
     public async Task ApproveGoogleGenerationSpendAsync(
         long authorizedMaximumMinorUnits,
         bool confirmedByUser,
@@ -85,17 +139,23 @@ public sealed partial class ShellViewModel
         EnterGoogleGenerationOperation();
         try
         {
-            var prepare = _prepareGoogleGenerationForApproval
-                ?? throw new InvalidOperationException("Google generation production preparation is not configured.");
+            GoogleGenerationSpendReview review = PreparedGoogleGenerationSpendReview
+                ?? throw new InvalidOperationException("Prepare the exact current Google request and review its estimate before approving spend.");
+            review.Validate();
+            if (PreparedGoogleGenerationSpendApproved)
+                throw new InvalidOperationException("The currently prepared Google request is already spend-approved.");
+            if (authorizedMaximumMinorUnits < review.CurrentEstimateMinorUnits)
+            {
+                throw new InvalidOperationException(
+                    $"Authorized spend ceiling is below the exact compiled estimate of {review.CurrentEstimateMinorUnits} minor units.");
+            }
             var approve = _approveGoogleGenerationSpend
                 ?? throw new InvalidOperationException("Google generation explicit spend approval is not configured.");
             cancellationToken.ThrowIfCancellationRequested();
-            StatusMessage = "Google generation · compiling exact current request for approval";
-            await prepare(cancellationToken).ConfigureAwait(true);
-            cancellationToken.ThrowIfCancellationRequested();
-            StatusMessage = "Google generation · confirming exact compiled spend authorization";
+            StatusMessage = "Google generation · confirming spend authorization for the displayed compiled request";
             await approve(authorizedMaximumMinorUnits, confirmedByUser, cancellationToken).ConfigureAwait(true);
-            StatusMessage = "Google generation · exact compiled spend authorized";
+            PreparedGoogleGenerationSpendApproved = true;
+            StatusMessage = "Google generation · displayed exact compiled spend authorized";
         }
         finally
         {
@@ -199,9 +259,35 @@ public sealed partial class ShellViewModel
     private void RefreshGoogleGenerationCommands()
     {
         OnPropertyChanged(nameof(CanGenerateWithGoogle));
+        OnPropertyChanged(nameof(CanPrepareGoogleGenerationSpend));
         OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
         OnPropertyChanged(nameof(CanPlayLastGeneratedGoogleMp3));
         GenerateWithGoogleCommand.NotifyCanExecuteChanged();
         PlayLastGeneratedGoogleMp3Command.NotifyCanExecuteChanged();
+    }
+
+    public sealed record GoogleGenerationSpendReview(
+        string Currency,
+        int Scale,
+        long CurrentEstimateMinorUnits,
+        string PricingProvenanceId,
+        string VoiceName,
+        string CompiledPayloadSha256)
+    {
+        public GoogleGenerationSpendReview Validate()
+        {
+            if (string.IsNullOrWhiteSpace(Currency)
+                || string.IsNullOrWhiteSpace(PricingProvenanceId)
+                || string.IsNullOrWhiteSpace(VoiceName)
+                || string.IsNullOrWhiteSpace(CompiledPayloadSha256))
+            {
+                throw new InvalidOperationException("Google generation spend review is missing exact compiled request evidence.");
+            }
+            if (Scale is < 0 or > 9)
+                throw new InvalidOperationException("Google generation spend review currency scale must be between zero and nine.");
+            if (CurrentEstimateMinorUnits < 0)
+                throw new InvalidOperationException("Google generation spend review estimate cannot be negative.");
+            return this;
+        }
     }
 }
