@@ -1,34 +1,36 @@
+using System.Security.Cryptography;
+using System.Text;
 using CloudScribe.Application.Providers;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>
-/// Establishes the minimum persisted trust needed for Voice Lab from a fresh Google
-/// service-account configuration. It proves only authenticated voice-catalog access for the
-/// service account's owning project; it deliberately does not create synthesis/model or spend
-/// authorization, which remain under the existing Stage6 fail-closed evidence chain.
+/// Establishes persisted Google TTS evidence for a fresh service-account configuration only after
+/// both a real authenticated voice-catalog read and an authenticated non-billable synthesis
+/// capability probe succeed. The resulting capability provenance is derived from those observed
+/// provider responses; no capability or project/model authorization is fabricated locally.
 /// </summary>
 public sealed class GoogleTextToSpeechCatalogBootstrapService(
     GoogleServiceAccountCredentialOnboardingService credentialOnboarding,
     GoogleVoiceCatalogClient catalogClient,
+    GoogleSynthesisCapabilityProbe synthesisProbe,
     IProviderAccountStore accounts,
     IProviderCapabilitySnapshotStore capabilities,
     IVoiceLabProjectAuthorizationStore projectAuthorizations,
+    IGoogleGenerationProjectAuthorizationStore generationProjectAuthorizations,
     TimeProvider timeProvider)
 {
     public const string VoiceCatalogCapabilityId = "voice-catalog";
     private static readonly TimeSpan EvidenceLifetime = TimeSpan.FromMinutes(30);
 
-    private readonly GoogleServiceAccountCredentialOnboardingService _credentialOnboarding =
-        credentialOnboarding ?? throw new ArgumentNullException(nameof(credentialOnboarding));
-    private readonly GoogleVoiceCatalogClient _catalogClient =
-        catalogClient ?? throw new ArgumentNullException(nameof(catalogClient));
+    private readonly GoogleServiceAccountCredentialOnboardingService _credentialOnboarding = credentialOnboarding ?? throw new ArgumentNullException(nameof(credentialOnboarding));
+    private readonly GoogleVoiceCatalogClient _catalogClient = catalogClient ?? throw new ArgumentNullException(nameof(catalogClient));
+    private readonly GoogleSynthesisCapabilityProbe _synthesisProbe = synthesisProbe ?? throw new ArgumentNullException(nameof(synthesisProbe));
     private readonly IProviderAccountStore _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
-    private readonly IProviderCapabilitySnapshotStore _capabilities =
-        capabilities ?? throw new ArgumentNullException(nameof(capabilities));
-    private readonly IVoiceLabProjectAuthorizationStore _projectAuthorizations =
-        projectAuthorizations ?? throw new ArgumentNullException(nameof(projectAuthorizations));
+    private readonly IProviderCapabilitySnapshotStore _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+    private readonly IVoiceLabProjectAuthorizationStore _projectAuthorizations = projectAuthorizations ?? throw new ArgumentNullException(nameof(projectAuthorizations));
+    private readonly IGoogleGenerationProjectAuthorizationStore _generationProjectAuthorizations = generationProjectAuthorizations ?? throw new ArgumentNullException(nameof(generationProjectAuthorizations));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
     public async Task<GoogleTextToSpeechCatalogBootstrapResult> ConfigureFreshAsync(
@@ -45,9 +47,6 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         cancellationToken.ThrowIfCancellationRequested();
         await RequireFreshAccountAsync(accountId, cancellationToken).ConfigureAwait(false);
 
-        // Admit both destinations before importing or resolving any credential. The generation
-        // account is pinned to the synthesis origin, while the catalog observation is required to
-        // use that same admitted Google APIs origin.
         Uri catalogOrigin = GetGoogleApiOrigin(catalogEndpoint);
         Uri synthesisOrigin = GetGoogleApiOrigin(synthesisEndpoint);
         RequireSameOrigin(catalogOrigin, synthesisOrigin);
@@ -65,6 +64,7 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
                 accountId,
                 displayName,
                 catalogEndpoint,
+                synthesisEndpoint,
                 synthesisOrigin,
                 regionId,
                 identity,
@@ -72,10 +72,7 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         }
         catch
         {
-            await RemoveUnboundCredentialAfterFailureAsync(
-                accountId,
-                credentialReferenceId,
-                credentialImported).ConfigureAwait(false);
+            await RemoveUnboundCredentialAfterFailureAsync(accountId, credentialReferenceId, credentialImported).ConfigureAwait(false);
             throw;
         }
     }
@@ -84,40 +81,50 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         string accountId,
         string displayName,
         Uri catalogEndpoint,
+        Uri synthesisEndpoint,
         Uri synthesisOrigin,
         string regionId,
         GoogleServiceAccountCredentialIdentity identity,
         CancellationToken cancellationToken)
     {
+        string endpointId = GoogleTextToSpeechEndpointIdentity.Create(synthesisEndpoint);
         var accountReference = new ProviderAccountReference(
             GoogleGenerationProvider.StableProviderId,
             accountId,
             displayName,
             new CredentialReference(identity.CredentialReferenceId),
+            endpointId: endpointId,
             regionId: regionId,
             endpointOrigin: synthesisOrigin);
 
-        // This direct bootstrap observation is intentionally narrower than Stage6. The real
-        // authenticated response must succeed before any account/catalog evidence is persisted.
         GoogleVoiceCatalogSnapshot observedCatalog = await _catalogClient.LoadAsync(
             accountReference,
             catalogEndpoint,
             cancellationToken).ConfigureAwait(false);
+        GoogleSynthesisCapabilityEvidence synthesisEvidence = await _synthesisProbe.VerifyAsync(
+            accountReference,
+            identity.ProjectId,
+            synthesisEndpoint,
+            cancellationToken).ConfigureAwait(false);
+
         ProviderAccountSnapshot storedAccount = await _accounts.CreateAsync(
             accountReference,
             isEnabled: true,
             cancellationToken).ConfigureAwait(false);
 
-        EvidenceWindow window = CreateEvidenceWindow(observedCatalog);
-        StoredProviderCapabilitySnapshot storedCapability = await PersistCatalogCapabilityAsync(
+        EvidenceWindow window = CreateEvidenceWindow(observedCatalog, synthesisEvidence);
+        string capabilityProvenance = BuildCombinedCapabilityProvenance(observedCatalog.ProvenanceId, synthesisEvidence.ProvenanceId);
+        StoredProviderCapabilitySnapshot storedCapability = await PersistCapabilitiesAsync(
             storedAccount,
-            observedCatalog,
+            capabilityProvenance,
             window,
             cancellationToken).ConfigureAwait(false);
-        await PersistProjectEvidenceAsync(
+        await PersistVoiceLabProjectEvidenceAsync(storedAccount, storedCapability, identity, window, cancellationToken).ConfigureAwait(false);
+        await PersistGenerationVoiceAuthorizationsAsync(
             storedAccount,
-            storedCapability,
+            storedCapability.Snapshot.ProvenanceId,
             identity,
+            observedCatalog.Voices,
             window,
             cancellationToken).ConfigureAwait(false);
 
@@ -130,27 +137,24 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
             window.ExpiresAtUtc);
     }
 
-    private async Task<StoredProviderCapabilitySnapshot> PersistCatalogCapabilityAsync(
+    private async Task<StoredProviderCapabilitySnapshot> PersistCapabilitiesAsync(
         ProviderAccountSnapshot storedAccount,
-        GoogleVoiceCatalogSnapshot observedCatalog,
+        string provenanceId,
         EvidenceWindow window,
         CancellationToken cancellationToken)
     {
         var capabilitySnapshot = new ProviderCapabilitySnapshot(
             storedAccount.Reference,
             window.CapturedAtUtc,
-            observedCatalog.ProvenanceId,
-            [new ProviderCapability(
-                VoiceCatalogCapabilityId,
-                ProviderCapabilityState.Supported,
-                ProviderLifecycleState.Available)]);
-        return await _capabilities.SaveAsync(
-            capabilitySnapshot,
-            window.ExpiresAtUtc,
-            cancellationToken).ConfigureAwait(false);
+            provenanceId,
+            [
+                new ProviderCapability(VoiceCatalogCapabilityId, ProviderCapabilityState.Supported, ProviderLifecycleState.Available),
+                new ProviderCapability(GoogleGenerationProvider.SynthesizeOperationStableId, ProviderCapabilityState.Supported, ProviderLifecycleState.Available),
+            ]);
+        return await _capabilities.SaveAsync(capabilitySnapshot, window.ExpiresAtUtc, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task PersistProjectEvidenceAsync(
+    private async Task PersistVoiceLabProjectEvidenceAsync(
         ProviderAccountSnapshot storedAccount,
         StoredProviderCapabilitySnapshot storedCapability,
         GoogleServiceAccountCredentialIdentity identity,
@@ -171,49 +175,77 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         await _projectAuthorizations.SaveVerifiedAsync(projectEvidence, cancellationToken).ConfigureAwait(false);
     }
 
-    private EvidenceWindow CreateEvidenceWindow(GoogleVoiceCatalogSnapshot observedCatalog)
+    private async Task PersistGenerationVoiceAuthorizationsAsync(
+        ProviderAccountSnapshot storedAccount,
+        string capabilityProvenanceId,
+        GoogleServiceAccountCredentialIdentity identity,
+        IReadOnlyList<GoogleVoiceCatalogEntry> voices,
+        EvidenceWindow window,
+        CancellationToken cancellationToken)
+    {
+        ProviderAccountReference account = storedAccount.Reference;
+        string endpointId = account.EndpointId ?? throw new InvalidOperationException("Google synthesis endpoint identity was not persisted.");
+        string regionId = account.RegionId ?? throw new InvalidOperationException("Google region identity was not persisted.");
+        string endpointOrigin = account.EndpointOrigin?.GetLeftPart(UriPartial.Authority)
+            ?? throw new InvalidOperationException("Google synthesis endpoint origin was not persisted.");
+
+        foreach (GoogleVoiceCatalogEntry voice in voices)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var evidence = new GoogleGenerationProjectAuthorizationEvidence(
+                account.AccountId,
+                identity.ProjectId,
+                voice.Name,
+                identity.CredentialReferenceId,
+                capabilityProvenanceId,
+                endpointId,
+                regionId,
+                endpointOrigin,
+                Authorized: true,
+                CapturedAtUtc: window.NowUtc,
+                ExpiresAtUtc: window.ExpiresAtUtc);
+            await _generationProjectAuthorizations.SaveVerifiedAsync(evidence, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private EvidenceWindow CreateEvidenceWindow(
+        GoogleVoiceCatalogSnapshot observedCatalog,
+        GoogleSynthesisCapabilityEvidence synthesisEvidence)
     {
         DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
         if (nowUtc.Offset != TimeSpan.Zero)
             throw new InvalidOperationException("Google catalog bootstrap requires a UTC time provider.");
-        DateTimeOffset capturedAtUtc = observedCatalog.ObservedAtUtc.ToUniversalTime();
-        if (capturedAtUtc > nowUtc.AddMinutes(1))
-            throw new InvalidOperationException("Google catalog observation timestamp is unexpectedly in the future.");
+        DateTimeOffset catalogCaptured = observedCatalog.ObservedAtUtc.ToUniversalTime();
+        DateTimeOffset synthesisCaptured = synthesisEvidence.CapturedAtUtc.ToUniversalTime();
+        if (catalogCaptured > nowUtc.AddMinutes(1) || synthesisCaptured > nowUtc.AddMinutes(1))
+            throw new InvalidOperationException("Google onboarding observation timestamp is unexpectedly in the future.");
+        DateTimeOffset capturedAtUtc = catalogCaptured > synthesisCaptured ? catalogCaptured : synthesisCaptured;
         return new EvidenceWindow(nowUtc, capturedAtUtc, nowUtc.Add(EvidenceLifetime));
+    }
+
+    private static string BuildCombinedCapabilityProvenance(string catalogProvenanceId, string synthesisProvenanceId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(catalogProvenanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(synthesisProvenanceId);
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{catalogProvenanceId}\n{synthesisProvenanceId}"));
+        return $"google-tts-capability-v1:sha256:{Convert.ToHexString(hash).ToLowerInvariant()}";
     }
 
     private async Task RequireFreshAccountAsync(string accountId, CancellationToken cancellationToken)
     {
-        ProviderAccountSnapshot? existing = await _accounts.FindAsync(
-            GoogleGenerationProvider.StableProviderId,
-            accountId,
-            cancellationToken).ConfigureAwait(false);
+        ProviderAccountSnapshot? existing = await _accounts.FindAsync(GoogleGenerationProvider.StableProviderId, accountId, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
-        {
-            throw new InvalidOperationException(
-                "Google TTS fresh configuration refuses to overwrite an existing provider account or credential binding.");
-        }
+            throw new InvalidOperationException("Google TTS fresh configuration refuses to overwrite an existing provider account or credential binding.");
     }
 
-    private async Task RemoveUnboundCredentialAfterFailureAsync(
-        string accountId,
-        string credentialReferenceId,
-        bool credentialImported)
+    private async Task RemoveUnboundCredentialAfterFailureAsync(string accountId, string credentialReferenceId, bool credentialImported)
     {
-        // Before provider-account persistence, a failed authenticated observation must not leave
-        // newly imported credential material behind. Once an account is persisted, its exact
-        // binding is retained so the failure is visible and retryable rather than silently
-        // deleting credentials underneath durable state.
         ProviderAccountSnapshot? persisted = await _accounts.FindAsync(
             GoogleGenerationProvider.StableProviderId,
             accountId,
             CancellationToken.None).ConfigureAwait(false);
         if (credentialImported && persisted is null)
-        {
-            _ = await _credentialOnboarding.RemoveAsync(
-                credentialReferenceId,
-                CancellationToken.None).ConfigureAwait(false);
-        }
+            _ = await _credentialOnboarding.RemoveAsync(credentialReferenceId, CancellationToken.None).ConfigureAwait(false);
     }
 
     private static void ValidateInputs(
@@ -234,12 +266,12 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
 
     private static Uri GetGoogleApiOrigin(Uri endpoint)
     {
-        if (!endpoint.IsAbsoluteUri ||
-            !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
-            !endpoint.IsDefaultPort ||
-            !string.IsNullOrEmpty(endpoint.UserInfo) ||
-            !string.IsNullOrEmpty(endpoint.Fragment) ||
-            !IsGoogleApisHost(endpoint.Host))
+        if (!endpoint.IsAbsoluteUri
+            || !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || !endpoint.IsDefaultPort
+            || !string.IsNullOrEmpty(endpoint.UserInfo)
+            || !string.IsNullOrEmpty(endpoint.Fragment)
+            || !IsGoogleApisHost(endpoint.Host))
         {
             throw new ArgumentException(
                 "Google endpoint must be a credential-free absolute HTTPS Google APIs URI on the default port without a fragment.",
@@ -250,25 +282,13 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
 
     private static void RequireSameOrigin(Uri catalogOrigin, Uri synthesisOrigin)
     {
-        if (Uri.Compare(
-                catalogOrigin,
-                synthesisOrigin,
-                UriComponents.SchemeAndServer,
-                UriFormat.SafeUnescaped,
-                StringComparison.OrdinalIgnoreCase) != 0)
-        {
-            throw new ArgumentException(
-                "Google voice-catalog and synthesis endpoints must use the same admitted Google API origin.",
-                nameof(synthesisOrigin));
-        }
+        if (Uri.Compare(catalogOrigin, synthesisOrigin, UriComponents.SchemeAndServer, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase) != 0)
+            throw new ArgumentException("Google voice-catalog and synthesis endpoints must use the same admitted Google API origin.", nameof(synthesisOrigin));
     }
 
     private static bool IsGoogleApisHost(string host) =>
-        string.Equals(host, "googleapis.com", StringComparison.OrdinalIgnoreCase) ||
-        host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase);
+        string.Equals(host, "googleapis.com", StringComparison.OrdinalIgnoreCase)
+        || host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase);
 
-    private sealed record EvidenceWindow(
-        DateTimeOffset NowUtc,
-        DateTimeOffset CapturedAtUtc,
-        DateTimeOffset ExpiresAtUtc);
+    private sealed record EvidenceWindow(DateTimeOffset NowUtc, DateTimeOffset CapturedAtUtc, DateTimeOffset ExpiresAtUtc);
 }
