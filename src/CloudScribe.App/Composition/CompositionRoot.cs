@@ -138,7 +138,17 @@ public static class CompositionRoot
         viewModel.ConfigureStage6GoogleGenerationPreparation(async cancellationToken =>
         {
             await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken).ConfigureAwait(false);
-            await preparationCoordinator.PrepareCurrentAsync(cancellationToken).ConfigureAwait(false);
+            GoogleGenerationProductionPendingApprovalStateOwner.PendingState pending = await preparationCoordinator
+                .PrepareCurrentAsync(cancellationToken)
+                .ConfigureAwait(false);
+            pending.Validate();
+            return new ShellViewModel.GoogleGenerationSpendReview(
+                pending.Currency,
+                pending.Scale,
+                pending.CurrentEstimateMinorUnits,
+                pending.Envelope.PricingProvenanceId,
+                pending.Envelope.VoiceName,
+                pending.Envelope.CompiledPayloadSha256).Validate();
         });
         GoogleGenerationProductionSpendApprovalService approvalService =
             serviceProvider.GetRequiredService<GoogleGenerationProductionSpendApprovalService>();
