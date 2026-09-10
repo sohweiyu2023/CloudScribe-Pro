@@ -42,8 +42,17 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
         GoogleSpeechCompilation compilation = GoogleSpeechPlanCompiler.Compile(
             evidence.Plan,
             evidence.CompilationOptions);
+
+        // Post-compile limits can only be established against the bytes that will actually be
+        // submitted. Never inherit a caller's precompile assertion for this fact.
+        evidence.Capabilities.RequireSupported(
+            evidence.CompilationOptions.VoiceName,
+            evidence.CompilationOptions.AudioEncoding,
+            compilation.Payload.Length,
+            evidence.NowUtc);
+
         GenerationProviderRequest providerRequest = BuildProviderRequest(evidence, compilation);
-        GoogleGenerationUiExecutionSnapshot snapshot = BuildSnapshot(evidence, providerRequest);
+        GoogleGenerationUiExecutionSnapshot snapshot = BuildPendingApprovalSnapshot(evidence, providerRequest);
 
         return _pendingApprovalPublisher.Publish(
             evidence.Account,
@@ -139,7 +148,7 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
         evidence.Capabilities.Validate(evidence.NowUtc).RequireSupported(
             evidence.CompilationOptions.VoiceName,
             evidence.CompilationOptions.AudioEncoding,
-            evidence.CompilationOptions.MaximumPayloadBytes,
+            compiledPayloadBytes: 0,
             evidence.NowUtc);
         evidence.AdmittedTrust.Validate();
         evidence.PreviousState.Validate();
@@ -148,12 +157,13 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
 
     private static void ValidatePrecompileAuthorizationState(GoogleGenerationProductionCompileEvidence evidence)
     {
+        // Spend approval and post-compile limits are intentionally absent from this gate. Both
+        // facts depend on the exact compiled payload and are established downstream.
         if (!evidence.AccountAuthorized || !evidence.ProjectAuthorized || !evidence.CapabilityCurrent ||
-            !evidence.PricingCurrent || !evidence.AdmissionCurrent || !evidence.AccountCredentialAvailable ||
-            !evidence.PricingApproved || !evidence.PostCompileLimitsSatisfied)
+            !evidence.PricingCurrent || !evidence.AdmissionCurrent || !evidence.AccountCredentialAvailable)
         {
             throw new InvalidOperationException(
-                "Google generation cannot be compiled while authorization, pricing, admission, credential, capability, or limit evidence is not current.");
+                "Google generation cannot be compiled while account, project, capability, pricing, admission, or credential evidence is not current.");
         }
 
         if (evidence.RequestRevision < 0)
@@ -190,7 +200,7 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
             compilation.Payload,
             evidence.CompilationOptions.AudioEncoding);
 
-    private static GoogleGenerationUiExecutionSnapshot BuildSnapshot(
+    private static GoogleGenerationUiExecutionSnapshot BuildPendingApprovalSnapshot(
         GoogleGenerationProductionCompileEvidence evidence,
         GenerationProviderRequest providerRequest) =>
         new(
@@ -212,6 +222,6 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
             evidence.ResolutionEvidence,
             evidence.AdmissionCurrent,
             evidence.AccountCredentialAvailable,
-            evidence.PricingApproved,
-            evidence.PostCompileLimitsSatisfied);
+            PricingApproved: false,
+            PostCompileLimitsSatisfied: true);
 }
