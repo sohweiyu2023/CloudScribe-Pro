@@ -200,6 +200,11 @@ public sealed partial class ShellViewModel
         }
         finally
         {
+            // Spend approval is single-use at the desktop boundary. Whether the guarded Stage6
+            // transition succeeds, rejects, or requires reconciliation, another provider attempt
+            // must be freshly prepared and explicitly approved against its exact compiled bytes.
+            PreparedGoogleGenerationSpendApproved = false;
+            PreparedGoogleGenerationSpendReview = null;
             ExitGoogleGenerationOperation();
         }
     }
