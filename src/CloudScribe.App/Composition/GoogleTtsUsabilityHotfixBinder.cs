@@ -332,14 +332,20 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         });
         host.Children.Add(new TextBlock
         {
-            Text = "CloudScribe carries an authenticated v2.22 pricing seed. It remains unsigned pricing evidence and is never activated silently; you must explicitly activate it before billable generation can be approved.",
+            Text = "CloudScribe carries an authenticated v2.22 pricing seed, but seed integrity alone is not proof that provider pricing is current. Enter the HTTPS pricing source you reviewed. CloudScribe will freshly retrieve it, record its final HTTPS URI, observation time and SHA-256 as unsigned evidence, and still require your explicit confirmation before activating the embedded catalog.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
+        TextBox currentSource = NewTextBox("Current provider pricing HTTPS source");
+        TextBlock evidence = new()
+        {
+            Text = "No current pricing source has been observed in this session.",
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+        };
         CheckBox confirmed = new()
         {
-            Content = "I explicitly activate the authenticated built-in pricing catalog",
+            Content = "I reviewed this current source and explicitly confirm it matches the built-in catalog rates used for spend approval",
         };
-        Button activate = new() { Content = "Activate built-in pricing" };
+        Button activate = new() { Content = "Fetch current pricing evidence and activate" };
         activate.Click += async (_, _) =>
         {
             if (!activate.IsEnabled)
@@ -347,14 +353,28 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             activate.IsEnabled = false;
             try
             {
-                var snapshot = await _builtInPricing
-                    .ActivateAsync(confirmed.IsChecked == true, CancellationToken.None)
+                Uri source = RequireHttpsEndpoint(currentSource.Text, "pricing evidence source");
+                BuiltInPricingCatalogBootstrapService.ActivationResult result = await _builtInPricing
+                    .VerifyCurrentSourceAndActivateAsync(
+                        source,
+                        confirmed.IsChecked == true,
+                        CancellationToken.None)
                     .ConfigureAwait(true);
+                string shortHash = result.Observation.Sha256.Length > 16
+                    ? result.Observation.Sha256[..16] + "…"
+                    : result.Observation.Sha256;
+                evidence.Text =
+                    $"Observed current source: {result.Observation.SourceUri}\n" +
+                    $"Observed UTC: {result.Observation.ObservedAtUtc:O}\n" +
+                    $"Source SHA-256: {result.Observation.Sha256}\n" +
+                    $"Bytes observed: {result.Observation.ByteCount}\n" +
+                    "Trust: unsigned HTTPS observation + explicit user match confirmation";
                 viewModel.StatusMessage =
-                    $"Pricing active · authenticated built-in catalog · {snapshot.Sha256[..12]}… · manual activation recorded";
+                    $"Pricing active · current source observed {result.Observation.ObservedAtUtc:O} · {shortHash} · manual unsigned activation recorded";
             }
             catch (Exception ex)
             {
+                evidence.Text = $"Current pricing evidence not activated · {ex.Message}";
                 viewModel.StatusMessage = $"Pricing activation failed safely · {ex.Message}";
             }
             finally
@@ -362,6 +382,8 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
                 activate.IsEnabled = true;
             }
         };
+        host.Children.Add(currentSource);
+        host.Children.Add(evidence);
         host.Children.Add(confirmed);
         host.Children.Add(activate);
     }
