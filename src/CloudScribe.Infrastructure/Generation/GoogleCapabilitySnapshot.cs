@@ -17,12 +17,17 @@ public sealed record GoogleCapabilitySnapshot(
 
     public bool IsStale(DateTimeOffset nowUtc) => nowUtc >= ExpiresAtUtc;
 
-    public void RequireSupported(string voiceName, string audioEncoding, int compiledPayloadBytes, DateTimeOffset nowUtc)
+    public void RequireVoiceAndEncodingSupported(string voiceName, string audioEncoding, DateTimeOffset nowUtc)
     {
         Validate(nowUtc);
         if (IsStale(nowUtc)) throw new InvalidOperationException("Google capability snapshot is stale and must be refreshed before billable submission.");
         if (!VoiceNames.Contains(voiceName)) throw new InvalidOperationException("Selected Google voice is not present in the current capability snapshot.");
         if (!AudioEncodings.Contains(audioEncoding)) throw new InvalidOperationException("Selected Google audio encoding is not present in the current capability snapshot.");
+    }
+
+    public void RequireSupported(string voiceName, string audioEncoding, int compiledPayloadBytes, DateTimeOffset nowUtc)
+    {
+        RequireVoiceAndEncodingSupported(voiceName, audioEncoding, nowUtc);
         if (compiledPayloadBytes > MaximumCompiledPayloadBytes) throw new InvalidOperationException("Compiled Google payload exceeds the current capability snapshot limit.");
     }
 
