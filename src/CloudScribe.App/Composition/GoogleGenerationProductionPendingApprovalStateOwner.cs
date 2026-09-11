@@ -72,7 +72,7 @@ public sealed class GoogleGenerationProductionPendingApprovalStateOwner
                 throw new InvalidOperationException("Google generation pending approval requires a UI execution snapshot.");
             }
 
-            GoogleGenerationProductionUiSnapshotValidator.Validate(Snapshot);
+            GoogleGenerationProductionUiSnapshotValidator.ValidatePendingApproval(Snapshot);
             if (string.IsNullOrWhiteSpace(Currency))
             {
                 throw new InvalidOperationException("Google generation pending approval currency is required.");
