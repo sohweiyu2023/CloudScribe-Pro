@@ -1,0 +1,7 @@
+# The 1.0.1 desktop binder intentionally keeps two linear UI-composition methods together so
+# spend-review and current-pricing controls remain visibly auditable as one guarded user flow.
+# Production evidence, authorization and Stage6 execution stay in dedicated services; only this
+# view-composition file receives the hotfix-scoped method-length exception.
+
+[GoogleTtsUsabilityHotfixBinder.cs]
+dotnet_diagnostic.MA0051.severity = none
