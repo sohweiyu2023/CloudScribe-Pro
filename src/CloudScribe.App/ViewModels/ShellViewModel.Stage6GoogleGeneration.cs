@@ -19,6 +19,7 @@ public sealed partial class ShellViewModel
     public bool CanGenerateWithGoogle =>
         _resolveGoogleGenerationExecutionContext is not null &&
         _persistAcceptedGoogleMp3 is not null &&
+        PreparedGoogleGenerationSpendApproved &&
         Volatile.Read(ref _googleGenerationInFlight) == 0;
 
     public bool CanPrepareGoogleGenerationSpend =>
@@ -50,6 +51,8 @@ public sealed partial class ShellViewModel
             if (!SetProperty(ref _preparedGoogleGenerationSpendApproved, value))
                 return;
             OnPropertyChanged(nameof(CanApproveGoogleGenerationSpend));
+            OnPropertyChanged(nameof(CanGenerateWithGoogle));
+            GenerateWithGoogleCommand.NotifyCanExecuteChanged();
         }
     }
 
