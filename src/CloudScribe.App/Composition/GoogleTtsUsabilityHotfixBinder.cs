@@ -397,11 +397,10 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
 
     private static void AddGenerateControls(StackPanel host, ShellViewModel viewModel)
     {
-        Button generate = new() { Content = "Generate with Google" };
-        generate.Click += (_, _) =>
+        Button generate = new()
         {
-            if (viewModel.GenerateWithGoogleCommand.CanExecute(null))
-                viewModel.GenerateWithGoogleCommand.Execute(null);
+            Content = "Generate with Google",
+            Command = viewModel.GenerateWithGoogleCommand,
         };
         host.Children.Add(generate);
         host.Children.Add(new TextBlock
