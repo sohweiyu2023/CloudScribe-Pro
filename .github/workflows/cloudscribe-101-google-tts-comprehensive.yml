@@ -121,7 +121,10 @@ jobs:
             'SHA256.HashData',
             'CryptographicOperations.FixedTimeEquals',
             '_acceptedPlaybackIntegrity',
-            'Verified Google MP3 output changed after acceptance and will not be played.'
+            'RequireVerifiedAcceptedFileAsync',
+            'Verified Google MP3 output changed after acceptance and will not be used.',
+            'Exported Google MP3 bytes differ from the accepted provider bytes.',
+            'Final exported Google MP3 bytes differ from the accepted provider bytes.'
           ) | ForEach-Object {
             if (-not $output.Contains($_, [System.StringComparison]::Ordinal)) {
               throw "Accepted-byte MP3 integrity path lost required element: $_"
