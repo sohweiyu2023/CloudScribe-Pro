@@ -83,7 +83,8 @@ jobs:
           @(
             'Configure Google TTS securely',
             'Refresh real Google voices',
-            'Compile and approve spend',
+            'Prepare exact request and show price',
+            'Approve displayed spend',
             'Generate with Google',
             'Play verified MP3'
           ) | ForEach-Object {
