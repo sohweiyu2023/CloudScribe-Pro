@@ -45,7 +45,24 @@ internal sealed class GoogleTtsStudioPreflightEvidenceResolver(
             .ResolveAsync(selection.AccountStableId, cancellationToken)
             .ConfigureAwait(false);
         production.Validate(nowUtc);
+        ValidateCapabilitySelection(selection, production);
 
+        GoogleGenerationAccount account = _accountFactory.Create(production);
+        PricingEvidence pricing = await ResolvePricingEvidenceAsync(cancellationToken).ConfigureAwait(false);
+        await RequireCredentialAsync(account, cancellationToken).ConfigureAwait(false);
+
+        return new PreflightEvidence(
+            production,
+            account,
+            pricing.ActivePricing,
+            pricing.AuthenticatedPricingSha,
+            nowUtc).Validate();
+    }
+
+    private static void ValidateCapabilitySelection(
+        ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        GoogleGenerationProductionEvidence production)
+    {
         if (!Guid.TryParse(selection.CapabilityEvidenceId, out Guid selectedCapabilityId)
             || selectedCapabilityId == Guid.Empty
             || production.Capability.Id != selectedCapabilityId)
@@ -62,8 +79,10 @@ internal sealed class GoogleTtsStudioPreflightEvidenceResolver(
             throw new InvalidOperationException(
                 "The selected Google voice and current persisted capability evidence do not belong to the same account.");
         }
+    }
 
-        GoogleGenerationAccount account = _accountFactory.Create(production);
+    private async Task<PricingEvidence> ResolvePricingEvidenceAsync(CancellationToken cancellationToken)
+    {
         PricingCatalogSnapshot activePricing = await _pricingCatalogHistoryStore
             .GetActiveSnapshotAsync(cancellationToken)
             .ConfigureAwait(false)
@@ -86,6 +105,13 @@ internal sealed class GoogleTtsStudioPreflightEvidenceResolver(
                 "The active pricing catalog is not the SHA-authenticated v2.22 Google pricing/control material. Activate the authenticated built-in pricing catalog before preparing generation.");
         }
 
+        return new PricingEvidence(activePricing, authenticatedPricingSha);
+    }
+
+    private async Task RequireCredentialAsync(
+        GoogleGenerationAccount account,
+        CancellationToken cancellationToken)
+    {
         CredentialReference credentialReference = new(account.CredentialReferenceId);
         CredentialSecret credential = await _credentialVault
             .ReadAsync(credentialReference, cancellationToken)
@@ -96,14 +122,11 @@ internal sealed class GoogleTtsStudioPreflightEvidenceResolver(
         {
             cancellationToken.ThrowIfCancellationRequested();
         }
-
-        return new PreflightEvidence(
-            production,
-            account,
-            activePricing,
-            authenticatedPricingSha,
-            nowUtc).Validate();
     }
+
+    private sealed record PricingEvidence(
+        PricingCatalogSnapshot ActivePricing,
+        string AuthenticatedPricingSha);
 
     internal sealed record PreflightEvidence(
         GoogleGenerationProductionEvidence Production,
