@@ -42,7 +42,7 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
 
         string languageCode = RequireCanonical(selection.LanguageCode, nameof(selection.LanguageCode));
         string voiceName = RequireCanonical(selection.VoiceStableId, nameof(selection.VoiceStableId));
-        currentCapability.RequireSupported(voiceName, "MP3", compiledPayloadBytes: 256, nowUtc);
+        currentCapability.RequireVoiceAndEncodingSupported(voiceName, "MP3", nowUtc);
 
         GoogleGenerationProjectAuthorizationEvidence authorization =
             await _projectAuthorizationStore.LoadCurrentAsync(
