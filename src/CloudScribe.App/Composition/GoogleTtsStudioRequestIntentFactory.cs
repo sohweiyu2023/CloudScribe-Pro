@@ -28,22 +28,46 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
     {
         ArgumentNullException.ThrowIfNull(selection);
         ArgumentNullException.ThrowIfNull(currentCapability);
-
         cancellationToken.ThrowIfCancellationRequested();
-        DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
-        currentCapability.Validate(nowUtc);
-        if (currentCapability.IsStale(nowUtc))
-            throw new InvalidOperationException("Current Google capability evidence is stale. Refresh the authenticated voice catalog before preparing generation.");
-        if (!string.Equals(currentCapability.AccountId, selection.AccountStableId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                "The current Google capability evidence is not bound to the selected authenticated account.");
-        }
 
+        DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
+        ValidateCapabilityBinding(selection, currentCapability, nowUtc);
         string languageCode = RequireCanonical(selection.LanguageCode, nameof(selection.LanguageCode));
         string voiceName = RequireCanonical(selection.VoiceStableId, nameof(selection.VoiceStableId));
         currentCapability.RequireVoiceAndEncodingSupported(voiceName, "MP3", nowUtc);
 
+        GoogleGenerationProjectAuthorizationEvidence authorization = await LoadAuthorizationAsync(
+            selection,
+            currentCapability,
+            voiceName,
+            nowUtc,
+            cancellationToken).ConfigureAwait(false);
+
+        var plan = new SpeechPlan(
+            languageCode,
+            [new SpeechText(selection.ExactText)],
+            BuildSpeechPlanProvenance(selection, currentCapability.ProvenanceId));
+        var compilationOptions = new GoogleSpeechCompilationOptions(
+            languageCode,
+            voiceName,
+            "MP3",
+            currentCapability.MaximumCompiledPayloadBytes).Validate();
+        RequestIdentity requestIdentity = BuildRequestIdentity(
+            selection,
+            authorization.ModelId,
+            currentCapability.ProvenanceId,
+            compilationOptions);
+
+        return CreateIntent(selection, authorization, plan, compilationOptions, requestIdentity);
+    }
+
+    private async Task<GoogleGenerationProjectAuthorizationEvidence> LoadAuthorizationAsync(
+        ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        GoogleCapabilitySnapshot currentCapability,
+        string voiceName,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
         GoogleGenerationProjectAuthorizationEvidence authorization =
             await _projectAuthorizationStore.LoadCurrentAsync(
                 selection.AccountStableId,
@@ -64,23 +88,31 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
                 "The current Google synthesis authorization is not bound to the selected account, project, real voice, and current capability provenance.");
         }
 
-        string provenanceId = BuildSpeechPlanProvenance(selection, currentCapability.ProvenanceId);
-        var plan = new SpeechPlan(
-            languageCode,
-            [new SpeechText(selection.ExactText)],
-            provenanceId);
-        var compilationOptions = new GoogleSpeechCompilationOptions(
-            languageCode,
-            voiceName,
-            "MP3",
-            currentCapability.MaximumCompiledPayloadBytes).Validate();
+        return authorization;
+    }
 
-        RequestIdentity requestIdentity = BuildRequestIdentity(
-            selection,
-            authorization.ModelId,
-            currentCapability.ProvenanceId,
-            compilationOptions);
-        return new GoogleGenerationProductionRequestIntent
+    private static void ValidateCapabilityBinding(
+        ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        GoogleCapabilitySnapshot currentCapability,
+        DateTimeOffset nowUtc)
+    {
+        currentCapability.Validate(nowUtc);
+        if (currentCapability.IsStale(nowUtc))
+            throw new InvalidOperationException("Current Google capability evidence is stale. Refresh the authenticated voice catalog before preparing generation.");
+        if (!string.Equals(currentCapability.AccountId, selection.AccountStableId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The current Google capability evidence is not bound to the selected authenticated account.");
+        }
+    }
+
+    private static GoogleGenerationProductionRequestIntent CreateIntent(
+        ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        GoogleGenerationProjectAuthorizationEvidence authorization,
+        SpeechPlan plan,
+        GoogleSpeechCompilationOptions compilationOptions,
+        RequestIdentity requestIdentity) =>
+        new GoogleGenerationProductionRequestIntent
         {
             Plan = plan,
             CompilationOptions = compilationOptions,
@@ -91,7 +123,6 @@ public sealed class GoogleTtsStudioRequestIntentFactory(
             RequestRevision = requestIdentity.RequestRevision,
             CapturedAtUtc = selection.CapturedAtUtc,
         }.Validate();
-    }
 
     private static RequestIdentity BuildRequestIdentity(
         ShellViewModel.GoogleTtsStudioRequestSelection selection,
