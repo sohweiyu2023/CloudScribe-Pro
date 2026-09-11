@@ -18,7 +18,7 @@ public sealed class GoogleGenerationProductionTransportFactoryTests
             new NeverResolvingCredentialResolver(),
             new FixedTimeProvider(Now));
 
-        GoogleGenerationProductionTransport result = factory.Create(evidence);
+        GoogleGenerationProductionTransport result = factory.Create(evidence, CreateSubmissionAccount(EndpointOrigin));
 
         Assert.Equal("primary", result.Account.AccountId);
         Assert.Equal("google.primary", result.Account.CredentialReferenceId);
@@ -36,7 +36,8 @@ public sealed class GoogleGenerationProductionTransportFactoryTests
             new NeverResolvingCredentialResolver(),
             new FixedTimeProvider(Now));
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => factory.Create(evidence));
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => factory.Create(evidence, CreateSubmissionAccount(EndpointOrigin)));
 
         Assert.Contains("stale", error.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -54,10 +55,14 @@ public sealed class GoogleGenerationProductionTransportFactoryTests
             new NeverResolvingCredentialResolver(),
             new FixedTimeProvider(Now));
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => factory.Create(evidence));
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => factory.Create(evidence, CreateSubmissionAccount(EndpointOrigin)));
 
         Assert.Contains("changed after capability evidence", error.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static GoogleGenerationAccount CreateSubmissionAccount(Uri endpoint) =>
+        new("primary", "google.primary", endpoint, "global");
 
     private static GoogleGenerationProductionEvidence CreateEvidence(Uri endpointOrigin, DateTimeOffset expiresAtUtc)
     {
