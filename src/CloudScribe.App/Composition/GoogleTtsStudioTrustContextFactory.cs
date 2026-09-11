@@ -26,12 +26,73 @@ internal sealed class GoogleTtsStudioTrustContextFactory(V222ControlSet controls
         string pricingProvenanceId,
         DateTimeOffset nowUtc)
     {
+        ValidateBindings(selection, intent, account, capability, pricingProvenanceId, nowUtc);
+        TrustIdentities identities = BuildTrustIdentities(selection, intent, account, capability);
+
+        return GoogleGenerationCacheTrustContextFactory.Create(
+            account,
+            capability,
+            intent.CompilationOptions,
+            intent.ProjectId,
+            intent.ModelId,
+            selection.VoiceFingerprint,
+            identities.SpeechPlan,
+            identities.SynthesisControls,
+            identities.SampleFormat,
+            RuntimeVersion(typeof(GoogleGenerationProvider)),
+            RuntimeVersion(typeof(GoogleSpeechPlanCompiler)),
+            RuntimeVersion(typeof(SpeechPlan)),
+            RuntimeVersion(typeof(SpeechText)),
+            pricingProvenanceId,
+            identities.GovernancePolicy,
+            identities.ProviderFeature,
+            identities.AccountCapability,
+            nowUtc);
+    }
+
+    private TrustIdentities BuildTrustIdentities(
+        ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        GoogleGenerationProductionRequestIntent intent,
+        GoogleGenerationAccount account,
+        GoogleCapabilitySnapshot capability) =>
+        new(
+            HashIdentity("speech-plan", intent.Plan.ProvenanceId, intent.Plan.LanguageTag, selection.ExactText),
+            HashIdentity(
+                "synthesis-controls",
+                intent.CompilationOptions.LanguageCode,
+                intent.CompilationOptions.VoiceName,
+                intent.CompilationOptions.AudioEncoding,
+                intent.CompilationOptions.MaximumPayloadBytes.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            HashIdentity("sample-format", intent.CompilationOptions.AudioEncoding),
+            HashBytes("governance-policy", _controls.RuntimePolicySeedUtf8.Span),
+            HashIdentity(
+                "provider-features",
+                capability.ProvenanceId,
+                capability.MaximumCompiledPayloadBytes.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                string.Join(",", capability.AudioEncodings.OrderBy(static value => value, StringComparer.Ordinal)),
+                string.Join(",", capability.VoiceNames.OrderBy(static value => value, StringComparer.Ordinal))),
+            HashIdentity(
+                "account-capability",
+                account.AccountId,
+                account.Endpoint.GetLeftPart(UriPartial.Authority),
+                account.Region,
+                capability.ProvenanceId,
+                capability.ObservedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                capability.ExpiresAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
+
+    private static void ValidateBindings(
+        ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        GoogleGenerationProductionRequestIntent intent,
+        GoogleGenerationAccount account,
+        GoogleCapabilitySnapshot capability,
+        string pricingProvenanceId,
+        DateTimeOffset nowUtc)
+    {
         ArgumentNullException.ThrowIfNull(selection);
         ArgumentNullException.ThrowIfNull(intent);
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
-
         intent.Validate();
         account.Validate();
         capability.Validate(nowUtc);
@@ -49,58 +110,6 @@ internal sealed class GoogleTtsStudioTrustContextFactory(V222ControlSet controls
             throw new InvalidOperationException(
                 "Google Studio trust evidence voice does not match the exact compilation intent.");
         }
-
-        string speechPlanIdentity = HashIdentity(
-            "speech-plan",
-            intent.Plan.ProvenanceId,
-            intent.Plan.LanguageTag,
-            selection.ExactText);
-        string synthesisControlsIdentity = HashIdentity(
-            "synthesis-controls",
-            intent.CompilationOptions.LanguageCode,
-            intent.CompilationOptions.VoiceName,
-            intent.CompilationOptions.AudioEncoding,
-            intent.CompilationOptions.MaximumPayloadBytes.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        string sampleFormatIdentity = HashIdentity(
-            "sample-format",
-            intent.CompilationOptions.AudioEncoding);
-        string governancePolicyIdentity = HashBytes(
-            "governance-policy",
-            _controls.RuntimePolicySeedUtf8.Span);
-        string providerFeatureIdentity = HashIdentity(
-            "provider-features",
-            capability.ProvenanceId,
-            capability.MaximumCompiledPayloadBytes.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            string.Join(",", capability.AudioEncodings.OrderBy(static value => value, StringComparer.Ordinal)),
-            string.Join(",", capability.VoiceNames.OrderBy(static value => value, StringComparer.Ordinal)));
-        string accountCapabilityIdentity = HashIdentity(
-            "account-capability",
-            account.AccountId,
-            account.Endpoint.GetLeftPart(UriPartial.Authority),
-            account.Region,
-            capability.ProvenanceId,
-            capability.ObservedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
-            capability.ExpiresAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
-
-        return GoogleGenerationCacheTrustContextFactory.Create(
-            account,
-            capability,
-            intent.CompilationOptions,
-            intent.ProjectId,
-            intent.ModelId,
-            selection.VoiceFingerprint,
-            speechPlanIdentity,
-            synthesisControlsIdentity,
-            sampleFormatIdentity,
-            RuntimeVersion(typeof(GoogleGenerationProvider)),
-            RuntimeVersion(typeof(GoogleSpeechPlanCompiler)),
-            RuntimeVersion(typeof(SpeechPlan)),
-            RuntimeVersion(typeof(SpeechText)),
-            pricingProvenanceId,
-            governancePolicyIdentity,
-            providerFeatureIdentity,
-            accountCapabilityIdentity,
-            nowUtc);
     }
 
     private static string RuntimeVersion(Type implementationType)
@@ -131,4 +140,12 @@ internal sealed class GoogleTtsStudioTrustContextFactory(V222ControlSet controls
             throw new InvalidOperationException($"Google Studio {scope} identity cannot be derived from empty evidence.");
         return $"{scope}:sha256:{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";
     }
+
+    private sealed record TrustIdentities(
+        string SpeechPlan,
+        string SynthesisControls,
+        string SampleFormat,
+        string GovernancePolicy,
+        string ProviderFeature,
+        string AccountCapability);
 }
