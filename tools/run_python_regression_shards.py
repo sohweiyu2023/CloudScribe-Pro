@@ -176,11 +176,23 @@ def build_checks(root: Path) -> list[Check]:
         and state.get("stage2_manual_visual_acceptance") is True
         and state.get("stage2_user_clicked_editor_retest") is True
     )
+    # Preserve the exact Stage 2-8 10.0.400 contract for the certified 1.0.0
+    # baseline; the explicit 1.0.1 Windows patch intentionally pins 10.0.401.
+    app_project_text = (root / "src/CloudScribe.App/CloudScribe.App.csproj").read_text(encoding="utf-8-sig")
+    is_release_101_patch = (
+        current_stage == 8
+        and version == "1.0.0"
+        and "<Version>1.0.1</Version>" in app_project_text
+        and "<InformationalVersion>1.0.1</InformationalVersion>" in app_project_text
+        and "<FileVersion>1.0.1.0</FileVersion>" in app_project_text
+    )
+    required_sdk_for_checkpoint = "10.0.401" if is_release_101_patch else "10.0.400"
+
     session_specs = (
         (state.get("project") == "CloudScribe Pro", "project identity"),
         (current_stage in (2, 3, 4, 8), "current stage"),
         (stage_lineage_ok, "repository version"),
-        (state.get("required_dotnet_sdk") == "10.0.400", "required SDK"),
+        (state.get("required_dotnet_sdk") == required_sdk_for_checkpoint, "required SDK"),
         (global_json.get("sdk", {}).get("version") == state.get("required_dotnet_sdk"), "global/session SDK consistency"),
         (state.get("stage1_checkpoint_promoted") is True, "Stage 1 checkpoint promoted"),
         (state.get("stage2_source_implemented") is True and state.get("stage2_runtime_tested") is True and state.get("stage2_windows_ui_tested") is True, "Stage 2 source and automated Windows engineering verification recorded"),
