@@ -33,6 +33,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           if ((git branch --show-current).Trim() -ne $env:CERT_BRANCH) { throw 'Wrong branch: release candidate is not isolated.' }
+          # A rerun retains the original event SHA. Resolve and checkout the
+          # current remote branch head *before* manifest freeze so repeat
+          # certification re-tests the same immutable published source tree.
+          $fetchSpec = '+refs/heads/' + $env:CERT_BRANCH + ':refs/remotes/origin/' + $env:CERT_BRANCH
+          git fetch origin $fetchSpec
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the current candidate ref.' }
+          $remoteHead = (git rev-parse "refs/remotes/origin/$env:CERT_BRANCH").Trim()
+          git reset --hard $remoteHead
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check out the current frozen candidate.' }
           if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { throw 'Initial checkout is dirty.' }
           git merge-base --is-ancestor $env:RELEASE_BASE_SHA HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Hotfix is not a descendant of certified 1.0.0.' }
