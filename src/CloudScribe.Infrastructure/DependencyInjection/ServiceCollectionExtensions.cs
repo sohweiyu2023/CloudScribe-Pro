@@ -88,6 +88,7 @@ public static class ServiceCollectionExtensions
 
     private static void AddProviderAndTrustServices(IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSingleton<IProviderAdapterFactory, GoogleVoiceLabProviderAdapterFactory>();
         services.AddSingleton<IProviderFactoryRegistry, ProviderFactoryRegistry>();
         services.AddSingleton<IProviderAccountStore, EfProviderAccountStore>();
         services.AddSingleton<IProviderCapabilitySnapshotStore, EfProviderCapabilitySnapshotStore>();
@@ -96,6 +97,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IVoiceLabAuditionAuthorizationStore, VoiceLabAuditionAuthorizationStore>();
         services.AddSingleton<VoiceLabCatalogCurrentEvidenceResolver>();
         services.AddSingleton<VoiceLabAuditionCurrentEvidenceResolver>();
+        services.AddSingleton<GoogleVoiceCatalogClient>();
+        services.AddSingleton<GoogleTextToSpeechCatalogBootstrapService>();
+        services.AddSingleton<GoogleSynthesisCapabilityProbe>();
         services.AddSingleton(serviceProvider =>
             new VoiceLabProductionCatalogTransport(
                 serviceProvider.GetRequiredService<IProviderAccountStore>(),
@@ -130,6 +134,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
         services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
+        services.AddSingleton<GoogleServiceAccountCredentialOnboardingService>();
         services.AddSingleton<ITransientCredentialResolver, VaultBackedTransientCredentialResolver>();
         services.AddSingleton<IGenerationPrivateCacheKeyProvider, VaultBackedGenerationPrivateCacheKeyProvider>();
     }

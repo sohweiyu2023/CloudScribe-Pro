@@ -68,14 +68,15 @@ public sealed class FinalReleaseIntegrationContractTests
             "ValidateCurrentPersistedEvidence(evidence, currentEvidence)",
             "GoogleSpeechPlanCompiler.Compile(",
             "BuildProviderRequest(evidence, compilation)",
-            "BuildSnapshot(evidence, providerRequest)",
+            "BuildPendingApprovalSnapshot(evidence, providerRequest)",
+            "PricingApproved: false",
             "pendingApprovalPublisher.Publish(",
         ];
 
         foreach (string required in requiredCompileBoundary)
         {
             Assert.True(stage6Compile.Contains(required, StringComparison.Ordinal),
-                $"Final Stage6 must refresh persisted evidence and compile the exact provider payload before spend approval: {required}");
+                $"Final Stage6 must refresh persisted evidence, compile the exact provider payload, and keep spend unapproved before explicit approval: {required}");
         }
     }
 
@@ -234,7 +235,7 @@ public sealed class FinalReleaseIntegrationContractTests
             "GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync",
             "GetRequiredService<GoogleGenerationProductionIntentAssemblyCoordinator>();",
             "await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken)",
-            "await preparationCoordinator.PrepareCurrentAsync(cancellationToken)",
+            ".PrepareCurrentAsync(cancellationToken)",
             "ConfigureStage6GoogleGenerationSpendApproval",
             "approvalService.ApproveExplicitAsync(",
             "GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);",
@@ -253,7 +254,7 @@ public sealed class FinalReleaseIntegrationContractTests
             "await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken)",
             StringComparison.Ordinal);
         int preparation = composition.IndexOf(
-            "await preparationCoordinator.PrepareCurrentAsync(cancellationToken)",
+            ".PrepareCurrentAsync(cancellationToken)",
             StringComparison.Ordinal);
         Assert.True(intentAssembly >= 0 && preparation > intentAssembly,
             "Final Stage6 preparation must assemble authoritative request intent before deterministic compile preparation.");

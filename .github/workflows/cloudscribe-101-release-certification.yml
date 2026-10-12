@@ -1,0 +1,178 @@
+name: CloudScribe 1.0.1 Final Release Certification
+
+on:
+  push:
+    branches:
+      - agent/cloudscribe-1.0.1-release-cert
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cloudscribe-101-final-release-cert
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: windows-2025
+    timeout-minutes: 100
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      RELEASE_BASE_SHA: 'ddf5bd8ed8982f7e4b7090b4857d4a813adaa6af'
+      CERT_BRANCH: 'agent/cloudscribe-1.0.1-release-cert'
+    steps:
+      - name: Checkout isolated 1.0.1 candidate
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify immutable release ancestry and prepare exact SHA-256 manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git branch --show-current).Trim() -ne $env:CERT_BRANCH) { throw 'Wrong branch: release candidate is not isolated.' }
+          # A rerun retains the original event SHA. Resolve and checkout the
+          # current remote branch head *before* manifest freeze so repeat
+          # certification re-tests the same immutable published source tree.
+          $fetchSpec = '+refs/heads/' + $env:CERT_BRANCH + ':refs/remotes/origin/' + $env:CERT_BRANCH
+          git fetch origin $fetchSpec
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the current candidate ref.' }
+          $remoteHead = (git rev-parse "refs/remotes/origin/$env:CERT_BRANCH").Trim()
+          git reset --hard $remoteHead
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check out the current frozen candidate.' }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { throw 'Initial checkout is dirty.' }
+          git merge-base --is-ancestor $env:RELEASE_BASE_SHA HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Hotfix is not a descendant of certified 1.0.0.' }
+          [xml]$project = Get-Content 'src/CloudScribe.App/CloudScribe.App.csproj' -Raw
+          $p = $project.Project.PropertyGroup | Select-Object -First 1
+          if ($p.Version -ne '1.0.1' -or $p.InformationalVersion -ne '1.0.1' -or $p.FileVersion -ne '1.0.1.0') { throw 'Hotfix version identity is not exact 1.0.1.' }
+          python -B tools/update_sha256_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw 'Deterministic manifest generation failed.' }
+          python -B tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Generated manifest check failed.' }
+          $changed = @(git status --porcelain=v1 --untracked-files=all)
+          if (@($changed | Where-Object { $_ -ne ' M SHA256SUMS.txt' }).Count -ne 0) {
+            $changed | ForEach-Object { Write-Host $_ }
+            throw 'Manifest preparation modified files other than SHA256SUMS.txt.'
+          }
+          if ($changed.Count -ne 0) {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -- SHA256SUMS.txt
+            git commit -m 'chore(1.0.1): freeze deterministic candidate source manifest'
+            if ($LASTEXITCODE -ne 0) { throw 'Manifest freeze commit failed.' }
+            git push origin "HEAD:$env:CERT_BRANCH"
+            if ($LASTEXITCODE -ne 0) { throw 'Manifest push rejected; candidate is not frozen.' }
+          }
+          git fetch origin "$env:CERT_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify remote frozen head.' }
+          $head = (git rev-parse HEAD).Trim()
+          $remote = (git rev-parse "refs/remotes/origin/$env:CERT_BRANCH").Trim()
+          if ($head -ne $remote) { throw 'Remote candidate moved during freeze.' }
+          if (@(git status --porcelain=v1 --untracked-files=all).Count -ne 0) { throw 'Candidate not clean after freeze.' }
+          "CANDIDATE_SHA=$head" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Exact frozen 1.0.1 candidate: $head"
+
+      - name: Install pinned .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.401'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Source governance and retained verification
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -B tools/verify_repository.py
+          if ($LASTEXITCODE -ne 0) { throw 'Physical source and manifest governance failed.' }
+          python -B tools/run_verifier_self_tests.py
+          if ($LASTEXITCODE -ne 0) { throw 'Verifier self-tests failed.' }
+          python -B tools/run_python_regression_shards.py --all
+          if ($LASTEXITCODE -ne 0) { throw 'Complete deterministic material regressions failed.' }
+
+      - name: Locked restore, formatting, strict Release build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
+          dotnet format CloudScribe.sln --no-restore --verify-no-changes --verbosity diagnostic
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting/analyzer gate failed.' }
+          dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Strict Release build failed.' }
+
+      - name: Complete compiled regression suite
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Complete solution test suite failed.' }
+
+      - name: Produce and verify portable Windows 1.0.1 package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $publish = Join-Path $env:RUNNER_TEMP 'cloudscribe-101-windows'
+          dotnet publish src/CloudScribe.App/CloudScribe.App.csproj -c Release --no-restore --no-build -o $publish
+          if ($LASTEXITCODE -ne 0) { throw 'Windows executable publish failed.' }
+          $exe = Join-Path $publish 'CloudScribe.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'CloudScribe.exe is missing.' }
+          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+          if ($version.FileVersion -ne '1.0.1.0' -or -not $version.ProductVersion.StartsWith('1.0.1', [System.StringComparison]::Ordinal)) { throw 'Published executable version mismatch.' }
+          $proc = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            if ($proc.HasExited) { throw "Windows executable exited unexpectedly (code $($proc.ExitCode))." }
+          }
+          finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force; $proc.WaitForExit() }
+          }
+          $zip = Join-Path $env:RUNNER_TEMP 'CloudScribe-Pro-1.0.1-Windows.zip'
+          Compress-Archive -Path (Join-Path $publish '*') -DestinationPath $zip -CompressionLevel Optimal -Force
+          if (-not (Test-Path -LiteralPath $zip -PathType Leaf)) { throw 'Windows package archive missing.' }
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "RELEASE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_ZIP_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Exact no-mutation and frozen remote proof
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -ne $env:CANDIDATE_SHA) { throw 'Candidate SHA changed during certification.' }
+          $dirty = @(git status --porcelain=v1 --untracked-files=all)
+          if ($dirty.Count -ne 0) { $dirty | ForEach-Object { Write-Host $_ }; throw 'Source tree mutated during certification.' }
+          git fetch origin "$env:CERT_BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot check remote head.' }
+          if ((git rev-parse "refs/remotes/origin/$env:CERT_BRANCH").Trim() -ne $env:CANDIDATE_SHA) { throw 'Remote head changed during certification.' }
+          $summary = Join-Path $env:RUNNER_TEMP 'CloudScribe-1.0.1-final-certification.txt'
+          @(
+            'STATUS=PASS',
+            "CANDIDATE_SHA=$env:CANDIDATE_SHA",
+            "RUN_ID=$env:GITHUB_RUN_ID",
+            "RUN_ATTEMPT=$env:GITHUB_RUN_ATTEMPT",
+            "RELEASE_BASE_SHA=$env:RELEASE_BASE_SHA",
+            'VERIFIER_SELF_TESTS=PASS',
+            'DETERMINISTIC_REGRESSIONS=PASS',
+            'LOCKED_RESTORE=PASS',
+            'FORMAT_ANALYZERS=PASS',
+            'STRICT_RELEASE_BUILD=PASS',
+            'FULL_COMPILED_TESTS=PASS',
+            'WINDOWS_PUBLISH_VERSION=1.0.1',
+            'WINDOWS_EXECUTABLE_SMOKE=PASS',
+            "WINDOWS_ZIP_SHA256=$env:RELEASE_ZIP_SHA256",
+            'EXACT_NO_MUTATION=PASS'
+          ) | Set-Content -LiteralPath $summary -Encoding utf8
+          "CERT_EVIDENCE=$summary" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload portable package and certification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudscribe-1.0.1-certified-windows
+          path: |
+            ${{ env.RELEASE_ZIP }}
+            ${{ env.CERT_EVIDENCE }}
+          if-no-files-found: error
+          retention-days: 30

@@ -50,6 +50,8 @@ public static class CompositionRoot
         services.AddSingleton<IGoogleGenerationProductionIntentEvidenceResolver>(serviceProvider =>
             serviceProvider.GetRequiredService<GoogleGenerationProductionIntentEvidenceResolver>());
         services.AddSingleton<GoogleGenerationProductionIntentAssemblyCoordinator>();
+        services.AddSingleton<GoogleTtsStudioPreflightEvidenceResolver>();
+        services.AddSingleton<GoogleTtsStudioRequestIntentFactory>();
         services.AddSingleton<GoogleGenerationProductionCurrentRequestStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();
@@ -64,6 +66,9 @@ public static class CompositionRoot
         services.AddSingleton<Stage6GoogleGenerationShellBinder>();
         services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
         services.AddSingleton<Stage7VoiceLabAuditionShellBinder>();
+        services.AddSingleton<BuiltInPricingCatalogBootstrapService>();
+        services.AddSingleton<GoogleTtsUsabilityHotfixBinder>();
+        services.AddSingleton<GoogleGenerationAcceptedMp3OutputService>();
     }
 
     private static void RegisterShell(IServiceCollection services)
@@ -82,6 +87,9 @@ public static class CompositionRoot
         {
             MainWindow window = ActivatorUtilities.CreateInstance<MainWindow>(serviceProvider);
             DocumentWindowBehavior.Attach(window);
+            serviceProvider.GetRequiredService<GoogleTtsUsabilityHotfixBinder>().Attach(
+                window,
+                serviceProvider.GetRequiredService<ShellViewModel>());
             return window;
         });
     }
@@ -109,21 +117,8 @@ public static class CompositionRoot
         serviceProvider.GetRequiredService<Stage6GoogleGenerationShellBinder>().Bind(
             viewModel,
             serviceProvider.GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync);
-        GoogleGenerationProductionIntentAssemblyCoordinator intentAssemblyCoordinator =
-            serviceProvider.GetRequiredService<GoogleGenerationProductionIntentAssemblyCoordinator>();
-        GoogleGenerationProductionPreparationCoordinator preparationCoordinator =
-            serviceProvider.GetRequiredService<GoogleGenerationProductionPreparationCoordinator>();
-        viewModel.ConfigureStage6GoogleGenerationPreparation(async cancellationToken =>
-        {
-            await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken).ConfigureAwait(false);
-            await preparationCoordinator.PrepareCurrentAsync(cancellationToken).ConfigureAwait(false);
-        });
-        GoogleGenerationProductionSpendApprovalService approvalService =
-            serviceProvider.GetRequiredService<GoogleGenerationProductionSpendApprovalService>();
-        viewModel.ConfigureStage6GoogleGenerationSpendApproval((maximum, confirmed, cancellationToken) =>
-            approvalService.ApproveExplicitAsync(
-                new GoogleGenerationProductionSpendApprovalService.ApprovalConfirmation(maximum, confirmed),
-                cancellationToken));
+        ConfigureGooglePreparationAndSpend(viewModel, serviceProvider);
+        ConfigureGoogleOutput(viewModel, serviceProvider);
         serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
         serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);
         Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(
@@ -131,5 +126,51 @@ public static class CompositionRoot
             serviceProvider.GetRequiredService<RestoreRecoveryExecutionCompositionFactory>(),
             serviceProvider.GetRequiredService<RestoreRecoveryProductionConfigurationResolver>(),
             serviceProvider.GetRequiredService<AtomicVerifiedRestoreExecutor>());
+    }
+
+    private static void ConfigureGooglePreparationAndSpend(
+        ShellViewModel viewModel,
+        IServiceProvider serviceProvider)
+    {
+        GoogleGenerationProductionIntentAssemblyCoordinator intentAssemblyCoordinator =
+            serviceProvider.GetRequiredService<GoogleGenerationProductionIntentAssemblyCoordinator>();
+        GoogleGenerationProductionPreparationCoordinator preparationCoordinator =
+            serviceProvider.GetRequiredService<GoogleGenerationProductionPreparationCoordinator>();
+        viewModel.ConfigureStage6GoogleGenerationPreparation(async cancellationToken =>
+        {
+            await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken).ConfigureAwait(false);
+            GoogleGenerationProductionPendingApprovalStateOwner.PendingState pending = await preparationCoordinator
+                .PrepareCurrentAsync(cancellationToken)
+                .ConfigureAwait(false);
+            pending.Validate();
+            return new ShellViewModel.GoogleGenerationSpendReview(
+                pending.Currency,
+                pending.Scale,
+                pending.CurrentEstimateMinorUnits,
+                pending.Envelope.PricingProvenanceId,
+                pending.Envelope.VoiceName,
+                pending.Envelope.CompiledPayloadSha256).Validate();
+        });
+        GoogleGenerationProductionSpendApprovalService approvalService =
+            serviceProvider.GetRequiredService<GoogleGenerationProductionSpendApprovalService>();
+        viewModel.ConfigureStage6GoogleGenerationSpendApproval((maximum, confirmed, cancellationToken) =>
+            approvalService.ApproveExplicitAsync(
+                new GoogleGenerationProductionSpendApprovalService.ApprovalConfirmation(maximum, confirmed),
+                cancellationToken));
+    }
+
+    private static void ConfigureGoogleOutput(ShellViewModel viewModel, IServiceProvider serviceProvider)
+    {
+        GoogleGenerationAcceptedMp3OutputService output =
+            serviceProvider.GetRequiredService<GoogleGenerationAcceptedMp3OutputService>();
+        viewModel.ConfigureStage6GoogleGenerationOutput(
+            async (outcome, cancellationToken) =>
+            {
+                GoogleGenerationAcceptedMp3Output persisted = await output
+                    .PersistAcceptedAsync(outcome, cancellationToken)
+                    .ConfigureAwait(false);
+                return persisted.Path;
+            },
+            output.PlayAsync);
     }
 }

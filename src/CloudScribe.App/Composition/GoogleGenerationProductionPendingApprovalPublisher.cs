@@ -28,7 +28,7 @@ public sealed class GoogleGenerationProductionPendingApprovalPublisher(
         ArgumentException.ThrowIfNullOrWhiteSpace(pricingProvenanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
 
-        GoogleGenerationProductionUiSnapshotValidator.Validate(snapshot);
+        GoogleGenerationProductionUiSnapshotValidator.ValidatePendingApproval(snapshot);
         ReadOnlyMemory<byte> compiledPayload = snapshot.ProviderRequest.CompiledPayload;
         if (compiledPayload.IsEmpty)
         {

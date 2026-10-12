@@ -73,6 +73,9 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
         // Compatibility fields remain while production composition is migrated. ResolveAsync no
         // longer trusts account/project authorization, capability/pricing currentness, or live
         // credential availability; those are independently re-established from production state.
+        // PricingApproved and PostCompileLimitsSatisfied are deliberately allowed to be false at
+        // this precompile boundary: exact spend approval and compiled-payload limits cannot exist
+        // until after compilation. The post-compile pending/runtime boundaries must establish them.
         public required bool AccountAuthorized { get; init; }
         public required bool ProjectAuthorized { get; init; }
         public required bool CapabilityCurrent { get; init; }
@@ -109,18 +112,28 @@ internal sealed class GoogleGenerationProductionAuthorizationSnapshotStateOwner
                     "Request-bound Google authorization snapshot account and capability evidence do not match its account identity.");
             }
 
-            if (ResolutionEvidence == GoogleGenerationReconciliationResolutionEvidence.None)
+            if (!Enum.IsDefined(ResolutionEvidence))
             {
                 throw new InvalidOperationException(
-                    "Request-bound Google authorization snapshot is missing reconciliation resolution evidence.");
+                    "Request-bound Google authorization snapshot contains unknown reconciliation evidence.");
             }
 
-            // Project authorization is deliberately excluded here: the production resolver now
-            // requires independently persisted project+model authorization bound to live evidence.
-            if (!AdmissionCurrent || !PricingApproved || !PostCompileLimitsSatisfied)
+            // A clean initial request legitimately carries no reconciliation resolution evidence.
+            // Non-None evidence is permitted only when the persisted transition actually clears an
+            // unresolved provider submission. The transition policy is the sole authority here so
+            // callers can never invent terminal/reconciled evidence merely to satisfy this snapshot.
+            GoogleGenerationPersistedQueueTransitionPolicy.ValidateTransition(
+                PreviousState,
+                CurrentState,
+                ResolutionEvidence);
+
+            // Admission is a genuine precompile gate. Spend approval and post-compile limits are
+            // intentionally not required here because requiring them would make compilation depend
+            // on evidence that can only be created from the compiled provider request.
+            if (!AdmissionCurrent)
             {
                 throw new InvalidOperationException(
-                    "Request-bound Google authorization snapshot contains rejected, stale, or unavailable production authorization evidence.");
+                    "Request-bound Google authorization snapshot contains rejected or stale precompile admission evidence.");
             }
 
             if (RequestRevision < 0 || Scale is < 0 or > 9 || CurrentEstimateMinorUnits < 0 || CapturedAtUtc == default)
