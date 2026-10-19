@@ -59,6 +59,70 @@ public sealed class GoogleGenerationProjectAuthorizationStore(
         }
     }
 
+    public async Task<GoogleGenerationProjectAuthorizationEvidence?> LoadSingleCurrentForProjectAsync(
+        string accountId,
+        string projectId,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+
+        CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
+        {
+            DbConnection connection = context.Database.GetDbConnection();
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            DbCommand command = connection.CreateCommand();
+            await using (command.ConfigureAwait(false))
+            {
+                command.CommandText = """
+                    SELECT ModelId, CredentialReferenceId, CapabilityProvenanceId, EndpointId, RegionId,
+                           EndpointOrigin, Authorized, CapturedAtUnixMilliseconds, ExpiresAtUnixMilliseconds
+                    FROM google_generation_project_authorizations
+                    WHERE AccountId = @accountId
+                      AND ProjectId = @projectId
+                      AND Authorized = 1
+                      AND ExpiresAtUnixMilliseconds > @nowUtc
+                    ORDER BY CapturedAtUnixMilliseconds DESC, ModelId ASC
+                    LIMIT 2;
+                    """;
+                AddParameter(command, "@accountId", accountId);
+                AddParameter(command, "@projectId", projectId);
+                AddParameter(command, "@nowUtc", nowUtc.ToUnixTimeMilliseconds());
+
+                DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        return null;
+
+                    GoogleGenerationProjectAuthorizationEvidence evidence = new(
+                        accountId,
+                        projectId,
+                        reader.GetString(0),
+                        reader.GetString(1),
+                        reader.GetString(2),
+                        reader.GetString(3),
+                        reader.GetString(4),
+                        reader.GetString(5),
+                        reader.GetBoolean(6),
+                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(7)),
+                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(8)));
+                    evidence.Validate(nowUtc);
+
+                    if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        throw new InvalidOperationException(
+                            "More than one current Google synthesis model authorization exists for this account/project; explicit model selection is required.");
+                    }
+
+                    return evidence;
+                }
+            }
+        }
+    }
+
     public async Task SaveVerifiedAsync(
         GoogleGenerationProjectAuthorizationEvidence evidence,
         CancellationToken cancellationToken = default)
