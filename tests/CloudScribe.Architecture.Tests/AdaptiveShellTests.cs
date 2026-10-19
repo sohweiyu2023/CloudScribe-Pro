@@ -314,10 +314,10 @@ public sealed class AdaptiveShellTests
         Assert.Contains("Brush.ShellGradient", applicationXaml, StringComparison.Ordinal);
         Assert.Contains("Brush.DocumentGradient", applicationXaml, StringComparison.Ordinal);
         Assert.Contains("^:focus-visible /template/ Border#PART_FocusRing", applicationXaml, StringComparison.Ordinal);
-        Assert.Contains("TextBox.editor:pointerover /template/ Border#PART_BorderElement", applicationXaml, StringComparison.Ordinal);
-        Assert.Contains("TextBox.editor:focus /template/ Border#PART_BorderElement", applicationXaml, StringComparison.Ordinal);
-        Assert.Contains("TextBox.document-title:focus /template/ Border#PART_BorderElement", applicationXaml, StringComparison.Ordinal);
-        Assert.Contains("TextBox.editor[IsReadOnly=True]", applicationXaml, StringComparison.Ordinal);
+        Assert.Contains(":is(TextBox).editor:pointerover /template/ Border#PART_BorderElement", applicationXaml, StringComparison.Ordinal);
+        Assert.Contains(":is(TextBox).editor:focus /template/ Border#PART_BorderElement", applicationXaml, StringComparison.Ordinal);
+        Assert.Contains(":is(TextBox).document-title:focus /template/ Border#PART_BorderElement", applicationXaml, StringComparison.Ordinal);
+        Assert.Contains(":is(TextBox).editor[IsReadOnly=True]", applicationXaml, StringComparison.Ordinal);
         Assert.Contains("SelectionForegroundBrush", applicationXaml, StringComparison.Ordinal);
         Assert.Contains("PlaceholderForeground", applicationXaml, StringComparison.Ordinal);
         Assert.Contains("Window.reduced-motion Button /template/ ContentPresenter#PART_ContentPresenter", applicationXaml, StringComparison.Ordinal);

@@ -13,7 +13,7 @@ namespace CloudScribe.App.Composition;
 /// introducing an alternate provider-submit path. Credential onboarding ends at the persisted
 /// catalog-evidence bootstrap; generation remains exclusively behind the existing Stage6 command.
 /// </summary>
-public sealed class GoogleTtsUsabilityHotfixBinder(
+public sealed partial class GoogleTtsUsabilityHotfixBinder(
     GoogleTextToSpeechCatalogBootstrapService bootstrapService,
     BuiltInPricingCatalogBootstrapService builtInPricing,
     GoogleGenerationAcceptedMp3OutputService acceptedMp3OutputService)
@@ -72,31 +72,34 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
     private void MountHost(MainWindow window, StackPanel host, ShellViewModel viewModel)
     {
         host.Children.Clear();
-        host.Spacing = 8;
+        host.Spacing = 14;
         AddIntro(host);
-        AddOnboardingControls(host, viewModel);
-        AddCatalogControls(host, viewModel);
-        AddOutputAndSpendControls(host, viewModel);
+        AddOnboardingControls(AddSection(host, "1 · Connect Google", expanded: false), viewModel);
+        AddCatalogControls(AddSection(host, "2 · Choose a voice", expanded: true), viewModel);
+        AddPricingActivationControls(AddSection(host, "3 · Confirm current pricing", expanded: false), viewModel);
+        AddOutputAndSpendControls(AddSection(host, "4 · Review & approve", expanded: true), viewModel);
         AddGenerateControls(host, viewModel);
-        AddVerifiedOutputControls(window, host, viewModel);
+        AddVerifiedOutputControls(window, AddSection(host, "5 · Listen & export", expanded: true), viewModel);
+        AddLiveStatus(host, viewModel);
     }
 
     private static void AddIntro(StackPanel host)
     {
         host.Children.Add(new TextBlock
         {
-            Text = "Google Cloud TTS · 1.0.1",
+            Text = "Your voice studio",
             FontWeight = Avalonia.Media.FontWeight.SemiBold,
         });
         host.Children.Add(new TextBlock
         {
-            Text = "Paste service-account JSON only for onboarding. CloudScribe imports it into the Windows credential vault, clears the field, obtains short-lived OAuth, and persists catalog trust only after a real authenticated voice-list response succeeds. Catalog and synthesis endpoints remain explicit user configuration and must share the same admitted Google API origin.",
+            Text = "Connect once, choose a voice, then review the price before generating audio. Your document stays local until you generate.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
     }
 
     private void AddOnboardingControls(StackPanel host, ShellViewModel viewModel)
     {
+        host.Children.Add(NewDescription("Your service-account key is stored in Windows Credential Manager. This field clears after setup. Use catalog and synthesis URLs from the same Google API origin."));
         var controls = new OnboardingControls(
             NewTextBox("Account ID (new, local CloudScribe identity)"),
             NewTextBox("Display name"),
@@ -105,16 +108,16 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             NewTextBox("Google voice catalog HTTPS endpoint"),
             NewTextBox("Google synthesis HTTPS endpoint"),
             NewTextBox("Paste service-account JSON (cleared after Configure)"),
-            new Button { Content = "Configure Google TTS securely" });
+            NewButton("Configure Google TTS securely"));
         controls.ServiceAccountJson.AcceptsReturn = true;
         controls.ServiceAccountJson.MinHeight = 86;
-        host.Children.Add(controls.AccountId);
-        host.Children.Add(controls.DisplayName);
-        host.Children.Add(controls.CredentialReference);
-        host.Children.Add(controls.RegionId);
-        host.Children.Add(controls.CatalogEndpoint);
-        host.Children.Add(controls.SynthesisEndpoint);
-        host.Children.Add(controls.ServiceAccountJson);
+        AddField(host, "Local account ID", controls.AccountId);
+        AddField(host, "Account display name", controls.DisplayName);
+        AddField(host, "Credential name", controls.CredentialReference);
+        AddField(host, "Google region", controls.RegionId);
+        AddField(host, "Voice catalog URL", controls.CatalogEndpoint);
+        AddField(host, "Synthesis URL", controls.SynthesisEndpoint);
+        AddField(host, "Service-account JSON", controls.ServiceAccountJson);
         controls.Configure.Click += async (_, _) => await ConfigureFreshAsync(viewModel, controls).ConfigureAwait(true);
         host.Children.Add(controls.Configure);
     }
@@ -144,7 +147,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
                 region,
                 CancellationToken.None).ConfigureAwait(true);
             viewModel.StatusMessage = $"Google TTS configured · project {result.ProjectId} · {result.Voices.Count} observed voices";
-            viewModel.RefreshVoiceLabCatalogCommand.Execute(null);
+            await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -157,7 +160,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         }
     }
 
-    private static void AddCatalogControls(StackPanel host, ShellViewModel viewModel)
+    private void AddCatalogControls(StackPanel host, ShellViewModel viewModel)
     {
         host.Children.Add(new TextBlock
         {
@@ -166,60 +169,104 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         });
         TextBox locale = NewTextBox("Language / locale filter (for example en-US)");
         locale.Text = viewModel.VoiceLabLocaleFilter;
-        locale.LostFocus += (_, _) => viewModel.VoiceLabLocaleFilter = locale.Text;
         TextBox search = NewTextBox("Voice search (optional)");
         search.Text = viewModel.VoiceLabSearchText;
-        search.LostFocus += (_, _) => viewModel.VoiceLabSearchText = search.Text;
-        host.Children.Add(locale);
-        host.Children.Add(search);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (string.Equals(args.PropertyName, nameof(ShellViewModel.VoiceLabLocaleFilter), StringComparison.Ordinal))
+                locale.Text = viewModel.VoiceLabLocaleFilter;
+            if (string.Equals(args.PropertyName, nameof(ShellViewModel.VoiceLabSearchText), StringComparison.Ordinal))
+                search.Text = viewModel.VoiceLabSearchText;
+        };
+        host.Children.Add(NewDescription("Apply language and search filters with Refresh voices."));
+        AddField(host, "Language or locale", locale);
+        AddField(host, "Search voices", search);
         AddRefreshControl(host, viewModel, locale, search);
         AddVoiceSelector(host, viewModel);
     }
 
-    private static void AddRefreshControl(
+    private void AddRefreshControl(
         StackPanel host,
         ShellViewModel viewModel,
         TextBox locale,
         TextBox search)
     {
-        Button refresh = new() { Content = "Refresh real Google voices" };
-        refresh.Click += (_, _) =>
+        Button refresh = NewButton("Refresh real Google voices");
+        refresh.Click += async (_, _) =>
         {
-            viewModel.VoiceLabLocaleFilter = locale.Text;
-            viewModel.VoiceLabSearchText = search.Text;
-            viewModel.RefreshVoiceLabCatalogCommand.Execute(null);
+            if (!refresh.IsEnabled)
+                return;
+            refresh.IsEnabled = false;
+            try
+            {
+                viewModel.VoiceLabLocaleFilter = locale.Text;
+                viewModel.VoiceLabSearchText = search.Text;
+                await _bootstrapService.RefreshConfiguredAsync(CancellationToken.None).ConfigureAwait(true);
+                await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+            {
+                viewModel.StatusMessage = "Could not refresh voices. Check your Google connection and language filter, then try again.";
+            }
+            finally
+            {
+                refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
+            }
         };
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (string.Equals(args.PropertyName, nameof(ShellViewModel.CanRefreshVoiceLabCatalog), StringComparison.Ordinal))
+                refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
+        };
+        refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
         host.Children.Add(refresh);
     }
 
     private static void AddVoiceSelector(StackPanel host, ShellViewModel viewModel)
     {
         ComboBox voices = new() { PlaceholderText = "Select a verified Google voice" };
-        host.Children.Add(voices);
+        AddField(host, "Voice", voices);
+        VoiceLabCatalogSelection[] snapshot = [];
+        bool rebuilding = false;
         void Rebuild()
         {
-            string? selectedId = viewModel.SelectedVoiceLabVoice?.VoiceStableId;
-            VoiceLabCatalogSelection[] snapshot = viewModel.VoiceLabCatalogResults.ToArray();
-            voices.ItemsSource = snapshot.Select(item => item.VoiceStableId).ToArray();
-            int index = selectedId is null
-                ? -1
-                : Array.FindIndex(snapshot, item => string.Equals(item.VoiceStableId, selectedId, StringComparison.Ordinal));
-            if (index >= 0)
+            rebuilding = true;
+            try
+            {
+                snapshot = viewModel.VoiceLabCatalogResults.ToArray();
+                voices.ItemsSource = snapshot.Select(item => item.VoiceStableId).ToArray();
+                int index = Array.FindIndex(snapshot, item => SameVoice(item, viewModel.SelectedVoiceLabVoice));
                 voices.SelectedIndex = index;
+            }
+            finally
+            {
+                rebuilding = false;
+            }
         }
         ((INotifyCollectionChanged)viewModel.VoiceLabCatalogResults).CollectionChanged += (_, _) => Rebuild();
-        voices.SelectionChanged += (_, _) => SelectVoice(viewModel, voices);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (string.Equals(args.PropertyName, nameof(ShellViewModel.SelectedVoiceLabVoice), StringComparison.Ordinal))
+                Rebuild();
+        };
+        voices.SelectionChanged += (_, _) =>
+        {
+            if (!rebuilding && voices.SelectedIndex >= 0 && voices.SelectedIndex < snapshot.Length)
+                viewModel.SelectedVoiceLabVoice = snapshot[voices.SelectedIndex];
+        };
         Rebuild();
     }
 
-    private static void SelectVoice(ShellViewModel viewModel, ComboBox voices)
-    {
-        int index = voices.SelectedIndex;
-        if (index >= 0 && index < viewModel.VoiceLabCatalogResults.Count)
-            viewModel.SelectedVoiceLabVoice = viewModel.VoiceLabCatalogResults[index];
-    }
+    private static bool SameVoice(VoiceLabCatalogSelection left, VoiceLabCatalogSelection? right) =>
+        right is not null &&
+        string.Equals(left.ProviderStableId, right.ProviderStableId, StringComparison.Ordinal) &&
+        string.Equals(left.AccountStableId, right.AccountStableId, StringComparison.Ordinal) &&
+        string.Equals(left.ProjectStableId, right.ProjectStableId, StringComparison.Ordinal) &&
+        string.Equals(left.VoiceStableId, right.VoiceStableId, StringComparison.Ordinal) &&
+        string.Equals(left.CapabilityEvidenceId, right.CapabilityEvidenceId, StringComparison.Ordinal) &&
+        string.Equals(left.VoiceFingerprint, right.VoiceFingerprint, StringComparison.Ordinal);
 
-    private void AddOutputAndSpendControls(StackPanel host, ShellViewModel viewModel)
+    private static void AddOutputAndSpendControls(StackPanel host, ShellViewModel viewModel)
     {
         host.Children.Add(new TextBlock { Text = "Output" });
         host.Children.Add(new ComboBox
@@ -227,10 +274,9 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             ItemsSource = Mp3OutputOptions,
             SelectedIndex = 0,
         });
-        AddPricingActivationControls(host, viewModel);
         host.Children.Add(new TextBlock
         {
-            Text = "Prepare the exact current document + selected real voice first. CloudScribe will display the estimate and its bound pricing/request evidence before you can separately approve a spend ceiling. Approval never recompiles the request.",
+            Text = "Prepare your document and chosen voice to see a conservative provider-list subtotal, before tax, credits and currency conversion. Set a spending limit and approve this request before generating.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
 
@@ -239,14 +285,21 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             Text = "No compiled Google request is awaiting spend review.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         };
-        Button prepareSpend = new() { Content = "Prepare exact request and show price" };
+        Button prepareSpend = NewButton("Prepare exact request and show price");
         TextBox spendMaximum = NewTextBox("Authorized maximum minor units");
-        CheckBox spendConfirmed = new() { Content = "I explicitly approve this displayed exact compiled request and spend ceiling" };
-        Button approveSpend = new() { Content = "Approve displayed spend" };
+        CheckBox spendConfirmed = NewConfirmation("I approve this request and spending limit.");
+        Button approveSpend = NewButton("Approve displayed spend");
+        ShellViewModel.GoogleGenerationSpendReview? displayedReview = null;
 
         void RefreshReview()
         {
             ShellViewModel.GoogleGenerationSpendReview? current = viewModel.PreparedGoogleGenerationSpendReview;
+            if (!ReferenceEquals(displayedReview, current))
+            {
+                displayedReview = current;
+                spendConfirmed.IsChecked = false;
+                spendMaximum.Text = current?.CurrentEstimateMinorUnits.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            }
             if (current is null)
             {
                 review.Text = "No compiled Google request is awaiting spend review.";
@@ -271,9 +324,9 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             bool canApprove = viewModel.CanApproveGoogleGenerationSpend;
             spendMaximum.IsEnabled = canApprove;
             spendConfirmed.IsEnabled = canApprove;
-            approveSpend.IsEnabled = canApprove;
-            if (canApprove && string.IsNullOrWhiteSpace(spendMaximum.Text))
-                spendMaximum.Text = current.CurrentEstimateMinorUnits.ToString(CultureInfo.InvariantCulture);
+            approveSpend.IsEnabled = canApprove && spendConfirmed.IsChecked == true &&
+                long.TryParse(spendMaximum.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long maximum) &&
+                maximum >= current.CurrentEstimateMinorUnits;
         }
 
         prepareSpend.Click += async (_, _) =>
@@ -295,6 +348,8 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
                 RefreshReview();
             }
         };
+        spendConfirmed.IsCheckedChanged += (_, _) => RefreshReview();
+        spendMaximum.TextChanged += (_, _) => RefreshReview();
         approveSpend.Click += async (_, _) =>
         {
             await ApproveSpendAsync(
@@ -317,9 +372,11 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
 
         host.Children.Add(prepareSpend);
         host.Children.Add(review);
-        host.Children.Add(spendMaximum);
+        AddField(host, "Spending limit · minor units", spendMaximum);
+        host.Children.Add(NewDescription("For a currency with two decimal places, 100 minor units = 1.00. The exact currency and estimate appear above."));
         host.Children.Add(spendConfirmed);
         host.Children.Add(approveSpend);
+        prepareSpend.IsEnabled = viewModel.CanPrepareGoogleGenerationSpend;
         RefreshReview();
     }
 
@@ -332,7 +389,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
         });
         host.Children.Add(new TextBlock
         {
-            Text = "CloudScribe carries an authenticated v2.22 pricing seed, but seed integrity alone is not proof that provider pricing is current. Enter the HTTPS pricing source you reviewed. CloudScribe will freshly retrieve it, record its final HTTPS URI, observation time and SHA-256 as unsigned evidence, and still require your explicit confirmation before activating the embedded catalog.",
+            Text = "Check the provider’s current prices against the included catalog. Paste the pricing page you reviewed and confirm the rates match. Fetching a page records your review; it does not verify the rates automatically.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
         TextBox currentSource = NewTextBox("Current provider pricing HTTPS source");
@@ -341,11 +398,9 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             Text = "No current pricing source has been observed in this session.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         };
-        CheckBox confirmed = new()
-        {
-            Content = "I reviewed this current source and explicitly confirm it matches the built-in catalog rates used for spend approval",
-        };
-        Button activate = new() { Content = "Fetch current pricing evidence and activate" };
+        CheckBox confirmed = NewConfirmation("I reviewed these prices and they match the included catalog rates.");
+        currentSource.TextChanged += (_, _) => confirmed.IsChecked = false;
+        Button activate = NewButton("Fetch current pricing evidence and activate");
         activate.Click += async (_, _) =>
         {
             if (!activate.IsEnabled)
@@ -382,7 +437,7 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
                 activate.IsEnabled = true;
             }
         };
-        host.Children.Add(currentSource);
+        AddField(host, "Current provider pricing URL", currentSource);
         host.Children.Add(evidence);
         host.Children.Add(confirmed);
         host.Children.Add(activate);
@@ -424,10 +479,12 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
             Content = "Generate with Google",
             Command = viewModel.GenerateWithGoogleCommand,
         };
+        generate.Classes.Add("primary");
+        generate.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         host.Children.Add(generate);
         host.Children.Add(new TextBlock
         {
-            Text = "Generate uses the existing fail-closed Stage6 authorization, persisted queue, guarded executor and current pricing evidence. This panel never submits directly to Google.",
+            Text = "Generating sends the approved text to Google and may incur charges. Each new request needs a fresh price review and approval.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
     }
@@ -435,19 +492,15 @@ public sealed class GoogleTtsUsabilityHotfixBinder(
     private void AddVerifiedOutputControls(MainWindow window, StackPanel host, ShellViewModel viewModel)
     {
         TextBlock outputPath = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
-        Button play = new() { Content = "Play verified MP3" };
-        Button export = new() { Content = "Export verified MP3…" };
-        play.Click += (_, _) =>
-        {
-            if (viewModel.PlayLastGeneratedGoogleMp3Command.CanExecute(null))
-                viewModel.PlayLastGeneratedGoogleMp3Command.Execute(null);
-        };
+        Button play = NewButton("Play verified MP3");
+        Button export = NewButton("Export verified MP3…");
+        play.Command = viewModel.PlayLastGeneratedGoogleMp3Command;
         export.Click += async (_, _) => await ExportVerifiedAsync(window, viewModel).ConfigureAwait(true);
 
         void Refresh()
         {
             outputPath.Text = string.IsNullOrWhiteSpace(viewModel.LastGeneratedGoogleMp3Path)
-                ? "No accepted Google MP3 has been exposed yet."
+                ? "Your verified audio will appear here after generation."
                 : $"Verified MP3 · {viewModel.LastGeneratedGoogleMp3Path}";
             play.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3;
             export.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3 && window.StorageProvider.CanSave;

@@ -18,7 +18,7 @@ public sealed class BuiltInPricingCatalogBootstrapService(
     IPricingCatalogHistoryStore history,
     HttpClient httpClient)
 {
-    private const int MaxPricingEvidenceBytes = 2 * 1024 * 1024;
+    private const int MaxPricingEvidenceBytes = 4 * 1024 * 1024;
 
     private readonly V222ControlSet _controls = controls ?? throw new ArgumentNullException(nameof(controls));
     private readonly IPricingCatalogAdmissionService _admission = admission ?? throw new ArgumentNullException(nameof(admission));
@@ -63,7 +63,7 @@ public sealed class BuiltInPricingCatalogBootstrapService(
         if (!string.Equals(finalUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Current pricing evidence redirected away from HTTPS.");
         if (response.Content.Headers.ContentLength is long declaredLength && declaredLength > MaxPricingEvidenceBytes)
-            throw new InvalidOperationException("Current pricing evidence exceeds the 2 MiB safety limit.");
+            throw new InvalidOperationException("Current pricing evidence exceeds the 4 MiB safety limit.");
 
         using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
@@ -76,7 +76,7 @@ public sealed class BuiltInPricingCatalogBootstrapService(
                 break;
             total = checked(total + read);
             if (total > MaxPricingEvidenceBytes)
-                throw new InvalidOperationException("Current pricing evidence exceeds the 2 MiB safety limit.");
+                throw new InvalidOperationException("Current pricing evidence exceeds the 4 MiB safety limit.");
             await buffer.WriteAsync(chunk.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
         }
         if (total == 0)
@@ -100,10 +100,9 @@ public sealed class BuiltInPricingCatalogBootstrapService(
         }
 
         string sourceDescription =
-            $"Authenticated built-in v2.22 pricing · {V222ControlSet.CatalogVersion} · " +
-            $"current-source={observation.SourceUri} · observed-utc={observation.ObservedAtUtc:O} · " +
-            $"source-sha256={observation.Sha256} · source-bytes={observation.ByteCount} · " +
-            "trust=unsigned-observation+explicit-user-match-confirmation";
+            $"v2.22 {V222ControlSet.CatalogVersion};source={observation.SourceUri};" +
+            $"utc={observation.ObservedAtUtc:yyyy-MM-ddTHH:mm:ssZ};" +
+            $"sha256={observation.Sha256};bytes={observation.ByteCount};trust=unsigned+manual";
 
         PricingCatalogSnapshot snapshot = await _history.SaveSnapshotAsync(
             bytes,

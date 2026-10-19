@@ -52,6 +52,9 @@ public static class CompositionRoot
         services.AddSingleton<GoogleGenerationProductionIntentAssemblyCoordinator>();
         services.AddSingleton<GoogleTtsStudioPreflightEvidenceResolver>();
         services.AddSingleton<GoogleTtsStudioRequestIntentFactory>();
+        services.AddSingleton<GoogleTtsStudioTrustContextFactory>();
+        services.AddSingleton<GoogleTtsStudioQueueStateResolver>();
+        services.AddSingleton<GoogleTtsStudioCaptureCoordinator>();
         services.AddSingleton<GoogleGenerationProductionCurrentRequestStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalStateOwner>();
         services.AddSingleton<GoogleGenerationProductionPendingApprovalPublisher>();
@@ -138,6 +141,9 @@ public static class CompositionRoot
             serviceProvider.GetRequiredService<GoogleGenerationProductionPreparationCoordinator>();
         viewModel.ConfigureStage6GoogleGenerationPreparation(async cancellationToken =>
         {
+            ShellViewModel.GoogleTtsStudioRequestSelection selection = viewModel.CaptureGoogleTtsStudioRequestSelection();
+            await serviceProvider.GetRequiredService<GoogleTtsStudioCaptureCoordinator>()
+                .CaptureAsync(selection, cancellationToken).ConfigureAwait(true);
             await intentAssemblyCoordinator.AssembleCurrentAsync(cancellationToken).ConfigureAwait(false);
             GoogleGenerationProductionPendingApprovalStateOwner.PendingState pending = await preparationCoordinator
                 .PrepareCurrentAsync(cancellationToken)

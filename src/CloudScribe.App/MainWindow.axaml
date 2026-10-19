@@ -227,7 +227,7 @@
           </Border>
           <StackPanel Spacing="0" VerticalAlignment="Center" IsVisible="{Binding ShowChromeSurfaces}">
             <TextBlock Text="CloudScribe Pro" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Navigation}" />
-            <TextBlock Text="COSMIC STUDIO" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+            <TextBlock Text="COSMIC STUDIO" Foreground="{DynamicResource Brush.PrimaryBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
           </StackPanel>
           <Border Background="{DynamicResource Brush.SurfaceInset}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="10" Padding="10,5" IsVisible="{Binding IsFullLayout}">
             <TextBlock Text="{Binding BuildLabel}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" VerticalAlignment="Center" />
@@ -316,7 +316,7 @@
         </StackPanel>
 
         <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center" MinWidth="0">
-          <TextBlock Text="{Binding CurrentPage.Eyebrow}" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+          <TextBlock Text="{Binding CurrentPage.Eyebrow}" Foreground="{DynamicResource Brush.SecondaryBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
           <TextBlock Text="{Binding CommandContextTitle}" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Large}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
         </StackPanel>
 
@@ -575,6 +575,10 @@
                 <TextBlock Text="EMPTY WORKSPACE" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" HorizontalAlignment="Center" />
                 <TextBlock Text="Start with a new local document" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Title}" TextAlignment="Center" TextWrapping="Wrap" />
                 <TextBlock Text="No document is selected. Durable creation and import arrive in Stage 3; this Stage 2 state intentionally contains no editable sample text or inactive creation control." Foreground="{DynamicResource Brush.InkMuted}" TextAlignment="Center" TextWrapping="Wrap" FontSize="{DynamicResource Typography.BodyLarge}" />
+                <WrapPanel HorizontalAlignment="Center" Margin="0,6,0,0">
+                  <Button Classes="primary" Content="New document" Command="{Binding NewDocumentCommand}" Margin="5,4" AutomationProperties.Name="Create a new local document from empty workspace" />
+                  <Button Classes="secondary" Content="Import…" Command="{Binding ImportDocumentCommand}" Margin="5,4" AutomationProperties.Name="Import a local document from empty workspace" />
+                </WrapPanel>
               </StackPanel>
             </Border>
 
@@ -654,21 +658,21 @@
           Padding="20">
         <Grid RowDefinitions="Auto,*,Auto" RowSpacing="16">
           <StackPanel>
-            <TextBlock Text="LOCAL CONTEXT" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+            <TextBlock Text="VOICE &amp; OUTPUT" Foreground="{DynamicResource Brush.PrimaryBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
             <TextBlock Text="Workspace inspector" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.SectionTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
           </StackPanel>
 
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="14">
-              <Border Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+              <Border Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
-                  <Border Width="34" Height="34" CornerRadius="11" Background="{DynamicResource Brush.Cyan}">
+                  <Border Width="34" Height="34" CornerRadius="11" Background="{DynamicResource Brush.PrimaryGradient}">
                     <PathIcon Data="M3,12 L8,17 L21,4 L23,6 L8,21 L1,14 Z" Foreground="{DynamicResource Brush.Perimeter}" Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center" />
                   </Border>
                   <StackPanel Grid.Column="1" Spacing="3" MinWidth="0">
-                    <TextBlock Text="LOCAL SESSION" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                    <TextBlock Text="LOCAL WORKSPACE" Foreground="{DynamicResource Brush.PrimaryBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
                     <TextBlock Text="Offline editing ready" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" />
-                    <TextBlock Text="No provider credentials loaded" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" TextWrapping="Wrap" />
+                    <TextBlock Text="Review your account and voice below before generating audio." Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Small}" TextWrapping="Wrap" />
                   </StackPanel>
                 </Grid>
               </Border>
@@ -695,10 +699,10 @@
                 </StackPanel>
               </StackPanel>
 
-              <Border Background="{DynamicResource Brush.WarningSoft}" BorderBrush="{DynamicResource Brush.Warning}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+              <Border Background="{DynamicResource Brush.SurfaceInset}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
                 <StackPanel Spacing="6">
-                  <TextBlock Text="PROVIDER FOUNDATION" Foreground="{DynamicResource Brush.Warning}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
-                  <TextBlock Text="Stage 4 exposes persisted provider account and capability evidence without pretending a provider is usable. Account and voice choices remain disabled until admitted pricing, credential-vault and fresh capability evidence agree." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Meta}" />
+                  <TextBlock Text="BEFORE GENERATING" Foreground="{DynamicResource Brush.PrimaryBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                  <TextBlock Text="Confirm the current provider prices, review the estimate and approve the cost before generating audio." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -747,7 +751,7 @@
         </StackPanel>
 
         <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center" MinWidth="0">
-          <TextBlock Text="PLAYER &amp; QUEUE" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+          <TextBlock Text="PLAYER &amp; QUEUE" Foreground="{DynamicResource Brush.SecondaryBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
           <TextBlock Text="No local audio yet · playback controls remain hidden until verified output exists." Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" TextTrimming="WordEllipsis" MaxLines="2" />
         </StackPanel>
 
@@ -846,25 +850,31 @@
       <Border Width="366" HorizontalAlignment="Right" Margin="0,0,0,8" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1,0,0,0" CornerRadius="18,0,0,18" Padding="22" BoxShadow="{DynamicResource Elevation.Floating}" KeyboardNavigation.TabNavigation="Cycle">
         <Grid RowDefinitions="Auto,*,Auto" RowSpacing="16">
           <Grid ColumnDefinitions="*,Auto">
-            <StackPanel>
-              <TextBlock Text="LOCAL CONTEXT" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
-              <TextBlock Text="Workspace inspector" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Title}" FontWeight="SemiBold" />
+            <StackPanel MinWidth="0">
+              <TextBlock Text="VOICE &amp; OUTPUT" Foreground="{DynamicResource Brush.PrimaryBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+              <TextBlock Text="Workspace inspector" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
             </StackPanel>
             <Button x:Name="InspectorDrawerCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close inspector drawer">
               <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
             </Button>
           </Grid>
-          <StackPanel Grid.Row="1" Spacing="14">
-            <TextBlock Text="Provider controls are visible in Stage 4, but stay disabled with explicit reasons until trusted account, capability and pricing evidence agree." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
-            <StackPanel
-                x:Name="InspectorDrawerProviderControlPreview"
-                Spacing="14"
-                IsVisible="{Binding FeatureAvailability.ShowProviderControls}">
-              <ComboBox IsEnabled="False" PlaceholderText="No admitted account" ToolTip.Tip="Persisted account metadata is inspectable, but selection stays disabled until admitted pricing, credential-vault and fresh capability evidence agree." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable because Stage 4 trust requirements are not satisfied" />
-              <ComboBox IsEnabled="False" PlaceholderText="No voice" ToolTip.Tip="Live voice discovery arrives with provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice unavailable until provider integration" />
-              <Button Classes="secondary" IsEnabled="False" Content="Voice sample unavailable" ToolTip.Tip="Voice preview arrives with live provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice sample unavailable until provider integration" />
+          <ScrollViewer
+              x:Name="InspectorDrawerScrollViewer"
+              Grid.Row="1"
+              VerticalScrollBarVisibility="Auto"
+              HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="14">
+              <TextBlock Text="Unavailable actions stay disabled with explicit reasons. Review your current account, voice and pricing before generating." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
+              <StackPanel
+                  x:Name="InspectorDrawerProviderControlPreview"
+                  Spacing="14"
+                  IsVisible="{Binding FeatureAvailability.ShowProviderControls}">
+                <ComboBox IsEnabled="False" PlaceholderText="No admitted account" ToolTip.Tip="Persisted account metadata is inspectable, but selection stays disabled until admitted pricing, credential-vault and fresh capability evidence agree." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Provider account unavailable because Stage 4 trust requirements are not satisfied" />
+                <ComboBox IsEnabled="False" PlaceholderText="No voice" ToolTip.Tip="Live voice discovery arrives with provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice unavailable until provider integration" />
+                <Button Classes="secondary" IsEnabled="False" Content="Voice sample unavailable" ToolTip.Tip="Voice preview arrives with live provider integration." ToolTip.ShowOnDisabled="True" AutomationProperties.Name="Voice sample unavailable until provider integration" />
+              </StackPanel>
             </StackPanel>
-          </StackPanel>
+          </ScrollViewer>
           <Button Grid.Row="2" Classes="secondary" Content="Close inspector" Command="{Binding CloseTransientSurfacesCommand}" />
         </Grid>
       </Border>
