@@ -198,6 +198,17 @@ public sealed partial class ShellViewModel
                 cancellationToken).ConfigureAwait(true);
             await HandleGoogleGenerationOutcomeAsync(outcome, cancellationToken).ConfigureAwait(true);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            StatusMessage = "Google generation cancelled · approval cleared; check queue status before another request";
+        }
+        catch (Exception exception) when (!IsFatalUiException(exception))
+        {
+            // A failure may occur after dispatch. Keep the durable queue authoritative and do
+            // not imply that repeating the request is free or safe. Provider exception text can
+            // contain private request details, so it does not belong in the visible status.
+            StatusMessage = "Google generation stopped · approval cleared; review queue status before preparing another request";
+        }
         finally
         {
             // Spend approval is single-use at the desktop boundary. Whether the guarded Stage6
@@ -212,12 +223,23 @@ public sealed partial class ShellViewModel
     [RelayCommand(CanExecute = nameof(CanPlayLastGeneratedGoogleMp3))]
     private async Task PlayLastGeneratedGoogleMp3Async(CancellationToken cancellationToken)
     {
-        string path = LastGeneratedGoogleMp3Path
-            ?? throw new InvalidOperationException("No verified Google MP3 output is available.");
-        var play = _playVerifiedGoogleMp3
-            ?? throw new InvalidOperationException("Google MP3 playback is not configured.");
-        await play(path, cancellationToken).ConfigureAwait(true);
-        StatusMessage = $"Google generation · opened verified MP3 · {path}";
+        try
+        {
+            string path = LastGeneratedGoogleMp3Path
+                ?? throw new InvalidOperationException("No verified Google MP3 output is available.");
+            var play = _playVerifiedGoogleMp3
+                ?? throw new InvalidOperationException("Google MP3 playback is not configured.");
+            await play(path, cancellationToken).ConfigureAwait(true);
+            StatusMessage = $"Google generation · opened verified MP3 · {path}";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            StatusMessage = "Google MP3 playback cancelled";
+        }
+        catch (Exception exception) when (!IsFatalUiException(exception))
+        {
+            StatusMessage = "Google MP3 playback unavailable · the verified output could not be opened; no new generation was started";
+        }
     }
 
     private async Task<GoogleGenerationUiExecutionContext> ResolveGoogleExecutionContextAsync(

@@ -14,8 +14,8 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialVault credentialVault)
 {
     internal const string ServiceAccountMarker = "google-service-account:v1";
-    internal const string MetadataSuffix = "/google-service-account-metadata";
-    internal const string PrivateKeySuffix = "/google-service-account-private-key";
+    internal const string MetadataSuffix = ".google-service-account-metadata";
+    internal const string PrivateKeySuffix = ".google-service-account-private-key";
     private const string GoogleApisDnsSuffix = ".googleapis.com";
 
     private readonly ICredentialVault _credentialVault = credentialVault ?? throw new ArgumentNullException(nameof(credentialVault));
@@ -109,6 +109,13 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         bool metadata = await _credentialVault.DeleteAsync(new CredentialReference(credentialReferenceId + MetadataSuffix), cancellationToken).ConfigureAwait(false);
         bool key = await _credentialVault.DeleteAsync(new CredentialReference(credentialReferenceId + PrivateKeySuffix), cancellationToken).ConfigureAwait(false);
         return marker || metadata || key;
+    }
+
+    internal async Task<GoogleServiceAccountCredentialIdentity> ResolveIdentityAsync(
+        string credentialReferenceId, CancellationToken cancellationToken)
+    {
+        GoogleServiceAccountCredentialMetadata metadata = await ResolveMetadataAsync(credentialReferenceId, cancellationToken).ConfigureAwait(false);
+        return new(credentialReferenceId, metadata.ProjectId, metadata.ClientEmail, metadata.PrivateKeyId, metadata.TokenUri);
     }
 
     private async Task<GoogleServiceAccountCredentialMetadata> ResolveMetadataAsync(

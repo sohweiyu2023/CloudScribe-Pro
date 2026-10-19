@@ -139,6 +139,14 @@ public sealed partial class ShellViewModel
 
             StatusMessage = $"Voice Lab · {VoiceLabCatalogResults.Count} trusted voices";
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            StatusMessage = "Voice Lab refresh cancelled";
+        }
+        catch (Exception exception) when (!IsFatalUiException(exception))
+        {
+            StatusMessage = "Voice Lab unavailable · connect an account and check its access, connection, and filters before refreshing";
+        }
         finally
         {
             Volatile.Write(ref _voiceLabCatalogRefreshInFlight, 0);
@@ -186,6 +194,15 @@ public sealed partial class ShellViewModel
             StatusMessage = outcome.CacheHit
                 ? "Voice Lab · trusted audition cache hit"
                 : "Voice Lab · trusted audition generated";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            StatusMessage = "Voice Lab audition cancelled · review queue and spend status before another audition";
+        }
+        catch (Exception exception) when (!IsFatalUiException(exception))
+        {
+            // Failure can follow a provider attempt. Do not retry or expose request details.
+            StatusMessage = "Voice Lab audition stopped · review queue and spend status before preparing another audition";
         }
         finally
         {

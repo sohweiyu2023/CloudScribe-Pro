@@ -77,6 +77,29 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         }
     }
 
+    public async Task<GoogleTextToSpeechCatalogBootstrapResult> RefreshConfiguredAsync(CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<ProviderAccountSnapshot> savedAccounts = await _accounts.ListAsync(cancellationToken).ConfigureAwait(false);
+        ProviderAccountSnapshot[] candidates = savedAccounts.Where(item => item.IsEnabled &&
+            string.Equals(item.Reference.ProviderStableId, GoogleGenerationProvider.StableProviderId, StringComparison.Ordinal)).ToArray();
+        if (candidates.Length != 1)
+            throw new InvalidOperationException("Refreshing the saved Google connection requires exactly one enabled Google account.");
+        ProviderAccountSnapshot account = candidates[0];
+        string credential = account.Reference.CredentialReference?.TargetName
+            ?? throw new InvalidOperationException("The saved Google account has no credential binding.");
+        GoogleServiceAccountCredentialIdentity identity = await _credentialOnboarding.ResolveIdentityAsync(credential, cancellationToken).ConfigureAwait(false);
+        Uri catalogEndpoint = await _credentialOnboarding.ResolveVoiceCatalogEndpointAsync(credential, cancellationToken).ConfigureAwait(false);
+        Uri synthesisEndpoint = await _credentialOnboarding.ResolveSynthesisEndpointAsync(credential, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(account.Reference.EndpointId, GoogleTextToSpeechEndpointIdentity.Create(synthesisEndpoint), StringComparison.Ordinal))
+            throw new InvalidOperationException("The saved synthesis endpoint no longer matches the account binding.");
+        GoogleVoiceCatalogSnapshot catalog = await _catalogClient.LoadAsync(account.Reference, catalogEndpoint, cancellationToken).ConfigureAwait(false);
+        GoogleSynthesisCapabilityEvidence probe = await _synthesisProbe.VerifyAsync(account.Reference, identity.ProjectId, synthesisEndpoint, cancellationToken).ConfigureAwait(false);
+        ProviderAccountSnapshot? current = await _accounts.FindAsync(GoogleGenerationProvider.StableProviderId, account.Reference.AccountId, cancellationToken).ConfigureAwait(false);
+        if (!Equals(current, account))
+            throw new InvalidOperationException("The Google account changed during connection refresh; no refreshed evidence was admitted.");
+        return await PersistObservedEvidenceAsync(account, identity, catalog, probe, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<GoogleTextToSpeechCatalogBootstrapResult> ObserveAndPersistAsync(
         string accountId,
         string displayName,
@@ -112,6 +135,16 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
             isEnabled: true,
             cancellationToken).ConfigureAwait(false);
 
+        return await PersistObservedEvidenceAsync(storedAccount, identity, observedCatalog, synthesisEvidence, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<GoogleTextToSpeechCatalogBootstrapResult> PersistObservedEvidenceAsync(
+        ProviderAccountSnapshot storedAccount,
+        GoogleServiceAccountCredentialIdentity identity,
+        GoogleVoiceCatalogSnapshot observedCatalog,
+        GoogleSynthesisCapabilityEvidence synthesisEvidence,
+        CancellationToken cancellationToken)
+    {
         EvidenceWindow window = CreateEvidenceWindow(observedCatalog, synthesisEvidence);
         string capabilityProvenance = BuildCombinedCapabilityProvenance(observedCatalog.ProvenanceId, synthesisEvidence.ProvenanceId);
         StoredProviderCapabilitySnapshot storedCapability = await PersistCapabilitiesAsync(
@@ -219,8 +252,9 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         DateTimeOffset synthesisCaptured = synthesisEvidence.CapturedAtUtc.ToUniversalTime();
         if (catalogCaptured > nowUtc.AddMinutes(1) || synthesisCaptured > nowUtc.AddMinutes(1))
             throw new InvalidOperationException("Google onboarding observation timestamp is unexpectedly in the future.");
-        DateTimeOffset capturedAtUtc = catalogCaptured > synthesisCaptured ? catalogCaptured : synthesisCaptured;
-        return new EvidenceWindow(nowUtc, capturedAtUtc, nowUtc.Add(EvidenceLifetime));
+        // This is the completed evidence snapshot, assembled after account persistence and both
+        // real provider observations. Their original timestamps/provenance remain on the inputs.
+        return new EvidenceWindow(nowUtc, nowUtc, nowUtc.Add(EvidenceLifetime));
     }
 
     private static string BuildCombinedCapabilityProvenance(string catalogProvenanceId, string synthesisProvenanceId)

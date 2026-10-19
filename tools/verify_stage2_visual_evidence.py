@@ -9,6 +9,7 @@ import pathlib
 import struct
 import sys
 import zlib
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -50,6 +51,22 @@ EXPECTED_CASES = {
 
 class EvidenceError(ValueError):
     pass
+
+
+def expected_capture_repository_version(state: dict[str, object], source_root: pathlib.Path) -> object:
+    version = state.get("repository_version")
+    # Stage 8 retains the certified 1.0.0 checkpoint identity. The explicit
+    # Windows 1.0.1 patch captures its actual assembly identity instead.
+    if (state.get("current_stage") == 8 and version == "1.0.0"
+            and state.get("required_dotnet_sdk") == "10.0.401"):
+        sdk = json.loads((source_root / "global.json").read_text(encoding="utf-8-sig"))
+        project = ET.parse(source_root / "src/CloudScribe.App/CloudScribe.App.csproj").getroot()
+        if (sdk.get("sdk", {}).get("version") == "10.0.401"
+                and project.findtext("./PropertyGroup/Version") == "1.0.1"
+                and project.findtext("./PropertyGroup/InformationalVersion") == "1.0.1"
+                and project.findtext("./PropertyGroup/FileVersion") == "1.0.1.0"):
+            return "1.0.1"
+    return version
 
 
 def read_bounded_bytes(path: pathlib.Path, maximum_bytes: int, label: str) -> bytes:
@@ -392,7 +409,7 @@ def validate(root: pathlib.Path) -> None:
     if manifest.get("schema") != "cloudscribe-stage2-visual-evidence-1.2":
         raise EvidenceError("unexpected visual evidence schema")
     current_state = json.loads((SOURCE_ROOT / "SESSION_STATE.json").read_text(encoding="utf-8"))
-    expected_repository_version = current_state.get("repository_version")
+    expected_repository_version = expected_capture_repository_version(current_state, SOURCE_ROOT)
     if manifest.get("repository_version") != expected_repository_version:
         raise EvidenceError(
             "visual evidence repository_version does not match the current SESSION_STATE.json"

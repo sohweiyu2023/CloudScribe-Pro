@@ -3,7 +3,9 @@ using CloudScribe.App.Navigation;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Activation;
 using CloudScribe.Application.Diagnostics;
+using CloudScribe.Application.Generation;
 using CloudScribe.Application.Observability;
+using CloudScribe.Domain.Generation;
 using CloudScribe.Domain.Observability;
 using CloudScribe.Providers.Abstractions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -149,6 +151,250 @@ public sealed class ShellViewModelStateTests
         Assert.False(viewModel.CanOpenCompletionOutputFolder);
         Assert.False(requested);
         Assert.Equal("Output folder is unavailable", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task GoogleGenerationFailureClearsSingleUseApprovalWithoutEscapingOrExposingPrivateDetails()
+    {
+        using ShellViewModel viewModel = CreateViewModel();
+        int resolutions = 0;
+        viewModel.ConfigureStage6GoogleGeneration(_ =>
+        {
+            resolutions++;
+            return Task.FromException<GoogleGenerationUiExecutionContext>(
+                new InvalidOperationException("private-document-text credential-secret"));
+        });
+        ConfigureGoogleSpendReview(viewModel);
+        await viewModel.PrepareGoogleGenerationSpendReviewAsync(TestContext.Current.CancellationToken);
+        await viewModel.ApproveGoogleGenerationSpendAsync(50, true, TestContext.Current.CancellationToken);
+        Assert.True(viewModel.GenerateWithGoogleCommand.CanExecute(null));
+
+        await viewModel.GenerateWithGoogleCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, resolutions);
+        Assert.Null(viewModel.PreparedGoogleGenerationSpendReview);
+        Assert.False(viewModel.PreparedGoogleGenerationSpendApproved);
+        Assert.False(viewModel.GenerateWithGoogleCommand.CanExecute(null));
+        Assert.True(viewModel.CanPrepareGoogleGenerationSpend);
+        Assert.Equal(
+            "Google generation stopped · approval cleared; review queue status before preparing another request",
+            viewModel.StatusMessage);
+
+        await viewModel.PrepareGoogleGenerationSpendReviewAsync(TestContext.Current.CancellationToken);
+        Assert.False(viewModel.CanGenerateWithGoogle);
+        Assert.True(viewModel.CanApproveGoogleGenerationSpend);
+    }
+
+    [Fact]
+    public async Task GoogleGenerationCancellationClearsApprovalAndReleasesOperationState()
+    {
+        using ShellViewModel viewModel = CreateViewModel();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.ConfigureStage6GoogleGeneration(async cancellationToken =>
+        {
+            entered.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("Cancellation was expected.");
+        });
+        ConfigureGoogleSpendReview(viewModel);
+        await viewModel.PrepareGoogleGenerationSpendReviewAsync(TestContext.Current.CancellationToken);
+        await viewModel.ApproveGoogleGenerationSpendAsync(50, true, TestContext.Current.CancellationToken);
+
+        Task execution = viewModel.GenerateWithGoogleCommand.ExecuteAsync(null);
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        viewModel.GenerateWithGoogleCommand.Cancel();
+        await execution;
+
+        Assert.Null(viewModel.PreparedGoogleGenerationSpendReview);
+        Assert.False(viewModel.PreparedGoogleGenerationSpendApproved);
+        Assert.False(viewModel.CanGenerateWithGoogle);
+        Assert.True(viewModel.CanPrepareGoogleGenerationSpend);
+        Assert.Equal(
+            "Google generation cancelled · approval cleared; check queue status before another request",
+            viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task GoogleGenerationFatalFailureIsNotSuppressed()
+    {
+        using ShellViewModel viewModel = CreateViewModel();
+#pragma warning disable CA2201 // Deliberately inject a fatal exception to verify that the UI catch filter preserves it.
+        viewModel.ConfigureStage6GoogleGeneration(_ =>
+            Task.FromException<GoogleGenerationUiExecutionContext>(new AccessViolationException()));
+#pragma warning restore CA2201
+        ConfigureGoogleSpendReview(viewModel);
+        await viewModel.PrepareGoogleGenerationSpendReviewAsync(TestContext.Current.CancellationToken);
+        await viewModel.ApproveGoogleGenerationSpendAsync(50, true, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<AccessViolationException>(() => viewModel.GenerateWithGoogleCommand.ExecuteAsync(null));
+
+        Assert.Null(viewModel.PreparedGoogleGenerationSpendReview);
+        Assert.False(viewModel.PreparedGoogleGenerationSpendApproved);
+        Assert.True(viewModel.CanPrepareGoogleGenerationSpend);
+    }
+
+    [Fact]
+    public async Task GooglePlaybackWithoutAcceptedOutputReportsFailureWithoutGenerating()
+    {
+        using ShellViewModel viewModel = CreateViewModel();
+        bool outputRequested = false;
+        viewModel.ConfigureStage6GoogleGenerationOutput(
+            (_, _) =>
+            {
+                outputRequested = true;
+                return Task.FromResult("unused.mp3");
+            },
+            (_, _) => Task.CompletedTask);
+
+        await viewModel.PlayLastGeneratedGoogleMp3Command.ExecuteAsync(null);
+
+        Assert.False(outputRequested);
+        Assert.Null(viewModel.LastGeneratedGoogleMp3Path);
+        Assert.False(viewModel.CanPlayLastGeneratedGoogleMp3);
+        Assert.Equal(
+            "Google MP3 playback unavailable · the verified output could not be opened; no new generation was started",
+            viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task VoiceCatalogWithoutAccountAuthorizationStaysUsableWithoutDispatch()
+    {
+        using ShellViewModel viewModel = CreateViewModel();
+        int requests = 0;
+        var catalog = new VoiceLabCatalogQueryService((_, _) =>
+        {
+            requests++;
+            return Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([]);
+        });
+        viewModel.ConfigureStage7VoiceLabCatalog(catalog, _ => Task.FromResult(CatalogState(accountAuthorized: false)));
+
+        await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, requests);
+        Assert.Empty(viewModel.VoiceLabCatalogResults);
+        Assert.True(viewModel.CanRefreshVoiceLabCatalog);
+        Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
+        Assert.Equal(
+            "Voice Lab unavailable · connect an account and check its access, connection, and filters before refreshing",
+            viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task VoiceCatalogFailureDoesNotRetryOrExposePrivateDetailsAndAllowsExplicitRefresh()
+    {
+        using ShellViewModel viewModel = CreateViewModel();
+        int requests = 0;
+        var catalog = new VoiceLabCatalogQueryService((_, _) =>
+        {
+            requests++;
+            return requests == 1
+                ? Task.FromException<IReadOnlyList<VoiceLabCatalogSelection>>(
+                    new InvalidOperationException("private-account credential-secret"))
+                : Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([VoiceSelection()]);
+        });
+        viewModel.ConfigureStage7VoiceLabCatalog(catalog, _ => Task.FromResult(CatalogState(accountAuthorized: true)));
+
+        await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, requests);
+        Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
+        Assert.Equal(
+            "Voice Lab unavailable · connect an account and check its access, connection, and filters before refreshing",
+            viewModel.StatusMessage);
+
+        await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, requests);
+        Assert.Single(viewModel.VoiceLabCatalogResults);
+        Assert.Equal(VoiceSelection(), viewModel.SelectedVoiceLabVoice);
+        Assert.Equal("Voice Lab · 1 trusted voices", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task VoiceCatalogCancellationReleasesCommandWithoutRetry()
+    {
+        using ShellViewModel viewModel = CreateViewModel();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int requests = 0;
+        var catalog = new VoiceLabCatalogQueryService(async (_, cancellationToken) =>
+        {
+            requests++;
+            entered.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+            return Array.Empty<VoiceLabCatalogSelection>();
+        });
+        viewModel.ConfigureStage7VoiceLabCatalog(catalog, _ => Task.FromResult(CatalogState(accountAuthorized: true)));
+
+        Task execution = viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null);
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        viewModel.RefreshVoiceLabCatalogCommand.Cancel();
+        await execution;
+
+        Assert.Equal(1, requests);
+        Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
+        Assert.Equal("Voice Lab refresh cancelled", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task VoiceAuditionFailureDoesNotRetryOrExposePrivateDetailsAndReleasesCommand()
+    {
+        using ShellViewModel viewModel = CreateViewModel();
+        VoiceLabCatalogSelection selected = VoiceSelection();
+        int preparations = 0;
+        int refreshes = 0;
+        viewModel.SelectedVoiceLabVoice = selected;
+        viewModel.ConfigureStage7VoiceLabAudition(
+            (_, _, _) =>
+            {
+                preparations++;
+                return Task.FromException<VoiceLabAuditionExecutionService>(
+                    new InvalidOperationException("private-audition-text credential-secret"));
+            },
+            (_, _) => Task.FromResult(new VoiceLabAuditionRequest(
+                selected, CachePolicyEligible: false, ForceFresh: true,
+                ExplicitSpendApproved: false, PricingCurrent: true, OutputFormat: "mp3")),
+            (selection, _) =>
+            {
+                refreshes++;
+                return Task.FromResult(selection);
+            });
+
+        await viewModel.AuditionSelectedVoiceCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, preparations);
+        Assert.Equal(1, refreshes);
+        Assert.Same(selected, viewModel.SelectedVoiceLabVoice);
+        Assert.True(viewModel.AuditionSelectedVoiceCommand.CanExecute(null));
+        Assert.Equal(
+            "Voice Lab audition stopped · review queue and spend status before preparing another audition",
+            viewModel.StatusMessage);
+    }
+
+    private static VoiceLabCatalogUiState CatalogState(bool accountAuthorized) => new(
+        new VoiceLabCatalogQuery("provider", "account", "project", null, null, false),
+        accountAuthorized,
+        ProjectAuthorized: true,
+        PrivateVoiceAccessAuthorized: false);
+
+    private static VoiceLabCatalogSelection VoiceSelection() => new(
+        VoiceStableId: "voice",
+        ProviderStableId: "provider",
+        AccountStableId: "account",
+        ProjectStableId: "project",
+        CapabilityEvidenceId: "capability",
+        VoiceFingerprint: "fingerprint",
+        CapabilityCurrent: true,
+        VoiceEnabled: true,
+        AccountProjectAuthorized: true);
+
+    private static void ConfigureGoogleSpendReview(ShellViewModel viewModel)
+    {
+        viewModel.ConfigureStage6GoogleGenerationPreparation(_ => Task.FromResult(
+            new ShellViewModel.GoogleGenerationSpendReview("USD", 2, 50, "pricing-test", "voice-test", new string('a', 64))));
+        viewModel.ConfigureStage6GoogleGenerationSpendApproval((_, _, _) => Task.CompletedTask);
+        viewModel.ConfigureStage6GoogleGenerationOutput(
+            (_, _) => Task.FromResult("unused.mp3"),
+            (_, _) => Task.CompletedTask);
     }
 
     private static ShellViewModel CreateViewModel() => new(
