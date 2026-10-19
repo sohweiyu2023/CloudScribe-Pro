@@ -13,12 +13,16 @@ public sealed class Stage7VoiceLabCatalogShellBinder(
     public void Bind(ShellViewModel viewModel)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
-        viewModel.ConfigureStage7VoiceLabCatalog(catalogService, CaptureCurrentStateAsync);
+        viewModel.ConfigureStage7VoiceLabCatalog(
+            catalogService,
+            cancellationToken => CaptureCurrentStateAsync(viewModel, cancellationToken));
     }
 
     public async Task<VoiceLabCatalogUiState> CaptureCurrentStateAsync(
+        ShellViewModel viewModel,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(viewModel);
         cancellationToken.ThrowIfCancellationRequested();
         DateTimeOffset nowUtc = timeProvider.GetUtcNow();
         IReadOnlyList<VoiceLabProjectAuthorizationEvidence> persisted = await projectAuthorizations
@@ -41,8 +45,8 @@ public sealed class Stage7VoiceLabCatalogShellBinder(
             selected.ProviderId,
             selected.AccountId,
             selected.ProjectId,
-            SearchText: null,
-            Locale: null,
+            SearchText: viewModel.VoiceLabSearchText,
+            Locale: viewModel.VoiceLabLocaleFilter,
             IncludePrivateVoices: false);
 
         VoiceLabCatalogAuthorizationEvidence evidence = await currentEvidence

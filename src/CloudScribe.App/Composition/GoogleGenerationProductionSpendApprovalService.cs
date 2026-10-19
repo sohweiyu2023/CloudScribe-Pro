@@ -38,14 +38,20 @@ public sealed class GoogleGenerationProductionSpendApprovalService
                     pending.CurrentEstimateMinorUnits,
                     confirmation.AuthorizedMaximumMinorUnits);
 
+                // Pending snapshots deliberately cannot claim spend approval. Promote only this
+                // exact compiled snapshot after the user authorizes the envelope that hashes those
+                // same provider bytes, then require the full runtime validator before persistence.
+                var approvedSnapshot = pending.Snapshot with { PricingApproved = true };
+                GoogleGenerationProductionUiSnapshotValidator.Validate(approvedSnapshot);
+
                 _ = GoogleGenerationProductionRuntimeRequestFactory.Create(
                     authorization,
-                    pending.Snapshot,
+                    approvedSnapshot,
                     pending.CurrentEstimateMinorUnits).Validate();
 
                 await _stateOwner.ApproveAsync(
                     authorization,
-                    pending.Snapshot,
+                    approvedSnapshot,
                     pending.CurrentEstimateMinorUnits,
                     currentCancellationToken).ConfigureAwait(false);
             },

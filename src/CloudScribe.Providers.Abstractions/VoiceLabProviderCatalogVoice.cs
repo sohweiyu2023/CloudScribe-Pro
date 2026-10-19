@@ -4,12 +4,26 @@ public sealed record VoiceLabProviderCatalogVoice(
     string VoiceStableId,
     string VoiceFingerprint,
     bool VoiceEnabled,
-    bool AccountProjectAuthorized)
+    bool AccountProjectAuthorized,
+    IReadOnlyList<string>? LanguageCodes = null)
 {
     public VoiceLabProviderCatalogVoice Validate()
     {
         RequireCanonical(VoiceStableId, nameof(VoiceStableId));
         RequireCanonical(VoiceFingerprint, nameof(VoiceFingerprint));
+        if (LanguageCodes is not null)
+        {
+            if (LanguageCodes.Count == 0)
+                throw new InvalidOperationException("Voice Lab provider voice language metadata cannot be an empty collection.");
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string languageCode in LanguageCodes)
+            {
+                RequireCanonical(languageCode, nameof(LanguageCodes));
+                if (!seen.Add(languageCode))
+                    throw new InvalidOperationException("Voice Lab provider voice language metadata contains duplicate language codes.");
+            }
+        }
         return this;
     }
 

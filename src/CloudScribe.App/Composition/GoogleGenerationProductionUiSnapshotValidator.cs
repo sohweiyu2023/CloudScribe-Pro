@@ -4,13 +4,31 @@ using CloudScribe.Infrastructure.Generation;
 namespace CloudScribe.App.Composition;
 
 /// <summary>
-/// Revalidates the cross-layer identities in a Stage6 UI execution snapshot before it may
-/// enter production runtime composition. This validator deliberately does not manufacture
-/// authorization/currentness flags; callers must supply them from their real evidence sources.
+/// Revalidates the cross-layer identities in a Stage6 UI execution snapshot. Pending approval
+/// snapshots must already satisfy every request/account/capability/pricing/admission/queue and
+/// post-compile limit gate, but cannot claim explicit spend approval until the user approves the
+/// exact compiled submission. Runtime snapshots require that final approval as well.
 /// </summary>
 public static class GoogleGenerationProductionUiSnapshotValidator
 {
-    public static GoogleGenerationUiExecutionSnapshot Validate(GoogleGenerationUiExecutionSnapshot snapshot)
+    public static GoogleGenerationUiExecutionSnapshot Validate(GoogleGenerationUiExecutionSnapshot snapshot) =>
+        ValidateCore(snapshot, requirePricingApproval: true);
+
+    public static GoogleGenerationUiExecutionSnapshot ValidatePendingApproval(GoogleGenerationUiExecutionSnapshot snapshot)
+    {
+        GoogleGenerationUiExecutionSnapshot validated = ValidateCore(snapshot, requirePricingApproval: false);
+        if (validated.PricingApproved)
+        {
+            throw new InvalidOperationException(
+                "Stage6 pending approval snapshot cannot claim explicit pricing/spend approval before the user approves the exact compiled submission.");
+        }
+
+        return validated;
+    }
+
+    private static GoogleGenerationUiExecutionSnapshot ValidateCore(
+        GoogleGenerationUiExecutionSnapshot snapshot,
+        bool requirePricingApproval)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         if (snapshot.UiSelection is null || snapshot.ProviderRequest is null || snapshot.AdmittedTrust is null ||
@@ -58,7 +76,7 @@ public static class GoogleGenerationProductionUiSnapshotValidator
 
         if (!snapshot.AccountAuthorized || !snapshot.ProjectAuthorized || !snapshot.CapabilityCurrent ||
             !snapshot.PricingCurrent || !snapshot.AdmissionCurrent || !snapshot.AccountCredentialAvailable ||
-            !snapshot.PricingApproved || !snapshot.PostCompileLimitsSatisfied)
+            !snapshot.PostCompileLimitsSatisfied || (requirePricingApproval && !snapshot.PricingApproved))
         {
             throw new InvalidOperationException("Stage6 production UI snapshot contains non-current or non-authorized evidence.");
         }

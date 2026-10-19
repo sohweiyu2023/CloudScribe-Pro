@@ -88,7 +88,8 @@ public sealed class GoogleGenerationProductionSpendApprovalServiceTests
         GoogleGenerationProductionSubmissionState? approved = await owner.ResolveCurrentAsync(CancellationToken.None);
         Assert.NotNull(approved);
         Assert.Equal(pending.Envelope, approved.SubmissionEnvelope);
-        Assert.Same(pending.Snapshot, approved.Snapshot);
+        Assert.Equal(pending.Snapshot with { PricingApproved = true }, approved.Snapshot);
+        Assert.True(approved.Snapshot.PricingApproved);
         Assert.Equal(125, approved.CurrentEstimateMinorUnits);
     }
 
@@ -164,7 +165,7 @@ public sealed class GoogleGenerationProductionSpendApprovalServiceTests
             GoogleGenerationReconciliationResolutionEvidence.None,
             true,
             true,
-            true,
+            false,
             true);
 
     private static GoogleGenerationPersistedQueueState CreateQueueState() =>

@@ -9,7 +9,8 @@ public sealed record VoiceLabCatalogSelection(
     string VoiceFingerprint,
     bool CapabilityCurrent,
     bool VoiceEnabled,
-    bool AccountProjectAuthorized)
+    bool AccountProjectAuthorized,
+    IReadOnlyList<string>? LanguageCodes = null)
 {
     public VoiceLabCatalogSelection Validate()
     {
@@ -22,6 +23,19 @@ public sealed record VoiceLabCatalogSelection(
         if (!CapabilityCurrent) throw new InvalidOperationException("Voice Lab selection requires current capability evidence.");
         if (!VoiceEnabled) throw new InvalidOperationException("Voice Lab selection references a disabled voice.");
         if (!AccountProjectAuthorized) throw new InvalidOperationException("Voice Lab selection is not authorized for the current account/project boundary.");
+        if (LanguageCodes is not null)
+        {
+            if (LanguageCodes.Count == 0)
+                throw new InvalidOperationException("Voice Lab selection language metadata cannot be an empty collection.");
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string languageCode in LanguageCodes)
+            {
+                RequireCanonical(languageCode, nameof(LanguageCodes));
+                if (!seen.Add(languageCode))
+                    throw new InvalidOperationException("Voice Lab selection language metadata contains duplicate language codes.");
+            }
+        }
         return this;
     }
 

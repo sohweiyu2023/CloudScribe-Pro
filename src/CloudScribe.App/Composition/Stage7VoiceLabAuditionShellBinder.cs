@@ -15,9 +15,10 @@ public sealed class Stage7VoiceLabAuditionShellBinder(
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         viewModel.ConfigureStage7VoiceLabAudition(
-            CreateExecutionServiceAsync,
+            (selected, request, cancellationToken) =>
+                CreateExecutionServiceAsync(viewModel, selected, request, cancellationToken),
             CaptureCurrentRequestAsync,
-            RefreshCurrentSelectionAsync);
+            (selected, cancellationToken) => RefreshCurrentSelectionAsync(viewModel, selected, cancellationToken));
     }
 
     private async Task<VoiceLabAuditionRequest> CaptureCurrentRequestAsync(
@@ -44,13 +45,15 @@ public sealed class Stage7VoiceLabAuditionShellBinder(
     }
 
     private async Task<VoiceLabCatalogSelection> RefreshCurrentSelectionAsync(
+        ShellViewModel viewModel,
         VoiceLabCatalogSelection selected,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(selected);
         selected.Validate();
         VoiceLabCatalogUiState state = await catalogShell
-            .CaptureCurrentStateAsync(cancellationToken)
+            .CaptureCurrentStateAsync(viewModel, cancellationToken)
             .ConfigureAwait(false);
         if (!string.Equals(state.Query.ProviderId, selected.ProviderStableId, StringComparison.Ordinal) ||
             !string.Equals(state.Query.AccountId, selected.AccountStableId, StringComparison.Ordinal) ||
@@ -72,10 +75,12 @@ public sealed class Stage7VoiceLabAuditionShellBinder(
     }
 
     private async Task<VoiceLabAuditionExecutionService> CreateExecutionServiceAsync(
+        ShellViewModel viewModel,
         VoiceLabCatalogSelection selected,
         VoiceLabAuditionRequest request,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(selected);
         ArgumentNullException.ThrowIfNull(request);
         selected.Validate();
@@ -85,7 +90,11 @@ public sealed class Stage7VoiceLabAuditionShellBinder(
             throw new InvalidOperationException("Production Voice Lab shell auditions are fresh-only and may not enter an unverified cache path.");
 
         IVoiceLabAuthorizedAuditionExecutor executor = await executorFactory
-            .CreateAsync(request, RefreshCurrentSelectionAsync, cancellationToken)
+            .CreateAsync(
+                request,
+                (currentSelection, refreshToken) =>
+                    RefreshCurrentSelectionAsync(viewModel, currentSelection, refreshToken),
+                cancellationToken)
             .ConfigureAwait(false);
         var coordinator = new VoiceLabAuditionCoordinator(FailClosedCacheReadAsync, executor);
         return new VoiceLabAuditionExecutionService(coordinator, selected);

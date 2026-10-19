@@ -35,7 +35,8 @@ public sealed class Stage6CurrentRequestReachabilityContractTests
         string[] requiredProductionWiring =
         [
             "services.AddSingleton<GoogleGenerationProductionCurrentRequestStateOwner>();",
-            "preparationCoordinator.PrepareCurrentAsync(cancellationToken)",
+            "GoogleGenerationProductionPreparationCoordinator preparationCoordinator",
+            ".PrepareCurrentAsync(cancellationToken)",
             "approvalService.ApproveExplicitAsync(",
         ];
         foreach (string required in requiredProductionWiring)
