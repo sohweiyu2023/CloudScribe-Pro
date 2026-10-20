@@ -10,6 +10,7 @@ public sealed class StudioPreferencesStore
     private readonly string _path;
     private bool _readable = true;
     public StudioPreferences State { get; private set; } = new();
+    public bool IsFreshProfile { get; }
     public string? Warning { get; private set; }
     public event EventHandler? Changed;
 
@@ -18,6 +19,7 @@ public sealed class StudioPreferencesStore
     public StudioPreferencesStore(string path)
     {
         _path = Path.GetFullPath(path);
+        IsFreshProfile = !File.Exists(_path);
         try
         {
             if (!File.Exists(_path)) return;
@@ -35,6 +37,12 @@ public sealed class StudioPreferencesStore
     }
 
     public void Remember(VoiceSetup setup) => Commit(State with { LastUsed = setup });
+    public void RememberDocument(Guid documentId)
+    {
+        if (documentId == Guid.Empty) throw new ArgumentException("A local document identity is required.", nameof(documentId));
+        if (State.LastDocumentId != documentId) Commit(State with { LastDocumentId = documentId });
+    }
+    public void RememberQuickStartSeen() => Commit(State with { QuickStartSeen = true });
     public void RememberDisplay(CloudScribe.App.Design.ThemePreference theme, bool reducedMotion) => Commit(State with { Theme = theme, ReducedMotion = reducedMotion });
 
     public void SaveSetup(VoiceSetup setup)

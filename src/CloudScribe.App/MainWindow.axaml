@@ -321,6 +321,12 @@
         </StackPanel>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+          <Button x:Name="CreateMp3Button" Classes="primary" Content="Create MP3"
+                  ToolTip.Tip="Review the current text, voice and cost before creating an MP3"
+                  AutomationProperties.Name="Create MP3" />
+          <Button x:Name="QuickStartHelpButton" Classes="secondary" Content="Help"
+                  ToolTip.Tip="Open the step-by-step Quick Start walkthrough"
+                  AutomationProperties.Name="Help and Quick Start" />
           <Button x:Name="WorkspaceSettingsButton" Classes="secondary" Content="Setups"
                   ToolTip.Tip="Saved voice setups, connection status and local recovery"
                   AutomationProperties.Name="Saved setups and local status" />
