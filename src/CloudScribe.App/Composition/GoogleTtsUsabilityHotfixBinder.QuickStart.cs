@@ -19,7 +19,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         new("Write or import text",
             "Create a local document in Studio or import TXT, Markdown, HTML or DOCX. Type or paste a short passage. Your work saves locally as you edit; Ctrl+S makes a checkpoint."),
         new("Connect Google once",
-            "To create audio, use your own Google Cloud project with Text-to-Speech enabled and billing you control. In Studio, open Advanced tools and Connect or change Google account. Supply your own service-account JSON there; CloudScribe stores it in Windows Credential Manager. A saved connection is shown as saved. Do not paste your key again on each visit.",
+            "To create audio, use your own Google Cloud project with Text-to-Speech enabled and billing you control. In Studio, open Advanced tools and Connect or change Google account. For a first connection, keep the suggested local names, global region and official URLs; paste your own service-account JSON and choose Configure Google TTS securely. Those names are labels on this computer. A different connection needs unused local names. Your key stays in Windows Credential Manager; do not paste it again on each visit.",
             "https://cloud.google.com/text-to-speech/docs/before-you-begin", "Open official Google setup guide"),
         new("Choose a voice",
             "Open Create MP3. You can choose a saved voice setup, then select Refresh real Google voices. Pick a voice from the returned list. A remembered name is only a preference until the current catalog confirms it. The access check expires after about 30 minutes, so refresh again when prompted."),

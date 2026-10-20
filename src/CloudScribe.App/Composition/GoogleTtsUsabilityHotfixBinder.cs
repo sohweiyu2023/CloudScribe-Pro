@@ -156,6 +156,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             NewButton("Configure Google TTS securely"));
         controls.ServiceAccountJson.AcceptsReturn = true;
         controls.ServiceAccountJson.MinHeight = 86;
+        controls.AccountId.Text = "google-home";
+        controls.DisplayName.Text = "My Google Text-to-Speech";
+        controls.CredentialReference.Text = "google-home-key";
         controls.RegionId.Text = "global";
         controls.CatalogEndpoint.Text = "https://texttospeech.googleapis.com/v1/voices";
         controls.SynthesisEndpoint.Text = "https://texttospeech.googleapis.com/v1/text:synthesize";
