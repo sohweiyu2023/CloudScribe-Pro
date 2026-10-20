@@ -123,7 +123,7 @@ internal static class Program
         startup.Token.ThrowIfCancellationRequested();
         startup.CancelAfter(Timeout.InfiniteTimeSpan);
         CloudScribeLog.DesktopLifetimeStarting(logger);
-        int exitCode = BuildAvaloniaApp(host).StartWithClassicDesktopLifetime(args);
+        int exitCode = await DesktopApartment.RunAsync(() => BuildAvaloniaApp(host).StartWithClassicDesktopLifetime(args)).ConfigureAwait(false);
         CloudScribeLog.DesktopLifetimeExited(logger, exitCode);
         return exitCode;
     }

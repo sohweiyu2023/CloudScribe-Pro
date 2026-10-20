@@ -37,12 +37,17 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "Guided desktop dialog layout and event wiring; approval and submission remain in the existing tested services.")]
-    private async Task OpenCreateMp3Async(MainWindow owner, ShellViewModel model)
+    private async Task OpenCreateMp3Async(MainWindow owner, ShellViewModel model, bool guided = false)
     {
+        if (_walkthroughRunning && !guided)
+        {
+            _studioWalkthrough?.NavigateToCreation();
+            return;
+        }
         Window dialog = new()
         {
             Title = "Create MP3",
-            Width = 660,
+            Width = guided ? 1100 : 660,
             Height = 740,
             MinWidth = 520,
             MinHeight = 500,
@@ -54,6 +59,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         TextBlock Text(string value) => new() { Text = value, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
         body.Children.Add(Text("Choose your voice, review the cost, then create your MP3."));
         TextBlock connection = Text("Reading saved connection...");
+        connection.Name = "GuideConnectionStatus";
+        AutomationProperties.SetName(connection, "Google connection status");
         body.Children.Add(connection);
         await LoadConnectionStatusAsync(connection).ConfigureAwait(true);
         TextBlock document = Text(string.Empty);
@@ -117,6 +124,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         CheckBox consent = NewConfirmation("I approve this exact request and its displayed maximum cost.");
         Button create = NewButton("Create MP3 — approve and send to Google");
         create.Classes.Add("primary");
+        create.Name = "GuideGenerateButton";
         ShellViewModel.GoogleGenerationSpendReview? displayed = null;
         bool busy = false;
         void Refresh()
@@ -186,7 +194,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         Button close = NewButton("Close and return to Studio");
         close.Click += (_, _) => dialog.Close();
         Grid layout = new() { RowDefinitions = new RowDefinitions("*,Auto") };
-        layout.Children.Add(new ScrollViewer { Content = body });
+        ScrollViewer bodyScroll = new() { Content = body };
+        layout.Children.Add(bodyScroll);
         StackPanel footer = new() { Spacing = 10, Margin = new Thickness(20, 8, 20, 16) };
         footer.Children.Add(estimate);
         footer.Children.Add(consent);
@@ -196,9 +205,19 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         footer.Children.Add(close);
         Grid.SetRow(footer, 1);
         layout.Children.Add(footer);
+        if (guided)
+        {
+            layout.Children.Clear();
+            body.Children.Add(footer);
+            layout.Children.Add(bodyScroll);
+        }
         dialog.Content = layout;
         Refresh();
-        try { await dialog.ShowDialog(owner).ConfigureAwait(true); }
+        try
+        {
+            if (guided) await RunGuidedDialogAsync(dialog, owner).ConfigureAwait(true);
+            else await dialog.ShowDialog(owner).ConfigureAwait(true);
+        }
         finally
         {
             model.PropertyChanged -= OnDocumentChanged;
