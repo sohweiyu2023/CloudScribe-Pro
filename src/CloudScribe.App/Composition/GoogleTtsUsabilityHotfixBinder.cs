@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.Globalization;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using CloudScribe.App.ViewModels;
@@ -123,7 +124,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         changeConnection.Click += (_, _) => { connectionSetup.IsVisible = true; connectionSetup.IsExpanded = true; };
         advanced.Children.Add(changeConnection);
         _ = LoadConnectionPresentationAsync(connectionStatus, connectionSetup, changeConnection);
-        AddCatalogControls(AddSection(advanced, "Voice catalog and filters", expanded: false), viewModel);
+        AddCatalogControls(AddSection(advanced, "Voice catalog and filters", expanded: false), viewModel, window);
         AddPricingActivationControls(AddSection(advanced, "Pricing source", expanded: false), viewModel);
         AddOutputAndSpendControls(AddSection(advanced, "Detailed request review", expanded: false), viewModel);
         AddGenerateControls(advanced, viewModel);
@@ -214,7 +215,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         }
     }
 
-    private void AddCatalogControls(StackPanel host, ShellViewModel viewModel)
+    private void AddCatalogControls(StackPanel host, ShellViewModel viewModel, Window lifetime)
     {
         host.Children.Add(new TextBlock
         {
@@ -235,52 +236,75 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         host.Children.Add(NewDescription("Apply language and search filters with Refresh voices."));
         AddField(host, "Language or locale", locale);
         AddField(host, "Search voices", search);
-        AddRefreshControl(host, viewModel, locale, search);
-        AddVoiceSelector(host, viewModel);
+        AddRefreshControl(host, viewModel, locale, search, lifetime);
+        AddVoiceSelector(host, viewModel, lifetime);
     }
 
-    private void AddRefreshControl(
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "Voice loading controls and cancellation are one UI lifetime.")]
+    private Func<Task> AddRefreshControl(
         StackPanel host,
         ShellViewModel viewModel,
         TextBox locale,
         TextBox search,
-        Window? lifetime = null)
+        Window? lifetime = null,
+        bool autoLoad = false)
     {
         Button refresh = NewButton("Refresh real Google voices");
-        refresh.Click += async (_, _) =>
+        AutomationProperties.SetName(locale, "Voice language filter");
+        AutomationProperties.SetName(search, "Voice name search");
+        Button clear = NewButton("Clear voice search and reload");
+        TextBlock status = NewDescription(viewModel.ConnectedVoiceCatalogStatus);
+        TextBlock applied = NewDescription(string.Empty);
+        CancellationTokenSource windowLifetime = new();
+        bool closed = false;
+        async Task RefreshAsync()
         {
-            if (!refresh.IsEnabled)
-                return;
-            refresh.IsEnabled = false;
-            try
-            {
-                viewModel.VoiceLabLocaleFilter = locale.Text;
-                viewModel.VoiceLabSearchText = search.Text;
-                await _bootstrapService.RefreshConfiguredAsync(CancellationToken.None).ConfigureAwait(true);
-                await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null).ConfigureAwait(true);
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-            {
-                viewModel.StatusMessage = "Could not refresh voices. Check your Google connection and language filter, then try again.";
-            }
-            finally
-            {
-                refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
-            }
-        };
+            if (closed || viewModel.IsConnectedVoiceCatalogLoading) return;
+            using CancellationTokenSource request = CancellationTokenSource.CreateLinkedTokenSource(windowLifetime.Token);
+            request.CancelAfter(TimeSpan.FromSeconds(30));
+            viewModel.VoiceLabLocaleFilter = locale.Text;
+            viewModel.VoiceLabSearchText = search.Text;
+            await RefreshConnectedVoicesAsync(viewModel, request.Token).ConfigureAwait(true);
+        }
+        void Update()
+        {
+            bool loading = viewModel.IsConnectedVoiceCatalogLoading;
+            refresh.IsEnabled = !closed && !loading && viewModel.CanRefreshVoiceLabCatalog;
+            clear.IsEnabled = refresh.IsEnabled;
+            locale.IsEnabled = !loading;
+            search.IsEnabled = !loading;
+            status.Text = viewModel.ConnectedVoiceCatalogStatus;
+            applied.Text = "Applied language: " + (string.IsNullOrWhiteSpace(viewModel.VoiceLabLocaleFilter) ? "all languages" : viewModel.VoiceLabLocaleFilter) +
+                ". Search: " + (string.IsNullOrWhiteSpace(viewModel.VoiceLabSearchText) ? "none" : viewModel.VoiceLabSearchText) + ". Change filters above, then refresh to apply them.";
+        }
+        refresh.Click += async (_, _) => await RefreshAsync().ConfigureAwait(true);
+        clear.Click += async (_, _) => { search.Text = string.Empty; await RefreshAsync().ConfigureAwait(true); };
         Observe(host, viewModel, (_, args) =>
         {
-            if (string.Equals(args.PropertyName, nameof(ShellViewModel.CanRefreshVoiceLabCatalog), StringComparison.Ordinal))
-                refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
+            if (args.PropertyName is nameof(ShellViewModel.CanRefreshVoiceLabCatalog) or nameof(ShellViewModel.IsConnectedVoiceCatalogLoading)
+                or nameof(ShellViewModel.ConnectedVoiceCatalogStatus) or nameof(ShellViewModel.VoiceLabLocaleFilter) or nameof(ShellViewModel.VoiceLabSearchText)) Update();
         }, lifetime);
-        refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
         host.Children.Add(refresh);
+        host.Children.Add(status);
+        host.Children.Add(applied);
+        host.Children.Add(clear);
+        if (lifetime is not null)
+        {
+            lifetime.Closed += (_, _) => { closed = true; windowLifetime.Cancel(); windowLifetime.Dispose(); };
+            if (autoLoad) lifetime.Opened += async (_, _) =>
+                await AutoLoadConnectedVoicesAsync(viewModel, RefreshAsync, windowLifetime.Token).ConfigureAwait(true);
+        }
+        Update();
+        return RefreshAsync;
     }
 
     private static void AddVoiceSelector(StackPanel host, ShellViewModel viewModel, Window? lifetime = null)
     {
         ComboBox voices = new() { PlaceholderText = "Select a verified Google voice" };
+        AutomationProperties.SetName(voices, "Verified Google voice");
         AddField(host, "Voice", voices);
+        TextBlock selected = NewDescription(string.Empty);
+        host.Children.Add(selected);
         VoiceLabCatalogSelection[] snapshot = [];
         bool rebuilding = false;
         void Rebuild()
@@ -292,6 +316,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 voices.ItemsSource = snapshot.Select(item => item.VoiceStableId).ToArray();
                 int index = Array.FindIndex(snapshot, item => SameVoice(item, viewModel.SelectedVoiceLabVoice));
                 voices.SelectedIndex = index;
+                voices.IsEnabled = snapshot.Length > 0 && !viewModel.IsConnectedVoiceCatalogLoading;
+                selected.Text = viewModel.SelectedVoiceLabVoice is { } choice
+                    ? "Selected verified voice: " + choice.VoiceStableId
+                    : "No verified voice selected. Load the list above, then choose a voice. Remembered names alone do not approve a request.";
             }
             finally
             {
@@ -304,7 +332,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             ((INotifyCollectionChanged)viewModel.VoiceLabCatalogResults).CollectionChanged -= catalogChanged;
         Observe(host, viewModel, (_, args) =>
         {
-            if (string.Equals(args.PropertyName, nameof(ShellViewModel.SelectedVoiceLabVoice), StringComparison.Ordinal))
+            if (args.PropertyName is nameof(ShellViewModel.SelectedVoiceLabVoice) or nameof(ShellViewModel.IsConnectedVoiceCatalogLoading))
                 Rebuild();
         }, lifetime);
         voices.SelectionChanged += (_, _) =>
