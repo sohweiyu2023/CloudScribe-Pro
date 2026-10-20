@@ -5,6 +5,7 @@ using Avalonia.Platform.Storage;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
+using CloudScribe.Infrastructure.Pricing;
 
 namespace CloudScribe.App.Composition;
 
@@ -37,6 +38,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         builtInPricing ?? throw new ArgumentNullException(nameof(builtInPricing));
     private readonly GoogleGenerationAcceptedMp3OutputService _acceptedMp3OutputService =
         acceptedMp3OutputService ?? throw new ArgumentNullException(nameof(acceptedMp3OutputService));
+    private readonly V222ControlSet _comparisonPricing = new(new StrictJsonObjectReader());
+    private GoogleVoiceSampleSession? _sampleSession;
 
     public void Attach(MainWindow window, ShellViewModel viewModel)
     {
@@ -66,6 +69,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             mounted = true;
         }
 
+        if (mounted && window.FindControl<Button>("VoiceComparisonButton") is { } comparison)
+        {
+            comparison.Click += async (_, _) => await OpenVoiceComparisonAsync(window, viewModel).ConfigureAwait(true);
+        }
         return mounted;
     }
 

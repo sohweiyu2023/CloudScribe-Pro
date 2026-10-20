@@ -23,7 +23,7 @@ public sealed class VoiceLabProductionCatalogTransportTests
         VoiceLabAdapter adapter = new(request =>
         {
             observed = request;
-            return [CreateProviderVoice()];
+            return [CreateProviderVoice() with { SsmlGender = "FEMALE", NaturalSampleRateHertz = 24000 }];
         });
         var transport = new VoiceLabProductionCatalogTransport(
             new AccountStore(account),
@@ -48,6 +48,8 @@ public sealed class VoiceLabProductionCatalogTransportTests
         Assert.Equal("google", results[0].ProviderStableId);
         Assert.Equal("primary", results[0].AccountStableId);
         Assert.Equal("project-1", results[0].ProjectStableId);
+        Assert.Equal("FEMALE", results[0].SsmlGender);
+        Assert.Equal(24000, results[0].NaturalSampleRateHertz);
     }
 
     [Fact]
