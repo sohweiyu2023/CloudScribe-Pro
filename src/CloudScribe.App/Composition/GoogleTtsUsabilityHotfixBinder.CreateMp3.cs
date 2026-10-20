@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -67,7 +68,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         body.Children.Add(document);
         void UpdateDocument() => document.Text = string.IsNullOrWhiteSpace(model.DocumentText)
             ? "No text in the current document. Close this window and type or import text in Studio."
-            : $"Current document: {model.DocumentText.Length} characters. Editing it will clear any prepared cost or approval.";
+            : $"Current document: {model.DocumentText.Length} characters. Editing it will clear any prepared cost or approval." +
+                (Encoding.UTF8.GetByteCount(model.DocumentText) >= 4_000
+                    ? " Long text may need parts: close this window, expand Advanced tools, then choose Preview local narration parts (no generation). The compiled short request must fit 5,000 bytes, including request fields."
+                    : string.Empty);
         UpdateDocument();
         model.PropertyChanged += OnDocumentChanged;
         void OnDocumentChanged(object? sender, PropertyChangedEventArgs args)
@@ -111,6 +115,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         AddField(filters, "Search voices", search);
         reloadVoices = AddRefreshControl(body, model, locale, search, dialog, autoLoad: true);
         AddVoiceSelector(body, model, dialog);
+        AddVoiceSampleLinks(body, model, dialog);
 
         TextBlock pricing = Text(model.PricingCatalogActiveSummary);
         body.Children.Add(pricing);
@@ -122,6 +127,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         AddPricingActivationControls(AddSection(body, "Review pricing source if pricing is unavailable", expanded: false), model, dialog);
 
         TextBlock estimate = Text("Prepare the exact current request to see its cost. No provider generation occurs during review.");
+        TextBlock nextStep = Text(string.Empty);
         Button review = NewButton("Review current text, voice and cost");
         CheckBox consent = NewConfirmation("I approve this exact request and its displayed maximum cost.");
         Button create = NewButton("Create MP3 — approve and send to Google");
@@ -147,6 +153,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             create.IsEnabled = !busy && !model.IsConnectedVoiceCatalogLoading && !model.GenerateWithGoogleCommand.IsRunning
                 && current is not null && consent.IsChecked == true && model.CanApproveGoogleGenerationSpend;
             consent.IsEnabled = current is not null && !busy;
+            nextStep.Text = CreateMp3NextStep.Describe(busy, reviewing, !string.IsNullOrWhiteSpace(model.DocumentText),
+                model.IsConnectedVoiceCatalogLoading, model.SelectedVoiceLabVoice is not null,
+                model.CanPrepareGoogleGenerationSpend, current is not null, consent.IsChecked == true, model.CanApproveGoogleGenerationSpend);
         }
         review.Click += async (_, _) =>
         {
@@ -190,7 +199,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         };
         body.Children.Add(review);
         TextBlock status = Text(model.StatusMessage);
-        StackPanel output = AddSection(body, "Listen, save and find audio", expanded: false);
+        StackPanel output = AddSection(body, "Listen, save and find audio", expanded: true);
         AddVerifiedOutputControls(owner, output, model, dialog);
         Button folder = NewButton("Open saved MP3 folder");
         folder.Click += (_, _) => OpenLocalFolder(Path.Combine(
@@ -208,6 +217,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         ScrollViewer bodyScroll = new() { Content = body };
         layout.Children.Add(bodyScroll);
         StackPanel footer = new() { Spacing = 10, Margin = new Thickness(20, 8, 20, 16) };
+        footer.Children.Add(nextStep);
         footer.Children.Add(estimate);
         footer.Children.Add(consent);
         footer.Children.Add(create);
