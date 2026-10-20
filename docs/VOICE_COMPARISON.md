@@ -18,7 +18,7 @@ The short MP3 sample flow is intentionally limited to Standard, WaveNet and Neur
 1. Enter a common sample of **1 to 500 characters**, or use the supplied short comparison passage. This box is separate from the document. The document text is never substituted, edited or sent by this flow.
 2. Choose **Prepare sample and show exact price**. No synthesis occurs. Read the exact USD request ceiling, voice and pricing provenance.
 3. Check **I approve this exact sample and its displayed USD request ceiling**, then choose **Generate sample**. This is the only action that submits a potentially billed sample, using the existing Stage6 single-use spend approval and reconciliation gates.
-4. Playback is manual. Choose **Replay matching sample - USD 0** or **Export matching sample MP3** after a verified result exists.
+4. Playback is manual. Choose **Replay matching sample — USD 0** or **Export matching sample MP3** after a verified result exists.
 
 Changing the voice or text clears the review and checkbox. Closing the comparison clears unused sample approval. The prior Studio voice/filter and document output selection are restored unless **Use selected voice in Studio** was explicitly chosen. The sample itself does not replace the document's selected audio output.
 

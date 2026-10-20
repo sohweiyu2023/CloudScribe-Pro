@@ -121,12 +121,12 @@ public sealed partial class ShellViewModel
             PreparedGoogleGenerationSpendApproved = false;
             _googleSamplePrepared = false;
             cancellationToken.ThrowIfCancellationRequested();
-            StatusMessage = "Google generation � compiling exact current request for spend review";
+            StatusMessage = "Google generation · compiling exact current request for spend review";
             GoogleGenerationSpendReview review = await prepare(cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Google generation preparation returned no spend review.");
             review.Validate();
             PreparedGoogleGenerationSpendReview = review;
-            StatusMessage = "Google generation � exact compiled estimate ready for explicit review";
+            StatusMessage = "Google generation · exact compiled estimate ready for explicit review";
             return review;
         }
         finally
@@ -156,10 +156,10 @@ public sealed partial class ShellViewModel
             var approve = _approveGoogleGenerationSpend
                 ?? throw new InvalidOperationException("Google generation explicit spend approval is not configured.");
             cancellationToken.ThrowIfCancellationRequested();
-            StatusMessage = "Google generation � confirming spend authorization for the displayed compiled request";
+            StatusMessage = "Google generation · confirming spend authorization for the displayed compiled request";
             await approve(authorizedMaximumMinorUnits, confirmedByUser, cancellationToken).ConfigureAwait(true);
             PreparedGoogleGenerationSpendApproved = true;
-            StatusMessage = "Google generation � displayed exact compiled spend authorized";
+            StatusMessage = "Google generation · displayed exact compiled spend authorized";
         }
         finally
         {
@@ -190,7 +190,7 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Google generation coordinator is unavailable for the current authorization state.");
             var state = executionContext.Snapshot
                 ?? throw new InvalidOperationException("Google generation UI state is unavailable.");
-            StatusMessage = "Google generation � validating current account, voice, pricing and trust";
+            StatusMessage = "Google generation · validating current account, voice, pricing and trust";
             GoogleGenerationQueueOutcome outcome = await coordinator.ProcessPersistedTransitionAsync(
                 state.UiSelection, state.AccountAuthorized, state.ProjectAuthorized, state.CapabilityCurrent,
                 state.PricingCurrent, state.ProviderRequest, state.AdmittedTrust, state.PreviousState,
@@ -201,14 +201,14 @@ public sealed partial class ShellViewModel
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            StatusMessage = "Google generation cancelled � approval cleared; check queue status before another request";
+            StatusMessage = "Google generation cancelled · approval cleared; check queue status before another request";
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
             // A failure may occur after dispatch. Keep the durable queue authoritative and do
             // not imply that repeating the request is free or safe. Provider exception text can
             // contain private request details, so it does not belong in the visible status.
-            StatusMessage = "Google generation stopped � approval cleared; review queue status before preparing another request";
+            StatusMessage = "Google generation stopped · approval cleared; review queue status before preparing another request";
         }
         finally
         {
@@ -231,7 +231,7 @@ public sealed partial class ShellViewModel
             var play = _playVerifiedGoogleMp3
                 ?? throw new InvalidOperationException("Google MP3 playback is not configured.");
             await play(path, cancellationToken).ConfigureAwait(true);
-            StatusMessage = $"Google generation � opened verified MP3 � {path}";
+            StatusMessage = $"Google generation · opened verified MP3 · {path}";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -239,7 +239,7 @@ public sealed partial class ShellViewModel
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
-            StatusMessage = "Google MP3 playback unavailable � the verified output could not be opened; no new generation was started";
+            StatusMessage = "Google MP3 playback unavailable · the verified output could not be opened; no new generation was started";
         }
     }
 
@@ -260,18 +260,18 @@ public sealed partial class ShellViewModel
         ArgumentNullException.ThrowIfNull(outcome);
         if (outcome.RequiresReconciliation)
         {
-            StatusMessage = "Google generation � reconciliation required; no output file exposed";
+            StatusMessage = "Google generation · reconciliation required; no output file exposed";
             return;
         }
         if (outcome.Response?.IsAccepted != true)
         {
-            StatusMessage = $"Google generation � not accepted � {outcome.Decision.Reason}";
+            StatusMessage = $"Google generation · not accepted · {outcome.Decision.Reason}";
             return;
         }
         var persist = _persistAcceptedGoogleMp3
             ?? throw new InvalidOperationException("Verified Google MP3 persistence is not configured.");
         LastGeneratedGoogleMp3Path = await persist(outcome, cancellationToken).ConfigureAwait(true);
-        StatusMessage = $"Google generation � verified MP3 ready � {LastGeneratedGoogleMp3Path}";
+        StatusMessage = $"Google generation · verified MP3 ready · {LastGeneratedGoogleMp3Path}";
     }
 
     private void EnterGoogleGenerationOperation()
