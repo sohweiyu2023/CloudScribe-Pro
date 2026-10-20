@@ -1,0 +1,9 @@
+# CloudScribe development and local delivery
+
+- Preserve existing documents, audio, preferences, account metadata and Windows Credential Manager entries. Do not make paid provider calls during development or tests unless explicitly authorized.
+- For Windows delivery, inspect the current installation and shortcut targets before changing them. Close the app normally and make a closed-profile backup before a migration. Never kill a running app just to replace binaries.
+- Publish to a clean staging folder, run the relevant Release build/tests/format checks and native UI smoke tests, then make a clean package with `scripts/New-CleanWindowsShare.ps1`.
+- Install/update through `scripts/Install-CloudScribe.ps1`. Keep the executable at `%LOCALAPPDATA%\Programs\CloudScribe Pro\app\CloudScribe.exe` and the Start Menu/taskbar shortcut target stable. A normal update preserves the installed profile override. Use `-MigrateProfileFrom` only for an inspected first migration; never substitute an empty profile for existing work.
+- Verify launch through the actual Start Menu shortcut, the loaded runtime and application hash after updating. If the user has pinned this stable executable, keep that same path so the pin starts the latest build. Windows may require the user to choose Pin to taskbar; report that accurately and do not use undocumented taskbar registry hacks.
+- Never commit or distribute a user profile, database, service-account JSON, Windows credentials, recordings, documents, installed private appsettings, local evidence containing personal content, or rollback directories. Share only a fresh clean package. See `docs/WINDOWS_INSTALLATION.md` for the update/rollback layout.
+- Push/PR/merge requires authorization in the conversation. Preserve unrelated checkout changes; use an isolated checkout when publishing a reviewed local update.
