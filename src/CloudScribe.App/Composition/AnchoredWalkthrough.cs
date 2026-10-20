@@ -105,6 +105,17 @@ internal sealed class AnchoredWalkthrough : IDisposable
 
     public Task<int> Completion => _completion.Task;
 
+    public void NavigateToCreation()
+    {
+        if (_disposed || _completion.Task.IsCompleted) return;
+        for (int index = 0; index < _steps.Count; index++)
+        {
+            if (_steps[index].Screen is not (WalkthroughScreen.Connection or WalkthroughScreen.Create)) continue;
+            Move(index);
+            return;
+        }
+    }
+
     // Prepare the permanent host before the first accessibility observation. Replaying Help
     // never reparents the editor or invalidates its native automation peers.
     public static void Prepare(Window window) => _ = Hosts.GetValue(window, static owner => new PreparedHost(owner));

@@ -14,6 +14,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     private bool _walkthroughRunning;
     private IReadOnlyList<WalkthroughStep>? _walkthroughSteps;
     private int _walkthroughIndex;
+    private AnchoredWalkthrough? _studioWalkthrough;
 
     private async Task OpenQuickStartAsync(MainWindow owner, ShellViewModel model)
     {
@@ -40,7 +41,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     model.SelectedNavigationItem = model.NavigationItems[0];
                     model.CloseTransientSurfacesCommand.Execute(null);
                     using AnchoredWalkthrough guide = new(owner, _walkthroughSteps, _walkthroughIndex);
-                    _walkthroughIndex = await guide.Completion.ConfigureAwait(true);
+                    _studioWalkthrough = guide;
+                    try { _walkthroughIndex = await guide.Completion.ConfigureAwait(true); }
+                    finally { _studioWalkthrough = null; }
                 }
                 else if (screen == WalkthroughScreen.Connection)
                     await OpenGuidedConnectionAsync(owner, model).ConfigureAwait(true);
