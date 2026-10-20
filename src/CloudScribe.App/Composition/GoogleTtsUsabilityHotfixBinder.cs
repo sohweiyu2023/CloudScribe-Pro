@@ -81,6 +81,17 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         }
         if (mounted && window.FindControl<Button>("WorkspaceSettingsButton") is { } settings)
             settings.Click += async (_, _) => await OpenWorkspaceSettingsAsync(window, viewModel).ConfigureAwait(true);
+        if (mounted && window.FindControl<Button>("CreateMp3Button") is { } create)
+            create.Click += async (_, _) => await OpenCreateMp3Async(window, viewModel).ConfigureAwait(true);
+        if (mounted && window.FindControl<Button>("QuickStartHelpButton") is { } help)
+            help.Click += async (_, _) => await OpenQuickStartAsync(window, viewModel).ConfigureAwait(true);
+        if (mounted && preferences.IsFreshProfile && !preferences.State.QuickStartSeen)
+        {
+            if (window.IsVisible)
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = OpenQuickStartObservedAsync(window, viewModel));
+            else
+                window.Opened += (_, _) => _ = OpenQuickStartObservedAsync(window, viewModel);
+        }
         return mounted;
     }
 
@@ -91,19 +102,32 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         AddIntro(host);
         TextBlock connectionStatus = NewDescription("Reading saved connection metadata...");
         host.Children.Add(connectionStatus);
-        _ = LoadConnectionStatusAsync(connectionStatus);
-        AddLocalPartsControls(window, host, viewModel);
-        host.Children.Add(NewDescription("Your document autosaves locally. Saved Google connections survive restart: skip Connect Google and refresh voices. Use Setups in the toolbar to save voice/language choices and inspect local recovery state."));
-        AddOnboardingControls(AddSection(host, "1 · Connect Google", expanded: false), viewModel);
-        AddCatalogControls(AddSection(host, "2 · Choose a voice", expanded: true), viewModel);
-        AddPricingActivationControls(AddSection(host, "3 · Confirm current pricing", expanded: false), viewModel);
-        AddOutputAndSpendControls(AddSection(host, "4 · Review & approve", expanded: true), viewModel);
-        AddGenerateControls(host, viewModel);
-        AddStopWaitingControl(host, viewModel);
-        AddVerifiedOutputControls(window, AddSection(host, "5 · Listen & export", expanded: true), viewModel);
+        host.Children.Add(NewDescription("Write or import text, then choose Create MP3. Your document autosaves locally."));
+        Button create = NewButton("Create MP3");
+        create.Classes.Add("primary");
+        create.Click += async (_, _) => await OpenCreateMp3Async(window, viewModel).ConfigureAwait(true);
+        host.Children.Add(create);
+
+        StackPanel advanced = AddSection(host, "Advanced tools and connection settings", expanded: false);
+        AddLocalPartsControls(window, advanced, viewModel);
+        Expander connectionSetup = new() { Header = "Connect or change Google account", IsExpanded = false };
+        StackPanel connectionFields = new() { Spacing = 10 };
+        connectionSetup.Content = connectionFields;
+        AddOnboardingControls(connectionFields, viewModel);
+        advanced.Children.Add(connectionSetup);
+        Button changeConnection = NewButton("Change connection");
+        changeConnection.IsVisible = false;
+        changeConnection.Click += (_, _) => { connectionSetup.IsVisible = true; connectionSetup.IsExpanded = true; };
+        advanced.Children.Add(changeConnection);
+        _ = LoadConnectionPresentationAsync(connectionStatus, connectionSetup, changeConnection);
+        AddCatalogControls(AddSection(advanced, "Voice catalog and filters", expanded: false), viewModel);
+        AddPricingActivationControls(AddSection(advanced, "Pricing source", expanded: false), viewModel);
+        AddOutputAndSpendControls(AddSection(advanced, "Detailed request review", expanded: false), viewModel);
+        AddGenerateControls(advanced, viewModel);
+        AddStopWaitingControl(advanced, viewModel);
+        AddVerifiedOutputControls(window, AddSection(advanced, "Listen and export", expanded: false), viewModel);
         AddLiveStatus(host, viewModel);
     }
-
     private static void AddIntro(StackPanel host)
     {
         host.Children.Add(new TextBlock
@@ -132,6 +156,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             NewButton("Configure Google TTS securely"));
         controls.ServiceAccountJson.AcceptsReturn = true;
         controls.ServiceAccountJson.MinHeight = 86;
+        controls.AccountId.Text = "google-home";
+        controls.DisplayName.Text = "My Google Text-to-Speech";
+        controls.CredentialReference.Text = "google-home-key";
         controls.RegionId.Text = "global";
         controls.CatalogEndpoint.Text = "https://texttospeech.googleapis.com/v1/voices";
         controls.SynthesisEndpoint.Text = "https://texttospeech.googleapis.com/v1/text:synthesize";
@@ -195,13 +222,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         locale.Text = viewModel.VoiceLabLocaleFilter;
         TextBox search = NewTextBox("Voice search (optional)");
         search.Text = viewModel.VoiceLabSearchText;
-        viewModel.PropertyChanged += (_, args) =>
+        Observe(host, viewModel, (_, args) =>
         {
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.VoiceLabLocaleFilter), StringComparison.Ordinal))
                 locale.Text = viewModel.VoiceLabLocaleFilter;
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.VoiceLabSearchText), StringComparison.Ordinal))
                 search.Text = viewModel.VoiceLabSearchText;
-        };
+        });
         host.Children.Add(NewDescription("Apply language and search filters with Refresh voices."));
         AddField(host, "Language or locale", locale);
         AddField(host, "Search voices", search);
@@ -213,7 +240,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         StackPanel host,
         ShellViewModel viewModel,
         TextBox locale,
-        TextBox search)
+        TextBox search,
+        Window? lifetime = null)
     {
         Button refresh = NewButton("Refresh real Google voices");
         refresh.Click += async (_, _) =>
@@ -237,16 +265,16 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
             }
         };
-        viewModel.PropertyChanged += (_, args) =>
+        Observe(host, viewModel, (_, args) =>
         {
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.CanRefreshVoiceLabCatalog), StringComparison.Ordinal))
                 refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
-        };
+        }, lifetime);
         refresh.IsEnabled = viewModel.CanRefreshVoiceLabCatalog;
         host.Children.Add(refresh);
     }
 
-    private static void AddVoiceSelector(StackPanel host, ShellViewModel viewModel)
+    private static void AddVoiceSelector(StackPanel host, ShellViewModel viewModel, Window? lifetime = null)
     {
         ComboBox voices = new() { PlaceholderText = "Select a verified Google voice" };
         AddField(host, "Voice", voices);
@@ -267,12 +295,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 rebuilding = false;
             }
         }
-        ((INotifyCollectionChanged)viewModel.VoiceLabCatalogResults).CollectionChanged += (_, _) => Rebuild();
-        viewModel.PropertyChanged += (_, args) =>
+        NotifyCollectionChangedEventHandler catalogChanged = (_, _) => Rebuild();
+        ((INotifyCollectionChanged)viewModel.VoiceLabCatalogResults).CollectionChanged += catalogChanged;
+        if (lifetime is not null) lifetime.Closed += (_, _) =>
+            ((INotifyCollectionChanged)viewModel.VoiceLabCatalogResults).CollectionChanged -= catalogChanged;
+        Observe(host, viewModel, (_, args) =>
         {
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.SelectedVoiceLabVoice), StringComparison.Ordinal))
                 Rebuild();
-        };
+        }, lifetime);
         voices.SelectionChanged += (_, _) =>
         {
             if (!rebuilding && voices.SelectedIndex >= 0 && voices.SelectedIndex < snapshot.Length)
@@ -385,7 +416,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 spendConfirmed.IsChecked == true).ConfigureAwait(true);
             RefreshReview();
         };
-        viewModel.PropertyChanged += (_, args) =>
+        Observe(host, viewModel, (_, args) =>
         {
             if (args.PropertyName is nameof(ShellViewModel.PreparedGoogleGenerationSpendReview)
                 or nameof(ShellViewModel.PreparedGoogleGenerationSpendApproved)
@@ -395,7 +426,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 prepareSpend.IsEnabled = viewModel.CanPrepareGoogleGenerationSpend;
                 RefreshReview();
             }
-        };
+        });
 
         host.Children.Add(prepareSpend);
         host.Children.Add(review);
@@ -407,7 +438,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         RefreshReview();
     }
 
-    private void AddPricingActivationControls(StackPanel host, ShellViewModel viewModel)
+    private void AddPricingActivationControls(StackPanel host, ShellViewModel viewModel, Window? lifetime = null)
     {
         host.Children.Add(new TextBlock
         {
@@ -423,11 +454,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         currentSource.Text = GoogleVoiceComparisonInformation.PricingUrl;
         TextBlock active = NewDescription(viewModel.PricingCatalogActiveSummary);
         host.Children.Add(active);
-        viewModel.PropertyChanged += (_, e) =>
+        Observe(host, viewModel, (_, e) =>
         {
             if (string.Equals(e.PropertyName, nameof(ShellViewModel.PricingCatalogActiveSummary), StringComparison.Ordinal))
                 active.Text = viewModel.PricingCatalogActiveSummary;
-        };
+        }, lifetime);
         host.Children.Add(NewDescription("Active catalog selection survives restart. Refreshing account/capability access and approving an exact request are separate. Price review is never confirmed automatically."));
         TextBlock evidence = new()
         {
@@ -527,7 +558,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         });
     }
 
-    private void AddVerifiedOutputControls(MainWindow window, StackPanel host, ShellViewModel viewModel)
+    private void AddVerifiedOutputControls(MainWindow window, StackPanel host, ShellViewModel viewModel, Window? lifetime = null)
     {
         TextBlock outputPath = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
         Button play = NewButton("Play verified MP3");
@@ -543,12 +574,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             play.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3;
             export.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3 && window.StorageProvider.CanSave;
         }
-        viewModel.PropertyChanged += (_, args) =>
+        Observe(host, viewModel, (_, args) =>
         {
             if (args.PropertyName is nameof(ShellViewModel.LastGeneratedGoogleMp3Path)
                 or nameof(ShellViewModel.CanPlayLastGeneratedGoogleMp3))
                 Refresh();
-        };
+        }, lifetime);
         Refresh();
         host.Children.Add(outputPath);
         host.Children.Add(play);

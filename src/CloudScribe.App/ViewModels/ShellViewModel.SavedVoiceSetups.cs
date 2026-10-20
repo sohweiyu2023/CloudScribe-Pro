@@ -15,6 +15,16 @@ public sealed partial class ShellViewModel
         ReducedMotionEnabled = preferences.State.ReducedMotion;
         if (preferences.State.LastUsed is { } last) ApplySavedVoiceSetup(last);
         PropertyChanged += PersistDisplayPreferences;
+        PropertyChanged += PersistDocumentPreference;
+    }
+
+    private void PersistDocumentPreference(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!string.Equals(e.PropertyName, nameof(CurrentDocumentId), StringComparison.Ordinal)
+            || _studioPreferences is null || CurrentDocumentId is not Guid id) return;
+        try { _studioPreferences.RememberDocument(id); }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
+        { StatusMessage = "The document is available, but its reopen preference could not be saved. Choose it from Library next time."; }
     }
 
     private void PersistDisplayPreferences(object? sender, PropertyChangedEventArgs e)
