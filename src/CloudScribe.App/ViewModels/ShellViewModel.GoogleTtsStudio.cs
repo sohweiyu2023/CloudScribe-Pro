@@ -37,9 +37,9 @@ public sealed partial class ShellViewModel
     /// </summary>
     public GoogleTtsStudioRequestSelection CaptureGoogleTtsStudioRequestSelection()
     {
-        Guid documentId = CurrentDocumentId
+        Guid documentId = _googleSampleCapture?.DocumentId ?? CurrentDocumentId
             ?? throw new InvalidOperationException("Open a local document before preparing Google generation.");
-        string text = DocumentText;
+        string text = _googleSampleCapture?.Text ?? DocumentText;
         if (string.IsNullOrWhiteSpace(text))
             throw new InvalidOperationException("The current local document has no text to synthesize.");
 
@@ -60,7 +60,7 @@ public sealed partial class ShellViewModel
 
         return new GoogleTtsStudioRequestSelection(
             documentId,
-            CurrentRevisionId,
+            _googleSampleCapture is null ? CurrentRevisionId : null,
             text,
             providerStableId,
             accountStableId,

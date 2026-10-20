@@ -321,6 +321,9 @@
         </StackPanel>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+          <Button x:Name="VoiceComparisonButton" Classes="secondary" Content="Voices"
+                  ToolTip.Tip="Compare voices, prices and short samples"
+                  AutomationProperties.Name="Compare voices and samples" />
           <ComboBox
               Width="154"
               ItemsSource="{Binding ThemeOptions}"
@@ -528,7 +531,7 @@
                 </Border>
 
                 <StackPanel Grid.Row="2" Spacing="9">
-                  <TextBlock Text="CLOUDSCRIBE · LOCAL WORKING DOCUMENT" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                  <TextBlock Text="CLOUDSCRIBE � LOCAL WORKING DOCUMENT" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
                   <controls:PaperTextBox
                       Classes="document-title"
                       Theme="{StaticResource PaperTextBoxTheme}"
@@ -577,7 +580,7 @@
                 <TextBlock Text="No document is selected. Durable creation and import arrive in Stage 3; this Stage 2 state intentionally contains no editable sample text or inactive creation control." Foreground="{DynamicResource Brush.InkMuted}" TextAlignment="Center" TextWrapping="Wrap" FontSize="{DynamicResource Typography.BodyLarge}" />
                 <WrapPanel HorizontalAlignment="Center" Margin="0,6,0,0">
                   <Button Classes="primary" Content="New document" Command="{Binding NewDocumentCommand}" Margin="5,4" AutomationProperties.Name="Create a new local document from empty workspace" />
-                  <Button Classes="secondary" Content="Import…" Command="{Binding ImportDocumentCommand}" Margin="5,4" AutomationProperties.Name="Import a local document from empty workspace" />
+                  <Button Classes="secondary" Content="Import." Command="{Binding ImportDocumentCommand}" Margin="5,4" AutomationProperties.Name="Import a local document from empty workspace" />
                 </WrapPanel>
               </StackPanel>
             </Border>
@@ -602,7 +605,7 @@
                   <Border Height="14" MaxWidth="430" HorizontalAlignment="Stretch" Background="{DynamicResource Brush.PaperBorder}" CornerRadius="7" />
                   <Border Height="14" MaxWidth="470" HorizontalAlignment="Stretch" Background="{DynamicResource Brush.PaperBorder}" CornerRadius="7" />
                 </StackPanel>
-                <TextBlock Text="Static placeholder · no motion" Foreground="{DynamicResource Brush.InkMuted}" FontSize="{DynamicResource Typography.Meta}" />
+                <TextBlock Text="Static placeholder � no motion" Foreground="{DynamicResource Brush.InkMuted}" FontSize="{DynamicResource Typography.Meta}" />
               </StackPanel>
             </Border>
           </Grid>
@@ -752,7 +755,7 @@
 
         <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center" MinWidth="0">
           <TextBlock Text="PLAYER &amp; QUEUE" Foreground="{DynamicResource Brush.SecondaryBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
-          <TextBlock Text="No local audio yet · playback controls remain hidden until verified output exists." Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" TextTrimming="WordEllipsis" MaxLines="2" />
+          <TextBlock Text="No local audio yet � playback controls remain hidden until verified output exists." Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" TextTrimming="WordEllipsis" MaxLines="2" />
         </StackPanel>
 
         <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="7" Margin="0,0,2,0" VerticalAlignment="Center">
@@ -768,7 +771,7 @@
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MinWidth="0" />
         <Border Grid.Column="1" Background="{DynamicResource Brush.SuccessSoft}" BorderBrush="{DynamicResource Brush.Success}" BorderThickness="1" CornerRadius="9" Padding="9,4" VerticalAlignment="Center" IsVisible="{Binding IsFullLayout}">
-          <TextBlock Text="LOCAL-FIRST · OFFLINE READY" Foreground="{DynamicResource Brush.Success}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+          <TextBlock Text="LOCAL-FIRST � OFFLINE READY" Foreground="{DynamicResource Brush.Success}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
         </Border>
       </Grid>
     </Border>
@@ -888,7 +891,7 @@
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel>
               <TextBlock Text="Generation queue" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Title}" FontWeight="SemiBold" />
-              <TextBlock Text="No jobs · generation is not enabled" Foreground="{DynamicResource Brush.TextOnDarkMuted}" />
+              <TextBlock Text="No jobs � generation is not enabled" Foreground="{DynamicResource Brush.TextOnDarkMuted}" />
             </StackPanel>
             <Button x:Name="QueueDrawerCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close queue drawer">
               <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />

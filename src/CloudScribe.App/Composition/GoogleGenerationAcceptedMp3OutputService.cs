@@ -20,11 +20,22 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
         new(StringComparer.OrdinalIgnoreCase);
 
     public GoogleGenerationAcceptedMp3OutputService()
+        : this(GetDefaultOutputDirectory())
+    {
+    }
+
+    public GoogleGenerationAcceptedMp3OutputService(string outputDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        _outputDirectory = Path.GetFullPath(outputDirectory);
+    }
+
+    private static string GetDefaultOutputDirectory()
     {
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrWhiteSpace(localAppData))
             throw new InvalidOperationException("Windows LocalApplicationData is unavailable for Google MP3 output.");
-        _outputDirectory = Path.Combine(localAppData, "CloudScribe Pro", "Generated");
+        return Path.Combine(localAppData, "CloudScribe Pro", "Generated");
     }
 
     public async Task<GoogleGenerationAcceptedMp3Output> PersistAcceptedAsync(
@@ -73,6 +84,9 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
         _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true })
             ?? throw new InvalidOperationException("Windows could not open the verified Google MP3 output.");
     }
+
+    public Task<string> VerifyAcceptedAsync(string path, CancellationToken cancellationToken = default) =>
+        RequireVerifiedAcceptedFileAsync(path, cancellationToken);
 
     public async Task<string> ExportVerifiedAsync(
         string sourcePath,
