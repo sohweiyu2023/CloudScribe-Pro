@@ -12,7 +12,8 @@ public static class DesktopApartment
             try { completion.SetResult(desktopLifetime()); }
             catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
             { completion.SetException(exception); }
-        }) { Name = "CloudScribe desktop" };
+        })
+        { Name = "CloudScribe desktop" };
         if (OperatingSystem.IsWindows()) desktop.SetApartmentState(ApartmentState.STA);
         desktop.Start();
         return completion.Task;
