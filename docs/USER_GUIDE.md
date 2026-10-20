@@ -42,7 +42,9 @@ Official references: [Google Text-to-Speech setup](https://cloud.google.com/text
 4. Inspect the displayed voice, currency and amount. Tick **I approve this exact request and its displayed maximum cost**, then choose **Create MP3 — approve and send to Google** once. The application ceiling is the displayed amount in the estimate's currency; this is not a Google billing-account cap.
 5. Wait for the result. **Listen, save and find audio** contains **Play verified MP3**, **Export verified MP3** and folder access. Play/export preserve accepted bytes and do not synthesize again. **Stop waiting** appears during generation; stopping a dispatched request does not prove it was uncharged.
 
-The creation button explains the next step when text, a verified voice, current review or consent is missing. Connection setup is hidden when exactly one enabled Google connection is saved; **Change connection** deliberately reveals the fresh-configuration form inside Advanced tools. It never reads your key back into the form or overwrites the old credential binding.
+Opening **Create MP3** automatically checks the saved Google connection and loads verified voices. A remembered voice is selected only after it appears in the verified list. Choosing a saved setup reloads and validates its voice too. Loading can take up to 30 seconds; closing the window cancels the wait. This checks access without generating speech. A fresh profile gets connection instructions instead of an unexplained empty list.
+
+The voice area shows loading, ready, no matching voices, or a connection error. **Language and voice filters** contains the filters; the applied language/search summary stays visible. **Clear voice search and reload** removes the name search while keeping your chosen language. A selected verified voice is named below the list. **Review current text, voice and cost** requires text and a verified voice; **Create MP3** becomes available after a current cost review and explicit approval. Connection setup is hidden when exactly one enabled Google connection is saved; **Change connection** deliberately reveals the fresh-configuration form inside Advanced tools. It never reads your key back into the form or overwrites the old credential binding.
 
 The detailed separate prepare/ceiling/approve/generate controls remain in **Advanced tools → Detailed request review** for inspection. The guided path uses the same production approval, capability, pricing, queue and byte-integrity checks.
 The displayed subtotal is conservatively rounded from the admitted provider character rate and the exact compiled input, using a UTF-8 byte upper bound. It ignores free allowances and credits, and excludes tax and currency conversion. Your billing account may use a different currency. Review actual Google billing separately.
@@ -58,9 +60,9 @@ The current session's Play/Export controls retain accepted-byte integrity eviden
 | Symptom | What to do |
 |---|---|
 | Voices or capability evidence expired | Choose **Refresh real Google voices** to revalidate the saved connection. Evidence expires after about 30 minutes. |
-| No voices | Check language/search filters, saved account access, API enablement and billing. Refresh, then choose an actual returned voice. |
+| No voices | Read the loading/error message. Expand **Language and voice filters** and check the language (for example en-US); use **Clear voice search and reload**. For an access error, inspect Setups and Google API/billing permissions. Do not replace a saved key just to retry. |
 | Pricing cannot be activated | Read the displayed error. Verify the official HTTPS page and rate match. Do not confirm mismatching rates. |
-| Create MP3 asks for a prerequisite | Follow its next-action message: add text, refresh/select a voice, review the current cost, then tick consent. |
+| Review or Create MP3 is disabled | Add text, wait for voices to load, select a verified voice, review the current cost, then tick consent. Editing the request invalidates the old review. |
 | Request stopped or reconciliation required | Inspect persisted request status in **Setups** before retrying. A lost response can still have incurred a charge. Do not repeatedly click Generate. |
 | Nothing plays | Confirm the MP3 exists and your default audio player works. Export/listen locally without a new synthesis. |
 
