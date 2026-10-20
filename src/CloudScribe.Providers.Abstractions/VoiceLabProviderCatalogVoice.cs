@@ -5,7 +5,9 @@ public sealed record VoiceLabProviderCatalogVoice(
     string VoiceFingerprint,
     bool VoiceEnabled,
     bool AccountProjectAuthorized,
-    IReadOnlyList<string>? LanguageCodes = null)
+    IReadOnlyList<string>? LanguageCodes = null,
+    string? SsmlGender = null,
+    int? NaturalSampleRateHertz = null)
 {
     public VoiceLabProviderCatalogVoice Validate()
     {

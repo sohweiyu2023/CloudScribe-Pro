@@ -1,0 +1,35 @@
+name: Voice comparison and guarded samples
+
+on:
+  push:
+    branches: [feature/voice-comparison-samples]
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'docs/VOICE_COMPARISON.md'
+      - '.github/workflows/cloudscribe-voice-comparison.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mocked-checks:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.401'
+      - name: Locked restore
+        run: dotnet restore CloudScribe.sln --locked-mode --configfile NuGet.config
+      - name: Strict Release build
+        run: dotnet build CloudScribe.sln -c Release --no-restore
+      - name: Formatting
+        run: dotnet format CloudScribe.sln --no-restore --verify-no-changes
+      - name: Mocked and local tests only
+        run: dotnet test CloudScribe.sln -c Release --no-build --no-restore --logger "console;verbosity=normal"

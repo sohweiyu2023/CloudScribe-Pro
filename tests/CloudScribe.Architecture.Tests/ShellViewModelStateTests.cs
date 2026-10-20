@@ -15,6 +15,33 @@ namespace CloudScribe.Architecture.Tests;
 public sealed class ShellViewModelStateTests
 {
     [Fact]
+    public async Task SamplePreparationCapturesOnlyBoundedTextWithoutEditingTheDocument()
+    {
+        using ShellViewModel model = CreateViewModel();
+        model.DocumentText = "Private full document must not be used for a voice sample.";
+        string originalText = model.DocumentText;
+        Guid? originalId = model.CurrentDocumentId;
+        model.SelectedVoiceLabVoice = VoiceSelection() with { VoiceStableId = "en-US-Standard-C", LanguageCodes = ["en-US"] };
+        ShellViewModel.GoogleTtsStudioRequestSelection? captured = null;
+        model.ConfigureStage6GoogleGenerationPreparation(_ =>
+        {
+            captured = model.CaptureGoogleTtsStudioRequestSelection();
+            return Task.FromResult(new ShellViewModel.GoogleGenerationSpendReview("USD", 2, 1, "pricing", "en-US-Standard-C", new string('a', 64)));
+        });
+        Guid sampleId = Guid.NewGuid();
+        await model.PrepareGoogleVoiceSampleAsync("Only this sample.", sampleId, TestContext.Current.CancellationToken);
+        Assert.NotNull(captured);
+        Assert.Equal("Only this sample.", captured.ExactText);
+        Assert.Equal(sampleId, captured.DocumentId);
+        Assert.Null(captured.RevisionId);
+        Assert.Equal(originalText, model.DocumentText);
+        Assert.Equal(originalId, model.CurrentDocumentId);
+        model.CancelGoogleVoiceSampleReview();
+        Assert.Null(model.PreparedGoogleGenerationSpendReview);
+        Assert.False(model.CanGenerateWithGoogle);
+    }
+
+    [Fact]
     public void UpdateViewportRejectsInvalidGeometryWithoutMutatingLayout()
     {
         using ShellViewModel viewModel = CreateViewModel();
@@ -43,7 +70,7 @@ public sealed class ShellViewModelStateTests
 
         Assert.Equal(expected, viewModel.Layout.Mode);
         Assert.Equal(
-            expected == originalMode ? originalStatus : $"Adaptive layout · {expected}",
+            expected == originalMode ? originalStatus : $"Adaptive layout � {expected}",
             viewModel.StatusMessage);
     }
 
@@ -131,7 +158,7 @@ public sealed class ShellViewModelStateTests
 
         Assert.True(viewModel.IsCompletionDialogOpen);
         Assert.False(viewModel.CanOpenCompletionOutputFolder);
-        Assert.Equal("Transcription complete · Output folder unavailable", viewModel.StatusMessage);
+        Assert.Equal("Transcription complete � Output folder unavailable", viewModel.StatusMessage);
     }
 
     [Fact]
@@ -177,7 +204,7 @@ public sealed class ShellViewModelStateTests
         Assert.False(viewModel.GenerateWithGoogleCommand.CanExecute(null));
         Assert.True(viewModel.CanPrepareGoogleGenerationSpend);
         Assert.Equal(
-            "Google generation stopped · approval cleared; review queue status before preparing another request",
+            "Google generation stopped � approval cleared; review queue status before preparing another request",
             viewModel.StatusMessage);
 
         await viewModel.PrepareGoogleGenerationSpendReviewAsync(TestContext.Current.CancellationToken);
@@ -210,7 +237,7 @@ public sealed class ShellViewModelStateTests
         Assert.False(viewModel.CanGenerateWithGoogle);
         Assert.True(viewModel.CanPrepareGoogleGenerationSpend);
         Assert.Equal(
-            "Google generation cancelled · approval cleared; check queue status before another request",
+            "Google generation cancelled � approval cleared; check queue status before another request",
             viewModel.StatusMessage);
     }
 
@@ -252,7 +279,7 @@ public sealed class ShellViewModelStateTests
         Assert.Null(viewModel.LastGeneratedGoogleMp3Path);
         Assert.False(viewModel.CanPlayLastGeneratedGoogleMp3);
         Assert.Equal(
-            "Google MP3 playback unavailable · the verified output could not be opened; no new generation was started",
+            "Google MP3 playback unavailable � the verified output could not be opened; no new generation was started",
             viewModel.StatusMessage);
     }
 
@@ -275,7 +302,7 @@ public sealed class ShellViewModelStateTests
         Assert.True(viewModel.CanRefreshVoiceLabCatalog);
         Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
         Assert.Equal(
-            "Voice Lab unavailable · connect an account and check its access, connection, and filters before refreshing",
+            "Voice Lab unavailable � connect an account and check its access, connection, and filters before refreshing",
             viewModel.StatusMessage);
     }
 
@@ -299,7 +326,7 @@ public sealed class ShellViewModelStateTests
         Assert.Equal(1, requests);
         Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
         Assert.Equal(
-            "Voice Lab unavailable · connect an account and check its access, connection, and filters before refreshing",
+            "Voice Lab unavailable � connect an account and check its access, connection, and filters before refreshing",
             viewModel.StatusMessage);
 
         await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null);
@@ -307,7 +334,7 @@ public sealed class ShellViewModelStateTests
         Assert.Equal(2, requests);
         Assert.Single(viewModel.VoiceLabCatalogResults);
         Assert.Equal(VoiceSelection(), viewModel.SelectedVoiceLabVoice);
-        Assert.Equal("Voice Lab · 1 trusted voices", viewModel.StatusMessage);
+        Assert.Equal("Voice Lab � 1 trusted voices", viewModel.StatusMessage);
     }
 
     [Fact]
@@ -366,7 +393,7 @@ public sealed class ShellViewModelStateTests
         Assert.Same(selected, viewModel.SelectedVoiceLabVoice);
         Assert.True(viewModel.AuditionSelectedVoiceCommand.CanExecute(null));
         Assert.Equal(
-            "Voice Lab audition stopped · review queue and spend status before preparing another audition",
+            "Voice Lab audition stopped � review queue and spend status before preparing another audition",
             viewModel.StatusMessage);
     }
 

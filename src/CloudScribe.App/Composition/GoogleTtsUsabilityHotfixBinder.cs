@@ -5,6 +5,7 @@ using Avalonia.Platform.Storage;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
+using CloudScribe.Infrastructure.Pricing;
 
 namespace CloudScribe.App.Composition;
 
@@ -24,7 +25,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         "InspectorDrawerProviderControlPreview",
     ];
 
-    private static readonly string[] Mp3OutputOptions = ["MP3 · preserve accepted provider bytes"];
+    private static readonly string[] Mp3OutputOptions = ["MP3 � preserve accepted provider bytes"];
     private static readonly FilePickerFileType Mp3FileType = new("MP3 audio")
     {
         Patterns = ["*.mp3"],
@@ -37,6 +38,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         builtInPricing ?? throw new ArgumentNullException(nameof(builtInPricing));
     private readonly GoogleGenerationAcceptedMp3OutputService _acceptedMp3OutputService =
         acceptedMp3OutputService ?? throw new ArgumentNullException(nameof(acceptedMp3OutputService));
+    private readonly V222ControlSet _comparisonPricing = new(new StrictJsonObjectReader());
+    private GoogleVoiceSampleSession? _sampleSession;
 
     public void Attach(MainWindow window, ShellViewModel viewModel)
     {
@@ -66,6 +69,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             mounted = true;
         }
 
+        if (mounted && window.FindControl<Button>("VoiceComparisonButton") is { } comparison)
+        {
+            comparison.Click += async (_, _) => await OpenVoiceComparisonAsync(window, viewModel).ConfigureAwait(true);
+        }
         return mounted;
     }
 
@@ -74,12 +81,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         host.Children.Clear();
         host.Spacing = 14;
         AddIntro(host);
-        AddOnboardingControls(AddSection(host, "1 · Connect Google", expanded: false), viewModel);
-        AddCatalogControls(AddSection(host, "2 · Choose a voice", expanded: true), viewModel);
-        AddPricingActivationControls(AddSection(host, "3 · Confirm current pricing", expanded: false), viewModel);
-        AddOutputAndSpendControls(AddSection(host, "4 · Review & approve", expanded: true), viewModel);
+        AddOnboardingControls(AddSection(host, "1 � Connect Google", expanded: false), viewModel);
+        AddCatalogControls(AddSection(host, "2 � Choose a voice", expanded: true), viewModel);
+        AddPricingActivationControls(AddSection(host, "3 � Confirm current pricing", expanded: false), viewModel);
+        AddOutputAndSpendControls(AddSection(host, "4 � Review & approve", expanded: true), viewModel);
         AddGenerateControls(host, viewModel);
-        AddVerifiedOutputControls(window, AddSection(host, "5 · Listen & export", expanded: true), viewModel);
+        AddVerifiedOutputControls(window, AddSection(host, "5 � Listen & export", expanded: true), viewModel);
         AddLiveStatus(host, viewModel);
     }
 
@@ -136,7 +143,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             string json = RequireServiceAccountJson(controls.ServiceAccountJson.Text);
             Uri catalogEndpoint = RequireHttpsEndpoint(controls.CatalogEndpoint.Text, "voice catalog endpoint");
             Uri synthesisEndpoint = RequireHttpsEndpoint(controls.SynthesisEndpoint.Text, "synthesis endpoint");
-            viewModel.StatusMessage = "Google TTS · authenticating service account and verifying real voice catalog";
+            viewModel.StatusMessage = "Google TTS � authenticating service account and verifying real voice catalog";
             GoogleTextToSpeechCatalogBootstrapResult result = await _bootstrapService.ConfigureFreshAsync(
                 account,
                 name,
@@ -146,12 +153,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 synthesisEndpoint,
                 region,
                 CancellationToken.None).ConfigureAwait(true);
-            viewModel.StatusMessage = $"Google TTS configured · project {result.ProjectId} · {result.Voices.Count} observed voices";
+            viewModel.StatusMessage = $"Google TTS configured � project {result.ProjectId} � {result.Voices.Count} observed voices";
             await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            viewModel.StatusMessage = $"Google TTS configuration failed safely · {ex.Message}";
+            viewModel.StatusMessage = $"Google TTS configuration failed safely � {ex.Message}";
         }
         finally
         {
@@ -310,7 +317,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             }
 
             string digest = current.CompiledPayloadSha256.Length > 16
-                ? current.CompiledPayloadSha256[..16] + "…"
+                ? current.CompiledPayloadSha256[..16] + "."
                 : current.CompiledPayloadSha256;
             string approvalState = viewModel.PreparedGoogleGenerationSpendApproved
                 ? "APPROVED for this exact compiled request"
@@ -340,7 +347,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             }
             catch (Exception ex)
             {
-                viewModel.StatusMessage = $"Google spend preparation failed safely · {ex.Message}";
+                viewModel.StatusMessage = $"Google spend preparation failed safely � {ex.Message}";
             }
             finally
             {
@@ -372,7 +379,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
 
         host.Children.Add(prepareSpend);
         host.Children.Add(review);
-        AddField(host, "Spending limit · minor units", spendMaximum);
+        AddField(host, "Spending limit � minor units", spendMaximum);
         host.Children.Add(NewDescription("For a currency with two decimal places, 100 minor units = 1.00. The exact currency and estimate appear above."));
         host.Children.Add(spendConfirmed);
         host.Children.Add(approveSpend);
@@ -389,7 +396,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         });
         host.Children.Add(new TextBlock
         {
-            Text = "Check the provider’s current prices against the included catalog. Paste the pricing page you reviewed and confirm the rates match. Fetching a page records your review; it does not verify the rates automatically.",
+            Text = "Check the provider's current prices against the included catalog. Paste the pricing page you reviewed and confirm the rates match. Fetching a page records your review; it does not verify the rates automatically.",
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
         TextBox currentSource = NewTextBox("Current provider pricing HTTPS source");
@@ -416,7 +423,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                         CancellationToken.None)
                     .ConfigureAwait(true);
                 string shortHash = result.Observation.Sha256.Length > 16
-                    ? result.Observation.Sha256[..16] + "…"
+                    ? result.Observation.Sha256[..16] + "."
                     : result.Observation.Sha256;
                 evidence.Text =
                     $"Observed current source: {result.Observation.SourceUri}\n" +
@@ -425,12 +432,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                     $"Bytes observed: {result.Observation.ByteCount}\n" +
                     "Trust: unsigned HTTPS observation + explicit user match confirmation";
                 viewModel.StatusMessage =
-                    $"Pricing active · current source observed {result.Observation.ObservedAtUtc:O} · {shortHash} · manual unsigned activation recorded";
+                    $"Pricing active � current source observed {result.Observation.ObservedAtUtc:O} � {shortHash} � manual unsigned activation recorded";
             }
             catch (Exception ex)
             {
-                evidence.Text = $"Current pricing evidence not activated · {ex.Message}";
-                viewModel.StatusMessage = $"Pricing activation failed safely · {ex.Message}";
+                evidence.Text = $"Current pricing evidence not activated � {ex.Message}";
+                viewModel.StatusMessage = $"Pricing activation failed safely � {ex.Message}";
             }
             finally
             {
@@ -459,7 +466,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         }
         catch (Exception ex)
         {
-            viewModel.StatusMessage = $"Google spend approval failed safely · {ex.Message}";
+            viewModel.StatusMessage = $"Google spend approval failed safely � {ex.Message}";
         }
     }
 
@@ -493,7 +500,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     {
         TextBlock outputPath = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
         Button play = NewButton("Play verified MP3");
-        Button export = NewButton("Export verified MP3…");
+        Button export = NewButton("Export verified MP3.");
         play.Command = viewModel.PlayLastGeneratedGoogleMp3Command;
         export.Click += async (_, _) => await ExportVerifiedAsync(window, viewModel).ConfigureAwait(true);
 
@@ -501,7 +508,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         {
             outputPath.Text = string.IsNullOrWhiteSpace(viewModel.LastGeneratedGoogleMp3Path)
                 ? "Your verified audio will appear here after generation."
-                : $"Verified MP3 · {viewModel.LastGeneratedGoogleMp3Path}";
+                : $"Verified MP3 � {viewModel.LastGeneratedGoogleMp3Path}";
             play.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3;
             export.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3 && window.StorageProvider.CanSave;
         }
@@ -539,16 +546,16 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             if (!destination.Path.IsFile)
                 throw new InvalidOperationException("The selected MP3 export destination is not a local Windows file.");
 
-            viewModel.StatusMessage = "Google generation · exporting verified accepted MP3 bytes";
+            viewModel.StatusMessage = "Google generation � exporting verified accepted MP3 bytes";
             string exportedPath = await _acceptedMp3OutputService.ExportVerifiedAsync(
                 sourcePath,
                 destination.Path.LocalPath,
                 CancellationToken.None).ConfigureAwait(true);
-            viewModel.StatusMessage = $"Google generation · verified MP3 exported · {exportedPath}";
+            viewModel.StatusMessage = $"Google generation � verified MP3 exported � {exportedPath}";
         }
         catch (Exception ex)
         {
-            viewModel.StatusMessage = $"Google MP3 export failed safely · {ex.Message}";
+            viewModel.StatusMessage = $"Google MP3 export failed safely � {ex.Message}";
         }
     }
 

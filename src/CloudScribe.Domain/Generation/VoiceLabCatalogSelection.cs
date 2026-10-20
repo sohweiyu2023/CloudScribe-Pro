@@ -10,7 +10,9 @@ public sealed record VoiceLabCatalogSelection(
     bool CapabilityCurrent,
     bool VoiceEnabled,
     bool AccountProjectAuthorized,
-    IReadOnlyList<string>? LanguageCodes = null)
+    IReadOnlyList<string>? LanguageCodes = null,
+    string? SsmlGender = null,
+    int? NaturalSampleRateHertz = null)
 {
     public VoiceLabCatalogSelection Validate()
     {
