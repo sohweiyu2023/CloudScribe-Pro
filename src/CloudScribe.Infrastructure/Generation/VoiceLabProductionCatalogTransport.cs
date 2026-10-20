@@ -191,7 +191,9 @@ public sealed class VoiceLabProductionCatalogTransport
                     CapabilityCurrent: true,
                     providerVoice.VoiceEnabled,
                     AccountProjectAuthorized: projectAuthorized,
-                    LanguageCodes: providerVoice.LanguageCodes?.ToArray()));
+                    LanguageCodes: providerVoice.LanguageCodes?.ToArray(),
+                    SsmlGender: providerVoice.SsmlGender,
+                    NaturalSampleRateHertz: providerVoice.NaturalSampleRateHertz));
             }
 
             return results;

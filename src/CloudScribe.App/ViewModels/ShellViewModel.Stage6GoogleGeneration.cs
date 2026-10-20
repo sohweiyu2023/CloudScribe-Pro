@@ -119,6 +119,7 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Google generation production preparation is not configured.");
             PreparedGoogleGenerationSpendReview = null;
             PreparedGoogleGenerationSpendApproved = false;
+            _googleSamplePrepared = false;
             cancellationToken.ThrowIfCancellationRequested();
             StatusMessage = "Google generation · compiling exact current request for spend review";
             GoogleGenerationSpendReview review = await prepare(cancellationToken).ConfigureAwait(true)

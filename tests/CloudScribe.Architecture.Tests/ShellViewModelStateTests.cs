@@ -15,6 +15,33 @@ namespace CloudScribe.Architecture.Tests;
 public sealed class ShellViewModelStateTests
 {
     [Fact]
+    public async Task SamplePreparationCapturesOnlyBoundedTextWithoutEditingTheDocument()
+    {
+        using ShellViewModel model = CreateViewModel();
+        model.DocumentText = "Private full document must not be used for a voice sample.";
+        string originalText = model.DocumentText;
+        Guid? originalId = model.CurrentDocumentId;
+        model.SelectedVoiceLabVoice = VoiceSelection() with { VoiceStableId = "en-US-Standard-C", LanguageCodes = ["en-US"] };
+        ShellViewModel.GoogleTtsStudioRequestSelection? captured = null;
+        model.ConfigureStage6GoogleGenerationPreparation(_ =>
+        {
+            captured = model.CaptureGoogleTtsStudioRequestSelection();
+            return Task.FromResult(new ShellViewModel.GoogleGenerationSpendReview("USD", 2, 1, "pricing", "en-US-Standard-C", new string('a', 64)));
+        });
+        Guid sampleId = Guid.NewGuid();
+        await model.PrepareGoogleVoiceSampleAsync("Only this sample.", sampleId, TestContext.Current.CancellationToken);
+        Assert.NotNull(captured);
+        Assert.Equal("Only this sample.", captured.ExactText);
+        Assert.Equal(sampleId, captured.DocumentId);
+        Assert.Null(captured.RevisionId);
+        Assert.Equal(originalText, model.DocumentText);
+        Assert.Equal(originalId, model.CurrentDocumentId);
+        model.CancelGoogleVoiceSampleReview();
+        Assert.Null(model.PreparedGoogleGenerationSpendReview);
+        Assert.False(model.CanGenerateWithGoogle);
+    }
+
+    [Fact]
     public void UpdateViewportRejectsInvalidGeometryWithoutMutatingLayout()
     {
         using ShellViewModel viewModel = CreateViewModel();
