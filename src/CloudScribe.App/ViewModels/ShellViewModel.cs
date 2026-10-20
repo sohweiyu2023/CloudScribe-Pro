@@ -350,7 +350,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _ => string.Empty,
     };
 
-    public string DocumentMetricLabel => $"Local preview · {DocumentText.Length:N0} characters";
+    public string DocumentMetricLabel => $"Local document · {DocumentText.Length:N0} characters";
 
     public CosmicThemePalette EffectivePalette => CosmicThemeCatalog.Resolve(
         SelectedThemeOption?.Preference ?? ThemePreference.FollowSystem,

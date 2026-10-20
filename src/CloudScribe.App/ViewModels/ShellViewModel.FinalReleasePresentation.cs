@@ -26,16 +26,16 @@ public sealed partial class ShellViewModel
         library.StateKind = "LOCAL";
 
         RoutePageViewModel queue = _pages[AppRoute.Queue];
-        queue.StateTitle = "No generation jobs";
+        queue.StateTitle = "Persisted request inspection";
         queue.StateDescription =
-            "No generation work is queued. Billable submission stays fail-closed until the document, provider, pricing and authorization evidence for that exact request are valid.";
-        queue.StateKind = "EMPTY";
+            "Open Setups in the toolbar for persisted request counts and unresolved states. This page does not claim the durable queue is empty. An uncertain dispatched request may have been charged; do not resubmit until its provider outcome is known.";
+        queue.StateKind = "LOCAL";
 
         RoutePageViewModel audio = _pages[AppRoute.Audio];
-        audio.StateTitle = "No verified local audio";
+        audio.StateTitle = "Saved MP3 audio";
         audio.StateDescription =
-            "Playback and audition actions appear only when the corresponding verified local media or trusted Voice Lab capability is available.";
-        audio.StateKind = "EMPTY";
+            "Open the saved MP3 folder to listen to existing audio without generating again. Current-session Play/Export verify accepted bytes. Older files remain on disk but are not silently adopted as trusted cache entries.";
+        audio.StateKind = "LOCAL";
 
         RoutePageViewModel pricing = _pages[AppRoute.Pricing];
         pricing.StateTitle = "No active trusted pricing catalog";

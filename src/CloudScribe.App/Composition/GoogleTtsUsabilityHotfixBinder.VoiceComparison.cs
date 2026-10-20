@@ -109,6 +109,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         foreach (Button button in new[] { prepare, generate, replay, export, use, close })
         { button.Margin = new Thickness(0, 0, 8, 8); actions.Children.Add(button); }
         content.Children.Add(actions);
+        AddStopWaitingControl(content, model);
         content.Children.Add(Info("Verified replay/export is free. This-session cache matches the exact account, project, voice, language, text and MP3 settings; restarting clears it."));
         dialog.Content = new ScrollViewer { Content = content, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
 
@@ -251,6 +252,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             GoogleVoiceSampleSpec? spec = Spec(); if (spec is null) return;
             model.SelectedVoiceLabVoice = spec.Voice; model.VoiceLabLocaleFilter = spec.LanguageCode;
             model.VoiceLabSearchText = null; useSelected = true; dialog.Close();
+            model.RememberSelectedVoiceSetup();
         };
         close.Click += (_, _) => dialog.Close();
         dialog.Closing += (_, args) => { if (busy) args.Cancel = true; };

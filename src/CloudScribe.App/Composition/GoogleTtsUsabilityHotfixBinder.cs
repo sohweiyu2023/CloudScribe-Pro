@@ -3,7 +3,9 @@ using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Providers;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Pricing;
 
@@ -17,7 +19,11 @@ namespace CloudScribe.App.Composition;
 public sealed partial class GoogleTtsUsabilityHotfixBinder(
     GoogleTextToSpeechCatalogBootstrapService bootstrapService,
     BuiltInPricingCatalogBootstrapService builtInPricing,
-    GoogleGenerationAcceptedMp3OutputService acceptedMp3OutputService)
+    GoogleGenerationAcceptedMp3OutputService acceptedMp3OutputService,
+    StudioPreferencesStore preferences,
+    IProviderAccountStore accounts,
+    AppPaths paths,
+    LocalRequestStatusReader requestStatus)
 {
     private static readonly string[] ProviderControlHostNames =
     [
@@ -73,6 +79,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         {
             comparison.Click += async (_, _) => await OpenVoiceComparisonAsync(window, viewModel).ConfigureAwait(true);
         }
+        if (mounted && window.FindControl<Button>("WorkspaceSettingsButton") is { } settings)
+            settings.Click += async (_, _) => await OpenWorkspaceSettingsAsync(window, viewModel).ConfigureAwait(true);
         return mounted;
     }
 
@@ -81,11 +89,17 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         host.Children.Clear();
         host.Spacing = 14;
         AddIntro(host);
+        TextBlock connectionStatus = NewDescription("Reading saved connection metadata...");
+        host.Children.Add(connectionStatus);
+        _ = LoadConnectionStatusAsync(connectionStatus);
+        AddLocalPartsControls(window, host, viewModel);
+        host.Children.Add(NewDescription("Your document autosaves locally. Saved Google connections survive restart: skip Connect Google and refresh voices. Use Setups in the toolbar to save voice/language choices and inspect local recovery state."));
         AddOnboardingControls(AddSection(host, "1 · Connect Google", expanded: false), viewModel);
         AddCatalogControls(AddSection(host, "2 · Choose a voice", expanded: true), viewModel);
         AddPricingActivationControls(AddSection(host, "3 · Confirm current pricing", expanded: false), viewModel);
         AddOutputAndSpendControls(AddSection(host, "4 · Review & approve", expanded: true), viewModel);
         AddGenerateControls(host, viewModel);
+        AddStopWaitingControl(host, viewModel);
         AddVerifiedOutputControls(window, AddSection(host, "5 · Listen & export", expanded: true), viewModel);
         AddLiveStatus(host, viewModel);
     }
@@ -118,6 +132,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             NewButton("Configure Google TTS securely"));
         controls.ServiceAccountJson.AcceptsReturn = true;
         controls.ServiceAccountJson.MinHeight = 86;
+        controls.RegionId.Text = "global";
+        controls.CatalogEndpoint.Text = "https://texttospeech.googleapis.com/v1/voices";
+        controls.SynthesisEndpoint.Text = "https://texttospeech.googleapis.com/v1/text:synthesize";
         AddField(host, "Local account ID", controls.AccountId);
         AddField(host, "Account display name", controls.DisplayName);
         AddField(host, "Credential name", controls.CredentialReference);
@@ -259,7 +276,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         voices.SelectionChanged += (_, _) =>
         {
             if (!rebuilding && voices.SelectedIndex >= 0 && voices.SelectedIndex < snapshot.Length)
+            {
                 viewModel.SelectedVoiceLabVoice = snapshot[voices.SelectedIndex];
+                viewModel.RememberSelectedVoiceSetup();
+            }
         };
         Rebuild();
     }
@@ -400,6 +420,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         });
         TextBox currentSource = NewTextBox("Current provider pricing HTTPS source");
+        currentSource.Text = GoogleVoiceComparisonInformation.PricingUrl;
+        TextBlock active = NewDescription(viewModel.PricingCatalogActiveSummary);
+        host.Children.Add(active);
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(ShellViewModel.PricingCatalogActiveSummary), StringComparison.Ordinal))
+                active.Text = viewModel.PricingCatalogActiveSummary;
+        };
+        host.Children.Add(NewDescription("Active catalog selection survives restart. Refreshing account/capability access and approving an exact request are separate. Price review is never confirmed automatically."));
         TextBlock evidence = new()
         {
             Text = "No current pricing source has been observed in this session.",
@@ -430,9 +459,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                     $"Observed UTC: {result.Observation.ObservedAtUtc:O}\n" +
                     $"Source SHA-256: {result.Observation.Sha256}\n" +
                     $"Bytes observed: {result.Observation.ByteCount}\n" +
-                    "Trust: unsigned HTTPS observation + explicit user match confirmation";
+                    "Trust: unsigned HTTPS observation + explicit user match confirmation\n" +
+                    (result.ObservationRecorded ? "Review metadata recorded locally." : "Latest review metadata could not be recorded; this observation is visible in this session only.");
                 viewModel.StatusMessage =
                     $"Pricing active · current source observed {result.Observation.ObservedAtUtc:O} · {shortHash} · manual unsigned activation recorded";
+                await viewModel.RefreshLocalPricingHistoryAsync().ConfigureAwait(true);
             }
             catch (Exception ex)
             {

@@ -70,6 +70,8 @@ public static class CompositionRoot
         services.AddSingleton<Stage7VoiceLabCatalogShellBinder>();
         services.AddSingleton<Stage7VoiceLabAuditionShellBinder>();
         services.AddSingleton<BuiltInPricingCatalogBootstrapService>();
+        services.AddSingleton<StudioPreferencesStore>();
+        services.AddSingleton<LocalRequestStatusReader>();
         services.AddSingleton<GoogleTtsUsabilityHotfixBinder>();
         services.AddSingleton<GoogleGenerationAcceptedMp3OutputService>();
     }
@@ -82,6 +84,7 @@ public static class CompositionRoot
             ConfigureWorkflows(viewModel, serviceProvider);
             ConfigureFinalProductionStages(viewModel, serviceProvider);
             viewModel.ApplyFinalReleasePresentation();
+            viewModel.ConfigureSavedVoiceSetups(serviceProvider.GetRequiredService<StudioPreferencesStore>());
             viewModel.ScheduleDocumentWorkspaceStart();
             viewModel.SchedulePricingHistoryStart();
             return viewModel;
@@ -135,6 +138,11 @@ public static class CompositionRoot
         ShellViewModel viewModel,
         IServiceProvider serviceProvider)
     {
+        viewModel.ConfigureGoogleRequestInvalidation(() =>
+        {
+            serviceProvider.GetRequiredService<GoogleGenerationProductionPendingApprovalStateOwner>().Invalidate();
+            serviceProvider.GetRequiredService<GoogleGenerationProductionSubmissionStateOwner>().Invalidate();
+        });
         GoogleGenerationProductionIntentAssemblyCoordinator intentAssemblyCoordinator =
             serviceProvider.GetRequiredService<GoogleGenerationProductionIntentAssemblyCoordinator>();
         GoogleGenerationProductionPreparationCoordinator preparationCoordinator =

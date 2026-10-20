@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CloudScribe.Architecture.Tests;
 
-public sealed class ShellViewModelStateTests
+public sealed partial class ShellViewModelStateTests
 {
     [Fact]
     public async Task SamplePreparationCapturesOnlyBoundedTextWithoutEditingTheDocument()
@@ -29,6 +29,8 @@ public sealed class ShellViewModelStateTests
             return Task.FromResult(new ShellViewModel.GoogleGenerationSpendReview("USD", 2, 1, "pricing", "en-US-Standard-C", new string('a', 64)));
         });
         Guid sampleId = Guid.NewGuid();
+        int invalidations = 0;
+        model.ConfigureGoogleRequestInvalidation(() => invalidations++);
         await model.PrepareGoogleVoiceSampleAsync("Only this sample.", sampleId, TestContext.Current.CancellationToken);
         Assert.NotNull(captured);
         Assert.Equal("Only this sample.", captured.ExactText);
@@ -39,6 +41,7 @@ public sealed class ShellViewModelStateTests
         model.CancelGoogleVoiceSampleReview();
         Assert.Null(model.PreparedGoogleGenerationSpendReview);
         Assert.False(model.CanGenerateWithGoogle);
+        Assert.True(invalidations > 0);
     }
 
     [Fact]

@@ -76,20 +76,9 @@ public sealed partial class ShellViewModel
         if (!_pages.TryGetValue(AppRoute.Audio, out RoutePageViewModel? page) || page is null)
             return;
 
-        if (CanAuditionSelectedVoice)
-        {
-            page.HasPrimaryAction = true;
-            page.PrimaryActionLabel = "Audition selected voice";
-            page.PrimaryActionCommand = AuditionSelectedVoiceCommand;
-            return;
-        }
-
-        if (_voiceLabCatalog is not null && _captureVoiceLabCatalogState is not null)
-        {
-            page.HasPrimaryAction = true;
-            page.PrimaryActionLabel = "Refresh Voice Lab";
-            page.PrimaryActionCommand = RefreshVoiceLabCatalogCommand;
-        }
+        page.HasPrimaryAction = true;
+        page.PrimaryActionLabel = "Open saved MP3 folder";
+        page.PrimaryActionCommand = OpenSavedAudioFolderCommand;
     }
 
     [RelayCommand(CanExecute = nameof(CanRefreshVoiceLabCatalog))]
@@ -132,10 +121,7 @@ public sealed partial class ShellViewModel
                 SelectedVoiceLabVoice = null;
             }
 
-            if (SelectedVoiceLabVoice is null && VoiceLabCatalogResults.Count == 1)
-            {
-                SelectedVoiceLabVoice = VoiceLabCatalogResults[0];
-            }
+            RestorePreferredCatalogVoice();
 
             StatusMessage = $"Voice Lab · {VoiceLabCatalogResults.Count} trusted voices";
         }

@@ -31,9 +31,7 @@ public sealed partial class ShellViewModel
     {
         if (Volatile.Read(ref _googleGenerationInFlight) != 0)
             throw new InvalidOperationException("Wait for the current Google operation before changing the sample.");
-        PreparedGoogleGenerationSpendApproved = false;
-        PreparedGoogleGenerationSpendReview = null;
-        _googleSamplePrepared = false;
+        ClearChangedGoogleRequest();
     }
 
     public async Task<string> GeneratePreparedGoogleVoiceSampleAsync(CancellationToken cancellationToken = default)
