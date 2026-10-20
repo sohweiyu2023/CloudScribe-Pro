@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -9,11 +10,25 @@ namespace CloudScribe.App.Composition;
 
 public sealed partial class GoogleTtsUsabilityHotfixBinder
 {
-    private static void AddStopWaitingControl(StackPanel host, ShellViewModel model)
+    private static void Observe(Control owner, ShellViewModel model, PropertyChangedEventHandler handler, Window? lifetime = null)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        model.PropertyChanged += handler;
+        if (lifetime is not null) lifetime.Closed += (_, _) => model.PropertyChanged -= handler;
+    }
+
+    private static void AddStopWaitingControl(StackPanel host, ShellViewModel model, Window? lifetime = null)
     {
         Button cancel = NewButton("Stop waiting for generation (charge may still apply)");
         cancel.IsEnabled = model.GenerateWithGoogleCommand.IsRunning;
-        model.GenerateWithGoogleCommand.PropertyChanged += (_, _) => cancel.IsEnabled = model.GenerateWithGoogleCommand.IsRunning;
+        cancel.IsVisible = model.GenerateWithGoogleCommand.IsRunning;
+        PropertyChangedEventHandler handler = (_, _) =>
+        {
+            cancel.IsEnabled = model.GenerateWithGoogleCommand.IsRunning;
+            cancel.IsVisible = model.GenerateWithGoogleCommand.IsRunning;
+        };
+        model.GenerateWithGoogleCommand.PropertyChanged += handler;
+        if (lifetime is not null) lifetime.Closed += (_, _) => model.GenerateWithGoogleCommand.PropertyChanged -= handler;
         cancel.Click += (_, _) =>
         {
             model.GenerateWithGoogleCommand.Cancel();

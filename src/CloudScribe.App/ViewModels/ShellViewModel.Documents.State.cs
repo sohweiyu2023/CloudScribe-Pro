@@ -148,7 +148,8 @@ public sealed partial class ShellViewModel
         try
         {
             await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
-            DocumentSummary? first = LocalDocuments.FirstOrDefault();
+            DocumentSummary? first = LocalDocuments.FirstOrDefault(d => d.Id == _studioPreferences?.State.LastDocumentId)
+                ?? LocalDocuments.FirstOrDefault();
             if (first is null)
             {
                 ClearDocumentWorkspace();

@@ -177,9 +177,9 @@ public sealed partial class ShellViewModel
             return;
         if (_resolveGoogleGenerationExecutionContext is null)
             return;
-        page.HasPrimaryAction = true;
-        page.PrimaryActionLabel = "Generate with Google";
-        page.PrimaryActionCommand = GenerateWithGoogleCommand;
+        // The toolbar's guided Create MP3 window owns the visible request review.
+        // A direct route action here bypassed that explanation and appeared disabled on return.
+        page.HasPrimaryAction = false;
     }
 
     [RelayCommand(CanExecute = nameof(CanGenerateWithGoogle))]
