@@ -1,7 +1,9 @@
 using System.Net;
 using System.Security.Cryptography;
 using CloudScribe.App.Composition;
+using CloudScribe.Application.Observability;
 using CloudScribe.Application.Pricing;
+using CloudScribe.Domain.Observability;
 using CloudScribe.Domain.Pricing;
 using CloudScribe.Infrastructure.Pricing;
 
@@ -9,6 +11,29 @@ namespace CloudScribe.Architecture.Tests;
 
 public sealed class PricingEvidenceSizeTests
 {
+    [Fact]
+    public async Task ReobservingSameCatalogRecordsEachExplicitReviewWithoutReactivatingIt()
+    {
+        var history = new RecordingHistory(); var timeline = new RecordingTimeline();
+        for (byte i = 1; i <= 2; i++)
+        {
+            using var content = new ByteArrayContent([i]); using var handler = new PricingHandler(content); using var client = new HttpClient(handler);
+            var service = new BuiltInPricingCatalogBootstrapService(new V222ControlSet(new StrictJsonObjectReader()), new ValidAdmission(), history, client, timeline);
+            var result = await service.VerifyCurrentSourceAndActivateAsync(new Uri("https://cloud.google.com/text-to-speech/pricing"), true, TestContext.Current.CancellationToken);
+            Assert.True(result.ObservationRecorded);
+        }
+        Assert.Equal(2, timeline.Entries.Count);
+        Assert.NotEqual(timeline.Entries[0].Summary, timeline.Entries[1].Summary);
+        Assert.All(timeline.Entries, e => Assert.InRange(e.Summary.Length, 1, 240));
+    }
+
+    private sealed class RecordingTimeline : IActivityTimelineStore
+    {
+        public List<ActivityTimelineEntry> Entries { get; } = [];
+        public Task AppendAsync(ActivityTimelineEntry entry, CancellationToken cancellationToken = default) { Entries.Add(entry); return Task.CompletedTask; }
+        public Task<IReadOnlyList<ActivityTimelineEntry>> GetRecentAsync(int maximumCount, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<ActivityTimelineEntry>>(Entries);
+    }
+
     [Fact]
     public async Task ConfirmedObservationCompletesUnsignedActivationWithBoundedProvenance()
     {

@@ -44,12 +44,15 @@ public sealed partial class ShellViewModel
                 .SaveCheckpointAsync(request)
                 .ConfigureAwait(true);
             ApplySaveMetadata(snapshot);
-            IsDocumentDirty = false;
+            bool stillMatches = string.Equals(EffectiveDocumentTitle(), request.Title, StringComparison.Ordinal)
+                && string.Equals(DocumentText, request.Text, StringComparison.Ordinal);
+            IsDocumentDirty = !stillMatches;
             HasDocumentConflict = false;
-            DocumentSaveState = "Saved locally";
-            StatusMessage = "Saved local checkpoint";
+            DocumentSaveState = stillMatches ? "Saved locally" : "Autosave pending.";
+            StatusMessage = stillMatches ? "Saved local checkpoint" : "Checkpoint saved; newer edits are still being saved";
+            if (!stillMatches) QueueDocumentAutosave();
             await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
-            return true;
+            return stillMatches;
         }
         catch (DocumentConcurrencyException)
         {
@@ -118,7 +121,7 @@ public sealed partial class ShellViewModel
             }
 
             ApplySaveMetadata(snapshot);
-            bool stillMatches = string.Equals(DocumentTitle, request.Title, StringComparison.Ordinal)
+            bool stillMatches = string.Equals(EffectiveDocumentTitle(), request.Title, StringComparison.Ordinal)
                 && string.Equals(DocumentText, request.Text, StringComparison.Ordinal);
             IsDocumentDirty = !stillMatches;
             IsDocumentSaving = false;

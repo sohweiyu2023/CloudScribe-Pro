@@ -104,6 +104,18 @@ internal sealed class DocumentWindowBehavior
 
     private void OnClosing(object? sender, WindowClosingEventArgs eventArgs)
     {
+        if (_closeApproved) return;
+        if (_closeInProgress)
+        {
+            eventArgs.Cancel = true;
+            return;
+        }
+        if (ViewModel is { } active && active.GenerateWithGoogleCommand.IsRunning)
+        {
+            eventArgs.Cancel = true;
+            active.StatusMessage = "Generation is still running. Use Stop waiting before closing; a dispatched request may still be charged.";
+            return;
+        }
         if (_closeApproved
             || _closeInProgress
             || ViewModel is not { RequiresDocumentSaveBeforeClose: true } viewModel)

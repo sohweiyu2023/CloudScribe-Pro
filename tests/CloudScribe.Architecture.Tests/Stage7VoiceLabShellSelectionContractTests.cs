@@ -3,7 +3,7 @@ namespace CloudScribe.Architecture.Tests;
 public sealed class Stage7VoiceLabShellSelectionContractTests
 {
     [Fact]
-    public void TrustedCatalogAutoSelectionRequiresExactlyOneVoice()
+    public void TrustedCatalogSelectionRequiresAnExactSavedPreferenceOrExactlyOneVoice()
     {
         string repositoryRoot = FindRepositoryRoot();
         string source = File.ReadAllText(Path.Combine(
@@ -11,10 +11,10 @@ public sealed class Stage7VoiceLabShellSelectionContractTests
             "src",
             "CloudScribe.App",
             "ViewModels",
-            "ShellViewModel.Stage7VoiceLab.cs"));
+            "ShellViewModel.SavedVoiceSetups.cs"));
 
         Assert.Contains(
-            "if (SelectedVoiceLabVoice is null && VoiceLabCatalogResults.Count == 1)",
+            "else if (VoiceLabCatalogResults.Count == 1)",
             source,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -25,6 +25,8 @@ public sealed class Stage7VoiceLabShellSelectionContractTests
             "SelectedVoiceLabVoice is null && VoiceLabCatalogResults.Count > 0",
             source,
             StringComparison.Ordinal);
+        Assert.Contains("if (SelectedVoiceLabVoice is not null) return;", source, StringComparison.Ordinal);
+        Assert.Contains("string.Equals(v.VoiceStableId, PreferredVoiceName, StringComparison.Ordinal)", source, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
