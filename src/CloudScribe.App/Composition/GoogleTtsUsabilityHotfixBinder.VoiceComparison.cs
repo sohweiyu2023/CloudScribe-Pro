@@ -205,10 +205,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             session.InvalidateReview(); consent.IsChecked = false;
             model.VoiceLabLocaleFilter = locale.Text?.Trim(); model.VoiceLabSearchText = null;
-            await _bootstrapService.RefreshConfiguredAsync(CancellationToken.None).ConfigureAwait(true);
-            await model.RefreshVoiceLabCatalogCommand.ExecuteAsync(null).ConfigureAwait(true);
+            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
+            bool loaded = await RefreshConnectedVoicesAsync(model, timeout.Token).ConfigureAwait(true);
             Populate((voices.SelectedItem as ComparisonVoice)?.Name);
-            status.Text = "Connected voice catalog refreshed. No speech was generated. Check the selection and prepare the short sample.";
+            status.Text = loaded ? model.ConnectedVoiceCatalogStatus : "Voice catalog not loaded. " + model.ConnectedVoiceCatalogStatus;
         }).ConfigureAwait(true);
         prepare.Click += async (_, _) => await Run(async () =>
         {
