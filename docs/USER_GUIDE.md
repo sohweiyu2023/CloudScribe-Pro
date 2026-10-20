@@ -4,13 +4,19 @@ The local usability update adds saved voice setups, remembered choices, offline 
 
 CloudScribe turns written text into spoken MP3 audio using your Google Cloud Text-to-Speech account. Cosmic Transcriber does the reverse: it turns recordings into text. The two apps use separate providers, credentials and bills.
 
+## Help inside the application
+
+**Help** in the toolbar opens a six-step Quick Start covering local text, Google setup, voices, cost approval, MP3 playback/export and safe sharing. A fresh profile opens it automatically. **Skip for now**, **Done** or Escape dismiss it; Help reopens it later. Enter advances the focused Next button. Opening or dismissing help does not replace the document editor or its text.
+
+To give a copy to a friend, use a clean app/runtime package. Never include your personal profile, documents, MP3s, service-account JSON, Windows credentials or billing access. Your friend must connect their own Google account. See [Safe Windows sharing](SHARING_WINDOWS.md).
+
 ## Start on an already configured computer
 
 Open the supplied `START-CLOUDSCRIBE.cmd` launcher. Keep the installation folder together: copying only the EXE will not work. The launcher can select the private .NET runtime and the correct local workspace.
 
-Choose **Studio**. Press **Ctrl+N** to create a new document, give it a title, and type or paste a short passage. Open the workspace inspector to see the five voice-workflow sections. Close the inspector drawer when you need to edit the document on a narrow window.
+Choose **Studio**. Press **Ctrl+N** to create a new document, give it a title, and type or paste a short passage. Choose the prominent **Create MP3** button. Its cost, approval and creation controls remain visible while voice choices scroll above. Close an inspector drawer when it blocks the toolbar on a narrow window.
 
-If Google was configured previously, do not create another account or paste the key again. In **2 - Choose a voice**, set the language, for example `en-US`, optionally search `Standard`, then select **Refresh real Google voices**. This renews the saved connection's authenticated evidence and loads current voices. Select the exact voice you want.
+If Google was configured previously, do not create another account or paste the key again. In **Create MP3**, choose a saved setup if desired. Open **Language and voice filters** only when you need to change the remembered language or search, then select **Refresh real Google voices**. This renews the saved connection's authenticated evidence and loads current voices. Select the exact voice you want.
 
 ## Set up Google Cloud once
 
@@ -20,7 +26,7 @@ You need your own Google Cloud account, an enabled billing account, a project wi
 2. Enable **Cloud Text-to-Speech API** for that project.
 3. Create a service account for CloudScribe. The tested configuration used the project's **Service Usage Consumer** role. Do not add Owner or Editor merely to get past an error. Organization policies may restrict keys; follow your administrator's supported credential policy.
 4. Create/download the service account's JSON key yourself. Treat this file like a password. Do not put it into Git, email, screenshots or support reports.
-5. In CloudScribe's **1 - Connect Google**, enter new local identifiers such as `google-home` for Account ID and `google-home-key` for Credential name, plus a display name and region `global`. Local identifiers use lowercase letters, numbers, periods or hyphens.
+5. In Studio's **Advanced tools and connection settings → Connect or change Google account**, enter new local identifiers such as `google-home` for Account ID and `google-home-key` for Credential name, plus a display name and region `global`. Local identifiers use lowercase letters, numbers, periods or hyphens.
 6. Use `https://texttospeech.googleapis.com/v1/voices` for the voice catalog and `https://texttospeech.googleapis.com/v1/text:synthesize` for synthesis. Both endpoints must share the admitted Google API origin.
 7. Paste the JSON directly into **Service-account JSON**, then choose **Configure Google TTS securely**. CloudScribe stores the credential in Windows Credential Manager. The field clears on both success and failure: check the status message and successful voice refresh to confirm setup.
 
@@ -28,22 +34,24 @@ Configuration validates real catalog access and sends an input-free capability p
 
 Official references: [Google Text-to-Speech setup](https://cloud.google.com/text-to-speech/docs/before-you-begin), [service-account key management](https://cloud.google.com/iam/docs/creating-managing-service-account-keys), and [pricing](https://cloud.google.com/text-to-speech/pricing).
 
-## Review pricing and generate
+## Review pricing and create an MP3
 
-1. In **3 - Confirm current pricing**, review Google's current pricing page and compare the relevant rates with the included catalog. Tick the match confirmation only if they agree, then choose **Fetch current pricing evidence and activate**. A successful fetch alone does not prove that prices match.
-2. In **4 - Review & approve**, choose **Prepare exact request and show price**. Check the selected voice, currency, subtotal and compiled payload identity.
-3. Enter a **Spending limit - minor units** at least as large as the displayed amount. For USD, `1` means one cent and `100` means one dollar. This is a per-request application check, not a Google billing-account cap.
-4. Tick **I approve this request and spending limit**, then choose **Approve displayed spend**.
-5. Choose **Generate with Google** once. The text is sent to Google at this point. Wait for a terminal status before doing anything again.
-6. In **5 - Listen & export**, use **Play verified MP3** to open the accepted file in your default player. Use **Export verified MP3** and select your desired folder/filename in the Windows Save dialog. Export preserves the accepted MP3 bytes; it does not generate or bill again.
+1. Choose **Create MP3** in the toolbar. Check the current document and remembered voice. Selecting a named setup restores its voice/language preference; **Refresh real Google voices** validates it using the saved connection. Choose an actual returned voice.
+2. The active pricing status is shown. If pricing is unavailable or needs review, expand **Review pricing source if pricing is unavailable**, compare the official rates with the included catalog, confirm the match yourself, and activate the observed source. Fetching a page does not verify its rates automatically.
+3. Choose **Review current text, voice and cost**. This compiles the exact current request and shows a conservative list estimate without generating audio.
+4. Inspect the displayed voice, currency and amount. Tick **I approve this exact request and its displayed maximum cost**, then choose **Create MP3 — approve and send to Google** once. The application ceiling is the displayed amount in the estimate's currency; this is not a Google billing-account cap.
+5. Wait for the result. **Listen, save and find audio** contains **Play verified MP3**, **Export verified MP3** and folder access. Play/export preserve accepted bytes and do not synthesize again. **Stop waiting** appears during generation; stopping a dispatched request does not prove it was uncharged.
 
+The creation button explains the next step when text, a verified voice, current review or consent is missing. Connection setup is hidden when exactly one enabled Google connection is saved; **Change connection** deliberately reveals the fresh-configuration form inside Advanced tools. It never reads your key back into the form or overwrites the old credential binding.
+
+The detailed separate prepare/ceiling/approve/generate controls remain in **Advanced tools → Detailed request review** for inspection. The guided path uses the same production approval, capability, pricing, queue and byte-integrity checks.
 The displayed subtotal is conservatively rounded from the admitted provider character rate and the exact compiled input, using a UTF-8 byte upper bound. It ignores free allowances and credits, and excludes tax and currency conversion. Your billing account may use a different currency. Review actual Google billing separately.
 
 Approval is single-use. A new prepared request needs fresh confirmation. Editing text or changing the voice requires a new review. The current synchronous workflow accepts short documents within a conservative 5,000-byte compiled-envelope ceiling; split longer passages into shorter documents. Unknown or unpriced voice families are rejected rather than assigned a guessed rate.
 
 ## Save, reopen and troubleshoot
 
-Documents and connection metadata are local. Open saved documents through **Library**; startup may show the welcome screen. Generated MP3s are saved under `%LOCALAPPDATA%\CloudScribe Pro\Generated`. Export files you want to keep in your own audio folder.
+Documents and connection metadata are local. Open saved documents through **Library**; startup reopens the remembered document when it is in the current recent local-library list, otherwise it uses the latest available document. An empty library shows the welcome screen. Generated MP3s are saved under `%LOCALAPPDATA%\CloudScribe Pro\Generated`. Export files you want to keep in your own audio folder.
 
 The current session's Play/Export controls retain accepted-byte integrity evidence in memory. After restarting the app, existing MP3 files remain on disk, but the last-output controls are not restored automatically. Open an already saved/exported MP3 directly in your player; do not regenerate simply to listen again.
 
@@ -52,8 +60,8 @@ The current session's Play/Export controls retain accepted-byte integrity eviden
 | Voices or capability evidence expired | Choose **Refresh real Google voices** to revalidate the saved connection. Evidence expires after about 30 minutes. |
 | No voices | Check language/search filters, saved account access, API enablement and billing. Refresh, then choose an actual returned voice. |
 | Pricing cannot be activated | Read the displayed error. Verify the official HTTPS page and rate match. Do not confirm mismatching rates. |
-| Generate is disabled | Prepare, enter a sufficient limit, tick consent and approve the current request. |
-| Request stopped or reconciliation required | Inspect **Queue** before retrying. A lost response can still have incurred a charge. Do not repeatedly click Generate. |
+| Create MP3 asks for a prerequisite | Follow its next-action message: add text, refresh/select a voice, review the current cost, then tick consent. |
+| Request stopped or reconciliation required | Inspect persisted request status in **Setups** before retrying. A lost response can still have incurred a charge. Do not repeatedly click Generate. |
 | Nothing plays | Confirm the MP3 exists and your default audio player works. Export/listen locally without a new synthesis. |
 
 Back up documents and exported audio before moving/removing an installation. Windows Credential Manager entries are separate from ordinary app files and do not transfer by copying the installation directory. Keep credentials out of backups you share.

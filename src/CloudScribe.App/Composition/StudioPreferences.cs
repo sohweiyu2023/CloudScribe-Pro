@@ -7,4 +7,6 @@ public sealed record StudioPreferences
     public VoiceSetup[] Setups { get; init; } = [];
     public CloudScribe.App.Design.ThemePreference Theme { get; init; }
     public bool ReducedMotion { get; init; }
+    public Guid? LastDocumentId { get; init; }
+    public bool QuickStartSeen { get; init; }
 }
