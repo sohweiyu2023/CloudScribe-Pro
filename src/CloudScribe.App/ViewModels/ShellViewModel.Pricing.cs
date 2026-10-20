@@ -8,6 +8,7 @@ namespace CloudScribe.App.ViewModels;
 
 public sealed partial class ShellViewModel
 {
+    public Task RefreshLocalPricingHistoryAsync() => RefreshPricingHistoryObservedAsync();
     private IPricingCatalogHistoryStore? _pricingCatalogHistoryStore;
     private IPricingContractOverrideStore? _pricingContractOverrideStore;
     private IProviderAccountStore? _providerAccountStore;

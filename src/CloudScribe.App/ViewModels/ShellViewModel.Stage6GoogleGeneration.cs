@@ -112,6 +112,7 @@ public sealed partial class ShellViewModel
     public async Task<GoogleGenerationSpendReview> PrepareGoogleGenerationSpendReviewAsync(
         CancellationToken cancellationToken = default)
     {
+        long requestVersion = Volatile.Read(ref _googleRequestVersion);
         EnterGoogleGenerationOperation();
         try
         {
@@ -125,6 +126,7 @@ public sealed partial class ShellViewModel
             GoogleGenerationSpendReview review = await prepare(cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Google generation preparation returned no spend review.");
             review.Validate();
+            RequireUnchangedGoogleRequest(requestVersion);
             PreparedGoogleGenerationSpendReview = review;
             StatusMessage = "Google generation · exact compiled estimate ready for explicit review";
             return review;
@@ -140,6 +142,7 @@ public sealed partial class ShellViewModel
         bool confirmedByUser,
         CancellationToken cancellationToken = default)
     {
+        long requestVersion = Volatile.Read(ref _googleRequestVersion);
         EnterGoogleGenerationOperation();
         try
         {
@@ -158,6 +161,7 @@ public sealed partial class ShellViewModel
             cancellationToken.ThrowIfCancellationRequested();
             StatusMessage = "Google generation · confirming spend authorization for the displayed compiled request";
             await approve(authorizedMaximumMinorUnits, confirmedByUser, cancellationToken).ConfigureAwait(true);
+            RequireUnchangedGoogleRequest(requestVersion);
             PreparedGoogleGenerationSpendApproved = true;
             StatusMessage = "Google generation · displayed exact compiled spend authorized";
         }
