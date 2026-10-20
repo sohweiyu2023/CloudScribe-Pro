@@ -55,6 +55,16 @@ public sealed partial class MainWindow : Window
     private void OnWindowSizeChanged(object? sender, SizeChangedEventArgs eventArgs)
     {
         ViewModel?.UpdateViewport(eventArgs.NewSize.Width);
+        UpdateCommandLayout(eventArgs.NewSize.Width);
+    }
+
+    internal void UpdateCommandLayout(double width)
+    {
+        bool narrow = width < 1000;
+        Grid.SetRow(CommandActions, narrow ? 1 : 0);
+        Grid.SetColumn(CommandActions, narrow ? 0 : 2);
+        Grid.SetColumnSpan(CommandActions, narrow ? 3 : 1);
+        CommandActions.HorizontalAlignment = narrow ? Avalonia.Layout.HorizontalAlignment.Left : Avalonia.Layout.HorizontalAlignment.Right;
     }
 
     private void OnWindowOpened(object? sender, EventArgs eventArgs)

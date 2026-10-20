@@ -6,7 +6,7 @@ CloudScribe turns written text into spoken MP3 audio using your Google Cloud Tex
 
 ## Help inside the application
 
-**Help** in the toolbar opens a six-step Quick Start covering local text, Google setup, voices, cost approval, MP3 playback/export and safe sharing. A fresh profile opens it automatically. **Skip for now**, **Done** or Escape dismiss it; Help reopens it later. Enter advances the focused Next button. Opening or dismissing help does not replace the document editor or its text.
+**Help** opens a live walkthrough that points to actual controls, opens the relevant screens and scrolls targets into view. It has 15 steps for first-time setup and 11 for a saved connection, plus labeled Google setup illustrations. **Back**, **Next**, **Skip guide**, **Finish guide** and **Show control** keep navigation simple; Escape skips, and Help replays it. Guide navigation never approves costs or generates speech. See [Visual walkthrough](VISUAL_WALKTHROUGH.md). **About** shows the maintainer, website and optional support email.
 
 To give a copy to a friend, use a clean app/runtime package. Never include your personal profile, documents, MP3s, service-account JSON, Windows credentials or billing access. Your friend must connect their own Google account. See [Safe Windows sharing](SHARING_WINDOWS.md).
 

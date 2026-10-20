@@ -54,7 +54,8 @@ Windows credentials. Each person must supply their own provider access.
 Official setup: https://cloud.google.com/text-to-speech/docs/before-you-begin
 Official pricing: https://cloud.google.com/text-to-speech/pricing
 '@ | Set-Content -LiteralPath (Join-Path $target 'README-FIRST.txt') -Encoding utf8
-foreach ($guide in @('USER_GUIDE.md','SHARING_WINDOWS.md','SAVED_SETUPS_AND_LOCAL_RECOVERY.md')) {
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-CloudScribe.ps1') -Destination (Join-Path $target 'INSTALL-CLOUDSCRIBE.ps1')
+foreach ($guide in @('USER_GUIDE.md','SHARING_WINDOWS.md','SAVED_SETUPS_AND_LOCAL_RECOVERY.md','VISUAL_WALKTHROUGH.md','ABOUT_REFERENCE.md','WINDOWS_INSTALLATION.md')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "..\docs\$guide") -Destination (Join-Path $target $guide)
 }
 $files = Get-ChildItem -LiteralPath $target -Recurse -File

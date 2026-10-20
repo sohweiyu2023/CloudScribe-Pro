@@ -13,6 +13,9 @@
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationIcon>Assets/CloudScribe.ico</ApplicationIcon>
+    <AppHostDotNetSearch>AppRelative;EnvironmentVariable;Global</AppHostDotNetSearch>
+    <AppHostRelativeDotNet>../runtime</AppHostRelativeDotNet>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../CloudScribe.Application/CloudScribe.Application.csproj" />
@@ -27,5 +30,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <AvaloniaResource Include="Assets/CloudScribe.ico" />
   </ItemGroup>
 </Project>

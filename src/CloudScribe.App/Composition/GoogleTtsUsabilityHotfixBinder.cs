@@ -84,7 +84,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         if (mounted && window.FindControl<Button>("CreateMp3Button") is { } create)
             create.Click += async (_, _) => await OpenCreateMp3Async(window, viewModel).ConfigureAwait(true);
         if (mounted && window.FindControl<Button>("QuickStartHelpButton") is { } help)
-            help.Click += async (_, _) => await OpenQuickStartAsync(window, viewModel).ConfigureAwait(true);
+            help.Click += async (_, _) => await OpenQuickStartObservedAsync(window, viewModel).ConfigureAwait(true);
+        if (mounted && window.FindControl<Button>("AboutButton") is { } about)
+            about.Click += async (_, _) => await CloudScribeAbout.ShowAsync(window).ConfigureAwait(true);
+        if (mounted) AnchoredWalkthrough.Prepare(window);
         if (mounted && preferences.IsFreshProfile && !preferences.State.QuickStartSeen)
         {
             if (window.IsVisible)
