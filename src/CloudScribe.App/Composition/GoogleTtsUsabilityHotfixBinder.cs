@@ -301,8 +301,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     private static void AddVoiceSelector(StackPanel host, ShellViewModel viewModel, Window? lifetime = null)
     {
         ComboBox voices = new() { PlaceholderText = "Select a verified Google voice" };
-        AutomationProperties.SetName(voices, "Verified Google voice");
         AddField(host, "Voice", voices);
+        AutomationProperties.SetName(voices, "Verified Google voice");
         TextBlock selected = NewDescription(string.Empty);
         host.Children.Add(selected);
         VoiceLabCatalogSelection[] snapshot = [];
@@ -600,7 +600,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         void Refresh()
         {
             outputPath.Text = string.IsNullOrWhiteSpace(viewModel.LastGeneratedGoogleMp3Path)
-                ? "Your verified audio will appear here after generation."
+                ? "No verified MP3 is available in this session yet. Older MP3 files stay on disk after restart: use Open saved MP3 folder here or in Setups and open a file in your audio player. You do not need to generate it again. Play/export enable after a verified result."
                 : $"Verified MP3 · {viewModel.LastGeneratedGoogleMp3Path}";
             play.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3;
             export.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3 && window.StorageProvider.CanSave;
@@ -615,6 +615,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         host.Children.Add(outputPath);
         host.Children.Add(play);
         host.Children.Add(export);
+        host.Children.Add(NewDescription("Play and export use the saved accepted audio and never synthesize again. Export lets you choose a folder and filename. If audio is unavailable or fails verification, keep the existing file and inspect Setups before retrying a paid request."));
     }
 
     private async Task ExportVerifiedAsync(MainWindow window, ShellViewModel viewModel)
