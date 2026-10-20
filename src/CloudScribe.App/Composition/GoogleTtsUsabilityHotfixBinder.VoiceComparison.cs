@@ -45,7 +45,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
         Window dialog = new()
         {
-            Title = "CloudScribe - Voices and short samples",
+            Title = "CloudScribe — Voices and short samples",
             Width = 980,
             Height = 780,
             MinWidth = 600,
@@ -61,7 +61,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         content.Children.Add(Info("Voice used for your existing AtR recordings: en-US-Standard-C. Current Studio voice: " + (originalVoice?.VoiceStableId ?? "not selected") + "."));
         content.Children.Add(Info("Selecting a voice sends nothing. Samples use only the box below; your document stays unchanged."));
         content.Children.Add(Info("USD list prices checked " + GoogleVoiceComparisonInformation.ReferenceChecked +
-            " � authenticated catalog " + V222ControlSet.CatalogVersion + ". Prepare verifies the final request; estimates exclude free allowances, tax and FX."));
+            " · authenticated catalog " + V222ControlSet.CatalogVersion + ". Prepare verifies the final request; estimates exclude free allowances, tax and FX."));
 
         WrapPanel links = new() { Orientation = Orientation.Horizontal };
         foreach ((string label, string url) in new[]
@@ -93,7 +93,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         comparison.Children.Add(voices); Grid.SetColumn(details, 1); comparison.Children.Add(details); content.Children.Add(comparison);
         TextBox sample = NewTextBox("Short sample text"); sample.Text = GoogleVoiceComparisonInformation.DefaultText;
         sample.AcceptsReturn = true; sample.TextWrapping = TextWrapping.Wrap; sample.MinHeight = 70; sample.MaxHeight = 130;
-        AutomationProperties.SetName(sample, "Voice sample text"); content.Children.Add(Info("Short sample - 1 to 500 characters. MP3, normal speed, zero pitch and volume adjustment.")); content.Children.Add(sample);
+        AutomationProperties.SetName(sample, "Voice sample text"); content.Children.Add(Info("Short sample — 1 to 500 characters. MP3, normal speed, zero pitch and volume adjustment.")); content.Children.Add(sample);
         TextBlock estimates = Info(string.Empty); AutomationProperties.SetName(estimates, "Voice sample cost and character count"); content.Children.Add(estimates);
         TextBlock status = Info("No speech request has been sent. The official links offer prerecorded examples; generating your own sample may be billed.");
         AutomationProperties.SetName(status, "Voice sample status"); content.Children.Add(status);
@@ -101,7 +101,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         content.Children.Add(consent);
         Button prepare = NewButton("Prepare sample and show exact price");
         Button generate = NewButton("Generate sample"); generate.Classes.Add("primary");
-        Button replay = NewButton("Replay matching sample - USD 0");
+        Button replay = NewButton("Replay matching sample — USD 0");
         Button export = NewButton("Export matching sample MP3");
         Button use = NewButton("Use selected voice in Studio");
         Button close = NewButton("Close voice comparison");
@@ -129,9 +129,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             string text = sample.Text ?? string.Empty;
             string language = (row?.Selection?.LanguageCodes is { Count: > 0 } languages ? languages[0] : null)
                 ?? (row?.Name is { Length: >= 5 } name ? name[..5] : "not available");
-            string gender = row?.Selection?.SsmlGender ?? "not returned - no inference from voice letters";
+            string gender = row?.Selection?.SsmlGender ?? "not returned — no inference from voice letters";
             details.Text = row is null ? "Choose a voice." : row.Name + "\n" + GoogleVoiceComparisonInformation.LocaleLabel(language) +
-                " � Provider gender label: " + gender + "\n" + GoogleVoiceComparisonInformation.Description(row.Name) + "\n" +
+                " · Provider gender label: " + gender + "\n" + GoogleVoiceComparisonInformation.Description(row.Name) + "\n" +
                 (row.Selection is null ? "Reference only: not currently loaded from the connected catalog." :
                  GoogleVoiceComparisonInformation.SupportsSampleFamily(row.Name) ? "Connected catalog entry; generation still requires current independent checks." :
                  "Reference only in this sample flow: use the official samples; no generation support is assumed.") + "\n" +
@@ -269,8 +269,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
     private sealed record ComparisonVoice(string Name, VoiceLabCatalogSelection? Selection, GoogleVoiceComparisonInformation.CharacterRate? Rate)
     {
-        public string ListLabel => Name + "  �  " + (Rate?.PriceLabel ?? "price unavailable") +
-            (Selection is null ? "  �  reference only" : GoogleVoiceComparisonInformation.SupportsSampleFamily(Name)
-                ? "  �  connected / short-sample family" : "  �  catalog entry / official samples only");
+        public string ListLabel => Name + "  ·  " + (Rate?.PriceLabel ?? "price unavailable") +
+            (Selection is null ? "  ·  reference only" : GoogleVoiceComparisonInformation.SupportsSampleFamily(Name)
+                ? "  ·  connected / short-sample family" : "  ·  catalog entry / official samples only");
     }
 }
