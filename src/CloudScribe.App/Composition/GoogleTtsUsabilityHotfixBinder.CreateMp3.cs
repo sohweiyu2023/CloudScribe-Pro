@@ -39,7 +39,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "Guided desktop dialog layout and event wiring; approval and submission remain in the existing tested services.")]
     private async Task OpenCreateMp3Async(MainWindow owner, ShellViewModel model, bool guided = false)
     {
-        if (_walkthroughRunning && !guided) return;
+        if (_walkthroughRunning && !guided)
+        {
+            _studioWalkthrough?.NavigateToCreation();
+            return;
+        }
         Window dialog = new()
         {
             Title = "Create MP3",

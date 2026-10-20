@@ -30,6 +30,16 @@ foreach($file in $all | Where-Object {-not $_.PSIsContainer}){
 }
 $settings=Get-Content -LiteralPath (Join-Path $package 'app/appsettings.json') -Raw | ConvertFrom-Json
 if($settings.CloudScribe.AppDataDirectoryOverride){throw 'The source package must not contain a personal profile override.'}
+$menu=[Environment]::GetFolderPath('Programs')
+$shortcut=Join-Path $menu 'CloudScribe Pro.lnk'
+$shell=New-Object -ComObject WScript.Shell
+if(Test-Path -LiteralPath $shortcut){
+    $existing=$shell.CreateShortcut($shortcut)
+    $expected=Join-Path $target 'app/CloudScribe.exe'
+    if(-not [string]::Equals($existing.TargetPath,$expected,[StringComparison]::OrdinalIgnoreCase) -or $existing.Arguments){
+        throw 'An existing CloudScribe Pro Start Menu shortcut points elsewhere or has custom arguments. It was preserved; inspect and rename it before installing.'
+    }
+}
 Assert-NoLinks $target
 $marker=Join-Path $target 'cloudscribe-install.json'
 $profile=$null
@@ -78,9 +88,6 @@ if($profile){
 $hadPrevious=Test-Path -LiteralPath $target
 if($hadPrevious){Move-Item -LiteralPath $target -Destination $backup}
 try{Move-Item -LiteralPath $stage -Destination $target}catch{if($hadPrevious -and -not (Test-Path -LiteralPath $target)){Move-Item -LiteralPath $backup -Destination $target};throw}
-$menu=[Environment]::GetFolderPath('Programs')
-$shortcut=Join-Path $menu 'CloudScribe Pro.lnk'
-$shell=New-Object -ComObject WScript.Shell
 $link=$shell.CreateShortcut($shortcut)
 $link.TargetPath=Join-Path $target 'app/CloudScribe.exe'
 $link.WorkingDirectory=Join-Path $target 'app'
