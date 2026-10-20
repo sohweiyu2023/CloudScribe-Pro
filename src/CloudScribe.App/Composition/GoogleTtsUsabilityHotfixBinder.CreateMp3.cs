@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -67,7 +68,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         body.Children.Add(document);
         void UpdateDocument() => document.Text = string.IsNullOrWhiteSpace(model.DocumentText)
             ? "No text in the current document. Close this window and type or import text in Studio."
-            : $"Current document: {model.DocumentText.Length} characters. Editing it will clear any prepared cost or approval.";
+            : $"Current document: {model.DocumentText.Length} characters. Editing it will clear any prepared cost or approval." +
+                (Encoding.UTF8.GetByteCount(model.DocumentText) >= 4_000
+                    ? " Long text may need parts: close this window, expand Advanced tools, then choose Preview local narration parts (no generation). The compiled short request must fit 5,000 bytes, including request fields."
+                    : string.Empty);
         UpdateDocument();
         model.PropertyChanged += OnDocumentChanged;
         void OnDocumentChanged(object? sender, PropertyChangedEventArgs args)
@@ -76,11 +80,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
 
         ComboBox setups = new() { PlaceholderText = "Saved voice setup (optional)" };
+        Func<Task>? reloadVoices = null;
         AutomationProperties.SetName(setups, "Saved voice setup");
         setups.ItemsSource = preferences.State.Setups.Select(s => s.Name).ToArray();
         setups.HorizontalAlignment = HorizontalAlignment.Stretch;
         body.Children.Add(setups);
-        setups.SelectionChanged += (_, _) =>
+        setups.SelectionChanged += async (_, _) =>
         {
             if (setups.SelectedItem is not string name) return;
             VoiceSetup? setup = preferences.State.Setups.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
@@ -89,26 +94,28 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             try { preferences.Remember(setup); }
             catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
             { model.StatusMessage = "Voice loaded for this session, but its preference could not be saved."; return; }
-            model.StatusMessage = "Saved voice chosen. Refresh voices to validate it before cost review.";
+            model.StatusMessage = "Saved voice chosen. Loading verified voices before cost review.";
+            if (reloadVoices is not null) await reloadVoices().ConfigureAwait(true);
         };
         TextBox locale = NewTextBox("Language, for example en-US");
         locale.Text = model.VoiceLabLocaleFilter;
         TextBox search = NewTextBox("Voice search (optional)");
         search.Text = model.VoiceLabSearchText;
-        TextBlock remembered = Text("Remembered voice: " + (model.PreferredVoiceName ?? "none chosen") + ". Refresh voices to validate it.");
+        TextBlock remembered = Text("Remembered voice: " + (model.PreferredVoiceName ?? "none chosen") + ". Loading checks that this voice is still available.");
         body.Children.Add(remembered);
         model.PropertyChanged += OnVoicePreferenceChanged;
         void OnVoicePreferenceChanged(object? sender, PropertyChangedEventArgs args)
         {
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.VoiceLabLocaleFilter), StringComparison.Ordinal)) locale.Text = model.VoiceLabLocaleFilter;
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.PreferredVoiceName), StringComparison.Ordinal))
-                remembered.Text = "Remembered voice: " + (model.PreferredVoiceName ?? "none chosen") + ". Refresh voices to validate it.";
+                remembered.Text = "Remembered voice: " + (model.PreferredVoiceName ?? "none chosen") + ". Loading checks that this voice is still available.";
         }
         StackPanel filters = AddSection(body, "Language and voice filters", expanded: false);
         AddField(filters, "Language", locale);
         AddField(filters, "Search voices", search);
-        AddRefreshControl(body, model, locale, search, dialog);
+        reloadVoices = AddRefreshControl(body, model, locale, search, dialog, autoLoad: true);
         AddVoiceSelector(body, model, dialog);
+        AddVoiceSampleLinks(body, model, dialog);
 
         TextBlock pricing = Text(model.PricingCatalogActiveSummary);
         body.Children.Add(pricing);
@@ -120,6 +127,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         AddPricingActivationControls(AddSection(body, "Review pricing source if pricing is unavailable", expanded: false), model, dialog);
 
         TextBlock estimate = Text("Prepare the exact current request to see its cost. No provider generation occurs during review.");
+        TextBlock nextStep = Text(string.Empty);
         Button review = NewButton("Review current text, voice and cost");
         CheckBox consent = NewConfirmation("I approve this exact request and its displayed maximum cost.");
         Button create = NewButton("Create MP3 — approve and send to Google");
@@ -127,6 +135,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         create.Name = "GuideGenerateButton";
         ShellViewModel.GoogleGenerationSpendReview? displayed = null;
         bool busy = false;
+        bool reviewing = false;
         void Refresh()
         {
             var current = model.PreparedGoogleGenerationSpendReview;
@@ -138,23 +147,34 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             estimate.Text = current is null
                 ? "No current cost review. Refresh the voice, check pricing, then review again."
                 : $"Exact request: {FormatEstimate(current)} maximum list estimate before taxes, credits and conversion. Voice: {current.VoiceName}. Each request needs new approval.";
-            create.IsEnabled = !busy && !model.GenerateWithGoogleCommand.IsRunning;
+            review.IsEnabled = !busy && !reviewing && !model.IsConnectedVoiceCatalogLoading && model.CanPrepareGoogleGenerationSpend
+                && model.SelectedVoiceLabVoice is not null && !string.IsNullOrWhiteSpace(model.DocumentText);
+            setups.IsEnabled = !busy && !reviewing && !model.IsConnectedVoiceCatalogLoading;
+            create.IsEnabled = !busy && !model.IsConnectedVoiceCatalogLoading && !model.GenerateWithGoogleCommand.IsRunning
+                && current is not null && consent.IsChecked == true && model.CanApproveGoogleGenerationSpend;
             consent.IsEnabled = current is not null && !busy;
+            nextStep.Text = CreateMp3NextStep.Describe(busy, reviewing, !string.IsNullOrWhiteSpace(model.DocumentText),
+                model.IsConnectedVoiceCatalogLoading, model.SelectedVoiceLabVoice is not null,
+                model.CanPrepareGoogleGenerationSpend, current is not null, consent.IsChecked == true, model.CanApproveGoogleGenerationSpend);
         }
         review.Click += async (_, _) =>
         {
-            review.IsEnabled = false;
+            if (reviewing) return;
+            reviewing = true;
+            Refresh();
             try { await model.PrepareGoogleGenerationSpendReviewAsync().ConfigureAwait(true); }
             catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
             { model.StatusMessage = "Cost review could not finish. Refresh voices, check the pricing source and current text. For a long document, use Advanced tools to create local parts. No generation was started."; }
-            finally { review.IsEnabled = true; Refresh(); }
+            finally { reviewing = false; Refresh(); }
         };
         consent.IsCheckedChanged += (_, _) => Refresh();
         model.PropertyChanged += OnReviewChanged;
         void OnReviewChanged(object? sender, PropertyChangedEventArgs args)
         {
             if (args.PropertyName is nameof(ShellViewModel.PreparedGoogleGenerationSpendReview)
-                or nameof(ShellViewModel.CanApproveGoogleGenerationSpend)) Refresh();
+                or nameof(ShellViewModel.CanApproveGoogleGenerationSpend) or nameof(ShellViewModel.IsConnectedVoiceCatalogLoading)
+                or nameof(ShellViewModel.CanPrepareGoogleGenerationSpend) or nameof(ShellViewModel.SelectedVoiceLabVoice)
+                or nameof(ShellViewModel.DocumentText)) Refresh();
         }
         create.Click += async (_, _) =>
         {
@@ -179,7 +199,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         };
         body.Children.Add(review);
         TextBlock status = Text(model.StatusMessage);
-        StackPanel output = AddSection(body, "Listen, save and find audio", expanded: false);
+        StackPanel output = AddSection(body, "Listen, save and find audio", expanded: true);
         AddVerifiedOutputControls(owner, output, model, dialog);
         Button folder = NewButton("Open saved MP3 folder");
         folder.Click += (_, _) => OpenLocalFolder(Path.Combine(
@@ -197,6 +217,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         ScrollViewer bodyScroll = new() { Content = body };
         layout.Children.Add(bodyScroll);
         StackPanel footer = new() { Spacing = 10, Margin = new Thickness(20, 8, 20, 16) };
+        footer.Children.Add(nextStep);
         footer.Children.Add(estimate);
         footer.Children.Add(consent);
         footer.Children.Add(create);
@@ -212,6 +233,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             layout.Children.Add(bodyScroll);
         }
         dialog.Content = layout;
+        DialogBounds.Fit(dialog, owner);
         Refresh();
         try
         {

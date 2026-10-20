@@ -92,6 +92,7 @@ public sealed partial class ShellViewModel
 
         try
         {
+            VoiceLabCatalogLastRefreshSucceeded = false;
             var catalog = _voiceLabCatalog
                 ?? throw new InvalidOperationException("Voice Lab catalog is not configured.");
             var capture = _captureVoiceLabCatalogState
@@ -122,6 +123,7 @@ public sealed partial class ShellViewModel
             }
 
             RestorePreferredCatalogVoice();
+            VoiceLabCatalogLastRefreshSucceeded = true;
 
             StatusMessage = $"Voice Lab · {VoiceLabCatalogResults.Count} trusted voices";
         }
