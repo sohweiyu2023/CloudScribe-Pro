@@ -78,6 +78,8 @@ public sealed partial class ShellViewModel
                 .ConfigureAwait(true);
 
             ApplyDocumentSnapshot(provenanceRevision, $"Imported locally · {displayName}");
+            if (imported.Warnings.Count > 0)
+                StatusMessage += " - " + string.Join(" ", imported.Warnings);
             DocumentSaveState = imported.Warnings.Count == 0
                 ? "Imported and saved locally"
                 : $"Imported safely · {imported.Warnings.Count} note{(imported.Warnings.Count == 1 ? string.Empty : "s")}";
@@ -87,7 +89,9 @@ public sealed partial class ShellViewModel
         {
             IsDocumentSaving = false;
             DocumentSaveState = "Import failed safely";
-            StatusMessage = "Import failed · no existing document was overwritten";
+            StatusMessage = exception is InvalidDataException or ArgumentException
+                ? "Import failed: use TXT, Markdown, HTML or DOCX within 32 MiB; the file must contain valid supported text. No existing document was overwritten."
+                : "Import failed: check local file/disk access. No existing document was overwritten.";
         }
     }
 

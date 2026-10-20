@@ -1,5 +1,7 @@
 # CloudScribe Pro 1.0.1: setup and everyday use
 
+The local usability update adds saved voice setups, remembered choices, offline request inspection and local narration-part preparation. See [Saved setups and local recovery](SAVED_SETUPS_AND_LOCAL_RECOVERY.md) for the updated workflow and persistence details.
+
 CloudScribe turns written text into spoken MP3 audio using your Google Cloud Text-to-Speech account. Cosmic Transcriber does the reverse: it turns recordings into text. The two apps use separate providers, credentials and bills.
 
 ## Start on an already configured computer
@@ -35,7 +37,7 @@ Official references: [Google Text-to-Speech setup](https://cloud.google.com/text
 5. Choose **Generate with Google** once. The text is sent to Google at this point. Wait for a terminal status before doing anything again.
 6. In **5 - Listen & export**, use **Play verified MP3** to open the accepted file in your default player. Use **Export verified MP3** and select your desired folder/filename in the Windows Save dialog. Export preserves the accepted MP3 bytes; it does not generate or bill again.
 
-The displayed subtotal is conservatively rounded from the admitted provider character rate and the exact compiled input, including SSML markup and a UTF-8 byte upper bound. It ignores free allowances and credits, and excludes tax and currency conversion. Your billing account may use a different currency. Review actual Google billing separately.
+The displayed subtotal is conservatively rounded from the admitted provider character rate and the exact compiled input, using a UTF-8 byte upper bound. It ignores free allowances and credits, and excludes tax and currency conversion. Your billing account may use a different currency. Review actual Google billing separately.
 
 Approval is single-use. A new prepared request needs fresh confirmation. Editing text or changing the voice requires a new review. The current synchronous workflow accepts short documents within a conservative 5,000-byte compiled-envelope ceiling; split longer passages into shorter documents. Unknown or unpriced voice families are rejected rather than assigned a guessed rate.
 

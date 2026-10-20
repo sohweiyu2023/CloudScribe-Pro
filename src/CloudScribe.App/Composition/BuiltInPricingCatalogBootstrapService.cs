@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
+using CloudScribe.Application.Observability;
 using CloudScribe.Application.Pricing;
+using CloudScribe.Domain.Observability;
 using CloudScribe.Domain.Pricing;
 using CloudScribe.Infrastructure.Pricing;
 
@@ -16,7 +18,8 @@ public sealed class BuiltInPricingCatalogBootstrapService(
     V222ControlSet controls,
     IPricingCatalogAdmissionService admission,
     IPricingCatalogHistoryStore history,
-    HttpClient httpClient)
+    HttpClient httpClient,
+    IActivityTimelineStore? timeline = null)
 {
     private const int MaxPricingEvidenceBytes = 4 * 1024 * 1024;
 
@@ -45,7 +48,22 @@ public sealed class BuiltInPricingCatalogBootstrapService(
         CurrentPricingObservation observation = await ObserveCurrentPricingAsync(pricingSource, cancellationToken)
             .ConfigureAwait(false);
         PricingCatalogSnapshot snapshot = await ActivateSeedAsync(observation, cancellationToken).ConfigureAwait(false);
-        return new ActivationResult(snapshot, observation);
+        bool recorded = await RecordObservationAsync(snapshot, observation, cancellationToken).ConfigureAwait(false);
+        return new ActivationResult(snapshot, observation, recorded);
+    }
+
+    private async Task<bool> RecordObservationAsync(PricingCatalogSnapshot snapshot, CurrentPricingObservation observation, CancellationToken cancellationToken)
+    {
+        if (timeline is null) return false;
+        try
+        {
+            await timeline.AppendAsync(ActivityTimelineEntry.Create(TimeProvider.System, ActivitySeverity.Information,
+                "PRICING_SOURCE_OBSERVED", "Manual pricing review; source SHA-256 " + observation.Sha256 +
+                "; catalog SHA-256 " + snapshot.Sha256 + "; unsigned observation, not verified rates.", Guid.NewGuid().ToString("N")), cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or Microsoft.Data.Sqlite.SqliteException or Microsoft.EntityFrameworkCore.DbUpdateException)
+        { return false; }
     }
 
     private async Task<CurrentPricingObservation> ObserveCurrentPricingAsync(
@@ -143,5 +161,6 @@ public sealed class BuiltInPricingCatalogBootstrapService(
 
     public sealed record ActivationResult(
         PricingCatalogSnapshot Snapshot,
-        CurrentPricingObservation Observation);
+        CurrentPricingObservation Observation,
+        bool ObservationRecorded = false);
 }

@@ -9,6 +9,18 @@ namespace CloudScribe.App.Composition;
 
 public sealed partial class GoogleTtsUsabilityHotfixBinder
 {
+    private static void AddStopWaitingControl(StackPanel host, ShellViewModel model)
+    {
+        Button cancel = NewButton("Stop waiting for generation (charge may still apply)");
+        cancel.IsEnabled = model.GenerateWithGoogleCommand.IsRunning;
+        model.GenerateWithGoogleCommand.PropertyChanged += (_, _) => cancel.IsEnabled = model.GenerateWithGoogleCommand.IsRunning;
+        cancel.Click += (_, _) =>
+        {
+            model.GenerateWithGoogleCommand.Cancel();
+            model.StatusMessage = "Stop requested. A dispatched request may still be charged; inspect persisted request status in Setups before retrying.";
+        };
+        host.Children.Add(cancel);
+    }
     private static StackPanel AddSection(StackPanel host, string title, bool expanded)
     {
         StackPanel content = new() { Spacing = 10, Margin = new Thickness(0, 12, 0, 4) };
