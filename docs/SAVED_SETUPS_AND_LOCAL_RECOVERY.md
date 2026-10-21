@@ -1,13 +1,13 @@
 # Saved setups, autosave and local recovery
 
-This local update builds on main `542fc32ce4873ac6332c8c2ef55a7d17f2f92e04`. It does not change the Google credential boundary or authorize provider spending.
+Saved setups retain local preferences while the existing Google credential boundary and explicit spending approval remain authoritative. For the current guided Create MP3 flow, see [the user guide](USER_GUIDE.md).
 
 ## Everyday use
 
-1. Launch the supplied updated launcher. Reopen a document in **Library**, or use **Ctrl+N** / **Ctrl+O** to create/import one. Text and title autosave after about 750 ms; **Ctrl+S** creates a checkpoint. Wait for the saved state before ending a session.
-2. If Google is already connected, skip **Connect Google**. Open the inspector with **Ctrl+Shift+I**, enter the language, and use **Refresh real Google voices**. The saved connection is reused; access/capability evidence must still be refreshed when stale.
+1. Open the installed **CloudScribe Pro** shortcut or the portable package's `START-CLOUDSCRIBE.cmd`. Reopen a document in **Library**, or use **Ctrl+N** / **Ctrl+O** to create/import one. Text and title autosave after about 750 ms; **Ctrl+S** creates a checkpoint. Wait for the saved state before ending a session.
+2. If Google is already connected, open **Create MP3** to reuse and check it. Under **Language and voice filters**, set the language and use **Refresh real Google voices** when needed. Access/capability evidence must still be refreshed when stale.
 3. Select a returned voice. Its voice/language choice is remembered automatically. To name it, close an inspector drawer if necessary, choose **Setups**, enter a name and choose **Save current voice setup**.
-4. In a later session, **Setups → Load selected setup** restores only intent. Close the dialog and refresh voices. The exact matching returned voice is selected; a missing preferred voice is not silently replaced with a different one. Voice search remains a temporary filter.
+4. In a later session, **Setups > Load selected setup** restores only intent. Close the dialog and refresh voices, or choose the saved setup inside **Create MP3**, which reloads and validates its voice. The exact matching returned voice is selected; a missing preferred voice is not silently replaced with a different one. Saved setups retain voice/language intent; voice search is a session filter and does not authorize provider access.
 5. Inspect stored pricing status and review current official prices when necessary. The official pricing URL is supplied, but the rate-match checkbox is never selected automatically. Fetching an HTTPS page does not verify its rates.
 6. Prepare the exact request, inspect its estimate, explicitly approve the spending limit, then generate once. Changing text, document, voice or locale clears the old review and approval, including changes while preparation/approval is running.
 7. Play/export the accepted MP3 in the current session. After restart, choose **Audio → Open saved MP3 folder**, or use the folder button in **Setups**, to listen to existing files with your normal player. Listening does not require regeneration.
@@ -44,6 +44,6 @@ Unreadable or future-version preferences are preserved instead of overwritten. A
 
 ## Data and recovery
 
-The updated launcher keeps the existing app-data root. No database schema migration or credential reimport is required. Documents and preferences live in the workspace root; generated MP3s use `%LOCALAPPDATA%\CloudScribe Pro\Generated`, a separate folder. Back up exported audio as well as the closed workspace. Windows Credential Manager bindings do not transfer by copying ordinary files.
+App updates preserve the existing profile selection; see [Windows installation and updates](WINDOWS_INSTALLATION.md). Documents and preferences live in the app-data profile; generated MP3s use `%LOCALAPPDATA%\CloudScribe Pro\Generated`, a separate folder. Back up exported audio as well as the closed profile. Windows Credential Manager bindings do not transfer by copying ordinary files.
 
-The original launcher and a closed-profile backup are retained for this local installation. Close the running app normally before switching launchers. The Settings restore action verifies an existing interrupted-restore journal; it is not a general backup wizard or a way to clear uncertain provider submissions.
+Close the running app normally before updating or backing up its profile. Retain your own closed-profile backup and rollback package. The Settings restore action verifies an existing interrupted-restore journal; it is not a general backup wizard or a way to clear uncertain provider submissions.
