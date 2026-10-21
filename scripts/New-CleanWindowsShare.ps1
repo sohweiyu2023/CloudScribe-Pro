@@ -14,6 +14,8 @@ foreach ($required in @('CloudScribe.exe','CloudScribe.dll','CloudScribe.deps.js
     if (-not (Test-Path -LiteralPath (Join-Path $app $required))) { throw "Missing published application file: $required" }
 }
 if (-not (Test-Path -LiteralPath (Join-Path $runtime 'shared\Microsoft.NETCore.App'))) { throw 'A compatible private .NET runtime is required.' }
+$repo = Split-Path -Parent $PSScriptRoot
+& (Join-Path $PSScriptRoot 'Test-ThirdPartyNotices.ps1') -AppRoot $app -NoticesRoot (Join-Path $repo 'licenses/third-party')
 New-Item -ItemType Directory -Path (Join-Path $target 'app'), (Join-Path $target 'runtime') -Force | Out-Null
 Get-ChildItem -LiteralPath $app -File | Where-Object {
     $_.Extension -eq '.dll' -or $_.Name -in @('CloudScribe.exe','CloudScribe.deps.json','CloudScribe.runtimeconfig.json','appsettings.json')
@@ -32,6 +34,8 @@ foreach ($name in @('dotnet.exe','LICENSE.txt','ThirdPartyNotices.txt')) {
 New-Item -ItemType Directory -Path (Join-Path $target 'runtime\host'), (Join-Path $target 'runtime\shared') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $runtime 'host\fxr') -Destination (Join-Path $target 'runtime\host\fxr') -Recurse
 Copy-Item -LiteralPath (Join-Path $runtime 'shared\Microsoft.NETCore.App') -Destination (Join-Path $target 'runtime\shared\Microsoft.NETCore.App') -Recurse
+Copy-Item -LiteralPath (Join-Path $repo 'LICENSE'), (Join-Path $repo 'THIRD-PARTY-NOTICES.md') -Destination $target
+Copy-Item -LiteralPath (Join-Path $repo 'licenses') -Destination (Join-Path $target 'licenses') -Recurse
 @'
 @echo off
 setlocal
@@ -59,6 +63,7 @@ foreach ($guide in @('USER_GUIDE.md','SHARING_WINDOWS.md','SAVED_SETUPS_AND_LOCA
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "..\docs\$guide") -Destination (Join-Path $target $guide)
 }
 $files = Get-ChildItem -LiteralPath $target -Recurse -File
+& (Join-Path $PSScriptRoot 'Test-ThirdPartyNotices.ps1') -AppRoot (Join-Path $target 'app') -NoticesRoot (Join-Path $target 'licenses/third-party')
 $unexpected = $files | Where-Object { $_.Extension -in @('.db','.mp3','.pdb') -or $_.Name -like '*.previous' }
 if ($unexpected) { throw 'Unexpected data or debug files in package; do not distribute it.' }
 Write-Output "Clean Windows x64 package: $target ($($files.Count) files). No profile or credential was copied."

@@ -5,5 +5,9 @@
 # authenticated byte-for-byte and must survive Windows checkout unchanged.
 *.zip -text
 
+# Preserve exact upstream license/notice bytes authenticated by the inventory.
+/licenses/third-party/texts/** -text
+/licenses/third-party/upstream/** -text
+
 # Windows Command Prompt accepts LF, but keep batch launchers in the conventional CRLF form.
 *.cmd text eol=crlf

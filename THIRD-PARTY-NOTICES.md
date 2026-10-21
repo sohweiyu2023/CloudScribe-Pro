@@ -1,0 +1,44 @@
+# Third-party licenses and notices
+
+CloudScribe Pro's project MIT license does not replace the licenses of its dependencies or their incorporated upstream components. Preserve the original texts below when redistributing the corresponding files.
+
+## Windows distribution inventory
+
+The [versioned component inventory](licenses/third-party/components.json) maps 61 package records to 74 Windows-distributed dependency files, with file hashes, package license/copyright metadata, exact notice hashes and upstream provenance. It includes managed platform-support assemblies actually copied by the packaging script; it excludes Linux/macOS native assets and packages with no redistributed files. CloudScribe's five own managed assemblies are classified separately.
+
+These records are an evidence-based inventory of the pinned dependency versions, not a blanket legal-clearance claim. Updating dependencies or distributed assets requires reviewing their terms and refreshing the inventory. Existing notices and attributions must not be removed merely because the project adopts MIT.
+
+The upstream native notice bundle includes FreeType terms, MPL/GPL/LGPL alternatives and conditional libmicrohttpd terms. These are retained in full; a top-level NuGet MIT label does not override them. Before a new binary release, check the actual native build/component configuration and satisfy any applicable attribution, source-availability or relinking obligations. The automated checks below verify identity and notice inclusion, not those legal conclusions. This software is based in part on the work of the FreeType Team.
+
+## Original upstream texts
+
+Files are retained byte-for-byte. Identical texts shared by several package records are stored once and referenced from each record in the inventory. A package's MIT label can coexist with additional native/derived-code notices; retain both its license and the relevant notices.
+
+| Upstream text | Used by package records |
+|---|---|
+| [LICENSE](licenses/third-party/texts/Avalonia.Angle.Windows.Natives/2.1.27548.20260419/LICENSE) | Avalonia.Angle.Windows.Natives 2.1.27548.20260419 |
+| [License.md](licenses/third-party/texts/CommunityToolkit.Mvvm/8.4.2/License.md) | CommunityToolkit.Mvvm 8.4.2 |
+| [ThirdPartyNotices.txt](licenses/third-party/texts/CommunityToolkit.Mvvm/8.4.2/ThirdPartyNotices.txt) | CommunityToolkit.Mvvm 8.4.2 |
+| [THIRD-PARTY-NOTICES.txt](licenses/third-party/texts/HarfBuzzSharp.NativeAssets.Win32/8.3.1.3/THIRD-PARTY-NOTICES.txt) | HarfBuzzSharp.NativeAssets.Win32 8.3.1.3, SkiaSharp.NativeAssets.Win32 3.119.4 |
+| [LICENSE.txt](licenses/third-party/texts/HarfBuzzSharp/8.3.1.3/LICENSE.txt) | HarfBuzzSharp 8.3.1.3, HarfBuzzSharp.NativeAssets.Win32 8.3.1.3, SkiaSharp 3.119.4, SkiaSharp.NativeAssets.Win32 3.119.4 |
+| [THIRD-PARTY-NOTICES.TXT](licenses/third-party/texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT) | Microsoft.Extensions.Caching.Abstractions 10.0.10, Microsoft.Extensions.Caching.Memory 10.0.10, Microsoft.Extensions.Configuration 10.0.10, Microsoft.Extensions.Configuration.Abstractions 10.0.10, Microsoft.Extensions.Configuration.Binder 10.0.10, Microsoft.Extensions.Configuration.CommandLine 10.0.10, Microsoft.Extensions.Configuration.EnvironmentVariables 10.0.10, Microsoft.Extensions.Configuration.FileExtensions 10.0.10, Microsoft.Extensions.Configuration.Json 10.0.10, Microsoft.Extensions.Configuration.UserSecrets 10.0.10, Microsoft.Extensions.DependencyInjection 10.0.10, Microsoft.Extensions.DependencyInjection.Abstractions 10.0.10, Microsoft.Extensions.DependencyModel 10.0.10, Microsoft.Extensions.Diagnostics 10.0.10, Microsoft.Extensions.Diagnostics.Abstractions 10.0.10, Microsoft.Extensions.FileProviders.Abstractions 10.0.10, Microsoft.Extensions.FileProviders.Physical 10.0.10, Microsoft.Extensions.FileSystemGlobbing 10.0.10, Microsoft.Extensions.Hosting 10.0.10, Microsoft.Extensions.Hosting.Abstractions 10.0.10, Microsoft.Extensions.Logging 10.0.10, Microsoft.Extensions.Logging.Abstractions 10.0.10, Microsoft.Extensions.Logging.Configuration 10.0.10, Microsoft.Extensions.Logging.Console 10.0.10, Microsoft.Extensions.Logging.Debug 10.0.10, Microsoft.Extensions.Logging.EventLog 10.0.10, Microsoft.Extensions.Logging.EventSource 10.0.10, Microsoft.Extensions.Options 10.0.10, Microsoft.Extensions.Options.ConfigurationExtensions 10.0.10, Microsoft.Extensions.Primitives 10.0.10, System.Diagnostics.EventLog 10.0.10 |
+| [LICENSE](licenses/third-party/texts/NSec.Cryptography/26.4.0/LICENSE) | NSec.Cryptography 26.4.0 |
+| [NOTICE](licenses/third-party/texts/NSec.Cryptography/26.4.0/NOTICE) | NSec.Cryptography 26.4.0 |
+| [LICENSE](licenses/third-party/texts/libsodium/1.0.22/LICENSE) | libsodium 1.0.22 |
+| [Apache-2.0.txt](licenses/third-party/upstream/Apache-2.0.txt) | SQLitePCLRaw.bundle_e_sqlite3 2.1.12, SQLitePCLRaw.core 2.1.12, SQLitePCLRaw.lib.e_sqlite3 2.1.12, SQLitePCLRaw.provider.e_sqlite3 2.1.12 |
+| [AvaloniaUI-Avalonia-licence.md](licenses/third-party/upstream/AvaloniaUI-Avalonia-licence.md) | Avalonia 12.1.1, Avalonia.Desktop 12.1.1, Avalonia.FreeDesktop 12.1.1, Avalonia.FreeDesktop.AtSpi 12.1.1, Avalonia.HarfBuzz 12.1.1, Avalonia.Native 12.1.1, Avalonia.Remote.Protocol 12.1.1, Avalonia.Skia 12.1.1, Avalonia.Themes.Fluent 12.1.1, Avalonia.Win32 12.1.1, Avalonia.X11 12.1.1 |
+| [dotnet-dotnet-LICENSE.TXT](licenses/third-party/upstream/dotnet-dotnet-LICENSE.TXT) | Microsoft.Data.Sqlite.Core 10.0.10, Microsoft.EntityFrameworkCore 10.0.10, Microsoft.EntityFrameworkCore.Abstractions 10.0.10, Microsoft.EntityFrameworkCore.Relational 10.0.10, Microsoft.EntityFrameworkCore.Sqlite.Core 10.0.10, Microsoft.Extensions.Caching.Abstractions 10.0.10, Microsoft.Extensions.Caching.Memory 10.0.10, Microsoft.Extensions.Configuration 10.0.10, Microsoft.Extensions.Configuration.Abstractions 10.0.10, Microsoft.Extensions.Configuration.Binder 10.0.10, Microsoft.Extensions.Configuration.CommandLine 10.0.10, Microsoft.Extensions.Configuration.EnvironmentVariables 10.0.10, Microsoft.Extensions.Configuration.FileExtensions 10.0.10, Microsoft.Extensions.Configuration.Json 10.0.10, Microsoft.Extensions.Configuration.UserSecrets 10.0.10, Microsoft.Extensions.DependencyInjection 10.0.10, Microsoft.Extensions.DependencyInjection.Abstractions 10.0.10, Microsoft.Extensions.DependencyModel 10.0.10, Microsoft.Extensions.Diagnostics 10.0.10, Microsoft.Extensions.Diagnostics.Abstractions 10.0.10, Microsoft.Extensions.FileProviders.Abstractions 10.0.10, Microsoft.Extensions.FileProviders.Physical 10.0.10, Microsoft.Extensions.FileSystemGlobbing 10.0.10, Microsoft.Extensions.Hosting 10.0.10, Microsoft.Extensions.Hosting.Abstractions 10.0.10, Microsoft.Extensions.Logging 10.0.10, Microsoft.Extensions.Logging.Abstractions 10.0.10, Microsoft.Extensions.Logging.Configuration 10.0.10, Microsoft.Extensions.Logging.Console 10.0.10, Microsoft.Extensions.Logging.Debug 10.0.10, Microsoft.Extensions.Logging.EventLog 10.0.10, Microsoft.Extensions.Logging.EventSource 10.0.10, Microsoft.Extensions.Options 10.0.10, Microsoft.Extensions.Options.ConfigurationExtensions 10.0.10, Microsoft.Extensions.Primitives 10.0.10, System.Diagnostics.EventLog 10.0.10 |
+| [kekekeks-MicroCom-LICENSE](licenses/third-party/upstream/kekekeks-MicroCom-LICENSE) | MicroCom.Runtime 0.11.6 |
+| [tmds-Tmds.DBus-COPYING](licenses/third-party/upstream/tmds-Tmds.DBus-COPYING) | Tmds.DBus.Protocol 0.94.1 |
+
+## Bundled .NET runtime
+
+The packaging script copies the selected private runtime's original `LICENSE.txt` and `ThirdPartyNotices.txt` into `runtime/`. Those texts apply to that runtime distribution and do not substitute for the app-dependency notices above. The apphost is built with .NET tooling; retain the runtime notices with the executable package.
+
+## Packaging and validation
+
+`scripts/New-CleanWindowsShare.ps1` validates the current app dependencies against this inventory before copying files. It includes the project `LICENSE`, this index and `licenses/third-party/` in the portable package, and validates the copied dependency and notice bytes again. Unknown DLLs, changed dependencies, missing/changed notices, stale package versions or unsafe inventory paths stop packaging.
+
+Run `scripts/Test-ThirdPartyNotices.ps1 -AppRoot <clean-publish-or-package-app-folder> -NoticesRoot ./licenses/third-party` and `scripts/Test-ThirdPartyNotices-SelfTests.ps1` when changing this material. Keep original copyright names/years in third-party texts. The project copyright notice does not claim ownership of those works.
+
+The separate Cosmic Transcriber project/reference archive keeps its own rights status; this document grants it no license. Its existing About provenance in CloudScribe is retained. Provider services, credentials, billing and generated output remain subject to their applicable terms; dependency licenses do not grant provider access.
