@@ -1,7 +1,7 @@
-CloudScribe Pro 0.3.48 - Building the Windows executable
+CloudScribe Pro 1.0.1 - Building the Windows executable
 =========================================================
 
-FASTEST METHOD
+QUICK DEVELOPMENT BUILD
 --------------
 Double-click:
 
@@ -13,6 +13,15 @@ source folder.
 The launcher checks for the required .NET SDK, restores the locked dependency
 graph, builds CloudScribe.App in Release configuration, publishes a runnable
 Windows folder, verifies the expected runtime files, and opens the output folder.
+
+Prerequisites: Windows, exact .NET SDK 10.0.401 selected by global.json,
+PowerShell 7 (pwsh), and Python 3 on PATH. A newer SDK alone is insufficient
+because rollForward is disabled. The launcher builds the app only; it does not
+run the solution test suite or certify a release.
+
+The launcher removes an existing sibling CloudScribe-Windows output folder.
+Keep personal files and working installations elsewhere. To preserve an existing
+output, use the manual commands below with a new empty destination.
 
 The runnable output is created as a sibling of the source folder:
 
@@ -68,26 +77,55 @@ PATH NAMES WITH PARENTHESES / REPEATED DOWNLOADS
 The launcher is designed to work when the extracted source is inside an ordinary
 Windows Downloads folder whose name contains parentheses, for example:
 
-    CloudScribe_Pro_Source_0.3.48-stage2-repair-in-progress(7)
+    CloudScribe-Pro-source(7)
 
 You should not need to rename the extracted folder just to build CloudScribe.
 The launcher deliberately avoids CMD parenthesized command blocks around paths
 derived from the source directory and keeps delayed expansion disabled so common
 path characters such as parentheses and literal exclamation marks are preserved.
 
-MANUAL COMMAND-LINE ALTERNATIVE
+MANUAL BUILD AND VALIDATION
 -------------------------------
 From the extracted source root:
 
-    dotnet restore .\src\CloudScribe.App\CloudScribe.App.csproj --locked-mode --configfile .\NuGet.config
-    dotnet build .\src\CloudScribe.App\CloudScribe.App.csproj -c Release --no-restore
+    dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
+    dotnet format CloudScribe.sln --no-restore --verify-no-changes
+    dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+    dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+
+Run source and verifier checks separately:
+
+    python -B tools/update_sha256_manifest.py --check
+    python -B tools/verify_repository.py
+    python -B tools/verify_exact_v222_controls.py
+    python -B tools/verify_project_dependencies.py
+    python -B tools/verify_stage1_source.py
+    python -B tools/verify_stage2_source.py
+    python -B tools/run_python_regression_shards.py --all
+    python -B tools/run_verifier_self_tests.py
+
+The self-test runner projects a temporary historical Stage4 fixture for its
+Stage4 contracts. Standalone Stage3/Stage4 verifiers expect their historical
+stage/SDK identities and do not accept the current Stage8/app-1.0.1 tree.
+After intentional source/doc edits, regenerate SHA256SUMS.txt with
+python tools/update_sha256_manifest.py, then rerun --check. Inspect unexpected
+changes before refreshing. Keep evidence, archives and backups outside the repo.
+Build outputs in bin/obj are excluded by the manifest tool.
 
 The repository publish script can then be invoked in a one-off child process:
 
-    pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-stage2-windows.ps1 -OutputDirectory "<absolute sibling output path>" -Configuration Release -Status verification-pending
+    pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-stage2-windows.ps1 -OutputDirectory "<new empty absolute sibling output path>" -Configuration Release -Status verification-pending
+
+The script retains its historical stage2 name and governance marker; it publishes
+the current built app. It requires an empty physical destination outside the
+source tree. See docs/SHARING_WINDOWS.md for portable private-runtime packages
+and docs/WINDOWS_INSTALLATION.md for permanent installation and updates.
 
 IMPORTANT
 ---------
-A successful dotnet build is not the same thing as a fully promoted CloudScribe
-release. Stage 2 certification and manual Windows accessibility/visual acceptance
-remain separate gates.
+A successful build/test run does not certify runtime behavior or promote a
+release. Preserve active certification workflows and manual Windows acceptance.
+SESSION_STATE.json retains historical Stage8 1.0.0 governance while the app is
+1.0.1; do not rewrite the historical stage identity to match the application.
+Historical batch records remain verifier inputs. Superseded handovers and unused
+transport fragments are recoverable from Git history and the external backup.
