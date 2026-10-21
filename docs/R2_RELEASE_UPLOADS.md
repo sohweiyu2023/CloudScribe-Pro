@@ -6,7 +6,7 @@ Publish only when the maintainer has authorized the release in the conversation.
 
 1. Record the exact source commit, locked restore, strict Release build, format and test results, and actual native/UI verification limits. See [Windows build and validation](../BUILDING-WINDOWS.txt).
 2. Publish to a new clean staging directory, then package with `scripts/New-CleanWindowsShare.ps1` and a compatible private runtime. Smoke-test a separate copy so execution logs cannot enter the upload artifact.
-3. Audit every ZIP entry. Exclude profiles, databases, documents, generated audio, recordings, keys, credentials, preferences, logs, QA evidence and rollback directories. Inspect JSON configuration: only public default appsettings and required dependency/runtime manifests belong in the app, with no personal profile override. Compare the packaged app DLL with the tested build and the default configuration with the repository.
+3. Audit every ZIP entry. Exclude profiles, databases, documents, generated audio, recordings, keys, credentials, preferences, logs, QA evidence and rollback directories. Inspect JSON configuration: only public default appsettings and required dependency/runtime manifests belong in the app, with no personal profile override. The separate public `licenses/third-party/components.json` is dependency/license metadata, not app configuration. Retain the project LICENSE, third-party notice index and original license texts, plus the runtime notices. Compare the packaged app DLL with the tested build and the default configuration with the repository.
 4. Compute exact ZIP byte size and SHA-256. Keep the audited ZIP unchanged through upload and public-download verification.
 
 ## Inspect the destination before writing
