@@ -12,7 +12,7 @@ To give a copy to a friend, use a clean app/runtime package. Never include your 
 
 ## Start on an already configured computer
 
-Open the supplied `START-CLOUDSCRIBE.cmd` launcher. Keep the installation folder together: copying only the EXE will not work. The launcher can select the private .NET runtime and the correct local workspace.
+For a permanent installation, open the **CloudScribe Pro** Start Menu shortcut. For a portable package, open `START-CLOUDSCRIBE.cmd`. Keep the package folder together: copying only the EXE will not work. The portable launcher selects its bundled .NET runtime; a permanent installation preserves its configured profile. See [Windows installation and updates](WINDOWS_INSTALLATION.md).
 
 Choose **Studio**. Press **Ctrl+N** to create a new document, give it a title, and type or paste a short passage. Choose the prominent **Create MP3** button. Its cost, approval and creation controls remain visible while voice choices scroll above. Close an inspector drawer when it blocks the toolbar on a narrow window.
 
@@ -78,12 +78,15 @@ Install the exact SDK selected by `global.json` (currently **.NET SDK 10.0.401**
 
 ```powershell
 dotnet restore CloudScribe.sln --locked-mode --configfile NuGet.config
+dotnet format CloudScribe.sln --no-restore --verify-no-changes
 dotnet build CloudScribe.sln -c Release --no-restore
 dotnet test CloudScribe.sln -c Release --no-build --no-restore
 dotnet publish src/CloudScribe.App/CloudScribe.App.csproj -c Release --no-build --no-restore -o ..\CloudScribe-Windows
 ```
 
 Run `CloudScribe-Windows\CloudScribe.exe` with the compatible .NET runtime available. A supplied installation launcher may instead use a private runtime and workspace override. Keep your existing working installation/data separate while testing a new build.
+
+These commands build/test/publish locally. See [Windows build and validation](https://github.com/sohweiyu2023/CloudScribe-Pro/blob/main/BUILDING-WINDOWS.txt) for strict build options, source checks and manifest maintenance, and [Safe Windows sharing](SHARING_WINDOWS.md) for the separate clean package step.
 
 ## Verified acceptance
 

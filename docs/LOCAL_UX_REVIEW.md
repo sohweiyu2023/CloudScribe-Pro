@@ -1,5 +1,7 @@
 # Local usability review — 20 October 2026
 
+Historical review of the earlier six-step help increment. Later updates replaced it with the live 15-step first-connection / 11-step saved-connection walkthrough and corrected subsequent voice-loading behavior. Use [the user guide](USER_GUIDE.md) and [current walkthrough](VISUAL_WALKTHROUGH.md) for present instructions; the findings below describe this increment only.
+
 This increment follows main `7fb8e59d0f191a14c9540512b1c0d0d61a6288fc` and the earlier request/save safety review. It addresses the returning user's report that the connection looked unsaved and creating an MP3 was hard to find. No paid synthesis is part of its verification.
 
 ## Findings and changes
@@ -28,4 +30,4 @@ This increment follows main `7fb8e59d0f191a14c9540512b1c0d0d61a6288fc` and the e
 | Clean sharing | Allowlisted app/runtime-only package with no personal workspace override; fresh native startup loads its bundled runtime | Windows x64 portable folder; not a signed installer; no live setup on another person's machine |
 | Diagnostics/data upgrade | Existing redaction/support-bundle exclusions; separate app folder; closed-profile backup and preservation checks | Review is not a penetration test; vault is separate from ordinary profile backup |
 
-See the local delivery report for exact test counts, native evidence, binary identity and launch instructions. Larger unsupported workflows are reported as limits rather than implied by passing library tests.
+Exact local delivery reports and private native evidence are not distributed with the source. For current launch instructions see [Windows installation](WINDOWS_INSTALLATION.md); the release record is in [Release uploads](R2_RELEASE_UPLOADS.md). Larger unsupported workflows are reported as limits rather than implied by passing library tests.
