@@ -16,7 +16,7 @@ For a permanent installation, open the **CloudScribe Pro** Start Menu shortcut. 
 
 Choose **Studio**. Press **Ctrl+N** to create a new document, give it a title, and type or paste a short passage. Choose the prominent **Create MP3** button. Its cost, approval and creation controls remain visible while voice choices scroll above. Close an inspector drawer when it blocks the toolbar on a narrow window.
 
-If Google was configured previously, do not create another account or paste the key again. In **Create MP3**, choose a saved setup if desired. Open **Language and voice filters** only when you need to change the remembered language or search, then select **Refresh real Google voices**. This renews the saved connection's authenticated evidence and loads current voices. Select the exact voice you want.
+If Google was configured previously, do not create another account or paste the key again. Opening **Create MP3** automatically checks the saved connection and loads verified voices; choosing a saved setup reloads and validates its voice too. Wait for loading to finish, then select the exact voice you want. Open **Language and voice filters** only when needed, and use **Refresh real Google voices** after changing filters, when evidence becomes stale, or to retry a failed load. This renews the saved connection's authenticated evidence without generating speech.
 
 ## Set up Google Cloud once
 
