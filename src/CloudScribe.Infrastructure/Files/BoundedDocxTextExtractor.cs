@@ -100,19 +100,26 @@ internal static class BoundedDocxTextExtractor
         StringBuilder output = new();
         using Stream stream = entry.Open();
         using XmlReader reader = XmlReader.Create(stream, settings);
-        while (reader.Read())
+        while (!reader.EOF)
         {
-            AppendCurrentNode(reader, output);
+            bool advanced = AppendCurrentNode(reader, output);
             if (output.Length > maxTextCharacters)
             {
                 throw new InvalidDataException("DOCX extracted text exceeds the configured text limit.");
+            }
+
+            // Reading an entire text element already positions the reader on its next
+            // sibling. Advancing again would skip adjacent text, tabs or line breaks.
+            if (!advanced)
+            {
+                reader.Read();
             }
         }
 
         return output.ToString().TrimEnd('\r', '\n');
     }
 
-    private static void AppendCurrentNode(XmlReader reader, StringBuilder output)
+    private static bool AppendCurrentNode(XmlReader reader, StringBuilder output)
     {
         if (reader.NodeType == XmlNodeType.Element)
         {
@@ -120,7 +127,7 @@ internal static class BoundedDocxTextExtractor
             {
                 case "t":
                     output.Append(reader.ReadElementContentAsString());
-                    break;
+                    return true;
                 case "tab":
                     output.Append('\t');
                     break;
@@ -130,7 +137,7 @@ internal static class BoundedDocxTextExtractor
                     break;
             }
 
-            return;
+            return false;
         }
 
         if (reader.NodeType == XmlNodeType.EndElement
@@ -138,6 +145,8 @@ internal static class BoundedDocxTextExtractor
         {
             AppendNewline(output);
         }
+
+        return false;
     }
 
     private static void AppendNewline(StringBuilder output)
