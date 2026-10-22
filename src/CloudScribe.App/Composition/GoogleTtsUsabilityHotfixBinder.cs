@@ -204,9 +204,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             viewModel.StatusMessage = $"Google TTS configured · project {result.ProjectId} · {result.Voices.Count} observed voices";
             await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
-        catch (Exception ex)
+        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
-            viewModel.StatusMessage = $"Google TTS configuration failed safely · {ex.Message}";
+            viewModel.StatusMessage = GoogleConnectionSetupErrorMessages.For(exception);
         }
         finally
         {

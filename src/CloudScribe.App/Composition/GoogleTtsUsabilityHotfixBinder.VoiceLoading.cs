@@ -20,7 +20,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             await model.RefreshVoiceCatalogForUiAsync(token).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
             if (!model.VoiceLabCatalogLastRefreshSucceeded)
-                throw new InvalidOperationException("Catalog verification did not complete.");
+            {
+                model.ConnectedVoiceCatalogStatus = model.StatusMessage;
+                return false;
+            }
             model.ConnectedVoiceCatalogStatus = model.VoiceLabCatalogResults.Count == 0
                 ? "No voices match these filters. Check the language code (for example en-US), or use Clear voice search and reload."
                 : $"{model.VoiceLabCatalogResults.Count} verified voices loaded. Choose a voice below. No speech was generated.";
