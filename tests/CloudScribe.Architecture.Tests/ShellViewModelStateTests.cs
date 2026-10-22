@@ -305,7 +305,7 @@ public sealed partial class ShellViewModelStateTests
         Assert.True(viewModel.CanRefreshVoiceLabCatalog);
         Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
         Assert.Equal(
-            "Voice Lab unavailable · connect an account and check its access, connection, and filters before refreshing",
+            "The voice list could not be verified. Inspect the saved connection in Setups, check the language/search filters, then refresh. No speech was requested and no key was changed.",
             viewModel.StatusMessage);
     }
 
@@ -329,7 +329,7 @@ public sealed partial class ShellViewModelStateTests
         Assert.Equal(1, requests);
         Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
         Assert.Equal(
-            "Voice Lab unavailable · connect an account and check its access, connection, and filters before refreshing",
+            "The voice list could not be verified. Inspect the saved connection in Setups, check the language/search filters, then refresh. No speech was requested and no key was changed.",
             viewModel.StatusMessage);
 
         await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null);
@@ -362,7 +362,7 @@ public sealed partial class ShellViewModelStateTests
 
         Assert.Equal(1, requests);
         Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
-        Assert.Equal("Voice Lab refresh cancelled", viewModel.StatusMessage);
+        Assert.Contains("Voice loading stopped or timed out.", viewModel.StatusMessage, StringComparison.Ordinal);
     }
 
     [Fact]

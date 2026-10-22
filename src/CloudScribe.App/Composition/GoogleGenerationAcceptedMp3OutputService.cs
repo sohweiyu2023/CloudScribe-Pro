@@ -139,7 +139,9 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string fullPath = Path.GetFullPath(path);
-        string outputRoot = Path.GetFullPath(_outputDirectory) + Path.DirectorySeparatorChar;
+        string outputRoot = Path.EndsInDirectorySeparator(_outputDirectory)
+            ? _outputDirectory
+            : _outputDirectory + Path.DirectorySeparatorChar;
         if (!fullPath.StartsWith(outputRoot, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Google MP3 access is restricted to CloudScribe's verified generated-output directory.");
         if (!File.Exists(fullPath) || !string.Equals(Path.GetExtension(fullPath), ".mp3", StringComparison.OrdinalIgnoreCase))

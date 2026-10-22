@@ -66,4 +66,5 @@ $files = Get-ChildItem -LiteralPath $target -Recurse -File
 & (Join-Path $PSScriptRoot 'Test-ThirdPartyNotices.ps1') -AppRoot (Join-Path $target 'app') -NoticesRoot (Join-Path $target 'licenses/third-party')
 $unexpected = $files | Where-Object { $_.Extension -in @('.db','.mp3','.pdb') -or $_.Name -like '*.previous' }
 if ($unexpected) { throw 'Unexpected data or debug files in package; do not distribute it.' }
+& (Join-Path $target 'INSTALL-CLOUDSCRIBE.ps1') -PackageRoot $target -ValidatePackageOnly | Out-Null
 Write-Output "Clean Windows x64 package: $target ($($files.Count) files). No profile or credential was copied."

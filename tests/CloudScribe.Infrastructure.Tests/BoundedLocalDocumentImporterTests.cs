@@ -70,6 +70,25 @@ public sealed class BoundedLocalDocumentImporterTests
             TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData("<w:tab/>", "\t")]
+    [InlineData("<w:br/>", "\n")]
+    [InlineData("<w:cr/>", "\n")]
+    [InlineData("", "")]
+    [InlineData("<w:t/>", "")]
+    public async Task DocxPreservesTextAndSeparatorsWithinOneRun(string separatorXml, string expectedSeparator)
+    {
+        BoundedLocalDocumentImporter importer = new();
+        using MemoryStream stream = CreateDocx(
+            $"<w:p><w:r><w:t>Before</w:t>{separatorXml}<w:t>After</w:t></w:r></w:p>");
+
+        LocalDocumentImportResult result = await importer.ImportAsync(
+            new(LocalDocumentImportKind.Docx, "narration.docx", stream),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Before" + expectedSeparator + "After", result.Text);
+    }
+
     [Fact]
     public async Task DocxRejectsDtdDeclarations()
     {

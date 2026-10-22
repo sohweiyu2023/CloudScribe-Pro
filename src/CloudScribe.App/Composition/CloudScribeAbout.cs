@@ -63,6 +63,14 @@ public static class CloudScribeAbout
         body.Children.Add(copy);
         body.Children.Add(Text("Independent software. Not affiliated with or endorsed by Google or OpenAI. Google Cloud Text-to-Speech usage is billed by Google under the user's own account."));
         body.Children.Add(Text("About layout and optional support wording adapted from Cosmic Transcriber 1.0.27. CloudScribe Pro is a separate text-to-speech application."));
+        Button notices = Button("Read third-party licenses and notices");
+        notices.Click += async (_, _) =>
+        {
+            try { await CloudScribeNoticesDialog.ShowAsync(dialog).ConfigureAwait(true); }
+            catch (Exception exception) when (exception is InvalidOperationException or IOException)
+            { status.Text = "The notices could not open. In the CloudScribe Pro package folder, open THIRD-PARTY-NOTICES.md and licenses/third-party."; }
+        };
+        body.Children.Add(notices);
         body.Children.Add(status);
         Grid layout = new() { RowDefinitions = new RowDefinitions("*,Auto") };
         layout.Children.Add(new ScrollViewer { Content = body });

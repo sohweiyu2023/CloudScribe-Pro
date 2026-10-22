@@ -31,5 +31,8 @@
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <AvaloniaResource Include="Assets/CloudScribe.ico" />
+    <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.md" LogicalName="CloudScribe.Notices/THIRD-PARTY-NOTICES.md" />
+    <EmbeddedResource Include="../../LICENSE" LogicalName="CloudScribe.Notices/LICENSE" />
+    <EmbeddedResource Include="../../licenses/third-party/**/*" LogicalName="CloudScribe.Notices/licenses/third-party/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

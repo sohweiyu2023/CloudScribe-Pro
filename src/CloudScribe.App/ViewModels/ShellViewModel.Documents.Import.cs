@@ -89,7 +89,7 @@ public sealed partial class ShellViewModel
         {
             IsDocumentSaving = false;
             DocumentSaveState = "Import failed safely";
-            StatusMessage = exception is InvalidDataException or ArgumentException
+            StatusMessage = exception is InvalidDataException or ArgumentException or System.Xml.XmlException
                 ? "Import failed: use TXT, Markdown, HTML or DOCX within 32 MiB; the file must contain valid supported text. No existing document was overwritten."
                 : "Import failed: check local file/disk access. No existing document was overwritten.";
         }

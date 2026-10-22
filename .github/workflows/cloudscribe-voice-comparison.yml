@@ -2,7 +2,7 @@ name: Voice comparison and guarded samples
 
 on:
   push:
-    branches: [feature/voice-comparison-samples]
+    branches: [feature/voice-comparison-samples, main]
   pull_request:
     paths:
       - 'src/**'
@@ -32,8 +32,21 @@ jobs:
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Exact candidate and source manifest
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:CANDIDATE_SHA) { throw 'Checkout does not match the triggering candidate.' }
+          python -B tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Source manifest check failed.' }
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.401'
@@ -48,5 +61,8 @@ jobs:
         run: |
           ./scripts/Test-ThirdPartyNotices.ps1 -AppRoot ./src/CloudScribe.App/bin/Release/net10.0 -NoticesRoot ./licenses/third-party
           ./scripts/Test-ThirdPartyNotices-SelfTests.ps1
+      - name: Installer package validation and rejection tests
+        shell: pwsh
+        run: ./scripts/Test-InstallCloudScribe-SelfTests.ps1
       - name: Mocked and local tests only
         run: dotnet test CloudScribe.sln -c Release --no-build --no-restore --logger "console;verbosity=normal"
