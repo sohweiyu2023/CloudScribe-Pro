@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CloudScribe.App.Composition;
 using CloudScribe.App.Navigation;
 using CloudScribe.Application.Generation;
 using CloudScribe.Domain.Generation;
@@ -93,6 +94,9 @@ public sealed partial class ShellViewModel
         try
         {
             VoiceLabCatalogLastRefreshSucceeded = false;
+            VoiceLabCatalogSelection? previousSelection = SelectedVoiceLabVoice;
+            SelectedVoiceLabVoice = null;
+            VoiceLabCatalogResults.Clear();
             var catalog = _voiceLabCatalog
                 ?? throw new InvalidOperationException("Voice Lab catalog is not configured.");
             var capture = _captureVoiceLabCatalogState
@@ -116,24 +120,20 @@ public sealed partial class ShellViewModel
                 VoiceLabCatalogResults.Add(selection);
             }
 
-            if (SelectedVoiceLabVoice is not null &&
-                !VoiceLabCatalogResults.Any(candidate => SameVoiceTrustIdentity(candidate, SelectedVoiceLabVoice)))
-            {
-                SelectedVoiceLabVoice = null;
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            SelectedVoiceLabVoice = previousSelection is null ? null :
+                VoiceLabCatalogResults.FirstOrDefault(candidate => SameVoiceTrustIdentity(candidate, previousSelection));
 
             RestorePreferredCatalogVoice();
             VoiceLabCatalogLastRefreshSucceeded = true;
 
             StatusMessage = $"Voice Lab · {VoiceLabCatalogResults.Count} trusted voices";
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            StatusMessage = "Voice Lab refresh cancelled";
-        }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
-            StatusMessage = "Voice Lab unavailable · connect an account and check its access, connection, and filters before refreshing";
+            SelectedVoiceLabVoice = null;
+            VoiceLabCatalogResults.Clear();
+            StatusMessage = VoiceCatalogErrorMessages.For(exception);
         }
         finally
         {

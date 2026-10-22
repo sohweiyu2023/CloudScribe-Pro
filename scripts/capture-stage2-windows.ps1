@@ -48,6 +48,12 @@ $previousCaptureDirectory = [Environment]::GetEnvironmentVariable($captureDirect
 try {
     python tools/update_sha256_manifest.py --check
     if ($LASTEXITCODE -ne 0) { throw 'Repository SHA-256 manifest does not match the current source bytes.' }
+    # This matrix measures the shell, including editor focus. Test first-run onboarding separately.
+    $profileRoot = Join-Path $dataRoot 'appdata'
+    [IO.Directory]::CreateDirectory($profileRoot) | Out-Null
+    [IO.File]::WriteAllText(
+        (Join-Path $profileRoot 'studio-preferences.json'),
+        '{"Version":1,"QuickStartSeen":true}')
     [Environment]::SetEnvironmentVariable(
         $sourceHashName,
         (Get-FileHash (Join-Path $repoRoot 'SHA256SUMS.txt') -Algorithm SHA256).Hash.ToLowerInvariant(),

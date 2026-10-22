@@ -2,13 +2,14 @@
 param(
     [string]$PackageRoot=$PSScriptRoot,
     [string]$MigrateProfileFrom,
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+    [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
-$package=(Resolve-Path -LiteralPath $PackageRoot).Path
-$programs=[IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs'))
-$target=Join-Path $programs 'CloudScribe Pro'
-if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($target)) -ne $programs){throw 'Install root escaped the Programs directory.'}
+if($ValidatePackageOnly -and ($ValidateOnly -or $MigrateProfileFrom)){throw 'ValidatePackageOnly cannot be combined with installation or migration preflight.'}
+$package=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $PackageRoot).Path)
+if($package.Length -gt [IO.Path]::GetPathRoot($package).Length){$package=$package.TrimEnd([char[]]@('\','/'))}
+$packagePrefix=$package.TrimEnd([char[]]@('\','/'))+[IO.Path]::DirectorySeparatorChar
 function Assert-NoLinks([string]$Path){
     $current=[IO.Path]::GetFullPath($Path)
     while($current){
@@ -16,20 +17,62 @@ function Assert-NoLinks([string]$Path){
         $current=Split-Path -Parent $current
     }
 }
-foreach($required in @('app/CloudScribe.exe','app/CloudScribe.dll','app/appsettings.json','runtime/dotnet.exe','runtime/shared/Microsoft.NETCore.App')){
-    if(-not (Test-Path -LiteralPath (Join-Path $package $required))){throw "Incomplete clean package: $required"}
+function Get-AllowedNoticeFiles {
+    $inventoryPath=Join-Path $package 'licenses/third-party/components.json'
+    # Refresh this pin only alongside the reviewed source inventory and its fixture tests.
+    # The package itself cannot expand the installer's notice-file allowlist.
+    $inventorySha256='e704c5a77b2a30153467825246c366133d09d4acd23c47c8e1fb235f021b6040'
+    if((Get-FileHash -LiteralPath $inventoryPath -Algorithm SHA256).Hash -ne $inventorySha256){throw 'Unexpected third-party inventory identity.'}
+    $inventory=Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
+    if($inventory.schema_version -ne 1 -or @($inventory.components).Count -eq 0){throw 'Invalid third-party inventory.'}
+    $allowed=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach($component in $inventory.components){
+        if(@($component.notice_files).Count -eq 0){throw 'Missing third-party notice records.'}
+        foreach($notice in $component.notice_files){
+            $relative=[string]$notice.path
+            $segments=$relative.Split('/')
+            if($relative -notmatch '^(texts|upstream)/' -or $relative -match '[\\:\x00-\x1f*?"<>|]' -or
+                ($segments | Where-Object {$_ -in @('','.','..') -or $_.EndsWith('.') -or $_.EndsWith(' ')})){
+                throw 'Unsafe third-party notice path.'
+            }
+            if(([IO.Path]::GetExtension($relative) -notin @('','.txt','.md') -and $relative -cne 'upstream/tmds-Tmds.DBus-COPYING') -or $notice.sha256 -notmatch '^[a-fA-F0-9]{64}$'){
+                throw 'Unexpected third-party notice type or hash.'
+            }
+            $entry='licenses/third-party/'+$relative
+            $path=[IO.Path]::GetFullPath((Join-Path $package $entry))
+            if(-not $path.StartsWith($packagePrefix,[StringComparison]::OrdinalIgnoreCase)){throw 'Third-party notice path escapes the package.'}
+            if($allowed.ContainsKey($entry) -and $allowed[$entry] -ne $notice.sha256){throw 'Conflicting third-party notice hashes.'}
+            if(-not (Test-Path -LiteralPath $path -PathType Leaf)){throw "Missing third-party notice: $entry"}
+            if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $notice.sha256){throw "Changed third-party notice: $entry"}
+            $allowed[$entry]=$notice.sha256
+        }
+    }
+    return ,$allowed
 }
+foreach($required in @('app/CloudScribe.exe','app/CloudScribe.dll','app/appsettings.json','runtime/dotnet.exe','LICENSE','THIRD-PARTY-NOTICES.md','licenses/third-party/components.json')){
+    if(-not (Test-Path -LiteralPath (Join-Path $package $required) -PathType Leaf)){throw "Incomplete clean package: $required"}
+}
+if(-not (Test-Path -LiteralPath (Join-Path $package 'runtime/shared/Microsoft.NETCore.App') -PathType Container)){throw 'Incomplete clean package: runtime/shared/Microsoft.NETCore.App'}
 Assert-NoLinks $package
 $all=@(Get-ChildItem -LiteralPath $package -Recurse -Force)
 if($all | Where-Object {$_.Attributes -band [IO.FileAttributes]::ReparsePoint}){throw 'Package contains links.'}
 if($all | Where-Object {$_.Extension -in @('.db','.sqlite','.mp3','.wav','.flac','.utf8','.pdb','.jsonl','.log','.previous','.key','.pem','.pfx')}){throw 'Package contains private, diagnostic or debug files; use a clean package.'}
+if((Get-FileHash -LiteralPath (Join-Path $package 'LICENSE') -Algorithm SHA256).Hash -ne 'a58a65454f49c01d25bed44828fe5e678592bbdfe20353c1f7dc7cc90c6cf1d3'){throw 'Unexpected project license identity.'}
+$allowedNotices=Get-AllowedNoticeFiles
 foreach($file in $all | Where-Object {-not $_.PSIsContainer}){
-    $relative=$file.FullName.Substring($package.Length+1).Replace('\','/')
-    if($relative -notmatch '^(app|runtime)/' -and $relative -notmatch '^[^/]+\.(md|txt|cmd)$|^INSTALL-CLOUDSCRIBE\.ps1$'){throw "Unexpected package entry: $relative"}
-    if($file.Extension -eq '.json' -and $file.Name -notin @('appsettings.json','CloudScribe.deps.json','CloudScribe.runtimeconfig.json','Microsoft.NETCore.App.deps.json','Microsoft.NETCore.App.runtimeconfig.json')){throw 'Unexpected JSON file; never install a credential-bearing package.'}
+    if(-not $file.FullName.StartsWith($packagePrefix,[StringComparison]::OrdinalIgnoreCase)){throw 'Package entry escapes its root.'}
+    $relative=$file.FullName.Substring($packagePrefix.Length).Replace('\','/')
+    $isNoticeInventory=$relative -eq 'licenses/third-party/components.json'
+    if($relative -notmatch '^(app|runtime)/' -and $relative -notmatch '^[^/]+\.(md|txt|cmd)$|^INSTALL-CLOUDSCRIBE\.ps1$' -and
+        $relative -ne 'LICENSE' -and -not $isNoticeInventory -and -not $allowedNotices.ContainsKey($relative)){throw "Unexpected package entry: $relative"}
+    if($file.Extension -eq '.json' -and -not $isNoticeInventory -and $file.Name -notin @('appsettings.json','CloudScribe.deps.json','CloudScribe.runtimeconfig.json','Microsoft.NETCore.App.deps.json','Microsoft.NETCore.App.runtimeconfig.json')){throw 'Unexpected JSON file; never install a credential-bearing package.'}
 }
 $settings=Get-Content -LiteralPath (Join-Path $package 'app/appsettings.json') -Raw | ConvertFrom-Json
 if($settings.CloudScribe.AppDataDirectoryOverride){throw 'The source package must not contain a personal profile override.'}
+if($ValidatePackageOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;NoticeFiles=$allowedNotices.Count;PackageOnly=$true};return}
+$programs=[IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs'))
+$target=Join-Path $programs 'CloudScribe Pro'
+if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($target)) -ne $programs){throw 'Install root escaped the Programs directory.'}
 $menu=[Environment]::GetFolderPath('Programs')
 $shortcut=Join-Path $menu 'CloudScribe Pro.lnk'
 $shell=New-Object -ComObject WScript.Shell

@@ -34,6 +34,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# This matrix measures the shell, including editor focus. Test first-run onboarding separately.
+mkdir -- "$CLOUDSCRIBE_CloudScribe__AppDataDirectoryOverride"
+printf '%s\n' '{"Version":1,"QuickStartSeen":true}' > "$CLOUDSCRIBE_CloudScribe__AppDataDirectoryOverride/studio-preferences.json"
+
 python3 tools/run_bounded_process.py \
   --timeout-seconds 60 \
   --max-output-bytes 8388608 \

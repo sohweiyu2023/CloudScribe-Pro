@@ -13,7 +13,7 @@ public sealed partial class ShellViewModel
             StatusMessage = "No generated MP3 folder exists yet. Audio generation has not been started.";
             return;
         }
+        StatusMessage = "Opening saved MP3 folder for local playback. No provider request was sent.";
         OutputFolderRequested?.Invoke(this, new OutputFolderRequestedEventArgs(folder));
-        StatusMessage = "Opened saved MP3 folder for local playback. No provider request was sent.";
     }
 }
