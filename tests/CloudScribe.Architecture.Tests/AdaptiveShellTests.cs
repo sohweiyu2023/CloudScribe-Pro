@@ -365,9 +365,12 @@ public sealed class AdaptiveShellTests
         string codeBehind = File.ReadAllText(Path.Combine(repositoryRoot, "src", "CloudScribe.App", "MainWindow.axaml.cs"));
 
         Assert.Contains("OutlineNavigationRequested", viewModel, StringComparison.Ordinal);
-        Assert.Contains("DocumentText.IndexOf(entry.AnchorText", viewModel, StringComparison.Ordinal);
+        Assert.Contains("new OutlineNavigationRequestedEventArgs(entry.StartOffset, entry.SelectionLength)", viewModel, StringComparison.Ordinal);
+        Assert.Contains("RebuildDocumentOutline(value)", viewModel, StringComparison.Ordinal);
         Assert.Contains("DocumentEditor.SelectionStart", codeBehind, StringComparison.Ordinal);
         Assert.Contains("DocumentEditor.SelectionEnd", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("DocumentEditor.CaretIndex = start", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("presenter.BringIntoView", codeBehind, StringComparison.Ordinal);
         Assert.Contains("SelectedOutlineIndex = -1", viewModel, StringComparison.Ordinal);
         Assert.Contains("_lastTransientSurface = TransientSurface.None", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("new(\"Opening\", \"1–3\"", viewModel, StringComparison.Ordinal);

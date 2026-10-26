@@ -63,11 +63,6 @@ public sealed partial class ShellViewModel
             "Focus Reading removes surrounding production controls without replacing the editor. Press F11 to enter or leave Focus Reading, Ctrl+Shift+O for the outline, Ctrl+Shift+I for the inspector, Ctrl+Shift+Q for the queue, and Ctrl+/ for the shortcut guide.",
         ]);
 
-        OutlineEntries.Clear();
-        OutlineEntries.Add(new("Overview", "Paragraph 1", "CloudScribe Pro is a local-first"));
-        OutlineEntries.Add(new("Local workflow", "Paragraph 2", "Create or import documents locally"));
-        OutlineEntries.Add(new("Generation safety", "Paragraph 3", "Provider-backed generation is available"));
-        OutlineEntries.Add(new("Current evidence", "Paragraph 4", "When current provider, account, project"));
-        OutlineEntries.Add(new("Focus and shortcuts", "Paragraph 5", "Focus Reading removes surrounding"));
+        RebuildDocumentOutline(DocumentText);
     }
 }

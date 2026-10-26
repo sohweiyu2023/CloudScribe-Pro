@@ -210,7 +210,7 @@ public sealed class FinalReleaseIntegrationContractTests
         [
             "DocumentTitle = \"CloudScribe Pro Local Workspace\";",
             "Provider-backed generation is available only through the production safety gates.",
-            "OutlineEntries.Clear();",
+            "RebuildDocumentOutline(DocumentText);",
         ];
         foreach (string required in requiredFinalPresentation)
         {

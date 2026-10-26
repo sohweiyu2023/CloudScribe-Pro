@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.401'
+          dotnet-version: '10.0.402'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
       - name: Locked restore
@@ -39,5 +39,5 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet test tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~GoogleServiceAccount|FullyQualifiedName~GoogleVoiceCatalog|FullyQualifiedName~VaultBackedTransientCredentialResolver|FullyQualifiedName~WindowsCredentialVault"
+          dotnet test --project tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~GoogleServiceAccount|FullyQualifiedName~GoogleVoiceCatalog|FullyQualifiedName~VaultBackedTransientCredentialResolver|FullyQualifiedName~WindowsCredentialVault"
           if ($LASTEXITCODE -ne 0) { throw 'Google credential/catalog focused tests failed.' }

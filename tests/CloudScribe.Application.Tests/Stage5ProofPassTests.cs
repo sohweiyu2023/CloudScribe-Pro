@@ -41,10 +41,10 @@ public sealed class Stage5ProofPassTests
             ProvenanceId: "fake/provider/run-2"));
 
         Assert.False(result.IsReleaseSafe);
-        Assert.Contains("quality.media.invalid", result.Quality.DiagnosticCodes);
-        Assert.Contains("quality.duration.out-of-range", result.Quality.DiagnosticCodes);
-        Assert.Contains("quality.timing-marks.missing", result.Quality.DiagnosticCodes);
-        Assert.Contains("provider.output.clipped", result.Quality.DiagnosticCodes);
+        Assert.Contains("quality.media.invalid", result.Quality.DiagnosticCodes, StringComparer.Ordinal);
+        Assert.Contains("quality.duration.out-of-range", result.Quality.DiagnosticCodes, StringComparer.Ordinal);
+        Assert.Contains("quality.timing-marks.missing", result.Quality.DiagnosticCodes, StringComparer.Ordinal);
+        Assert.Contains("provider.output.clipped", result.Quality.DiagnosticCodes, StringComparer.Ordinal);
     }
 
     [Fact]

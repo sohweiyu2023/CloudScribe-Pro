@@ -71,14 +71,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         ShortcutMap = KeyboardShortcutMap.Default;
 
-        OutlineEntries =
-        [
-            new("Overview", "Paragraph 1", "CloudScribe Pro is a local-first"),
-            new("Adaptive workspace", "Paragraph 2", "This Stage 2 workspace demonstrates"),
-            new("Calm reading surface", "Paragraph 3", "The paper-centered reading surface"),
-            new("Generation gates", "Paragraph 4", "Generation is not enabled yet"),
-            new("Focus and shortcuts", "Paragraph 5", "Focus Reading removes surrounding"),
-        ];
+        OutlineEntries = [];
+        RebuildDocumentOutline(DocumentText);
 
         _pages = CreatePages();
         _selectedNavigationItem = NavigationItems[0];
@@ -97,6 +91,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public ObservableCollection<ThemeOption> ThemeOptions { get; }
 
     public ObservableCollection<OutlineEntryViewModel> OutlineEntries { get; }
+
+    public string OutlineCountLabel => OutlineEntries.Count == 1 ? "1 paragraph" : $"{OutlineEntries.Count:N0} paragraphs";
+
+    public string OutlineHelpText => OutlineEntries.Count == 0
+        ? "Add text to create paragraph shortcuts."
+        : "Choose a paragraph to scroll to it and highlight its text.";
 
     public KeyboardShortcutMap ShortcutMap { get; private set; }
 
@@ -388,18 +388,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
 
         OutlineEntryViewModel entry = OutlineEntries[value];
-        int offset = DocumentText.IndexOf(entry.AnchorText, StringComparison.Ordinal);
-        if (offset < 0)
-        {
-            StatusMessage = $"Outline destination changed · {entry.Label}";
-            SelectedOutlineIndex = -1;
-            return;
-        }
-
         OutlineNavigationRequested?.Invoke(
             this,
-            new OutlineNavigationRequestedEventArgs(offset, entry.AnchorText.Length));
-        StatusMessage = $"Outline · {entry.Label}";
+            new OutlineNavigationRequestedEventArgs(entry.StartOffset, entry.SelectionLength));
+        StatusMessage = $"{entry.RangeLabel} highlighted in your text";
         IsOutlineDrawerOpen = false;
         SelectedOutlineIndex = -1;
     }
@@ -432,7 +424,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     partial void OnSystemHighContrastChanged(bool value) => NotifyEffectivePaletteChanged();
 
-    partial void OnDocumentTextChanged(string value) => OnPropertyChanged(nameof(DocumentMetricLabel));
+    partial void OnDocumentTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(DocumentMetricLabel));
+        RebuildDocumentOutline(value);
+    }
 
     private void NotifyEffectivePaletteChanged()
     {
@@ -747,7 +743,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private static RoutePageViewModel CreateLibraryPage() => new(
         "Library",
         "DOCUMENTS",
-        "Your durable document library will live locally on this device.",
+        "Create, import, search and reopen documents saved on this device.",
         "No documents yet",
         "Document creation and import arrive in Stage 3. This route is intentionally read-only in Stage 2.",
         "EMPTY");
@@ -763,7 +759,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private static RoutePageViewModel CreateAudioPage() => new(
         "Audio",
         "LOCAL MEDIA",
-        "Browse verified exports and resume playback from this device.",
+        "Find saved MP3 files and open them in your audio player without generating again.",
         "No audio yet",
         "The audio engine and player are introduced in Stage 5. Playback controls remain hidden until verified local audio exists.",
         "EMPTY");
@@ -793,7 +789,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private RoutePageViewModel CreateDiagnosticsPage() => new(
         "Diagnostics",
         "LOCAL OBSERVABILITY",
-        "Inspect bounded local diagnostics and preview exactly what a support bundle would contain.",
+        "Inspect the local log location and export basic application metadata. Nothing is uploaded automatically.",
         _diagnosticLogStatus.IsAvailable ? "Privacy-first diagnostics" : "Diagnostics unavailable",
         _diagnosticLogStatus.IsAvailable
             ? "Documents, audio, databases, credentials and provider payloads are excluded from support bundles by default."

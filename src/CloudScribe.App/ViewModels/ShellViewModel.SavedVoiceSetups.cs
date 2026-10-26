@@ -49,14 +49,17 @@ public sealed partial class ShellViewModel
 
     public void RememberSelectedVoiceSetup()
     {
-        if (_studioPreferences is null || SelectedVoiceLabVoice is not { } voice) return;
+        if (SelectedVoiceLabVoice is not { } voice) return;
+        // Manual intent survives refresh even if the preference store is absent or cannot write.
+        // Only fresh catalog evidence may restore the actual selection; this name grants no trust.
+        PreferredVoiceName = voice.VoiceStableId;
+        OnPropertyChanged(nameof(PreferredVoiceName));
+        if (_studioPreferences is null) return;
         string? locale = VoiceLabLocaleFilter ?? (voice.LanguageCodes is { Count: > 0 } codes ? codes[0] : null);
         if (string.IsNullOrWhiteSpace(locale)) return;
         try
         {
             _studioPreferences.Remember(new VoiceSetup("Last used", locale, voice.VoiceStableId));
-            PreferredVoiceName = voice.VoiceStableId;
-            OnPropertyChanged(nameof(PreferredVoiceName));
         }
         catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -69,7 +72,5 @@ public sealed partial class ShellViewModel
         if (SelectedVoiceLabVoice is not null) return;
         if (PreferredVoiceName is not null)
             SelectedVoiceLabVoice = VoiceLabCatalogResults.FirstOrDefault(v => string.Equals(v.VoiceStableId, PreferredVoiceName, StringComparison.Ordinal));
-        else if (VoiceLabCatalogResults.Count == 1)
-            SelectedVoiceLabVoice = VoiceLabCatalogResults[0];
     }
 }

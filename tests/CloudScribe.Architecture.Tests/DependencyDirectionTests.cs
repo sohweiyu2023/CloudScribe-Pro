@@ -22,8 +22,8 @@ public sealed class DependencyDirectionTests
         Assembly application = typeof(CloudScribe.Application.Activation.ActivationRouter).Assembly;
         string[] references = application.GetReferencedAssemblies().Select(name => name.Name ?? string.Empty).ToArray();
 
-        Assert.DoesNotContain("CloudScribe.App", references);
-        Assert.DoesNotContain("CloudScribe.Infrastructure", references);
+        Assert.DoesNotContain("CloudScribe.App", references, StringComparer.Ordinal);
+        Assert.DoesNotContain("CloudScribe.Infrastructure", references, StringComparer.Ordinal);
         Assert.DoesNotContain(references, name => name.StartsWith("Avalonia", StringComparison.Ordinal));
     }
 

@@ -21,7 +21,11 @@ public sealed partial class CloudScribeApplication : Avalonia.Application
         _host = host ?? throw new ArgumentNullException(nameof(host));
     }
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        Diagnostics.NativeUiDiagnosticLog.ApplicationInitialized();
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

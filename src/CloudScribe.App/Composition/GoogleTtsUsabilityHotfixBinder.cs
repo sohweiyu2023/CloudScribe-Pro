@@ -3,6 +3,7 @@ using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
+using CloudScribe.App.Diagnostics;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Providers;
 using CloudScribe.Domain.Generation;
@@ -298,8 +299,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         return RefreshAsync;
     }
 
-    private static void AddVoiceSelector(StackPanel host, ShellViewModel viewModel, Window? lifetime = null)
+    private void AddVoiceSelector(StackPanel host, ShellViewModel viewModel, Window? lifetime = null)
     {
+        AddVoiceRecommendations(host, viewModel, lifetime);
         ComboBox voices = new() { PlaceholderText = "Select a verified Google voice" };
         AddField(host, "Voice", voices);
         AutomationProperties.SetName(voices, "Verified Google voice");
@@ -622,6 +624,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     {
         try
         {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Open);
             string sourcePath = viewModel.LastGeneratedGoogleMp3Path
                 ?? throw new InvalidOperationException("No verified Google MP3 is available to export.");
             if (!window.StorageProvider.CanSave)
@@ -636,7 +639,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 ShowOverwritePrompt = true,
             }).ConfigureAwait(true);
             if (destination is null)
+            {
+                NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Cancel);
                 return;
+            }
             if (!destination.Path.IsFile)
                 throw new InvalidOperationException("The selected MP3 export destination is not a local Windows file.");
 
@@ -645,10 +651,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 sourcePath,
                 destination.Path.LocalPath,
                 CancellationToken.None).ConfigureAwait(true);
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Complete);
             viewModel.StatusMessage = $"Google generation · verified MP3 exported · {exportedPath}";
         }
         catch (Exception ex)
         {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Failed, ex);
             viewModel.StatusMessage = $"Google MP3 export failed safely · {ex.Message}";
         }
     }

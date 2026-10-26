@@ -37,7 +37,7 @@ public sealed class Stage5PrivateCacheNamespaceTests
         };
 
         Assert.All(variants, variant =>
-            Assert.NotEqual(baselineKey.HmacSha256, PrivateCacheLookupKey.Derive(key, variant, payload).HmacSha256));
+            Assert.NotEqual(baselineKey.HmacSha256, PrivateCacheLookupKey.Derive(key, variant, payload).HmacSha256, StringComparer.Ordinal));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class Stage5PrivateCacheNamespaceTests
         var lookup = PrivateCacheLookupKey.Derive(key, CreateContext(), payload);
         var rawPayloadSha = Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
 
-        Assert.NotEqual(rawPayloadSha, lookup.HmacSha256);
+        Assert.NotEqual(rawPayloadSha, lookup.HmacSha256, StringComparer.Ordinal);
         Assert.Equal(64, lookup.HmacSha256.Length);
         Assert.DoesNotContain("sensitive", lookup.HmacSha256, StringComparison.OrdinalIgnoreCase);
     }

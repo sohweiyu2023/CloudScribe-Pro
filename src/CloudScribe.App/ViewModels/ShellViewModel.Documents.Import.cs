@@ -1,3 +1,4 @@
+using CloudScribe.App.Diagnostics;
 using CloudScribe.Application.Documents;
 using CloudScribe.Domain.Documents;
 using CommunityToolkit.Mvvm.Input;
@@ -43,6 +44,7 @@ public sealed partial class ShellViewModel
         if (RequiresDocumentSaveBeforeClose
             && !await SaveCurrentDocumentCoreAsync("Pre-import checkpoint").ConfigureAwait(true))
         {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Unavailable);
             return;
         }
 
@@ -84,15 +86,22 @@ public sealed partial class ShellViewModel
                 ? "Imported and saved locally"
                 : $"Imported safely · {imported.Warnings.Count} note{(imported.Warnings.Count == 1 ? string.Empty : "s")}";
             await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Complete);
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
-            IsDocumentSaving = false;
-            DocumentSaveState = "Import failed safely";
-            StatusMessage = exception is InvalidDataException or ArgumentException or System.Xml.XmlException
-                ? "Import failed: use TXT, Markdown, HTML or DOCX within 32 MiB; the file must contain valid supported text. No existing document was overwritten."
-                : "Import failed: check local file/disk access. No existing document was overwritten.";
+            ReportImportFailure(exception);
         }
+    }
+
+    private void ReportImportFailure(Exception exception)
+    {
+        NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Failed, exception);
+        IsDocumentSaving = false;
+        DocumentSaveState = "Import failed safely";
+        StatusMessage = exception is InvalidDataException or ArgumentException or System.Xml.XmlException
+            ? "Import failed: use TXT, Markdown, HTML or DOCX within 32 MiB; the file must contain valid supported text. No existing document was overwritten."
+            : "Import failed: check local file/disk access. No existing document was overwritten.";
     }
 
     private void EnsureImportWorkflowConfigured()

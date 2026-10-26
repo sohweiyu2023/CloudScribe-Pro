@@ -2,12 +2,14 @@ using System.ComponentModel;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using CloudScribe.App.Design;
 using CloudScribe.App.Input;
 using CloudScribe.App.ViewModels;
@@ -35,6 +37,7 @@ public sealed partial class MainWindow : Window
         Activated += OnWindowActivated;
         Closed += OnWindowClosed;
         KeyDown += OnWindowKeyDown;
+        Diagnostics.NativeUiDiagnosticLog.Attach(this);
     }
 
     public MainWindow(ShellViewModel viewModel)
@@ -499,9 +502,26 @@ public sealed partial class MainWindow : Window
             int textLength = DocumentEditor.Text?.Length ?? 0;
             int start = Math.Clamp(eventArgs.StartOffset, 0, textLength);
             int end = Math.Clamp(start + eventArgs.SelectionLength, start, textLength);
+            // Reset after the originating two-way binding update has completed so choosing
+            // the same paragraph again still navigates after the user moves the caret.
+            OutlinePanelList.SelectedIndex = -1;
+            OutlineDrawerList.SelectedIndex = -1;
+            DocumentEditor.Focus();
+            DocumentEditor.CaretIndex = start;
             DocumentEditor.SelectionStart = start;
             DocumentEditor.SelectionEnd = end;
-            DocumentEditor.Focus();
+            TextPresenter? presenter = DocumentEditor.GetVisualDescendants().OfType<TextPresenter>().FirstOrDefault();
+            if (presenter is not null)
+            {
+                Rect destination = presenter.TextLayout.HitTestTextPosition(start);
+                Rect lastLine = presenter.TextLayout.HitTestTextPosition(Math.Max(start, end - 1));
+                double paragraphHeight = lastLine.Bottom - destination.Y + 16;
+                double viewportHeight = this.FindControl<ScrollViewer>("WorkspaceScrollViewer")?.Viewport.Height ?? 0;
+                double visibleHeight = viewportHeight > 0
+                    ? Math.Min(paragraphHeight, viewportHeight * 0.85)
+                    : paragraphHeight;
+                presenter.BringIntoView(new Rect(0, destination.Y, 1, Math.Max(destination.Height, visibleHeight)));
+            }
         }, DispatcherPriority.Input);
     }
 

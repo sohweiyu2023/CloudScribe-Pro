@@ -21,7 +21,7 @@ function Get-AllowedNoticeFiles {
     $inventoryPath=Join-Path $package 'licenses/third-party/components.json'
     # Refresh this pin only alongside the reviewed source inventory and its fixture tests.
     # The package itself cannot expand the installer's notice-file allowlist.
-    $inventorySha256='e704c5a77b2a30153467825246c366133d09d4acd23c47c8e1fb235f021b6040'
+    $inventorySha256='d3f95b877d4ee8230a7121cd8126ebd1321340d57e00ae2aee058f1c0e2089d7'
     if((Get-FileHash -LiteralPath $inventoryPath -Algorithm SHA256).Hash -ne $inventorySha256){throw 'Unexpected third-party inventory identity.'}
     $inventory=Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
     if($inventory.schema_version -ne 1 -or @($inventory.components).Count -eq 0){throw 'Invalid third-party inventory.'}

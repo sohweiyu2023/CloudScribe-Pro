@@ -64,15 +64,15 @@ def _stage4_contract_root() -> tempfile.TemporaryDirectory[str]:
         temporary.cleanup()
         raise RuntimeError("Historical Stage4 self-test projection is allowed only from exact Final Stage8 1.0.0 source")
     # Verify release SDK identity before projecting a historical Stage 4 source
-    # fixture. The real patch retains its own 10.0.401 pin; only the *temporary*
+    # fixture. The real patch retains its own exact servicing SDK pin; only the *temporary*
     # historical checkpoint uses Stage 4's exact original 10.0.400 pin.
     global_path = root / "global.json"
     global_state = json.loads(global_path.read_text(encoding="utf-8-sig"))
     actual_sdk = str(global_state.get("sdk", {}).get("version", ""))
-    if actual_sdk != state.get("required_dotnet_sdk") or actual_sdk not in ("10.0.400", "10.0.401"):
+    if actual_sdk != state.get("required_dotnet_sdk") or actual_sdk not in ("10.0.400", "10.0.401", "10.0.402"):
         temporary.cleanup()
         raise RuntimeError("Historical Stage4 projection requires a valid supported source SDK identity")
-    if actual_sdk == "10.0.401":
+    if actual_sdk in ("10.0.401", "10.0.402"):
         app_project = (root / "src/CloudScribe.App/CloudScribe.App.csproj").read_text(encoding="utf-8-sig")
         if not all(marker in app_project for marker in (
             "<Version>1.0.1</Version>",
@@ -80,7 +80,7 @@ def _stage4_contract_root() -> tempfile.TemporaryDirectory[str]:
             "<FileVersion>1.0.1.0</FileVersion>",
         )):
             temporary.cleanup()
-            raise RuntimeError("10.0.401 may only project the exact 1.0.1 patch source")
+            raise RuntimeError("A servicing SDK may only project the exact 1.0.1 patch source")
     state["current_stage"] = 4
     state["repository_version"] = "0.5.0-stage4-preservation-self-test"
     state["required_dotnet_sdk"] = "10.0.400"

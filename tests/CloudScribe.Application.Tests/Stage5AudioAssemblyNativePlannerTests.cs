@@ -28,9 +28,9 @@ public sealed class Stage5AudioAssemblyNativePlannerTests
 
         var invocation = Assert.Single(invocations);
         Assert.Equal(root, invocation.WorkingDirectory);
-        Assert.Contains(source1, invocation.Arguments);
-        Assert.Contains(source2, invocation.Arguments);
-        Assert.Contains("-filter_complex", invocation.Arguments);
+        Assert.Contains(source1, invocation.Arguments, StringComparer.Ordinal);
+        Assert.Contains(source2, invocation.Arguments, StringComparer.Ordinal);
+        Assert.Contains("-filter_complex", invocation.Arguments, StringComparer.Ordinal);
         Assert.Contains(invocation.Arguments, value => value.Contains("loudnorm=I=-16:TP=-1", StringComparison.Ordinal));
         Assert.Equal(plan.OutputPaths[0], invocation.Arguments[^1]);
         Assert.DoesNotContain(invocation.Arguments, value => value.Contains("cmd.exe", StringComparison.OrdinalIgnoreCase));
