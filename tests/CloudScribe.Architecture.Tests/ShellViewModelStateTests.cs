@@ -336,6 +336,8 @@ public sealed partial class ShellViewModelStateTests
 
         Assert.Equal(2, requests);
         Assert.Single(viewModel.VoiceLabCatalogResults);
+        Assert.Null(viewModel.SelectedVoiceLabVoice);
+        viewModel.SelectedVoiceLabVoice = Assert.Single(viewModel.VoiceLabCatalogResults);
         Assert.Equal(VoiceSelection(), viewModel.SelectedVoiceLabVoice);
         Assert.Equal("Voice Lab · 1 trusted voices", viewModel.StatusMessage);
     }

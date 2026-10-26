@@ -53,8 +53,8 @@ public sealed class Stage5GenerationSafetyTests
 
         Assert.Equal(OutputQualityDisposition.Accepted, accepted.Disposition);
         Assert.Equal(OutputQualityDisposition.Quarantined, quarantined.Disposition);
-        Assert.Contains("quality.duration.out-of-range", quarantined.DiagnosticCodes);
-        Assert.Contains("quality.timing-marks.missing", quarantined.DiagnosticCodes);
+        Assert.Contains("quality.duration.out-of-range", quarantined.DiagnosticCodes, StringComparer.Ordinal);
+        Assert.Contains("quality.timing-marks.missing", quarantined.DiagnosticCodes, StringComparer.Ordinal);
     }
 
     [Fact]

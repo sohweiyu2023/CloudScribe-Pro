@@ -11,6 +11,9 @@ public static class GoogleSpeechPlanCompiler
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
+        if (options.VoiceName.Contains("-Chirp3-HD-", StringComparison.OrdinalIgnoreCase)
+            && plan.Nodes.OfType<SpeechProsody>().Any(value => value.Rate != 1m || value.PitchSemitones != 0m || value.VolumeDb != 0m))
+            throw new InvalidOperationException("Chirp 3 HD nondefault prosody is not supported by this request path.");
 
         var text = new StringBuilder();
         var degradations = new List<SpeechDegradation>();
@@ -76,8 +79,23 @@ public static class GoogleSpeechPlanCompiler
         }
     }
 
-    private static byte[] BuildPayload(StringBuilder text, GoogleSpeechCompilationOptions options, GoogleProsodyState prosody) =>
-        JsonSerializer.SerializeToUtf8Bytes(new
+    private static byte[] BuildPayload(StringBuilder text, GoogleSpeechCompilationOptions options, GoogleProsodyState prosody)
+    {
+        if (options.VoiceName.Contains("-Chirp3-HD-", StringComparison.OrdinalIgnoreCase))
+        {
+            if (prosody != new GoogleProsodyState(1m, 0m, 0m))
+                throw new InvalidOperationException("Chirp 3 HD supports only default controls in this request path; pitch, rate and volume changes are not silently applied.");
+            if (!string.Equals(options.AudioEncoding, "MP3", StringComparison.Ordinal))
+                throw new InvalidOperationException("The tested Chirp 3 HD path requires MP3 output.");
+            // Minimal synchronous text/MP3 envelope. Preview SSML/prosody controls are deliberately not assumed.
+            return JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                input = new { text = text.ToString() },
+                voice = new { languageCode = options.LanguageCode, name = options.VoiceName },
+                audioConfig = new { audioEncoding = options.AudioEncoding },
+            });
+        }
+        return JsonSerializer.SerializeToUtf8Bytes(new
         {
             input = new { text = text.ToString() },
             voice = new { languageCode = options.LanguageCode, name = options.VoiceName },
@@ -89,6 +107,7 @@ public static class GoogleSpeechPlanCompiler
                 volumeGainDb = prosody.Volume,
             },
         });
+    }
 
     private readonly record struct GoogleProsodyState(decimal Rate, decimal Pitch, decimal Volume);
 }

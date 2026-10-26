@@ -88,7 +88,7 @@ function Pass([string]$Label) {
 
 function Expect-Valid([string]$Label, [string]$Package) {
     $result = & $installer -PackageRoot $Package -ValidatePackageOnly
-    if ($result.Valid -ne $true -or $result.PackageOnly -ne $true -or $result.NoticeFiles -ne 14 -or $result.PackageFiles -lt 20) {
+    if ($result.Valid -ne $true -or $result.PackageOnly -ne $true -or $result.NoticeFiles -ne 15 -or $result.PackageFiles -lt 20) {
         throw "Unexpected package-only validation result for '$Label'."
     }
     Pass $Label

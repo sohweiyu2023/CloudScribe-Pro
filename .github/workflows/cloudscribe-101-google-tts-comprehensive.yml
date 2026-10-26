@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.401'
+          dotnet-version: '10.0.402'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
 
@@ -48,7 +48,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false --logger "console;verbosity=detailed"
+          dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore --output Detailed
           if ($LASTEXITCODE -ne 0) { throw 'Complete compiled solution test suite failed; continuing only to collect the remaining comprehensive acceptance evidence.' }
 
       - name: Google TTS 1.0.1 source acceptance

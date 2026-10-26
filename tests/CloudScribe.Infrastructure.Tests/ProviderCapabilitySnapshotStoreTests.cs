@@ -117,9 +117,9 @@ public sealed class ProviderCapabilitySnapshotStoreTests
                 tables.Add(reader.GetString(0));
             }
 
-            Assert.Contains("provider_accounts", tables);
-            Assert.Contains("provider_capability_snapshots", tables);
-            Assert.Contains("provider_capability_entries", tables);
+            Assert.Contains("provider_accounts", tables, StringComparer.Ordinal);
+            Assert.Contains("provider_capability_snapshots", tables, StringComparer.Ordinal);
+            Assert.Contains("provider_capability_entries", tables, StringComparer.Ordinal);
         }
     }
 

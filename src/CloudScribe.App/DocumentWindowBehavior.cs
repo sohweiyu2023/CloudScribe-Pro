@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
+using CloudScribe.App.Diagnostics;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Documents;
 
@@ -63,6 +64,7 @@ internal sealed class DocumentWindowBehavior
         ShellViewModel? viewModel = ViewModel;
         if (viewModel is null || !_window.StorageProvider.CanOpen)
         {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Unavailable);
             if (viewModel is not null)
             {
                 viewModel.StatusMessage = "This platform cannot open the local document picker";
@@ -73,6 +75,7 @@ internal sealed class DocumentWindowBehavior
 
         try
         {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Open);
             IReadOnlyList<IStorageFile> files = await _window.StorageProvider
                 .OpenFilePickerAsync(new()
                 {
@@ -84,11 +87,13 @@ internal sealed class DocumentWindowBehavior
             IStorageFile? file = files.Count == 0 ? null : files[0];
             if (file is null)
             {
+                NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Cancel);
                 return;
             }
 
             if (!TryResolveImportKind(file.Name, out LocalDocumentImportKind kind))
             {
+                NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Unsupported);
                 viewModel.StatusMessage = "Unsupported local document type";
                 return;
             }
@@ -96,8 +101,9 @@ internal sealed class DocumentWindowBehavior
             using Stream content = await file.OpenReadAsync().ConfigureAwait(true);
             await viewModel.ImportDocumentAsync(kind, file.Name, content).ConfigureAwait(true);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Failed, exception);
             viewModel.StatusMessage = "The local document picker failed safely · no existing document was changed";
         }
     }

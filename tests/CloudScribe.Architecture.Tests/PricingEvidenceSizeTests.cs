@@ -23,7 +23,7 @@ public sealed class PricingEvidenceSizeTests
             Assert.True(result.ObservationRecorded);
         }
         Assert.Equal(2, timeline.Entries.Count);
-        Assert.NotEqual(timeline.Entries[0].Summary, timeline.Entries[1].Summary);
+        Assert.NotEqual(timeline.Entries[0].Summary, timeline.Entries[1].Summary, StringComparer.Ordinal);
         Assert.All(timeline.Entries, e => Assert.InRange(e.Summary.Length, 1, 240));
     }
 

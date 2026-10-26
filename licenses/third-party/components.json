@@ -3,96 +3,6 @@
   "scope": "Windows application dependencies; bundled .NET runtime notices are supplied separately by its distribution.",
   "components": [
     {
-      "package": "Avalonia",
-      "version": "12.1.1",
-      "license_metadata": {
-        "text": "MIT",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "Copyright 2013-2026 \u00a9 The AvaloniaUI Project",
-        "attributes": {}
-      },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "Avalonia.Base.dll",
-          "sha256": "19596afa3c31f1643812b6bacf7dead04889e61c3b465714eb3e818b9ecb1bb3",
-          "dependency_asset": "lib/net10.0/Avalonia.Base.dll"
-        },
-        {
-          "path": "Avalonia.Controls.dll",
-          "sha256": "5a2540f4e27a59a7390b13be11bfbac484773ee98843a08ef00ae442e4aafb0c",
-          "dependency_asset": "lib/net10.0/Avalonia.Controls.dll"
-        },
-        {
-          "path": "Avalonia.DesignerSupport.dll",
-          "sha256": "a2bcc2ad2236015ee69d7fd7d47ea3448596620cc83b0562318688c39746cd59",
-          "dependency_asset": "lib/net10.0/Avalonia.DesignerSupport.dll"
-        },
-        {
-          "path": "Avalonia.Dialogs.dll",
-          "sha256": "b90af0559fa3eae9664e13649300da2e054636aef959b24df897f1a324d56824",
-          "dependency_asset": "lib/net10.0/Avalonia.Dialogs.dll"
-        },
-        {
-          "path": "Avalonia.Markup.Xaml.dll",
-          "sha256": "3bc2fb3c368256a7ca328e82d6b1296779d459a19fe1ed8a306f0088748d2cc3",
-          "dependency_asset": "lib/net10.0/Avalonia.Markup.Xaml.dll"
-        },
-        {
-          "path": "Avalonia.Markup.dll",
-          "sha256": "061c8f2b9734f3befcf38f4b009b66190514c17c312ffd8db6fdbcbf45bffdc1",
-          "dependency_asset": "lib/net10.0/Avalonia.Markup.dll"
-        },
-        {
-          "path": "Avalonia.Metal.dll",
-          "sha256": "79c7505aa2ac04564e4966d168d38ce60fc47982d8661a6ebcbf3eefc8061c22",
-          "dependency_asset": "lib/net10.0/Avalonia.Metal.dll"
-        },
-        {
-          "path": "Avalonia.MicroCom.dll",
-          "sha256": "bd86aff78404bb8d09f38c3d7cc8f523df4b4a0af393291afd4e589512923689",
-          "dependency_asset": "lib/net10.0/Avalonia.MicroCom.dll"
-        },
-        {
-          "path": "Avalonia.OpenGL.dll",
-          "sha256": "60c753cc3f5d118deb82ff6131c99bb873153c081c05483f55406a7c3f60c3ad",
-          "dependency_asset": "lib/net10.0/Avalonia.OpenGL.dll"
-        },
-        {
-          "path": "Avalonia.Vulkan.dll",
-          "sha256": "790aad1467b5d6b48cabb5e6e68fb6e4960923998c9e67fba5758b44815da031",
-          "dependency_asset": "lib/net10.0/Avalonia.Vulkan.dll"
-        },
-        {
-          "path": "Avalonia.dll",
-          "sha256": "e373a92e9539efc989429b4cfd9ff8e898ca604ac1d283782168011f8978db6e",
-          "dependency_asset": "lib/net10.0/Avalonia.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "upstream/AvaloniaUI-Avalonia-licence.md",
-          "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
-            "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
-          },
-          "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
-        }
-      ]
-    },
-    {
       "package": "Avalonia.Angle.Windows.Natives",
       "version": "2.1.27548.20260419",
       "license_metadata": {
@@ -130,7 +40,7 @@
     },
     {
       "package": "Avalonia.Desktop",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -146,13 +56,14 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.Desktop.dll",
-          "sha256": "12d0af0c34912242b4b66fe561dc6aa6b073dcd67427488573deedd721993b70",
+          "sha256": "c5d2267f29cad93c3aed598083d286262c8fb160c464133b76cd66faefe77e17",
           "dependency_asset": "lib/net10.0/Avalonia.Desktop.dll"
         }
       ],
@@ -160,48 +71,8 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
-            "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
-          },
-          "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
-        }
-      ]
-    },
-    {
-      "package": "Avalonia.FreeDesktop",
-      "version": "12.1.1",
-      "license_metadata": {
-        "text": "MIT",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "Copyright 2013-2026 \u00a9 The AvaloniaUI Project",
-        "attributes": {}
-      },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "Avalonia.FreeDesktop.dll",
-          "sha256": "caf2505151490cc075f919613e78d6b962d35bf1f9965845b21659d2698ef57b",
-          "dependency_asset": "lib/net10.0/Avalonia.FreeDesktop.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "upstream/AvaloniaUI-Avalonia-licence.md",
-          "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -210,7 +81,7 @@
     },
     {
       "package": "Avalonia.FreeDesktop.AtSpi",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -226,13 +97,14 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.FreeDesktop.AtSpi.dll",
-          "sha256": "be8ef27f44ec61b0af1ea58d6a04c08c4ae05e3ecdcb0c852a0c536b80b981a3",
+          "sha256": "93fdfb9124dfa3491eb728b99560c659e8dfe8a4d00cfbd429e1c1e0ac93c518",
           "dependency_asset": "lib/net10.0/Avalonia.FreeDesktop.AtSpi.dll"
         }
       ],
@@ -240,8 +112,49 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
+            "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
+          },
+          "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
+        }
+      ]
+    },
+    {
+      "package": "Avalonia.FreeDesktop",
+      "version": "12.1.4",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "Copyright 2013-2026 \u00a9 The AvaloniaUI Project",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://github.com/AvaloniaUI/Avalonia/",
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "Avalonia.FreeDesktop.dll",
+          "sha256": "eebbfec2de64ea47f91ba138aa749c586deefcd8040c7f0330be9733d552e752",
+          "dependency_asset": "lib/net10.0/Avalonia.FreeDesktop.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "upstream/AvaloniaUI-Avalonia-licence.md",
+          "source": {
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -250,7 +163,7 @@
     },
     {
       "package": "Avalonia.HarfBuzz",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -266,13 +179,14 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.HarfBuzz.dll",
-          "sha256": "7e896b33d3ba0c78347398d33112c6ca4dbd810a6f3b6caf22d3de3686332a40",
+          "sha256": "56a922f1dc979f120f2acb569b24ab643346775d74d5eafd1e379a921812574e",
           "dependency_asset": "lib/net10.0/Avalonia.HarfBuzz.dll"
         }
       ],
@@ -280,8 +194,8 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -290,7 +204,7 @@
     },
     {
       "package": "Avalonia.Native",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -306,13 +220,14 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.Native.dll",
-          "sha256": "1873d288024bda285b7d9b9d06ae69183fc421667e9bd44d8da0fe0fe54010f9",
+          "sha256": "47972e538a1d73e56570e8c5c68c30e96615ce76ca0a8717997a9945c064f71a",
           "dependency_asset": "lib/net10.0/Avalonia.Native.dll"
         }
       ],
@@ -320,8 +235,8 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -330,7 +245,7 @@
     },
     {
       "package": "Avalonia.Remote.Protocol",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -346,13 +261,14 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.Remote.Protocol.dll",
-          "sha256": "e0f3ccd76a47210367e9b2d1127ef499fb82eb283612cbf388a590a5ddf7e71b",
+          "sha256": "9c002eedc2870fbbd5637b2c49181a26050fccc19ed07bcb4a063341e072136e",
           "dependency_asset": "lib/net10.0/Avalonia.Remote.Protocol.dll"
         }
       ],
@@ -360,8 +276,8 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -370,7 +286,7 @@
     },
     {
       "package": "Avalonia.Skia",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -386,13 +302,14 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.Skia.dll",
-          "sha256": "9eb06b804efe57cacf6f60e8f451dabe2b5dd743d5b563ff51d6bab84476782e",
+          "sha256": "ab801e03246f8fd39e0681888fed615cbe818313de5f74cf782154871171b334",
           "dependency_asset": "lib/net10.0/Avalonia.Skia.dll"
         }
       ],
@@ -400,8 +317,8 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -410,7 +327,7 @@
     },
     {
       "package": "Avalonia.Themes.Fluent",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -426,13 +343,14 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.Themes.Fluent.dll",
-          "sha256": "43b9888e28f6f635a5926e3cc228b29282c825d7078a66dfc7dfa5a8041ec401",
+          "sha256": "66883c8eed675cdefa9f36b103b209b5351e815f579e1abb0e5a0f1299417e56",
           "dependency_asset": "lib/net10.0/Avalonia.Themes.Fluent.dll"
         }
       ],
@@ -440,8 +358,8 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -450,7 +368,7 @@
     },
     {
       "package": "Avalonia.Win32",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -466,18 +384,19 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.Win32.Automation.dll",
-          "sha256": "b805d7fcaacff732fbc3951cfeeababc56a8cbe56b01ee6937daeeef5b4c4b42",
+          "sha256": "11a8cab62229e76783d2f730f7d277c7ec04493cdd282c6825027617e60a3bad",
           "dependency_asset": "lib/net10.0/Avalonia.Win32.Automation.dll"
         },
         {
           "path": "Avalonia.Win32.dll",
-          "sha256": "9d7fb93a2d0ed176341ff27396f1969933ca746f53595b55a9e39d411e190e09",
+          "sha256": "072310bf798d9b19d2b9575c173ad27abe9714808abe8f16c679e643c513c2f5",
           "dependency_asset": "lib/net10.0/Avalonia.Win32.dll"
         }
       ],
@@ -485,8 +404,8 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -495,7 +414,7 @@
     },
     {
       "package": "Avalonia.X11",
-      "version": "12.1.1",
+      "version": "12.1.4",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -511,13 +430,14 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/AvaloniaUI/Avalonia/",
-          "commit": "e33eaed9c106846b200680751022385d9cc5dc6f"
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
         }
       },
       "distributed_files": [
         {
           "path": "Avalonia.X11.dll",
-          "sha256": "a03ca44de21f07e286cc1a690fe12f40c6bfcc6d5c9dd1f71c5b433bb2b9aebd",
+          "sha256": "7014e30270a67a7be321f6aa582e4bec07c62302a0d31b3b358351f620f24e23",
           "dependency_asset": "lib/net10.0/Avalonia.X11.dll"
         }
       ],
@@ -525,8 +445,99 @@
         {
           "path": "upstream/AvaloniaUI-Avalonia-licence.md",
           "source": {
-            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/e33eaed9c106846b200680751022385d9cc5dc6f/licence.md",
-            "upstream_revision": "e33eaed9c106846b200680751022385d9cc5dc6f",
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
+            "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
+          },
+          "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
+        }
+      ]
+    },
+    {
+      "package": "Avalonia",
+      "version": "12.1.4",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "Copyright 2013-2026 \u00a9 The AvaloniaUI Project",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://github.com/AvaloniaUI/Avalonia/",
+          "branch": "refs/heads/release/12.1.4",
+          "commit": "2d79ba55fae1b1e71c69f93a668080c9029e6a31"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "Avalonia.Base.dll",
+          "sha256": "99bf47f44f8e6b2c91f96f175dcf7efa8ba64267a1acd17faa05266d7210b72e",
+          "dependency_asset": "lib/net10.0/Avalonia.Base.dll"
+        },
+        {
+          "path": "Avalonia.Controls.dll",
+          "sha256": "24d36a48b0033e52313d1f7a2d8b69bcc18e5504d518bf56c23916558c4f1912",
+          "dependency_asset": "lib/net10.0/Avalonia.Controls.dll"
+        },
+        {
+          "path": "Avalonia.DesignerSupport.dll",
+          "sha256": "9605daf1df49f8f6a1b5dd009e5d56cb68d0db4479d1adbdd8abc4a066ec554e",
+          "dependency_asset": "lib/net10.0/Avalonia.DesignerSupport.dll"
+        },
+        {
+          "path": "Avalonia.Dialogs.dll",
+          "sha256": "8814546c28ec69c5a9a8874cfbacdfa7fa64ec622a8854231eac51ccf5bbadbb",
+          "dependency_asset": "lib/net10.0/Avalonia.Dialogs.dll"
+        },
+        {
+          "path": "Avalonia.Markup.Xaml.dll",
+          "sha256": "407b2bd896e440e8f2133d55f77f6e83e25603a774a92a1723e7e974f406350d",
+          "dependency_asset": "lib/net10.0/Avalonia.Markup.Xaml.dll"
+        },
+        {
+          "path": "Avalonia.Markup.dll",
+          "sha256": "e5a6d499f23845c1199ef4f53a52432e66947d1dc24f4452853561b970cf7f61",
+          "dependency_asset": "lib/net10.0/Avalonia.Markup.dll"
+        },
+        {
+          "path": "Avalonia.Metal.dll",
+          "sha256": "13ba916946ac2ad77eb4588c2f76727e8090356edf294fafd555649b9e52d77c",
+          "dependency_asset": "lib/net10.0/Avalonia.Metal.dll"
+        },
+        {
+          "path": "Avalonia.MicroCom.dll",
+          "sha256": "fe62d3f49cf4f5a3cb26262d0c1c74057f522deea553c79135b3e3fb5b0d9619",
+          "dependency_asset": "lib/net10.0/Avalonia.MicroCom.dll"
+        },
+        {
+          "path": "Avalonia.OpenGL.dll",
+          "sha256": "c14de1359f1cbaf0a67933d2b062f8d9064f457bef8d49870ea44c278c2866d8",
+          "dependency_asset": "lib/net10.0/Avalonia.OpenGL.dll"
+        },
+        {
+          "path": "Avalonia.Vulkan.dll",
+          "sha256": "c51e72518de1da6af6051b9d39b6aa8e5d70b4003e49b9befeadf6fb0ca494ab",
+          "dependency_asset": "lib/net10.0/Avalonia.Vulkan.dll"
+        },
+        {
+          "path": "Avalonia.dll",
+          "sha256": "c74260e117c6964ae9b7c12e203a9ac2edd9b08aecd22d2c298b2ce1f6457b14",
+          "dependency_asset": "lib/net10.0/Avalonia.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "upstream/AvaloniaUI-Avalonia-licence.md",
+          "source": {
+            "url": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/2d79ba55fae1b1e71c69f93a668080c9029e6a31/licence.md",
+            "upstream_revision": "2d79ba55fae1b1e71c69f93a668080c9029e6a31",
             "git_blob_sha": "41951805ac6a5cdb91373db7725fbaa9c004d912"
           },
           "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
@@ -576,45 +587,8 @@
       ]
     },
     {
-      "package": "HarfBuzzSharp",
-      "version": "8.3.1.3",
-      "license_metadata": {
-        "text": "MIT",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
-        "attributes": {}
-      },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://go.microsoft.com/fwlink/?linkid=868515",
-          "branch": "release/3.119.2",
-          "commit": "2888c737ad016d584c74525e2d35db5097ea8576"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "HarfBuzzSharp.dll",
-          "sha256": "55e72ac23263f8e12484f3435e02ec22fac9eff6e6d169bb0a8c246be6b99d29",
-          "dependency_asset": "lib/net8.0/HarfBuzzSharp.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "texts/HarfBuzzSharp/8.3.1.3/LICENSE.txt",
-          "source": "NuGet:HarfBuzzSharp/8.3.1.3/LICENSE.txt",
-          "sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938"
-        }
-      ]
-    },
-    {
       "package": "HarfBuzzSharp.NativeAssets.Win32",
-      "version": "8.3.1.3",
+      "version": "14.2.1.301",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -630,68 +604,70 @@
         "attributes": {
           "type": "git",
           "url": "https://go.microsoft.com/fwlink/?linkid=868515",
-          "branch": "release/3.119.2",
-          "commit": "2888c737ad016d584c74525e2d35db5097ea8576"
+          "branch": "release/4.153.1",
+          "commit": "4783f51448f9b070dda4f87b83e941c9599e466e"
         }
       },
       "distributed_files": [
         {
           "path": "runtimes/win-x64/native/libHarfBuzzSharp.dll",
-          "sha256": "145ade963eba427027d5e1381db5d51a0ef9e98e9fef9efbfa6074ca20da246f",
+          "sha256": "936633a5e4bba88b93acf806a2fff4c1e42b8da4145219a4a2634a162c213df2",
           "dependency_asset": "runtimes/win-x64/native/libHarfBuzzSharp.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/HarfBuzzSharp/8.3.1.3/LICENSE.txt",
-          "source": "NuGet:HarfBuzzSharp.NativeAssets.Win32/8.3.1.3/LICENSE.txt",
+          "source": "NuGet:HarfBuzzSharp.NativeAssets.Win32/14.2.1.301/LICENSE.txt",
           "sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938"
         },
         {
           "path": "texts/HarfBuzzSharp.NativeAssets.Win32/8.3.1.3/THIRD-PARTY-NOTICES.txt",
-          "source": "NuGet:HarfBuzzSharp.NativeAssets.Win32/8.3.1.3/THIRD-PARTY-NOTICES.txt",
+          "source": "NuGet:HarfBuzzSharp.NativeAssets.Win32/14.2.1.301/THIRD-PARTY-NOTICES.txt",
           "sha256": "21504c46c4c58aa64c1055bd2dcbc5f9a136b4b8c412ed3cc6740e22c5b127f5"
         }
       ]
     },
     {
-      "package": "libsodium",
-      "version": "1.0.22",
+      "package": "HarfBuzzSharp",
+      "version": "14.2.1.301",
       "license_metadata": {
-        "text": "ISC",
+        "text": "MIT",
         "attributes": {
           "type": "expression"
         }
       },
       "copyright_metadata": {
-        "text": "\u00a9 2026 Frank Denis",
+        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
         "attributes": {}
       },
       "repository_metadata": {
         "text": null,
         "attributes": {
           "type": "git",
-          "url": "https://github.com/jedisct1/libsodium.git"
+          "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+          "branch": "release/4.153.1",
+          "commit": "4783f51448f9b070dda4f87b83e941c9599e466e"
         }
       },
       "distributed_files": [
         {
-          "path": "runtimes/win-x64/native/libsodium.dll",
-          "sha256": "64a1f143868309069f0a0a3c8141c0853c4f17243ddf734e92b11c5411739771",
-          "dependency_asset": "runtimes/win-x64/native/libsodium.dll"
+          "path": "HarfBuzzSharp.dll",
+          "sha256": "c183f9bf8ce80979f8cbb54f9ded9ad77c105cd7605bfb9466f1544b39506c0c",
+          "dependency_asset": "lib/net10.0/HarfBuzzSharp.dll"
         }
       ],
       "notice_files": [
         {
-          "path": "texts/libsodium/1.0.22/LICENSE",
-          "source": "NuGet:libsodium/1.0.22/LICENSE",
-          "sha256": "508a76d186356c0dd807a670ef510964f8724557024796a2c426c6c0e19ab683"
+          "path": "texts/HarfBuzzSharp/8.3.1.3/LICENSE.txt",
+          "source": "NuGet:HarfBuzzSharp/14.2.1.301/LICENSE.txt",
+          "sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938"
         }
       ]
     },
     {
       "package": "MicroCom.Runtime",
-      "version": "0.11.6",
+      "version": "0.11.7",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -707,13 +683,13 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/kekekeks/MicroCom",
-          "commit": "76785efcafd91b5902fd19dd11145f6dd655b7b4"
+          "commit": "cd2fa3c89525fbe7b46bd13f9ec8c77bd829e815"
         }
       },
       "distributed_files": [
         {
           "path": "MicroCom.Runtime.dll",
-          "sha256": "2538ec6f3c24e901a90e33c37788b9a4e4b6ae8158cab7328a00a00bb28eab9e",
+          "sha256": "825697d6120f0ec9f506c8cae65c5ea9e44ef1bca106b323e3016198e6c1f50b",
           "dependency_asset": "lib/net8.0/MicroCom.Runtime.dll"
         }
       ],
@@ -721,8 +697,8 @@
         {
           "path": "upstream/kekekeks-MicroCom-LICENSE",
           "source": {
-            "url": "https://raw.githubusercontent.com/kekekeks/MicroCom/76785efcafd91b5902fd19dd11145f6dd655b7b4/LICENSE",
-            "upstream_revision": "76785efcafd91b5902fd19dd11145f6dd655b7b4",
+            "url": "https://raw.githubusercontent.com/kekekeks/MicroCom/cd2fa3c89525fbe7b46bd13f9ec8c77bd829e815/LICENSE",
+            "upstream_revision": "cd2fa3c89525fbe7b46bd13f9ec8c77bd829e815",
             "git_blob_sha": "6bcf96f0b4029b873c3d9b55d4c1117bbd157e28"
           },
           "sha256": "6ee769c9ac4dac9abb16b98b1341e9528ff9f4ab685481410d3376d14148f3a9"
@@ -731,7 +707,7 @@
     },
     {
       "package": "Microsoft.Data.Sqlite.Core",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -747,13 +723,13 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Data.Sqlite.dll",
-          "sha256": "1078d41c6c0f2cee48a8b706e3a54ce145705993f19f703d2b3bdf2abcc59088",
+          "sha256": "9f1fe804321767b6cc8db751ecedd56ab308e5f15492a7f40d7093bb61ab7638",
           "dependency_asset": "lib/net8.0/Microsoft.Data.Sqlite.dll"
         }
       ],
@@ -761,48 +737,8 @@
         {
           "path": "upstream/dotnet-dotnet-LICENSE.TXT",
           "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
-        }
-      ]
-    },
-    {
-      "package": "Microsoft.EntityFrameworkCore",
-      "version": "10.0.10",
-      "license_metadata": {
-        "text": "MIT",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
-        "attributes": {}
-      },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "Microsoft.EntityFrameworkCore.dll",
-          "sha256": "acb89dff050d681fab6f86d2175929471200b9bed66ac9321cbe6a17eaa26933",
-          "dependency_asset": "lib/net10.0/Microsoft.EntityFrameworkCore.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+            "url": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/LICENSE.TXT",
+            "upstream_revision": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
             "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
           },
           "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
@@ -811,7 +747,7 @@
     },
     {
       "package": "Microsoft.EntityFrameworkCore.Abstractions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -827,13 +763,13 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.EntityFrameworkCore.Abstractions.dll",
-          "sha256": "98c8252995283ef0884b904dbab03696ca7f71a05b8dde34dace5eeb9bf4382c",
+          "sha256": "24596b62ac0546c641e308a06bb9ea4bb153e9a776ed2311e730832465f34f5d",
           "dependency_asset": "lib/net10.0/Microsoft.EntityFrameworkCore.Abstractions.dll"
         }
       ],
@@ -841,8 +777,8 @@
         {
           "path": "upstream/dotnet-dotnet-LICENSE.TXT",
           "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+            "url": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/LICENSE.TXT",
+            "upstream_revision": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
             "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
           },
           "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
@@ -851,7 +787,7 @@
     },
     {
       "package": "Microsoft.EntityFrameworkCore.Relational",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -867,13 +803,13 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.EntityFrameworkCore.Relational.dll",
-          "sha256": "ac1146e68d53d56b79e9473f68c557999de99674be392bbbbb02ae93a296b93e",
+          "sha256": "078ad42527c893d858e1c48b7edc5a0ec755c60b28395e996bc438ede3555cf0",
           "dependency_asset": "lib/net10.0/Microsoft.EntityFrameworkCore.Relational.dll"
         }
       ],
@@ -881,8 +817,8 @@
         {
           "path": "upstream/dotnet-dotnet-LICENSE.TXT",
           "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+            "url": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/LICENSE.TXT",
+            "upstream_revision": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
             "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
           },
           "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
@@ -891,7 +827,7 @@
     },
     {
       "package": "Microsoft.EntityFrameworkCore.Sqlite.Core",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -907,13 +843,13 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.EntityFrameworkCore.Sqlite.dll",
-          "sha256": "b8c5027b27be2012094699cbd5260239778a1891dc5c1887797d331b67f0ef89",
+          "sha256": "3b22114697fa67e5956a88b71c04bf470990fb4e464614d034d8ff607f8ba827",
           "dependency_asset": "lib/net10.0/Microsoft.EntityFrameworkCore.Sqlite.dll"
         }
       ],
@@ -921,8 +857,48 @@
         {
           "path": "upstream/dotnet-dotnet-LICENSE.TXT",
           "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+            "url": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/LICENSE.TXT",
+            "upstream_revision": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
+            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
+          },
+          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
+        }
+      ]
+    },
+    {
+      "package": "Microsoft.EntityFrameworkCore",
+      "version": "10.0.13",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://github.com/dotnet/dotnet",
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "Microsoft.EntityFrameworkCore.dll",
+          "sha256": "87faf0bf54de5f62c7d30eb686018b11c53d4acf6c280adb39965b303c5b2b59",
+          "dependency_asset": "lib/net10.0/Microsoft.EntityFrameworkCore.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
+          "source": {
+            "url": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/LICENSE.TXT",
+            "upstream_revision": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699",
             "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
           },
           "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
@@ -931,7 +907,7 @@
     },
     {
       "package": "Microsoft.Extensions.Caching.Abstractions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -947,36 +923,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Caching.Abstractions.dll",
-          "sha256": "d82421a7036109556106414748a63425ca2aafa3e6b76669d41b74d625c66e7e",
+          "sha256": "db8df1f8f824028eba680511df8e3724a104df9955b515f322fd60bb372b2bf2",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Caching.Abstractions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Caching.Abstractions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Caching.Memory",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -992,81 +959,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Caching.Memory.dll",
-          "sha256": "d2d85721e191d9bc6f640da31311a32d19c684cab24ea22b0c1732578f23bc7d",
+          "sha256": "f9d9f48e96322deef7d798815448b91755b19357d82328e4ce898478d4050340",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Caching.Memory.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Caching.Memory/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Caching.Memory/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
-        }
-      ]
-    },
-    {
-      "package": "Microsoft.Extensions.Configuration",
-      "version": "10.0.10",
-      "license_metadata": {
-        "text": "MIT",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
-        "attributes": {}
-      },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "Microsoft.Extensions.Configuration.dll",
-          "sha256": "82e24fb29ce626917e2061cb56bc45bbcd6df949c8c8a2ffa8e0d58131a57e5f",
-          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Configuration/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Configuration.Abstractions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1082,36 +995,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Configuration.Abstractions.dll",
-          "sha256": "685493e38adb7e5d06bfcd93aa160fb8ce23aae80dadd1ff489e8cd4cfc6cafe",
+          "sha256": "a6e043abc339b7341bf7dabf6f101bc16fd5d10dcde67587ac6418f7fd6615f0",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.Abstractions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Configuration.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Configuration.Abstractions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Configuration.Binder",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1127,36 +1031,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Configuration.Binder.dll",
-          "sha256": "a8023c962de35b80af4f76900f5f76721d60bcf8deaf68f537fa4aa5a34dff9c",
+          "sha256": "53dd1d292fe99d94c03d42a6783e3b3604c2847580c76f7b1f6e0eb1419049d0",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.Binder.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Configuration.Binder/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Configuration.Binder/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Configuration.CommandLine",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1172,36 +1067,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Configuration.CommandLine.dll",
-          "sha256": "be304af31eb2e2ddef73ec907951535387fe70c039103805dfab27743d5623ff",
+          "sha256": "757974ea4b65545c0e2c61dea5da765fb3ba63d149468b560bdc60b0ba81f6eb",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.CommandLine.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Configuration.CommandLine/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Configuration.CommandLine/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Configuration.EnvironmentVariables",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1217,36 +1103,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
-          "sha256": "2b02bcce661642e4f74965b1a9be29e3ef9d97fcc6ac9e0a969d60497016ec67",
+          "sha256": "1cbe9651c65f65ce3cc649f5920d00809d71093507d964eabf89c477bdd4b2a1",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.EnvironmentVariables.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Configuration.EnvironmentVariables/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Configuration.EnvironmentVariables/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Configuration.FileExtensions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1262,36 +1139,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Configuration.FileExtensions.dll",
-          "sha256": "66c81c68358ad8e0845e89a42b0b90162d4796e6d9cf60de02a6828ed1285448",
+          "sha256": "8518caf1f3888ed33188a92495ed51905964ec66a916c09d346078ef9e8a0b04",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.FileExtensions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Configuration.FileExtensions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Configuration.FileExtensions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Configuration.Json",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1307,36 +1175,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Configuration.Json.dll",
-          "sha256": "bce587d4fda7a8d6bc3758f0670e5a6a7095be283b43a838a0e0ca054bad021c",
+          "sha256": "dfced8d327661c0a9edc1b3122d28c0a522d45d824d64821332dcb1232bd3ea7",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.Json.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Configuration.Json/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Configuration.Json/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Configuration.UserSecrets",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1352,36 +1211,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Configuration.UserSecrets.dll",
-          "sha256": "a011b1bd1b3a7a8430c101ceac2fed0610ae94af8ee6deef45091e0e17089e1d",
+          "sha256": "40866ddc26c6ff5d1fc54b33f6099fd8f0a149a640b97ee4767e5fcc7e6a9a10",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.UserSecrets.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Configuration.UserSecrets/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Configuration.UserSecrets/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
-      "package": "Microsoft.Extensions.DependencyInjection",
-      "version": "10.0.10",
+      "package": "Microsoft.Extensions.Configuration",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1397,36 +1247,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
-          "path": "Microsoft.Extensions.DependencyInjection.dll",
-          "sha256": "5af15e4b692dfa774550b0d506e3411f4a84ed1a757ff617016b6bd060e7b1dc",
-          "dependency_asset": "lib/net10.0/Microsoft.Extensions.DependencyInjection.dll"
+          "path": "Microsoft.Extensions.Configuration.dll",
+          "sha256": "2afbe810f4988debd8c0011053e2c5b751facecd211933f48ba0f4ffc12bb94b",
+          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Configuration.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.DependencyInjection/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Configuration/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.DependencyInjection.Abstractions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1442,36 +1283,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.DependencyInjection.Abstractions.dll",
-          "sha256": "592c33e4bc20e041d6125b79a4311293540f30332495429241c3d7c7286c8e16",
+          "sha256": "7d07e2588a256ae5983af6a2e64eac603cb81d8f224dbea5e65eda8d67258175",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.DependencyInjection.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.DependencyInjection.Abstractions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
-      "package": "Microsoft.Extensions.DependencyModel",
-      "version": "10.0.10",
+      "package": "Microsoft.Extensions.DependencyInjection",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1487,81 +1319,63 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "Microsoft.Extensions.DependencyInjection.dll",
+          "sha256": "ba7e45a53867bfcf4b12997c2d565ce7c0eaa9595d2b509c56605b46a28228b1",
+          "dependency_asset": "lib/net10.0/Microsoft.Extensions.DependencyInjection.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.DependencyInjection/10.0.13/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "package": "Microsoft.Extensions.DependencyModel",
+      "version": "10.0.13",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://github.com/dotnet/dotnet",
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.DependencyModel.dll",
-          "sha256": "2385bfbc9344e03acb2ff44f1ed21a3770fbafdf1ba4be2dbcacd42027b8c3bd",
+          "sha256": "6b2dbb3f1cbcef55e4c4e419371467d1d5b645f2723762e73f1af50329b9e23d",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.DependencyModel.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.DependencyModel/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.DependencyModel/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
-        }
-      ]
-    },
-    {
-      "package": "Microsoft.Extensions.Diagnostics",
-      "version": "10.0.10",
-      "license_metadata": {
-        "text": "MIT",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
-        "attributes": {}
-      },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "Microsoft.Extensions.Diagnostics.dll",
-          "sha256": "71e08ba824b5a9e6a186d887b29890ddcadcbe2b2024ffff0432f81821c72a66",
-          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Diagnostics.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Diagnostics/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Diagnostics.Abstractions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1577,36 +1391,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Diagnostics.Abstractions.dll",
-          "sha256": "7a60eff59e2360136fb2696227c643ff6e3cde298fa010e3202151ac79bf55de",
+          "sha256": "f8dc83f39fa7aa57833fe06c6af149b3c050325bfda9f2325557b84ae7fd95a5",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Diagnostics.Abstractions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Diagnostics.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Diagnostics.Abstractions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
-      "package": "Microsoft.Extensions.FileProviders.Abstractions",
-      "version": "10.0.10",
+      "package": "Microsoft.Extensions.Diagnostics",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1622,36 +1427,63 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "Microsoft.Extensions.Diagnostics.dll",
+          "sha256": "dbf06d7f3d2937400ac706f2f0491549a9aa4a4f6ff9deca62ad92ec29ae6c2e",
+          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Diagnostics.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Diagnostics/10.0.13/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "package": "Microsoft.Extensions.FileProviders.Abstractions",
+      "version": "10.0.13",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://github.com/dotnet/dotnet",
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.FileProviders.Abstractions.dll",
-          "sha256": "670e6ccb7984ade31318af5db4fba19903174721d8e9f1fd3d5e64403ac05d87",
+          "sha256": "23f3ab8c92b4687b53454395d3b09f0940c3692025b2020882775133d02d0cac",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.FileProviders.Abstractions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.FileProviders.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.FileProviders.Abstractions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.FileProviders.Physical",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1667,36 +1499,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.FileProviders.Physical.dll",
-          "sha256": "441746bddb3b418462a2edccdd1386a7740a70e4e2767b2ef603a7cd721e6668",
+          "sha256": "a21fb353cf06856cdb8b643b927d82e588cd8fb3d0d442dc8b38cd92c1679441",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.FileProviders.Physical.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.FileProviders.Physical/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.FileProviders.Physical/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.FileSystemGlobbing",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1712,81 +1535,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.FileSystemGlobbing.dll",
-          "sha256": "fe9f4d6f98e15e7f2f2ad8db324b1ad5a7a2744d4bb3a5eaeb19f4a354bdae5c",
+          "sha256": "262e242f9dd268422864a1282d9a43e55c5fdc49725e59d8a8f50f718bb8813d",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.FileSystemGlobbing.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.FileSystemGlobbing/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.FileSystemGlobbing/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
-        }
-      ]
-    },
-    {
-      "package": "Microsoft.Extensions.Hosting",
-      "version": "10.0.10",
-      "license_metadata": {
-        "text": "MIT",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
-        "attributes": {}
-      },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "Microsoft.Extensions.Hosting.dll",
-          "sha256": "3dd19c2e520cae17a612551cf8c52620e8aa4ad609cae398ae1afe04a4ef4a36",
-          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Hosting.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Hosting/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Hosting.Abstractions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1802,36 +1571,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Hosting.Abstractions.dll",
-          "sha256": "55d316f9a8da2b2e91c50c75a92c44114eb23e4b796090008cfa4524fa082866",
+          "sha256": "c71749c0adafc6a77995429a7d777cf4eddc723b0b29fbba40ba2b91ce9b8e06",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Hosting.Abstractions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Hosting.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Hosting.Abstractions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
-      "package": "Microsoft.Extensions.Logging",
-      "version": "10.0.10",
+      "package": "Microsoft.Extensions.Hosting",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1847,36 +1607,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
-          "path": "Microsoft.Extensions.Logging.dll",
-          "sha256": "14129c595b456ebfe99d0f04618247235043107b2159a772299ead894b5223ac",
-          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Logging.dll"
+          "path": "Microsoft.Extensions.Hosting.dll",
+          "sha256": "5b96db7650b3b2dd17f94995f0622a28759a63ed1560973cb1da22d38bc332a7",
+          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Hosting.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Logging/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Hosting/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Logging.Abstractions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1892,36 +1643,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Logging.Abstractions.dll",
-          "sha256": "46826fd3b68bd23028b274ff73ecc161088b53e41b4a7436e759de4d78143a43",
+          "sha256": "d0a3cce0caf2bdda4af7d54135a321b45438015947fd902d7c2e6a0a30730c55",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Logging.Abstractions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Logging.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Logging.Abstractions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Logging.Configuration",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1937,36 +1679,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Logging.Configuration.dll",
-          "sha256": "2ffd6a6790ff271ecf5238ed7bcf583c9cc2c97b908b2f35ce33948ce7b616b0",
+          "sha256": "da412f47d1b3c7dbebc415c698a0455fba74d3b0b4aa2d264d56fd732a233e34",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Logging.Configuration.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Logging.Configuration/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Logging.Configuration/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Logging.Console",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -1982,36 +1715,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Logging.Console.dll",
-          "sha256": "9468dc0466f2e582e2de1c4fbdf3dbbfcb392e6a26cc9a5ecc65ea4ab66807c5",
+          "sha256": "b34ad1019a6c57c12729905de3cf3d027db4b6ddb7d7ce206725481962a9577b",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Logging.Console.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Logging.Console/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Logging.Console/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Logging.Debug",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -2027,36 +1751,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Logging.Debug.dll",
-          "sha256": "a99b3c4b57c9b6f045f82a5f7be3e83945f2d939a795b7c57befc10f1b61f00c",
+          "sha256": "072fe39ffd1f5adc9ecf4a842063e5cabd044bd017c5b512dc1a6bf50c2ea4d3",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Logging.Debug.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Logging.Debug/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Logging.Debug/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Logging.EventLog",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -2072,36 +1787,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Logging.EventLog.dll",
-          "sha256": "3724057b31f8bf455360bdf21a26d7a3ae45fa9bf51ccc0a2363eb977688fc91",
+          "sha256": "d4352c3512b171ac7a933b5d7e6e915fafb9f4adad4c471c78f5cf6e8dd2302d",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Logging.EventLog.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Logging.EventLog/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Logging.EventLog/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Logging.EventSource",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -2117,36 +1823,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Logging.EventSource.dll",
-          "sha256": "7b6e0de3e0fd1ef63794405409912973cc6611148bc3a822ab80300b88bc718d",
+          "sha256": "581615c5921eed60d72545abc08c4853e4354108ed67f9db725a4972c47c0483",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Logging.EventSource.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Logging.EventSource/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Logging.EventSource/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
-      "package": "Microsoft.Extensions.Options",
-      "version": "10.0.10",
+      "package": "Microsoft.Extensions.Logging",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -2162,36 +1859,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
-          "path": "Microsoft.Extensions.Options.dll",
-          "sha256": "e6e4183c67c8b265d852e40e6b873640371c4eb19f6268d4c4734c1aeba17dfb",
-          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Options.dll"
+          "path": "Microsoft.Extensions.Logging.dll",
+          "sha256": "16944de682f1db805b8aa4148e167d5c16a63a75ff8d3d753cb9a3a1dc6c63ff",
+          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Logging.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Options/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Logging/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Microsoft.Extensions.Options.ConfigurationExtensions",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -2207,36 +1895,27 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Options.ConfigurationExtensions.dll",
-          "sha256": "57016b035ba45edd1e18a35d0a15f33a8edd06f514e81bb2578cfed1279138f6",
+          "sha256": "e4268aa2fffa635b28a4ab11aa2c75b7442278e12e98fcd72c677923c0ead52e",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Options.ConfigurationExtensions.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Options.ConfigurationExtensions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Options.ConfigurationExtensions/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
-      "package": "Microsoft.Extensions.Primitives",
-      "version": "10.0.10",
+      "package": "Microsoft.Extensions.Options",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -2252,30 +1931,57 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "Microsoft.Extensions.Options.dll",
+          "sha256": "b99e0911eb18a1819923d812f6e5424b4a63b6959bfcde26d8f202bc8a9e807e",
+          "dependency_asset": "lib/net10.0/Microsoft.Extensions.Options.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Options/10.0.13/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
+    },
+    {
+      "package": "Microsoft.Extensions.Primitives",
+      "version": "10.0.13",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://github.com/dotnet/dotnet",
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "Microsoft.Extensions.Primitives.dll",
-          "sha256": "149f0bb5fbbf39836f38f61ea24eee49d78bc62c63bdb3c462381bdffb1d3603",
+          "sha256": "deb951c8de3092d81dd4459ac4e51b819883f30f6488abc4bfb915f1e33db183",
           "dependency_asset": "lib/net10.0/Microsoft.Extensions.Primitives.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:Microsoft.Extensions.Primitives/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:Microsoft.Extensions.Primitives/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
@@ -2321,87 +2027,40 @@
       ]
     },
     {
-      "package": "SkiaSharp",
-      "version": "3.119.4",
+      "package": "SQLite",
+      "version": "3.54.1",
       "license_metadata": {
-        "text": "MIT",
+        "text": "LICENSE.txt",
         "attributes": {
-          "type": "expression"
+          "type": "file"
         }
       },
       "copyright_metadata": {
-        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
+        "text": "Copyright 2014-2026 SourceGear, LLC",
         "attributes": {}
       },
       "repository_metadata": {
         "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://go.microsoft.com/fwlink/?linkid=868515",
-          "branch": "release/3.119.4",
-          "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "SkiaSharp.dll",
-          "sha256": "aaaaa18c68ba1f3a3408b00dff28b11d5705198e17ba9d3aa59222bfd35407c8",
-          "dependency_asset": "lib/net10.0/SkiaSharp.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "texts/HarfBuzzSharp/8.3.1.3/LICENSE.txt",
-          "source": "NuGet:SkiaSharp/3.119.4/LICENSE.txt",
-          "sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938"
-        }
-      ]
-    },
-    {
-      "package": "SkiaSharp.NativeAssets.Win32",
-      "version": "3.119.4",
-      "license_metadata": {
-        "text": "MIT",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
         "attributes": {}
       },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://go.microsoft.com/fwlink/?linkid=868515",
-          "branch": "release/3.119.4",
-          "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
-        }
-      },
       "distributed_files": [
         {
-          "path": "runtimes/win-x64/native/libSkiaSharp.dll",
-          "sha256": "7dec3ba900ab353491e6446f0083739924c6f8dd668832e2f09d38ebffdbbe1c",
-          "dependency_asset": "runtimes/win-x64/native/libSkiaSharp.dll"
+          "path": "runtimes/win-x64/native/e_sqlite3.dll",
+          "sha256": "922ab7ff7e47ef2694ca5f62adbefcc44c637bf5d082488c286816ed5d06363f",
+          "dependency_asset": "runtimes/win-x64/native/e_sqlite3.dll"
         }
       ],
       "notice_files": [
         {
-          "path": "texts/HarfBuzzSharp/8.3.1.3/LICENSE.txt",
-          "source": "NuGet:SkiaSharp.NativeAssets.Win32/3.119.4/LICENSE.txt",
-          "sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938"
-        },
-        {
-          "path": "texts/HarfBuzzSharp.NativeAssets.Win32/8.3.1.3/THIRD-PARTY-NOTICES.txt",
-          "source": "NuGet:SkiaSharp.NativeAssets.Win32/3.119.4/THIRD-PARTY-NOTICES.txt",
-          "sha256": "21504c46c4c58aa64c1055bd2dcbc5f9a136b4b8c412ed3cc6740e22c5b127f5"
+          "path": "texts/SQLite/3.54.1/LICENSE.txt",
+          "source": "NuGet:SQLite/3.54.1/LICENSE.txt",
+          "sha256": "99464c3a88df7b708ce59e462cdcb85f72dfc9b1335b4fcc68be56131b634b95"
         }
       ]
     },
     {
-      "package": "SQLitePCLRaw.bundle_e_sqlite3",
-      "version": "2.1.12",
+      "package": "SQLitePCLRaw.config.e_sqlite3",
+      "version": "3.0.5",
       "license_metadata": {
         "text": "Apache-2.0",
         "attributes": {
@@ -2409,21 +2068,22 @@
         }
       },
       "copyright_metadata": {
-        "text": "Copyright 2014-2024 SourceGear, LLC",
+        "text": "Copyright 2014-2026 SourceGear, LLC",
         "attributes": {}
       },
       "repository_metadata": {
         "text": null,
         "attributes": {
           "type": "git",
-          "url": "https://github.com/ericsink/SQLitePCL.raw"
+          "url": "https://github.com/ericsink/SQLitePCL.raw",
+          "commit": "96043b8cff323f21919df86a431c136655d81b4a"
         }
       },
       "distributed_files": [
         {
           "path": "SQLitePCLRaw.batteries_v2.dll",
-          "sha256": "815ce410c9eab531dd219318e3ba16c5e38e83d361cfbbdbb4bbca222c497b0b",
-          "dependency_asset": "lib/netstandard2.0/SQLitePCLRaw.batteries_v2.dll"
+          "sha256": "1ee3c6ff4d39171690d6ff6f84b4d876ed038ca28e39bb6e74995f52d2aacf8b",
+          "dependency_asset": "lib/net8.0/SQLitePCLRaw.batteries_v2.dll"
         }
       ],
       "notice_files": [
@@ -2431,7 +2091,8 @@
           "path": "upstream/Apache-2.0.txt",
           "source": {
             "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
-            "upstream_revision": "Apache License Version 2.0"
+            "upstream_revision": "96043b8cff323f21919df86a431c136655d81b4a",
+            "git_blob_sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
           },
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
         }
@@ -2439,7 +2100,7 @@
     },
     {
       "package": "SQLitePCLRaw.core",
-      "version": "2.1.12",
+      "version": "3.0.5",
       "license_metadata": {
         "text": "Apache-2.0",
         "attributes": {
@@ -2447,21 +2108,22 @@
         }
       },
       "copyright_metadata": {
-        "text": "Copyright 2014-2024 SourceGear, LLC",
+        "text": "Copyright 2014-2025 SourceGear, LLC",
         "attributes": {}
       },
       "repository_metadata": {
         "text": null,
         "attributes": {
           "type": "git",
-          "url": "https://github.com/ericsink/SQLitePCL.raw"
+          "url": "https://github.com/ericsink/SQLitePCL.raw",
+          "commit": "ed046114d5a30534e13294d94d78eb73de896ad4"
         }
       },
       "distributed_files": [
         {
           "path": "SQLitePCLRaw.core.dll",
-          "sha256": "af340ac9eb9195795660d7fc1114f486b6ab63998f33176e2f24c8e0acb9aa84",
-          "dependency_asset": "lib/netstandard2.0/SQLitePCLRaw.core.dll"
+          "sha256": "b72c9dfe1479a568d6b84e249eaf949e76c757888f8056fb6ddb9c0480e0dd25",
+          "dependency_asset": "lib/net8.0/SQLitePCLRaw.core.dll"
         }
       ],
       "notice_files": [
@@ -2469,45 +2131,8 @@
           "path": "upstream/Apache-2.0.txt",
           "source": {
             "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
-            "upstream_revision": "Apache License Version 2.0"
-          },
-          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
-        }
-      ]
-    },
-    {
-      "package": "SQLitePCLRaw.lib.e_sqlite3",
-      "version": "2.1.12",
-      "license_metadata": {
-        "text": "Apache-2.0",
-        "attributes": {
-          "type": "expression"
-        }
-      },
-      "copyright_metadata": {
-        "text": "Copyright 2014-2024 SourceGear, LLC",
-        "attributes": {}
-      },
-      "repository_metadata": {
-        "text": null,
-        "attributes": {
-          "type": "git",
-          "url": "https://github.com/ericsink/SQLitePCL.raw"
-        }
-      },
-      "distributed_files": [
-        {
-          "path": "runtimes/win-x64/native/e_sqlite3.dll",
-          "sha256": "b7385d722c83fb52142a00477a726723745916d22a555711ee89834c1111fb2e",
-          "dependency_asset": "runtimes/win-x64/native/e_sqlite3.dll"
-        }
-      ],
-      "notice_files": [
-        {
-          "path": "upstream/Apache-2.0.txt",
-          "source": {
-            "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
-            "upstream_revision": "Apache License Version 2.0"
+            "upstream_revision": "ed046114d5a30534e13294d94d78eb73de896ad4",
+            "git_blob_sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
           },
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
         }
@@ -2515,7 +2140,7 @@
     },
     {
       "package": "SQLitePCLRaw.provider.e_sqlite3",
-      "version": "2.1.12",
+      "version": "3.0.5",
       "license_metadata": {
         "text": "Apache-2.0",
         "attributes": {
@@ -2523,21 +2148,22 @@
         }
       },
       "copyright_metadata": {
-        "text": "Copyright 2014-2024 SourceGear, LLC",
+        "text": "Copyright 2014-2025 SourceGear, LLC",
         "attributes": {}
       },
       "repository_metadata": {
         "text": null,
         "attributes": {
           "type": "git",
-          "url": "https://github.com/ericsink/SQLitePCL.raw"
+          "url": "https://github.com/ericsink/SQLitePCL.raw",
+          "commit": "ed046114d5a30534e13294d94d78eb73de896ad4"
         }
       },
       "distributed_files": [
         {
           "path": "SQLitePCLRaw.provider.e_sqlite3.dll",
-          "sha256": "df996bcae63c2cabcfe8d4b9c5110eb39a2a4706178b07d875665391c6eb3995",
-          "dependency_asset": "lib/net6.0/SQLitePCLRaw.provider.e_sqlite3.dll"
+          "sha256": "1d4cb69b3aaf6a9cf40dfe179cc16dd678f12bc024b212d4297654e0a29e220d",
+          "dependency_asset": "lib/net8.0/SQLitePCLRaw.provider.e_sqlite3.dll"
         }
       ],
       "notice_files": [
@@ -2545,15 +2171,95 @@
           "path": "upstream/Apache-2.0.txt",
           "source": {
             "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
-            "upstream_revision": "Apache License Version 2.0"
+            "upstream_revision": "ed046114d5a30534e13294d94d78eb73de896ad4",
+            "git_blob_sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
           },
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
         }
       ]
     },
     {
+      "package": "SkiaSharp.NativeAssets.Win32",
+      "version": "4.153.1",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+          "branch": "release/4.153.1",
+          "commit": "4783f51448f9b070dda4f87b83e941c9599e466e"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "runtimes/win-x64/native/libSkiaSharp.dll",
+          "sha256": "935ef4a00462e6b0c4dadb870f734fa43679b4f561287fe0d28cbe2ba147e832",
+          "dependency_asset": "runtimes/win-x64/native/libSkiaSharp.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "texts/HarfBuzzSharp/8.3.1.3/LICENSE.txt",
+          "source": "NuGet:SkiaSharp.NativeAssets.Win32/4.153.1/LICENSE.txt",
+          "sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938"
+        },
+        {
+          "path": "texts/HarfBuzzSharp.NativeAssets.Win32/8.3.1.3/THIRD-PARTY-NOTICES.txt",
+          "source": "NuGet:SkiaSharp.NativeAssets.Win32/4.153.1/THIRD-PARTY-NOTICES.txt",
+          "sha256": "21504c46c4c58aa64c1055bd2dcbc5f9a136b4b8c412ed3cc6740e22c5b127f5"
+        }
+      ]
+    },
+    {
+      "package": "SkiaSharp",
+      "version": "4.153.1",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "\u00a9 Microsoft Corporation. All rights reserved.",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+          "branch": "release/4.153.1",
+          "commit": "4783f51448f9b070dda4f87b83e941c9599e466e"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "SkiaSharp.dll",
+          "sha256": "2c9bbbe1a3d0e9407894c319821b5cdcade1f302466a950a2e5d6024aee32422",
+          "dependency_asset": "lib/net10.0/SkiaSharp.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "texts/HarfBuzzSharp/8.3.1.3/LICENSE.txt",
+          "source": "NuGet:SkiaSharp/4.153.1/LICENSE.txt",
+          "sha256": "89101e35a8c66fd4d6dffc1763259161d35cb564c169714ec227a768c89f2938"
+        }
+      ]
+    },
+    {
       "package": "System.Diagnostics.EventLog",
-      "version": "10.0.10",
+      "version": "10.0.13",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -2569,46 +2275,37 @@
         "attributes": {
           "type": "git",
           "url": "https://github.com/dotnet/dotnet",
-          "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd"
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
         }
       },
       "distributed_files": [
         {
           "path": "System.Diagnostics.EventLog.dll",
-          "sha256": "a4abdda22b86c58eb5069a439681f26c4d86bf24858fc5191c1db8767fc272a2",
+          "sha256": "ce377bd710852d96edb952e5e9d353825938854da77e9d3561548b3067ac1ce5",
           "dependency_asset": "lib/net10.0/System.Diagnostics.EventLog.dll"
         },
         {
           "path": "runtimes/win/lib/net10.0/System.Diagnostics.EventLog.Messages.dll",
-          "sha256": "d61a4474c6002ff132b4e7dccf7d92fee24928722c77c2d258b5f4464dd7392a",
+          "sha256": "8caf8d059ed75d232cdcc63c4d95164029b5dcf5f27cca7abad81f534db1648f",
           "dependency_asset": "runtimes/win/lib/net10.0/System.Diagnostics.EventLog.Messages.dll"
         },
         {
           "path": "runtimes/win/lib/net10.0/System.Diagnostics.EventLog.dll",
-          "sha256": "e4a0bb00ca9d5cf3c54cff629680f54ff4a23cd93339899ec481d1cb4fe92518",
+          "sha256": "bf7bfb5f25ac87844c296605a5f0d91950e0b0f0f5e6ee00c2055ef2b7a20cdd",
           "dependency_asset": "runtimes/win/lib/net10.0/System.Diagnostics.EventLog.dll"
         }
       ],
       "notice_files": [
         {
           "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
-          "source": "NuGet:System.Diagnostics.EventLog/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:System.Diagnostics.EventLog/10.0.13/THIRD-PARTY-NOTICES.TXT",
           "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
-        },
-        {
-          "path": "upstream/dotnet-dotnet-LICENSE.TXT",
-          "source": {
-            "url": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
-            "upstream_revision": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
-            "git_blob_sha": "a616ed188dfce68ee308f674350ad242d8588c2b"
-          },
-          "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
         }
       ]
     },
     {
       "package": "Tmds.DBus.Protocol",
-      "version": "0.94.1",
+      "version": "0.95.1",
       "license_metadata": {
         "text": "MIT",
         "attributes": {
@@ -2625,13 +2322,13 @@
           "type": "git",
           "url": "https://github.com/tmds/Tmds.DBus.git",
           "branch": "refs/heads/main",
-          "commit": "b4a7fed0b878f74cb54f7cca84d2889af4e596ba"
+          "commit": "491bde2c16d65a7904397933cffa24e15e45eb2a"
         }
       },
       "distributed_files": [
         {
           "path": "Tmds.DBus.Protocol.dll",
-          "sha256": "60a1c5255731d8ac843cab53108be8ba1ed02759ce3db0da5b49939ebe97bd8a",
+          "sha256": "6a80ba07449d57a9f050d06bf4c94172f4670a685d4d30e0effeeb049a2676f8",
           "dependency_asset": "lib/net9.0/Tmds.DBus.Protocol.dll"
         }
       ],
@@ -2639,11 +2336,46 @@
         {
           "path": "upstream/tmds-Tmds.DBus-COPYING",
           "source": {
-            "url": "https://raw.githubusercontent.com/tmds/Tmds.DBus/b4a7fed0b878f74cb54f7cca84d2889af4e596ba/COPYING",
-            "upstream_revision": "b4a7fed0b878f74cb54f7cca84d2889af4e596ba",
+            "url": "https://raw.githubusercontent.com/tmds/Tmds.DBus/491bde2c16d65a7904397933cffa24e15e45eb2a/COPYING",
+            "upstream_revision": "491bde2c16d65a7904397933cffa24e15e45eb2a",
             "git_blob_sha": "d1060c2f634ad623ba500dff09ac3044c9747c82"
           },
           "sha256": "aca3b49277abcc7886ccb2f115603a9f5b15fc3f96019a10c00f2974098b210c"
+        }
+      ]
+    },
+    {
+      "package": "libsodium",
+      "version": "1.0.22",
+      "license_metadata": {
+        "text": "ISC",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "\u00a9 2026 Frank Denis",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://github.com/jedisct1/libsodium.git"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "runtimes/win-x64/native/libsodium.dll",
+          "sha256": "64a1f143868309069f0a0a3c8141c0853c4f17243ddf734e92b11c5411739771",
+          "dependency_asset": "runtimes/win-x64/native/libsodium.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "texts/libsodium/1.0.22/LICENSE",
+          "source": "NuGet:libsodium/1.0.22/LICENSE",
+          "sha256": "508a76d186356c0dd807a670ef510964f8724557024796a2c426c6c0e19ab683"
         }
       ]
     }

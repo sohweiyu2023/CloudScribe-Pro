@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using CloudScribe.Infrastructure.Pricing;
@@ -35,15 +36,41 @@ public static class GoogleTtsStudioCostEstimator
             throw new InvalidOperationException("The admitted character rate is invalid.");
         using JsonDocument payload = JsonDocument.Parse(compiledPayload);
         JsonElement input = payload.RootElement.GetProperty("input");
-        string? text = input.TryGetProperty("ssml", out JsonElement ssml) ? ssml.GetString() : input.GetProperty("text").GetString();
+        bool isChirp = string.Equals(model, "google.chirp-3-hd", StringComparison.Ordinal);
+        bool hasSsml = input.TryGetProperty("ssml", out JsonElement ssml);
+        if (isChirp && hasSsml)
+            throw new InvalidOperationException("Chirp 3 HD estimates require the supported plain-text request, not SSML.");
+        string? text = hasSsml ? ssml.GetString() : input.GetProperty("text").GetString();
         if (string.IsNullOrEmpty(text))
             throw new InvalidOperationException("Compiled Google input is empty.");
-        // UTF-8 bytes conservatively bound Unicode character count, including SSML markup.
-        // Ignore free allowances/credits and round the provider subtotal upwards to a cent.
+        // The byte envelope limit remains independent of Google's character billing unit.
+        // Chirp's supported path is plain text: count Unicode scalars, including whitespace,
+        // without normalization or grapheme merging. Retain existing conservative handling for
+        // other families/SSML, where markup (including mark tags) remains in the upper bound.
         long inputBytes = Encoding.UTF8.GetByteCount(text);
-        long minorUnits = checked((long)decimal.Ceiling(checked(price * inputBytes * 100m) / quantity));
-        return new EstimateResult("USD", 2, minorUnits, inputBytes, rates[0].GetProperty("rate_id").GetString()!);
+        long billingCharacters = isChirp ? CountUnicodeScalars(text) : inputBytes;
+        // Ignore allowances/credits and retain an upward cent ceiling for EACH request.
+        long minorUnits = checked((long)decimal.Ceiling(checked(price * billingCharacters * 100m) / quantity));
+        return new EstimateResult("USD", 2, minorUnits, inputBytes, rates[0].GetProperty("rate_id").GetString()!)
+        { EstimatedBillableCharacters = billingCharacters };
     }
 
-    public sealed record EstimateResult(string Currency, int Scale, long MaximumMinorUnits, long InputUtf8Bytes, string RateId);
+    private static long CountUnicodeScalars(string text)
+    {
+        ReadOnlySpan<char> remaining = text.AsSpan();
+        long count = 0;
+        while (!remaining.IsEmpty)
+        {
+            if (Rune.DecodeFromUtf16(remaining, out _, out int consumed) != OperationStatus.Done)
+                throw new InvalidOperationException("Google billing input contains an unpaired Unicode surrogate.");
+            count = checked(count + 1);
+            remaining = remaining[consumed..];
+        }
+        return count;
+    }
+
+    public sealed record EstimateResult(string Currency, int Scale, long MaximumMinorUnits, long InputUtf8Bytes, string RateId)
+    {
+        public long EstimatedBillableCharacters { get; init; }
+    }
 }

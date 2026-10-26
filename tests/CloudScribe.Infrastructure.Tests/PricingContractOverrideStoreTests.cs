@@ -58,9 +58,9 @@ public sealed class PricingContractOverrideStoreTests
             tables.Add(reader.GetString(0));
         }
 
-        Assert.Contains("pricing_catalog_snapshots", tables);
-        Assert.Contains("pricing_catalog_activations", tables);
-        Assert.Contains("pricing_contract_overrides", tables);
+        Assert.Contains("pricing_catalog_snapshots", tables, StringComparer.Ordinal);
+        Assert.Contains("pricing_catalog_activations", tables, StringComparer.Ordinal);
+        Assert.Contains("pricing_contract_overrides", tables, StringComparer.Ordinal);
     }
 
     [Fact]

@@ -14,7 +14,7 @@ The launcher checks for the required .NET SDK, restores the locked dependency
 graph, builds CloudScribe.App in Release configuration, publishes a runnable
 Windows folder, verifies the expected runtime files, and opens the output folder.
 
-Prerequisites: Windows, exact .NET SDK 10.0.401 selected by global.json,
+Prerequisites: Windows, exact .NET SDK 10.0.402 selected by global.json,
 PowerShell 7 (pwsh), and Python 3 on PATH. A newer SDK alone is insufficient
 because rollForward is disabled. The launcher builds the app only; it does not
 run the solution test suite or certify a release.
@@ -91,7 +91,7 @@ From the extracted source root:
     dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
     dotnet format CloudScribe.sln --no-restore --verify-no-changes
     dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
-    dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+    dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore
 
 Run source and verifier checks separately:
 

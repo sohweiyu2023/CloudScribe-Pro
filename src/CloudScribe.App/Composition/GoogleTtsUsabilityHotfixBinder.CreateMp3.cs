@@ -211,7 +211,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.StatusMessage), StringComparison.Ordinal)) status.Text = model.StatusMessage;
         }
-        Button close = NewButton("Close and return to Studio");
+        Button close = NewButton("Close Create MP3");
         close.Click += (_, _) => dialog.Close();
         Grid layout = new() { RowDefinitions = new RowDefinitions("*,Auto") };
         ScrollViewer bodyScroll = new() { Content = body };

@@ -58,7 +58,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         TextBlock Title(string value) => new() { Text = value, FontSize = 22, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
         TextBlock Info(string value) => new() { Text = value, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
         content.Children.Add(Title("Compare voices and try a short sample"));
-        content.Children.Add(Info("Voice used for your existing AtR recordings: en-US-Standard-C. Current Studio voice: " + (originalVoice?.VoiceStableId ?? "not selected") + "."));
+        content.Children.Add(Info("Comparison reference: en-US-Standard-C. Current Studio voice: " + (originalVoice?.VoiceStableId ?? "not selected") + "."));
         content.Children.Add(Info("Selecting a voice sends nothing. Samples use only the box below; your document stays unchanged."));
         content.Children.Add(Info("USD list prices checked " + GoogleVoiceComparisonInformation.ReferenceChecked +
             " · authenticated catalog " + V222ControlSet.CatalogVersion + ". Prepare verifies the final request; estimates exclude free allowances, tax and FX."));

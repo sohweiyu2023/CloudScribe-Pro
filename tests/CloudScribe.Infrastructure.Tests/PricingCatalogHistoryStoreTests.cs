@@ -182,8 +182,8 @@ public sealed class PricingCatalogHistoryStoreTests
             tables.Add(tableReader.GetString(0));
         }
 
-        Assert.Contains("pricing_catalog_snapshots", tables);
-        Assert.Contains("pricing_catalog_activations", tables);
+        Assert.Contains("pricing_catalog_snapshots", tables, StringComparer.Ordinal);
+        Assert.Contains("pricing_catalog_activations", tables, StringComparer.Ordinal);
     }
 
     private static PricingCatalogActivationRequest Request(

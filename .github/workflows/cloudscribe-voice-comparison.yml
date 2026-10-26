@@ -49,7 +49,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Source manifest check failed.' }
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.401'
+          dotnet-version: '10.0.402'
       - name: Locked restore
         run: dotnet restore CloudScribe.sln --locked-mode --configfile NuGet.config
       - name: Strict Release build
@@ -65,4 +65,4 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-InstallCloudScribe-SelfTests.ps1
       - name: Mocked and local tests only
-        run: dotnet test CloudScribe.sln -c Release --no-build --no-restore --logger "console;verbosity=normal"
+        run: dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore --output Detailed

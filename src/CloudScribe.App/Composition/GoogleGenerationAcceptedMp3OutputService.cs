@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
+using CloudScribe.App.Diagnostics;
 using CloudScribe.Application.Generation;
 
 namespace CloudScribe.App.Composition;
@@ -79,10 +80,25 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
 
     public async Task PlayAsync(string path, CancellationToken cancellationToken = default)
     {
-        string fullPath = await RequireVerifiedAcceptedFileAsync(path, cancellationToken).ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true })
-            ?? throw new InvalidOperationException("Windows could not open the verified Google MP3 output.");
+        try
+        {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Play, NativeUiPhase.Open);
+            string fullPath = await RequireVerifiedAcceptedFileAsync(path, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true })
+                ?? throw new InvalidOperationException("Windows could not open the verified Google MP3 output.");
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Play, NativeUiPhase.ShellOpened);
+        }
+        catch (OperationCanceledException)
+        {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Play, NativeUiPhase.Cancel);
+            throw;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+        {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Play, NativeUiPhase.Failed, error);
+            throw;
+        }
     }
 
     public Task<string> VerifyAcceptedAsync(string path, CancellationToken cancellationToken = default) =>

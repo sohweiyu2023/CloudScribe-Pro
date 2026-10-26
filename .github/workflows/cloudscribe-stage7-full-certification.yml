@@ -52,7 +52,7 @@ jobs:
       - name: Set up exact .NET SDK
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.400'
+          dotnet-version: '10.0.402'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
 
@@ -71,7 +71,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1
+          dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore
           if ($LASTEXITCODE -ne 0) { throw 'Complete compiled test suite failed.' }
 
       - name: Run auxiliary verifier self-tests

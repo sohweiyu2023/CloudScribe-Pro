@@ -177,7 +177,7 @@ def build_checks(root: Path) -> list[Check]:
         and state.get("stage2_user_clicked_editor_retest") is True
     )
     # Preserve the exact Stage 2-8 10.0.400 contract for the certified 1.0.0
-    # baseline; the explicit 1.0.1 Windows patch intentionally pins 10.0.401.
+    # baseline; the explicit 1.0.1 Windows dependency refresh intentionally pins 10.0.402.
     app_project_text = (root / "src/CloudScribe.App/CloudScribe.App.csproj").read_text(encoding="utf-8-sig")
     is_release_101_patch = (
         current_stage == 8
@@ -186,7 +186,7 @@ def build_checks(root: Path) -> list[Check]:
         and "<InformationalVersion>1.0.1</InformationalVersion>" in app_project_text
         and "<FileVersion>1.0.1.0</FileVersion>" in app_project_text
     )
-    required_sdk_for_checkpoint = "10.0.401" if is_release_101_patch else "10.0.400"
+    required_sdk_for_checkpoint = "10.0.402" if is_release_101_patch else "10.0.400"
 
     session_specs = (
         (state.get("project") == "CloudScribe Pro", "project identity"),

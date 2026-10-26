@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.400'
+          dotnet-version: '10.0.402'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
 
@@ -46,7 +46,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet test CloudScribe.sln -c Release --no-build --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore
           if ($LASTEXITCODE -ne 0) { throw 'Complete compiled solution test suite failed.' }
 
       - name: Final release source acceptance

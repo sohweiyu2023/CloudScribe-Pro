@@ -26,14 +26,14 @@ jobs:
           python-version: '3.13'
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.400'
+          dotnet-version: '10.0.402'
           cache: true
           cache-dependency-path: '**/packages.lock.json'
       - name: Exact SDK and portable source gates
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          if((dotnet --version).Trim() -ne '10.0.400'){throw 'Wrong .NET SDK.'}
+          if((dotnet --version).Trim() -ne '10.0.402'){throw 'Wrong .NET SDK.'}
           python tools/update_sha256_manifest.py
           python tools/verify_repository.py
           python tools/verify_project_dependencies.py
@@ -62,6 +62,6 @@ jobs:
             'tests/CloudScribe.Infrastructure.Tests/CloudScribe.Infrastructure.Tests.csproj',
             'tests/CloudScribe.Architecture.Tests/CloudScribe.Architecture.Tests.csproj')
           foreach($project in $projects){
-            dotnet test $project -c Release --no-build --no-restore -m:1 -nodeReuse:false -p:UseSharedCompilation=false
+            dotnet test --project $project -c Release --no-build --no-restore
             if($LASTEXITCODE -ne 0){throw "Tests failed: $project"}
           }

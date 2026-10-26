@@ -441,19 +441,20 @@
           BorderBrush="{DynamicResource Brush.BorderSubtle}"
           BorderThickness="0,0,1,0"
           Padding="20">
-        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14">
+        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel MinWidth="0">
               <TextBlock Text="DOCUMENT MAP" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
-              <TextBlock Text="Outline" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.SectionTitle}" FontWeight="SemiBold" />
+              <TextBlock Text="Jump to text" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.SectionTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
             </StackPanel>
             <Border Grid.Column="1" Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1" CornerRadius="9" Padding="8,4" VerticalAlignment="Center">
-              <TextBlock Text="5 SECTIONS" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
+              <TextBlock Text="{Binding OutlineCountLabel}" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
             </Border>
           </Grid>
+          <TextBlock Grid.Row="1" Text="{Binding OutlineHelpText}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" TextWrapping="Wrap" />
           <ListBox
               x:Name="OutlinePanelList"
-              Grid.Row="1"
+              Grid.Row="2"
               Classes="outline-list"
               ItemsSource="{Binding OutlineEntries}"
               SelectedIndex="{Binding SelectedOutlineIndex, Mode=TwoWay}"
@@ -462,7 +463,7 @@
               AutomationProperties.Name="Document outline">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:OutlineEntryViewModel">
-                <Grid ColumnDefinitions="*,Auto" Margin="3,7">
+                <Grid ColumnDefinitions="*,Auto" Margin="3,7" ToolTip.Tip="Jump to and highlight this paragraph">
                   <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Brush.TextOnDark}" TextWrapping="Wrap" MaxLines="3" MinWidth="0" />
                   <Border Grid.Column="1" Margin="8,0,0,0" Background="{DynamicResource Brush.SurfaceInset}" CornerRadius="7" Padding="6,3" VerticalAlignment="Center">
                     <TextBlock Text="{Binding RangeLabel}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
@@ -471,7 +472,7 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
-          <Border Grid.Row="2" Background="{DynamicResource Brush.PaperWarm}" BorderBrush="{DynamicResource Brush.PaperBorder}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+          <Border Grid.Row="3" Background="{DynamicResource Brush.PaperWarm}" BorderBrush="{DynamicResource Brush.PaperBorder}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
             <StackPanel Spacing="4">
               <TextBlock Text="STAGE 2 PREVIEW" Foreground="{DynamicResource Brush.WarningOnPaper}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
               <TextBlock Text="Edits are temporary until Stage 3 durable documents and autosave are implemented." Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Meta}" />
@@ -840,17 +841,19 @@
     <Grid Grid.Row="1" Grid.RowSpan="4" IsVisible="{Binding IsOutlineDrawerOpen}" Panel.ZIndex="51">
       <Button Classes="scrim" Background="{DynamicResource Brush.Scrim}" BorderThickness="0" IsTabStop="False" Command="{Binding CloseTransientSurfacesCommand}" AutomationProperties.Name="Close outline drawer" />
       <Border Width="344" HorizontalAlignment="Left" Margin="0,0,0,8" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="0,0,1,0" CornerRadius="0,18,18,0" Padding="22" BoxShadow="{DynamicResource Elevation.Floating}" KeyboardNavigation.TabNavigation="Cycle">
-        <Grid RowDefinitions="Auto,*" RowSpacing="14">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="14">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel>
               <TextBlock Text="DOCUMENT MAP" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
-              <TextBlock Text="Document outline" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Title}" FontWeight="SemiBold" />
+              <TextBlock Text="Jump to text" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.Title}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding OutlineCountLabel}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
             </StackPanel>
             <Button x:Name="OutlineDrawerCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close outline drawer">
               <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
             </Button>
           </Grid>
-          <ListBox Grid.Row="1" Classes="outline-list" ItemsSource="{Binding OutlineEntries}" SelectedIndex="{Binding SelectedOutlineIndex, Mode=TwoWay}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Document outline drawer list">
+          <TextBlock Grid.Row="1" Text="{Binding OutlineHelpText}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" TextWrapping="Wrap" />
+          <ListBox x:Name="OutlineDrawerList" Grid.Row="2" Classes="outline-list" ItemsSource="{Binding OutlineEntries}" SelectedIndex="{Binding SelectedOutlineIndex, Mode=TwoWay}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Document outline drawer list">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:OutlineEntryViewModel">
                 <Grid ColumnDefinitions="*,Auto" Margin="4,8">
@@ -929,7 +932,7 @@
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel>
               <TextBlock Text="Keyboard shortcuts" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="{DynamicResource Typography.DialogTitle}" FontWeight="SemiBold" />
-              <TextBlock Text="Every visible Stage 2 interaction has a keyboard path." Foreground="{DynamicResource Brush.TextOnDarkMuted}" />
+              <TextBlock Text="Use these shortcuts to move around the workspace." Foreground="{DynamicResource Brush.TextOnDarkMuted}" />
             </StackPanel>
             <Button x:Name="ShortcutGuideCloseButton" Grid.Column="1" Classes="ghost" Command="{Binding CloseTransientSurfacesCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close keyboard shortcut guide">
               <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
@@ -949,7 +952,7 @@
               </ItemsControl>
             </ScrollViewer>
             <TextBlock
-                Text="Shortcut definitions are collision-checked and ready for persistent overrides in the Settings stage."
+                Text="These shortcuts are fixed. Press Escape to close an open surface or leave Focus Reading."
                 Foreground="{DynamicResource Brush.TextOnDarkMuted}"
                 FontSize="{DynamicResource Typography.Meta}"
                 TextWrapping="Wrap" />

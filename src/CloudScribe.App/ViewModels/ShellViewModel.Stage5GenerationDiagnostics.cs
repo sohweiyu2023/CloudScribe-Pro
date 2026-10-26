@@ -39,8 +39,9 @@ public sealed partial class ShellViewModel
         }
 
         page.HasPrimaryAction = true;
-        page.PrimaryActionLabel = "Export generation diagnostics";
+        page.PrimaryActionLabel = "Export application metadata locally";
         page.PrimaryActionCommand = ExportGenerationDiagnosticsCommand;
+        page.StateDescription = "This export contains application version, platform and export time only. It excludes documents, audio, credentials, full logs and crash dumps. Find the local JSON in the workspace's support-bundles folder, available through Setups. Nothing is uploaded.";
     }
 
     [RelayCommand(CanExecute = nameof(CanExportGenerationDiagnostics))]
@@ -80,7 +81,11 @@ public sealed partial class ShellViewModel
                 metadata,
                 cancellationToken).ConfigureAwait(true);
 
-            StatusMessage = "Generation diagnostics exported · metadata only";
+            StatusMessage = "Application metadata saved locally in workspace/support-bundles";
+        }
+        catch (Exception exception) when (!IsFatalUiException(exception))
+        {
+            StatusMessage = "Metadata export failed. Check workspace folder access and disk space, then retry. Your documents and audio were left unchanged.";
         }
         finally
         {

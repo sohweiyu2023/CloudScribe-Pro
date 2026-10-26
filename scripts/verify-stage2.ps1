@@ -314,7 +314,7 @@ try {
         $resultDirectory = Join-Path $testOutput ([string]$index)
         New-Item $resultDirectory -ItemType Directory -Force | Out-Null
         Invoke-BoundedCommand -Label "Release tests for $project" `
-            -Command @('dotnet', 'test', $project, '-c', 'Release', '--no-build', '--no-restore', '-m:1', '-nodeReuse:false', '-p:UseSharedCompilation=false', '--results-directory', $resultDirectory, '--logger', 'trx;LogFileName=stage2-tests.trx') `
+            -Command @('dotnet', 'test', '--project', $project, '-c', 'Release', '--no-build', '--no-restore', '--results-directory', $resultDirectory, '--report-xunit-trx', '--report-xunit-trx-filename', 'stage2-tests.trx') `
             -StdoutPath (Join-Path $logOutput "test-$index.log") `
             -StderrPath (Join-Path $logOutput "test-$index.stderr.log") -Tee
     }

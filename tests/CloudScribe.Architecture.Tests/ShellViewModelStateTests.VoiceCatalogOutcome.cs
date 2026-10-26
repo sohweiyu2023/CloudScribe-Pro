@@ -71,6 +71,7 @@ public sealed partial class ShellViewModelStateTests
     public async Task FailedRefreshRemovesPriorVoicesAndPreservesSafeRecoveryAction(HttpStatusCode code, string action)
     {
         using ShellViewModel model = CreateViewModel();
+        model.ApplySavedVoiceSetup(new CloudScribe.App.Composition.VoiceSetup("Explicit test choice", "en-US", VoiceSelection().VoiceStableId));
         int calls = 0;
         model.ConfigureStage7VoiceLabCatalog(new VoiceLabCatalogQueryService((_, _) =>
             ++calls == 2
@@ -102,6 +103,7 @@ public sealed partial class ShellViewModelStateTests
     public async Task CancelledRefreshDoesNotKeepPreviousVerifiedVoice()
     {
         using ShellViewModel model = CreateViewModel();
+        model.ApplySavedVoiceSetup(new CloudScribe.App.Composition.VoiceSetup("Explicit test choice", "en-US", VoiceSelection().VoiceStableId));
         model.ConfigureStage7VoiceLabCatalog(new VoiceLabCatalogQueryService((_, _) =>
             Task.FromResult<IReadOnlyList<VoiceLabCatalogSelection>>([VoiceSelection()])),
             _ => Task.FromResult(CatalogState(accountAuthorized: true)));
