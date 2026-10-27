@@ -4,6 +4,7 @@ namespace CloudScribe.Application.Logging;
 
 public static class CloudScribeEventIds
 {
+    public static readonly EventId StartupPhaseTiming = new(1020, nameof(StartupPhaseTiming));
     public static readonly EventId GoogleGenerationRequestContext = new(1600, nameof(GoogleGenerationRequestContext));
     public static readonly EventId GoogleGenerationOutcome = new(1601, nameof(GoogleGenerationOutcome));
     public static readonly EventId GoogleGenerationStopped = new(1602, nameof(GoogleGenerationStopped));

@@ -1,5 +1,6 @@
 using CloudScribe.Application.Activation;
 using CloudScribe.Application.Generation;
+using CloudScribe.Application.Startup;
 using CloudScribe.Domain.Generation;
 using Microsoft.Extensions.Logging;
 
@@ -7,6 +8,9 @@ namespace CloudScribe.Application.Logging;
 
 public static partial class CloudScribeLog
 {
+    [LoggerMessage(EventId = 1020, Level = LogLevel.Information, Message = "Startup timing {Sequence}: {Phase} {State}, phase {PhaseMilliseconds} ms, managed startup {StartupMilliseconds} ms, backend budget {Budget}, remaining {RemainingMilliseconds} ms (-1 means not armed).")]
+    public static partial void StartupPhaseTiming(ILogger logger, int sequence, StartupPhase phase, StartupPhaseState state,
+        long phaseMilliseconds, long startupMilliseconds, StartupBudgetState budget, long remainingMilliseconds);
     [LoggerMessage(EventId = 1603, Level = LogLevel.Information, Message = "Google synthesis {Correlation}: payload {PayloadSha256}, stage {Stage}, HTTP {HttpStatus}, error status {ErrorStatus}. No credentials or response contents are retained.")]
     public static partial void GoogleSynthesisTransportStage(ILogger logger, string correlation, string payloadSha256, GoogleSynthesisStage stage, int httpStatus, GoogleErrorStatus errorStatus);
     [LoggerMessage(EventId = 1600, Level = LogLevel.Information, Message = "Google request reached execution: payload SHA256 {PayloadSha256}, compiled bytes {PayloadBytes}. No request contents are logged.")]

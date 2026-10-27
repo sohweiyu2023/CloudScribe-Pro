@@ -19,16 +19,21 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        StartupPhaseTimings timings = new();
+        timings.Start(StartupPhase.Bootstrap);
         BootstrapDiagnosticLog.InstallGlobalExceptionHandlers();
         BootstrapDiagnosticLog.ProcessStarting(args.Length);
+        timings.Complete(StartupPhase.Bootstrap);
         try
         {
-            int exitCode = RunAsync(args).GetAwaiter().GetResult();
+            int exitCode = RunAsync(args, timings).GetAwaiter().GetResult();
             BootstrapDiagnosticLog.Write("process.exit", $"exitCode={exitCode}");
             return exitCode;
         }
         catch (Exception exception) when (!IsFatalProcessException(exception))
         {
+            timings.InterruptCurrent();
+            BootstrapDiagnosticLog.Write("startup.phase-summary", timings.BufferedSummary());
             BootstrapDiagnosticLog.Write("process.fatal-startup", "Unhandled startup failure.", exception);
             // Host construction and mandatory option validation occur before a logger can be
             // resolved. Keep that process-boundary failure deterministic without disclosing
@@ -38,39 +43,53 @@ internal static class Program
         }
     }
 
-    private static async Task<int> RunAsync(string[] args)
+    private static async Task<int> RunAsync(string[] args, StartupPhaseTimings timings)
     {
+        timings.Start(StartupPhase.HostComposition);
         IHost host = CompositionRoot.BuildHost();
+        timings.Complete(StartupPhase.HostComposition);
+        timings.Start(StartupPhase.CoreServiceResolution);
         ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("CloudScribe.Startup");
         CloudScribeOptions options = host.Services.GetRequiredService<IOptions<CloudScribeOptions>>().Value;
         AppPaths paths = host.Services.GetRequiredService<AppPaths>();
         TimeProvider timeProvider = host.Services.GetRequiredService<TimeProvider>();
         ISingleInstanceCoordinator coordinator = host.Services.GetRequiredService<ISingleInstanceCoordinator>();
+        timings.Complete(StartupPhase.CoreServiceResolution);
+        timings.Start(StartupPhase.DiagnosticsInitialization);
         InitializeDiagnostics(paths, logger);
+        timings.Complete(StartupPhase.DiagnosticsInitialization);
+        timings.AttachLogger(logger);
         bool hostStartAttempted = false;
         using CancellationTokenSource startup = new(
             TimeSpan.FromSeconds(options.StartupTimeoutSeconds),
             timeProvider);
+        timings.ArmBudget(options.StartupTimeoutSeconds);
         CloudScribeLog.ApplicationStarting(logger, "offline");
         try
         {
+            timings.Start(StartupPhase.PrimaryInstanceAcquisition);
             if (!await coordinator.TryBecomePrimaryAsync(args, startup.Token).ConfigureAwait(false))
             {
+                timings.Complete(StartupPhase.PrimaryInstanceAcquisition);
                 CloudScribeLog.SecondaryActivationForwarded(logger, args.Length);
                 return 0;
             }
 
+            timings.Complete(StartupPhase.PrimaryInstanceAcquisition);
             CloudScribeLog.PrimaryInstanceAcquired(logger, args.Length);
             hostStartAttempted = true;
-            return await StartHostAndApplicationAsync(host, args, startup, logger).ConfigureAwait(false);
+            return await StartHostAndApplicationAsync(host, args, startup, logger, timings).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (startup.IsCancellationRequested)
         {
+            timings.InterruptCurrent();
+            timings.BudgetExpired();
             CloudScribeLog.ApplicationStartupTimedOut(logger, options.StartupTimeoutSeconds);
             return 2;
         }
         catch (Exception exception) when (!IsFatalProcessException(exception))
         {
+            timings.InterruptCurrent();
             CloudScribeLog.ApplicationStartupFailed(logger, exception);
             return 1;
         }
@@ -107,23 +126,38 @@ internal static class Program
         IHost host,
         string[] args,
         CancellationTokenSource startup,
-        ILogger logger)
+        ILogger logger,
+        StartupPhaseTimings timings)
     {
+        timings.Start(StartupPhase.HostStart);
         CloudScribeLog.HostStarting(logger);
         await host.StartAsync(startup.Token).ConfigureAwait(false);
         CloudScribeLog.HostStarted(logger);
-        foreach (IApplicationInitializer initializer in host.Services.GetServices<IApplicationInitializer>())
+        timings.Complete(StartupPhase.HostStart);
+        timings.Start(StartupPhase.InitializerResolution);
+        IApplicationInitializer[] initializers = host.Services.GetServices<IApplicationInitializer>().ToArray();
+        timings.Complete(StartupPhase.InitializerResolution);
+        foreach (IApplicationInitializer initializer in initializers)
         {
             string initializerName = initializer.GetType().FullName ?? initializer.GetType().Name;
             CloudScribeLog.InitializerStarting(logger, initializerName);
+            timings.Start(StartupPhase.ApplicationInitialization);
             await initializer.InitializeAsync(startup.Token).ConfigureAwait(false);
+            timings.Complete(StartupPhase.ApplicationInitialization);
             CloudScribeLog.InitializerCompleted(logger, initializerName);
         }
 
         startup.Token.ThrowIfCancellationRequested();
         startup.CancelAfter(Timeout.InfiniteTimeSpan);
+        timings.DisarmBudget();
         CloudScribeLog.DesktopLifetimeStarting(logger);
-        int exitCode = await DesktopApartment.RunAsync(() => BuildAvaloniaApp(host).StartWithClassicDesktopLifetime(args)).ConfigureAwait(false);
+        timings.Start(StartupPhase.DesktopThreadScheduling);
+        int exitCode = await DesktopApartment.RunAsync(() =>
+        {
+            timings.Complete(StartupPhase.DesktopThreadScheduling);
+            timings.Start(StartupPhase.Readiness);
+            return BuildAvaloniaApp(host, timings).StartWithClassicDesktopLifetime(args);
+        }).ConfigureAwait(false);
         CloudScribeLog.DesktopLifetimeExited(logger, exitCode);
         return exitCode;
     }
@@ -211,5 +245,9 @@ internal static class Program
 
     public static AppBuilder BuildAvaloniaApp(IHost host) =>
         AppBuilder.Configure(() => new CloudScribeApplication(host))
+            .UsePlatformDetect();
+
+    private static AppBuilder BuildAvaloniaApp(IHost host, StartupPhaseTimings timings) =>
+        AppBuilder.Configure(() => new CloudScribeApplication(host, timings))
             .UsePlatformDetect();
 }
