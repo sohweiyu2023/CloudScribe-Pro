@@ -31,7 +31,7 @@ public sealed partial class GoogleExplicitRecoveryService
         using var transaction = connection.BeginTransaction(deferred: true);
         using var command = Command(connection, transaction, """
             SELECT ChildKey,ReviewSha256,ProjectId,Currency,Scale,EstimateMinorUnits,ReservedMinorUnits,Consumed,EnvelopeJson,
-            LogicalItemId,RootHistoricalKey,RootHistoricalStateSha256,AdmissionSha256,DocumentId,RevisionId,TextSha256,ApprovedFinancialSha256
+            LogicalItemId,RootHistoricalKey,RootHistoricalStateSha256,AdmissionSha256,DocumentId,RevisionId,TextSha256,ApprovedFinancialSha256,GrantMaximumNewAttempts,GrantMaximumAdditionalMinorUnits
             FROM google_recovery_attempts WHERE AuthorizationId=$id AND AccountId=$account AND OperationId=$operation;
             """, ("$id", id.ToString("N")), ("$account", envelope.AccountId), ("$operation", GoogleGenerationProvider.SynthesizeOperationStableId));
         GoogleRecoveryExecutionAuthorization result; GoogleRecoveryAssociationProof association;
@@ -44,13 +44,15 @@ public sealed partial class GoogleExplicitRecoveryService
             var approval = new GoogleRecoveryApprovedAttempt(id, row.GetString(0), row.GetString(1), row.GetInt64(6));
             var spend = GoogleGenerationSpendAuthorization.Create(envelope, row.GetString(3), row.GetInt32(4), row.GetInt64(5), row.GetInt64(6));
             result = new(approval, row.GetString(2), spend, row.GetString(16));
-            association = new(row.GetString(9), row.GetString(10), row.GetString(11), row.GetString(12));
+            if (row.IsDBNull(17) || row.IsDBNull(18)) return null;
+            association = new(row.GetString(9), row.GetString(10), row.GetString(11), row.GetString(12), row.GetInt32(17), row.GetInt64(18));
             documentId = Guid.Parse(row.GetString(13)); revisionId = Guid.Parse(row.GetString(14)); textHash = row.GetString(15); financial = row.GetString(16);
         }
         if (!string.Equals(await FinancialDigestAsync(connection, transaction, cancellationToken).ConfigureAwait(false), financial, StringComparison.Ordinal))
             throw new InvalidOperationException("Financial evidence changed after recovery approval.");
         await RequireAssociationCurrentAsync(association, envelope.AccountId, GoogleGenerationProvider.SynthesizeOperationStableId,
             result.ProjectId, documentId, revisionId, textHash, envelope.CompiledPayloadSha256, cancellationToken).ConfigureAwait(false);
+        await RequireGrantCapacityAsync(connection, transaction, association, envelope.AccountId, result.ProjectId, 0, creating: false, cancellationToken).ConfigureAwait(false);
         var budget = await RequireCurrentBudgetAsync(connection, transaction, envelope.AccountId, result.ProjectId, result.SpendAuthorization.Currency,
             result.SpendAuthorization.Scale, financial, cancellationToken).ConfigureAwait(false);
         return result with { Budget = budget };

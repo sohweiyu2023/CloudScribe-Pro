@@ -86,7 +86,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     {
         string reservation = p.ExistingApproval is null ? $"Additional maximum {p.AdditionalMaximumMinorUnits}."
             : $"Resume the SAME existing reserved attempt ({p.AdditionalMaximumMinorUnits}); additional reservation now ZERO.";
-        return $"{p.Intent.Currency}, scale {p.Intent.Scale}: current estimate {p.Intent.EstimateMinorUnits}. {reservation} Retained commitments {p.Budget.RetainedCommittedMinorUnits}; project ceiling {p.Budget.ProjectCeilingMinorUnits}; remaining allocation {p.Budget.RemainingAllocationMinorUnits}. Voice {p.Intent.Envelope.VoiceName}. Earlier holds stay reserved. Confirmation does not generate audio.";
+        return $"{p.Intent.Currency}, scale {p.Intent.Scale}: current estimate {p.Intent.EstimateMinorUnits}. {reservation} This admission permits at most {p.AssociationProof.MaximumNewAttempts} new attempt(s), with cumulative additional reservations at most {p.AssociationProof.MaximumAdditionalReservationMinorUnits}. Retained commitments {p.Budget.RetainedCommittedMinorUnits}; project ceiling {p.Budget.ProjectCeilingMinorUnits}; remaining allocation {p.Budget.RemainingAllocationMinorUnits}. Voice {p.Intent.Envelope.VoiceName}. Earlier holds stay reserved. Confirmation does not generate audio.";
     }
 
     private static async Task RunRecoveryDialogActionAsync(RecoveryControls c, RecoveryDialogState state, Func<Task> action, CancellationToken cancellationToken)

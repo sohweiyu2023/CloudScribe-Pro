@@ -5,7 +5,7 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed partial class InstalledRecoveryAdmissionStore
 {
-    private bool ValidPolicy(RecoveryAdmissionPolicy p) => p.SchemaVersion == 1 && p.ExpiresAtUtc > clock.GetUtcNow()
+    private bool ValidPolicy(RecoveryAdmissionPolicy p) => p.SchemaVersion == 2 && p.ExpiresAtUtc > clock.GetUtcNow()
         && IsHash(p.AppSha256) && IsHash(p.InfrastructureSha256) && IsHash(p.ProfileRootSha256) && !string.IsNullOrWhiteSpace(p.AccountId)
         && !string.IsNullOrWhiteSpace(p.ProjectId) && p.Currency is { Length: 3 } && p.Currency.All(char.IsAsciiLetterUpper)
         && p.Scale is >= 0 and <= 9 && p.HistoricalAudio is { Count: <= 200 } && p.Predecessors is { Count: <= 200 }
@@ -18,9 +18,12 @@ public sealed partial class InstalledRecoveryAdmissionStore
             && string.Equals(x.Anchor.AccountId, p.AccountId, StringComparison.Ordinal)
             && string.Equals(x.Anchor.OperationId, GoogleGenerationProvider.SynthesizeOperationStableId, StringComparison.Ordinal))
         && p.Predecessors.Select(x => x.HistoricalKey).Distinct(StringComparer.Ordinal).Count() == p.Predecessors.Count
+        && p.Predecessors.Select(x => x.AdmissionSha256).Distinct(StringComparer.Ordinal).Count() == p.Predecessors.Count
         && p.Predecessors.All(x => string.Equals(x.AccountId, p.AccountId, StringComparison.Ordinal)
             && string.Equals(x.ProjectId, p.ProjectId, StringComparison.Ordinal)
-            && string.Equals(x.OperationId, GoogleGenerationProvider.SynthesizeOperationStableId, StringComparison.Ordinal));
+            && string.Equals(x.OperationId, GoogleGenerationProvider.SynthesizeOperationStableId, StringComparison.Ordinal)
+            && IsHash(x.AdmissionSha256) && x.MaximumNewAttempts is >= 1 and <= 200
+            && x.MaximumAdditionalReservationMinorUnits >= 0);
 
     private static bool ValidPins(IReadOnlyList<RecoveryFinancialRowPin>? pins) => pins is { Count: <= 10000 }
         && pins.All(x => !string.IsNullOrWhiteSpace(x.Identity) && IsHash(x.Sha256))

@@ -51,6 +51,7 @@ function Assert-RecoveryRecord($Element,[hashtable]$Fields){
 }
 function Assert-RecoveryNestedPolicy($Root){
     Assert-RecoveryRecord $Root @{SchemaVersion='Int32';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';AccountId='String';ProjectId='String';Currency='String';Scale='Int32';ExpiresAtUtc='Date';Budget='Object';HistoricalAudio='Array';Predecessors='Array'}
+    if($Root.GetProperty('SchemaVersion').GetInt32() -ne 2){throw 'Recovery policy requires bounded-grant schema2.'}
     if([string]::IsNullOrWhiteSpace($Root.GetProperty('AccountId').GetString()) -or [string]::IsNullOrWhiteSpace($Root.GetProperty('ProjectId').GetString()) -or $Root.GetProperty('Currency').GetString() -cnotmatch '^[A-Z]{3}$' -or $Root.GetProperty('Scale').GetInt32() -notin 0..9){throw 'Recovery policy scope is invalid.'}
     foreach($name in @('AppSha256','InfrastructureSha256','ProfileRootSha256')){if($Root.GetProperty($name).GetString() -notmatch '^[a-fA-F0-9]{64}$'){throw 'Recovery policy hash is invalid.'}}
     $budget=$Root.GetProperty('Budget')
@@ -78,8 +79,10 @@ function Assert-RecoveryNestedPolicy($Root){
         if($anchor.GetProperty('AccountId').GetString() -cne $Root.GetProperty('AccountId').GetString() -or $anchor.GetProperty('OperationId').GetString() -cne 'synthesize-speech'){throw 'Recovery policy historical scope is invalid.'}
     }
     $keys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $grants=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach($entry in $predecessors.EnumerateArray()){
-        Assert-RecoveryRecord $entry @{LogicalNarrationId='String';AccountId='String';OperationId='String';HistoricalKey='String';HistoricalStateSha256='String';ProjectId='String';DocumentId='Guid';RevisionId='Guid';TextSha256='String';OriginalPayloadSha256='String';AdmissionSha256='String';ExpiresAtUtc='Date'}
+        Assert-RecoveryRecord $entry @{LogicalNarrationId='String';AccountId='String';OperationId='String';HistoricalKey='String';HistoricalStateSha256='String';ProjectId='String';DocumentId='Guid';RevisionId='Guid';TextSha256='String';OriginalPayloadSha256='String';AdmissionSha256='String';ExpiresAtUtc='Date';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
+        if($entry.GetProperty('MaximumNewAttempts').GetInt32() -notin 1..200 -or $entry.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -lt 0 -or $entry.GetProperty('AdmissionSha256').GetString() -notmatch '^[a-fA-F0-9]{64}$' -or -not $grants.Add($entry.GetProperty('AdmissionSha256').GetString())){throw 'Recovery policy grant bounds or identity are invalid.'}
         if(-not $keys.Add($entry.GetProperty('HistoricalKey').GetString()) -or $entry.GetProperty('AccountId').GetString() -cne $Root.GetProperty('AccountId').GetString() -or $entry.GetProperty('ProjectId').GetString() -cne $Root.GetProperty('ProjectId').GetString() -or $entry.GetProperty('OperationId').GetString() -cne 'synthesize-speech'){throw 'Recovery policy predecessor scope is invalid.'}
     }
 }
@@ -104,7 +107,7 @@ function Get-ReviewedRecoveryPolicy([string]$Profile){
         Assert-RecoveryNestedPolicy $root
         $allowed=@('SchemaVersion','AppSha256','InfrastructureSha256','ProfileRootSha256','AccountId','ProjectId','Currency','Scale','ExpiresAtUtc','Budget','HistoricalAudio','Predecessors')
         if(@($root.EnumerateObject()).Count -ne $allowed.Count -or @($root.EnumerateObject() | Where-Object {$_.Name -cnotin $allowed}).Count){throw 'Recovery policy schema is incomplete or unknown.'}
-        if($root.GetProperty('SchemaVersion').GetInt32() -ne 1 -or $root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow){throw 'Recovery policy is incompatible or expired.'}
+        if($root.GetProperty('SchemaVersion').GetInt32() -ne 2 -or $root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow){throw 'Recovery policy is incompatible or expired.'}
         if($root.GetProperty('InfrastructureSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash){throw 'Recovery policy belongs to another exact build.'}
         if($root.GetProperty('AppSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash){throw 'Recovery policy belongs to another exact app build.'}
         $canonical=[IO.Path]::GetFullPath($Profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()

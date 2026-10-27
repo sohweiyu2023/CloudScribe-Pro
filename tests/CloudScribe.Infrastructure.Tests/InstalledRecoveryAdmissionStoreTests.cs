@@ -38,6 +38,11 @@ public sealed class InstalledRecoveryAdmissionStoreTests
     [InlineData("expired")]
     [InlineData("scope")]
     [InlineData("schema")]
+    [InlineData("missing-grant-limit")]
+    [InlineData("missing-grant-cap")]
+    [InlineData("zero-grant-count")]
+    [InlineData("negative-grant-cap")]
+    [InlineData("duplicate-grant")]
     [InlineData("duplicate")]
     [InlineData("unknown")]
     [InlineData("oversized")]
@@ -54,10 +59,15 @@ public sealed class InstalledRecoveryAdmissionStoreTests
             "profile" => f.Policy with { ProfileRootSha256 = new string('b', 64) },
             "expired" => f.Policy with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1) },
             "scope" => f.Policy with { AccountId = "another-account" },
-            "schema" => f.Policy with { SchemaVersion = 2 },
+            "schema" => f.Policy with { SchemaVersion = 1 },
+            "zero-grant-count" => f.Policy with { Predecessors = [f.Policy.Predecessors[0] with { MaximumNewAttempts = 0 }] },
+            "negative-grant-cap" => f.Policy with { Predecessors = [f.Policy.Predecessors[0] with { MaximumAdditionalReservationMinorUnits = -1 }] },
+            "duplicate-grant" => f.Policy with { Predecessors = [f.Policy.Predecessors[0], f.Policy.Predecessors[0] with { HistoricalKey = "another-root" }] },
             _ => f.Policy,
         };
         string json = JsonSerializer.Serialize(p);
+        if (string.Equals(failure, "missing-grant-limit", StringComparison.Ordinal)) json = json.Replace("\"MaximumNewAttempts\":1,", string.Empty, StringComparison.Ordinal);
+        if (string.Equals(failure, "missing-grant-cap", StringComparison.Ordinal)) json = json.Replace(",\"MaximumAdditionalReservationMinorUnits\":3", string.Empty, StringComparison.Ordinal);
         if (string.Equals(failure, "duplicate", StringComparison.Ordinal)) json = "{\"SchemaVersion\":1," + json[1..];
         if (string.Equals(failure, "unknown", StringComparison.Ordinal)) json = "{\"UnreviewedTrustOverride\":true," + json[1..];
         if (string.Equals(failure, "oversized", StringComparison.Ordinal)) json += new string(' ', 1024 * 1024);
@@ -92,8 +102,8 @@ public sealed class InstalledRecoveryAdmissionStoreTests
                 "synthetic-voice", "en-US", new string('e', 64));
             var prior = new GoogleRecoveryPredecessorEvidence("synthetic-logical-item", anchor.AccountId, anchor.OperationId,
                 anchor.IdempotencyKey, new string('f', 64), "synthetic-project", anchor.DocumentId, anchor.RevisionId,
-                anchor.TextSha256, anchor.PayloadSha256, new string('a', 64), expiry);
-            Policy = new(1, Hash(File.ReadAllBytes(Path.Combine(AppDirectory, "CloudScribe.dll"))), Hash(File.ReadAllBytes(Path.Combine(AppDirectory, "CloudScribe.Infrastructure.dll"))),
+                anchor.TextSha256, anchor.PayloadSha256, new string('a', 64), expiry, 1, 3);
+            Policy = new(2, Hash(File.ReadAllBytes(Path.Combine(AppDirectory, "CloudScribe.dll"))), Hash(File.ReadAllBytes(Path.Combine(AppDirectory, "CloudScribe.Infrastructure.dll"))),
                 InstalledRecoveryAdmissionStore.ProfileHash(paths.RootDirectory), "synthetic-account", "synthetic-project", "USD", 2, expiry,
                 new(250, 1000, 10, 80, new string('a', 64), [], [], []), [new("synthetic-admitted-evidence", anchor)], [prior]);
         }
