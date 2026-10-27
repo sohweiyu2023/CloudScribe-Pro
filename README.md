@@ -22,6 +22,7 @@ Google bills your own Cloud account. A ChatGPT subscription does not include Goo
 - Exact-request preparation, explicit single-use cost approval, and verified MP3 playback/export.
 - A guided setup walkthrough, voice comparison and separately approved short samples.
 - Local narration-part preparation for longer text. Each part still requires its own review and approval.
+- [One continuous article MP3](docs/ARTICLE_MP3_EXPORT.md) from complete, verified local part outputs, using an existing FFmpeg installation. Missing or uncertain parts block export; this action never synthesizes audio.
 
 The current generation path is for short requests within a conservative **5,000-byte compiled-envelope limit**, including JSON escaping and request fields. It sends plain text; automatic long-audio batches, multi-speaker script production and custom SSML lexicons are not supplied by this interface. Prices require current admitted evidence and user source review; the app does not promise live billing-account tracking. See [saved setups and recovery](docs/SAVED_SETUPS_AND_LOCAL_RECOVERY.md) and [voice comparison](docs/VOICE_COMPARISON.md).
 

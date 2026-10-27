@@ -19,6 +19,17 @@ public sealed partial class ShellViewModel
     private bool _preparedGoogleGenerationSpendApproved;
     private string? _lastGeneratedGoogleMp3Path;
     private int _googleGenerationInFlight;
+    private Func<CloudScribe.Application.Documents.DocumentSnapshot, CloudScribe.Providers.Abstractions.GenerationProviderRequest,
+        GoogleGenerationQueueOutcome, string, CancellationToken, Task>? _recordArticleAudio;
+
+    public event EventHandler? ArticleExportRequested;
+
+    [RelayCommand]
+    private void RequestArticleExport() => ArticleExportRequested?.Invoke(this, EventArgs.Empty);
+
+    public void ConfigureArticleAudioRecording(Func<CloudScribe.Application.Documents.DocumentSnapshot,
+        CloudScribe.Providers.Abstractions.GenerationProviderRequest, GoogleGenerationQueueOutcome,
+        string, CancellationToken, Task> record) => _recordArticleAudio = record;
 
     public bool CanGenerateWithGoogle =>
         _resolveGoogleGenerationExecutionContext is not null &&
@@ -192,12 +203,21 @@ public sealed partial class ShellViewModel
         EnterGoogleGenerationOperation();
         try
         {
+            Guid? articleIdAtStart = _currentDocumentId;
+            Guid? articleRevisionAtStart = _currentRevisionId;
+            long articleRequestVersion = Volatile.Read(ref _googleRequestVersion);
+            bool articleCleanAtStart = !IsDocumentDirty && !IsDocumentSaving;
             GoogleGenerationUiExecutionContext executionContext = await ResolveGoogleExecutionContextAsync(cancellationToken)
                 .ConfigureAwait(true);
             var coordinator = executionContext.Coordinator
                 ?? throw new InvalidOperationException("Google generation coordinator is unavailable for the current authorization state.");
             var state = executionContext.Snapshot
                 ?? throw new InvalidOperationException("Google generation UI state is unavailable.");
+            var articleDocument = articleCleanAtStart && articleIdAtStart is { } documentId && _documentLibrary is not null
+                ? await _documentLibrary.OpenAsync(documentId, cancellationToken).ConfigureAwait(true) : null;
+            if (articleIdAtStart != _currentDocumentId || articleRevisionAtStart != _currentRevisionId
+                || articleDocument?.CurrentRevisionId != articleRevisionAtStart || IsDocumentDirty || IsDocumentSaving
+                || articleRequestVersion != Volatile.Read(ref _googleRequestVersion)) articleDocument = null;
             StatusMessage = "Google generation · validating current account, voice, pricing and trust";
             if (_logger.IsEnabled(LogLevel.Information))
             {
@@ -211,6 +231,7 @@ public sealed partial class ShellViewModel
                 state.AccountCredentialAvailable, state.PricingApproved, state.PostCompileLimitsSatisfied,
                 cancellationToken).ConfigureAwait(true);
             await HandleGoogleGenerationOutcomeAsync(outcome, cancellationToken).ConfigureAwait(true);
+            await RecordArticleAudioOutcomeAsync(articleDocument, state.ProviderRequest, outcome, cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -233,6 +254,22 @@ public sealed partial class ShellViewModel
             PreparedGoogleGenerationSpendApproved = false;
             PreparedGoogleGenerationSpendReview = null;
             ExitGoogleGenerationOperation();
+        }
+    }
+
+    private async Task RecordArticleAudioOutcomeAsync(CloudScribe.Application.Documents.DocumentSnapshot? articleDocument,
+        CloudScribe.Providers.Abstractions.GenerationProviderRequest request, GoogleGenerationQueueOutcome outcome,
+        CancellationToken cancellationToken)
+    {
+        if (_recordArticleAudio is not null && articleDocument is not null && string.Equals(outcome.Response?.DiagnosticCode, "google-accepted", StringComparison.Ordinal)
+            && !outcome.RequiresReconciliation && LastGeneratedGoogleMp3Path is { } acceptedPath)
+        {
+            try { await _recordArticleAudio(articleDocument, request, outcome, acceptedPath, cancellationToken).ConfigureAwait(true); }
+            catch (Exception error) when (!IsFatalUiException(error))
+            {
+                CloudScribeLog.GoogleGenerationStopped(_logger, "article-receipt-unavailable");
+                StatusMessage = "Accepted MP3 saved; article provenance could not be recorded. Keep the audio; do not regenerate to repair export.";
+            }
         }
     }
 

@@ -8,6 +8,9 @@ namespace CloudScribe.Application.Logging;
 
 public static partial class CloudScribeLog
 {
+    [LoggerMessage(EventId = 1604, Level = LogLevel.Information, Message = "Google synthesis {Correlation}: HTTP {HttpStatus}, canonical reason {Reason}, domain {Domain}, request field {Field}. Free-form provider details are excluded; retry permission is not implied.")]
+    public static partial void GoogleSynthesisErrorDetails(ILogger logger, string correlation, int httpStatus,
+        GoogleErrorReasonCategory reason, GoogleErrorDomainCategory domain, GoogleErrorFieldCategory field);
     [LoggerMessage(EventId = 1020, Level = LogLevel.Information, Message = "Startup timing {Sequence}: {Phase} {State}, phase {PhaseMilliseconds} ms, managed startup {StartupMilliseconds} ms, backend budget {Budget}, remaining {RemainingMilliseconds} ms (-1 means not armed).")]
     public static partial void StartupPhaseTiming(ILogger logger, int sequence, StartupPhase phase, StartupPhaseState state,
         long phaseMilliseconds, long startupMilliseconds, StartupBudgetState budget, long remainingMilliseconds);

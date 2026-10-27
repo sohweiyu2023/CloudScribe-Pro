@@ -56,6 +56,11 @@ public sealed class GoogleGenerationHttpTransport
             byte[] bytes = await ReadResponseBytesAsync(response, request.MaximumResponseBytes, cancellationToken).ConfigureAwait(false);
             var category = response.StatusCode == System.Net.HttpStatusCode.OK ? GoogleErrorStatus.NotProvided : GoogleErrorStatusParser.Parse(bytes);
             Log(GoogleSynthesisStage.ResponseReadCompleted, category);
+            if (status != 200)
+            {
+                var details = GoogleErrorDetailParser.Parse(bytes);
+                CloudScribeLog.GoogleSynthesisErrorDetails(_logger, correlation, status, details.Reason, details.Domain, details.Field);
+            }
             return new GoogleHttpTransportResponse(response.StatusCode, bytes, retryAfter, category);
         }
         catch (OperationCanceledException)

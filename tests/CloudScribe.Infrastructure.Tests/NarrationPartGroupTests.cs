@@ -11,7 +11,7 @@ using Microsoft.Extensions.Options;
 
 namespace CloudScribe.Infrastructure.Tests;
 
-public sealed class NarrationPartGroupTests
+public sealed partial class NarrationPartGroupTests
 {
     [Fact]
     public async Task TwoOriginalsAndFortySixPartsShowSixArticlesWithoutChangingDocuments()
@@ -108,6 +108,8 @@ public sealed class NarrationPartGroupTests
             Library = new EfDocumentLibrary(this, new DocumentContentStore(_paths), TimeProvider.System);
             Groups = new EfNarrationPartGroupStore(this, Library);
         }
+        public AppPaths Paths => _paths;
+        public string Root => _root;
         public EfDocumentLibrary Library { get; }
         public EfNarrationPartGroupStore Groups { get; }
         public CloudScribeDbContext CreateDbContext() => new(new DbContextOptionsBuilder<CloudScribeDbContext>()
