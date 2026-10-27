@@ -242,6 +242,7 @@ public sealed class DatabaseRecoveryTests
                 Stage6GoogleGenerationProjectAuthorization.MigrationId,
                 GoogleSubmissionAttemptBarrier.MigrationId,
                 NarrationPartGroups.MigrationId,
+                GoogleExplicitRecovery.MigrationId,
             ],
             currentMigrations);
     }
