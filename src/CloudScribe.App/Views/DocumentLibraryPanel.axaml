@@ -32,27 +32,40 @@
             <TextBlock Text="{Binding CurrentPage.StateTitle}" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" />
             <TextBlock Grid.Column="1" Text="{Binding CurrentPage.StateKind}" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
           </Grid>
-          <ListBox
-              Grid.Row="1"
-              MinHeight="360"
-              ItemsSource="{Binding LocalDocuments}"
-              SelectedItem="{Binding SelectedLocalDocument, Mode=TwoWay}"
-              Background="Transparent"
-              BorderThickness="0"
-              AutomationProperties.Name="Local documents">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="documents:DocumentSummary">
+          <ItemsControl Grid.Row="1" MinHeight="360" ItemsSource="{Binding LibraryArticles}" AutomationProperties.Name="Local articles and narration parts">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:LibraryArticleViewModel">
                 <Border Margin="3" Padding="14" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}">
-                  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="4">
-                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Meta}" />
-                    <TextBlock Grid.Row="1" Text="Select to open in Studio" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ConcurrencyVersion, StringFormat='v{0}'}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" />
-                  </Grid>
+                  <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                      <TextBlock Text="{Binding Document.Title}" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <Button Grid.Column="1" Content="Open article" Command="{Binding OpenCommand}" CommandParameter="{Binding Document.Id}" Classes="secondary" />
+                    </Grid>
+                    <Expander IsVisible="{Binding HasParts}" Header="{Binding PartsLabel}" IsExpanded="{Binding ExpandParts, Mode=OneWay}">
+                      <StackPanel Spacing="8">
+                        <TextBlock Text="{Binding PreparationStatus}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding Parts}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:LibraryPartViewModel">
+                              <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="{DynamicResource Brush.BorderSubtle}">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                  <StackPanel Spacing="3">
+                                    <TextBlock Text="{Binding Document.Title}" Foreground="{DynamicResource Brush.TextOnDark}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
+                                  </StackPanel>
+                                  <Button Grid.Column="1" Content="Open part" Command="{Binding OpenCommand}" CommandParameter="{Binding Document.Id}" Classes="secondary" />
+                                </Grid>
+                              </Border>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </Expander>
+                  </StackPanel>
                 </Border>
               </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
         </Grid>
       </Border>
     </Grid>

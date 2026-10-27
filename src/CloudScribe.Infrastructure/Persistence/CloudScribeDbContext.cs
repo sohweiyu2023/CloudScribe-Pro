@@ -37,11 +37,33 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ConfigureNarrationPartGroups(modelBuilder);
         ConfigureObservability(modelBuilder);
         ConfigureDocuments(modelBuilder);
         ConfigurePricingCatalogHistory(modelBuilder);
         ConfigurePricingContractOverrides(modelBuilder);
         ConfigureProviderAccountsAndCapabilities(modelBuilder);
+    }
+
+    private static void ConfigureNarrationPartGroups(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<NarrationPartGroupEntity>(entity =>
+        {
+            entity.ToTable("narration_part_groups");
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => item.ParentDocumentId).IsUnique();
+            entity.HasOne<DocumentEntity>().WithMany().HasForeignKey(item => item.ParentDocumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DocumentRevisionEntity>().WithMany().HasForeignKey(item => item.SourceRevisionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<NarrationPartLinkEntity>(entity =>
+        {
+            entity.ToTable("narration_part_links");
+            entity.HasKey(item => item.ChildDocumentId);
+            entity.HasIndex(item => new { item.GroupId, item.Ordinal }).IsUnique();
+            entity.HasOne<NarrationPartGroupEntity>().WithMany().HasForeignKey(item => item.GroupId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DocumentEntity>().WithMany().HasForeignKey(item => item.ChildDocumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DocumentRevisionEntity>().WithMany().HasForeignKey(item => item.ChildRevisionId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureObservability(ModelBuilder modelBuilder)

@@ -1,4 +1,10 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using CloudScribe.Application.Generation;
+using CloudScribe.Application.Logging;
+using CloudScribe.Domain.Generation;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -7,12 +13,14 @@ public sealed class GoogleGenerationHttpTransport
     private readonly HttpClient _httpClient;
     private readonly ITransientCredentialResolver _credentialResolver;
     private readonly Uri _allowedOrigin;
+    private readonly ILogger<GoogleGenerationHttpTransport> _logger;
 
-    public GoogleGenerationHttpTransport(HttpClient httpClient, ITransientCredentialResolver credentialResolver, Uri allowedOrigin)
+    public GoogleGenerationHttpTransport(HttpClient httpClient, ITransientCredentialResolver credentialResolver, Uri allowedOrigin, ILogger<GoogleGenerationHttpTransport>? logger = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _credentialResolver = credentialResolver ?? throw new ArgumentNullException(nameof(credentialResolver));
         _allowedOrigin = ValidateOrigin(allowedOrigin);
+        _logger = logger ?? NullLogger<GoogleGenerationHttpTransport>.Instance;
     }
 
     public async Task<GoogleHttpTransportResponse> SendAsync(GoogleHttpTransportRequest request, CancellationToken cancellationToken = default)
@@ -23,17 +31,47 @@ public sealed class GoogleGenerationHttpTransport
             throw new ArgumentException("Credential reference ID is required.", nameof(request));
         ValidateBoundedRequest(request.Payload, request.MaximumResponseBytes);
 
-        var token = await _credentialResolver.ResolveAccessTokenAsync(request.CredentialReferenceId, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("Credential resolver returned an empty access token.");
+        string correlation = Guid.NewGuid().ToString("N");
+        string payloadHash = _logger.IsEnabled(LogLevel.Information) ? Convert.ToHexStringLower(SHA256.HashData(request.Payload.Span)) : "logging-disabled";
+        int status = 0;
+        void Log(GoogleSynthesisStage stage, GoogleErrorStatus category = GoogleErrorStatus.NotProvided) =>
+            CloudScribeLog.GoogleSynthesisTransportStage(_logger, correlation, payloadHash, stage, status, category);
+        Log(GoogleSynthesisStage.ResolvingCredential);
+        try
+        {
+            var token = await _credentialResolver.ResolveAccessTokenAsync(request.CredentialReferenceId, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("Credential resolver returned an empty access token.");
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, request.Endpoint);
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        message.Content = new ByteArrayContent(request.Payload.ToArray());
-        message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            using var message = new HttpRequestMessage(HttpMethod.Post, request.Endpoint);
+            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            message.Content = new ByteArrayContent(request.Payload.ToArray());
+            message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-        using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        var retryAfter = ParseRetryAfter(response.Headers.RetryAfter);
+            Log(GoogleSynthesisStage.Dispatching);
+            using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            status = (int)response.StatusCode;
+            Log(GoogleSynthesisStage.ResponseHeaders);
+            var retryAfter = ParseRetryAfter(response.Headers.RetryAfter);
+            byte[] bytes = await ReadResponseBytesAsync(response, request.MaximumResponseBytes, cancellationToken).ConfigureAwait(false);
+            var category = response.StatusCode == System.Net.HttpStatusCode.OK ? GoogleErrorStatus.NotProvided : GoogleErrorStatusParser.Parse(bytes);
+            Log(GoogleSynthesisStage.ResponseReadCompleted, category);
+            return new GoogleHttpTransportResponse(response.StatusCode, bytes, retryAfter, category);
+        }
+        catch (OperationCanceledException)
+        {
+            Log(GoogleSynthesisStage.Cancelled);
+            throw;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+        {
+            Log(GoogleSynthesisStage.Failed);
+            throw;
+        }
+    }
+
+    private static async Task<byte[]> ReadResponseBytesAsync(HttpResponseMessage response, int maximumResponseBytes, CancellationToken cancellationToken)
+    {
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
         var rented = new byte[81920];
@@ -41,12 +79,12 @@ public sealed class GoogleGenerationHttpTransport
         {
             var read = await stream.ReadAsync(rented.AsMemory(), cancellationToken).ConfigureAwait(false);
             if (read == 0) break;
-            if (buffer.Length + read > request.MaximumResponseBytes)
+            if (buffer.Length + read > maximumResponseBytes)
                 throw new InvalidDataException("Google response exceeded the configured bounded response size.");
             buffer.Write(rented, 0, read);
         }
 
-        return new GoogleHttpTransportResponse(response.StatusCode, buffer.ToArray(), retryAfter);
+        return buffer.ToArray();
     }
 
     private static void ValidateBoundedRequest(ReadOnlyMemory<byte> payload, int maximumResponseBytes)

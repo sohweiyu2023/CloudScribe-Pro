@@ -51,7 +51,7 @@ The visible next-step message explains why review or creation is unavailable and
 The voice area shows loading, ready, no matching voices, or a connection error. **Language and voice filters** contains the filters; the applied language/search summary stays visible. **Clear voice search and reload** removes the name search while keeping your chosen language. A selected verified voice is named below the list. **Review current text, voice and cost** requires text and a verified voice; **Create MP3** becomes available after a current cost review and explicit approval. Connection setup is hidden when exactly one enabled Google connection is saved; **Change connection** deliberately reveals the fresh-configuration form inside Advanced tools. It never reads your key back into the form or overwrites the old credential binding.
 
 The detailed separate prepare/ceiling/approve/generate controls remain in **Advanced tools → Detailed request review** for inspection. The guided path uses the same production approval, capability, pricing, queue and byte-integrity checks.
-The displayed subtotal is conservatively rounded from the admitted provider character rate and the exact compiled input, using a UTF-8 byte upper bound. It ignores free allowances and credits, and excludes tax and currency conversion. Your billing account may use a different currency. Review actual Google billing separately.
+For plain-text Chirp 3 HD requests, the estimate counts Unicode scalar values in the exact input (including whitespace and combining characters) using the admitted character rate. Each request reserves its estimate rounded up to a whole cent, so a multi-part reservation can exceed the unrounded article estimate. Other supported families retain their conservative UTF-8 byte upper bound. The separate 5,000-byte compiled-envelope limit includes JSON escaping and request fields; it is a transport safety limit, not the Chirp billing character count. It ignores free allowances and credits, and excludes tax and currency conversion. Your billing account may use a different currency. Review actual Google billing separately.
 
 Approval is single-use. A new prepared request needs fresh confirmation. Editing text or changing the voice requires a new review. The current synchronous workflow accepts short documents within a conservative 5,000-byte compiled-envelope ceiling; split longer passages into shorter documents. Unknown or unpriced voice families are rejected rather than assigned a guessed rate.
 
@@ -74,13 +74,13 @@ Back up documents and exported audio before moving/removing an installation. Win
 
 ## Build from source on Windows
 
-Install the exact SDK selected by `global.json` (currently **.NET SDK 10.0.401**). From a fresh source folder:
+Install the exact SDK selected by `global.json` (currently **.NET SDK 10.0.402**). From a fresh source folder:
 
 ```powershell
 dotnet restore CloudScribe.sln --locked-mode --configfile NuGet.config
 dotnet format CloudScribe.sln --no-restore --verify-no-changes
 dotnet build CloudScribe.sln -c Release --no-restore
-dotnet test CloudScribe.sln -c Release --no-build --no-restore
+dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore
 dotnet publish src/CloudScribe.App/CloudScribe.App.csproj -c Release --no-build --no-restore -o ..\CloudScribe-Windows
 ```
 
@@ -91,3 +91,19 @@ These commands build/test/publish locally. See [Windows build and validation](ht
 ## Verified acceptance
 
 On 19 October 2026, two distinct short `en-US-Standard-C` documents passed real Google synthesis, MP3 decoding and byte-identical app export. The first was audibly confirmed by the user in VLC. The local repair passed 662 compiled tests and the native interaction/visual checks. These results cover this short synchronous MP3 path; they do not certify every voice, language, long-document workflow or future provider pricing.
+
+See [voice recommendations and Chirp controls](VOICE_RECOMMENDATIONS.md) for exact-language defaults, premium pricing and preserved manual choices.
+
+## Articles and technical narration parts
+
+The Library keeps the original article and shows its verified local narration parts in an expandable section. Each Open part action opens that existing document ID for its own request review. A title ending in Part 001 is not enough to classify a document as a technical part. Search can find child text and reveal its original with the parts expanded. Article limits apply after grouping; remembered child documents can still reopen independently.
+
+Grouping stores only explicit document/revision IDs, order and hashes after exact original/child content verification. It does not merge text, re-create paid requests, change a voice, approve spending or certify current synthesis suitability. Edits retain membership and show a changed-since-preparation warning. One preparation is supported per original: a second split or revision is blocked rather than interleaved with existing parts. An interrupted preparation retains all documents visibly and prevents blind repetition.
+
+## Failed or uncertain synthesis
+
+The displayed provider diagnostic is sanitized metadata such as google-http-403 or google-transport-timeout. A canonical error category may also be shown. It is not a billing receipt. Keep the existing reservation and consult local request status before any further paid action. Missing audio, a null provider request ID or a completed HTTP error does not prove no charge.
+
+Before dispatch, CloudScribe atomically records a local attempt and durable uncertainty barrier. Cancellation cannot erase it. Attempted identities, including accepted and historical records, cannot be resubmitted through this path. HTTP408/429/5xx require reconciliation; Retry-After alone is not permission for another billed request. A successful response with unusable audio remains an attempted/accepted request, not a free retry. Diagnostics never reset the queue or historical spend authorizations.
+
+The first previously recorded attempt without retained HTTP metadata remains unknown: the update cannot reconstruct its status, recover a provider ID or settle its charge. Do not retry it under a new identity to bypass this hold.

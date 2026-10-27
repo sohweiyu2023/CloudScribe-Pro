@@ -143,7 +143,9 @@ public static class GoogleGenerationUiExecutionContextFactory
         var boundQueue = new GoogleGenerationBoundQueueCoordinator(
             queue,
             persistedQueueStateStore.LoadAsync,
-            persistedQueueStateStore.SaveAsync);
+            persistedQueueStateStore.SaveAsync,
+            persistedQueueStateStore.TryClaimSubmissionAsync,
+            persistedQueueStateStore.SaveOutcomeAsync);
         var uiQueue = new GoogleGenerationUiQueueCoordinator(boundQueue);
 
         return new GoogleGenerationUiExecutionContext(uiQueue, evidence.Snapshot);

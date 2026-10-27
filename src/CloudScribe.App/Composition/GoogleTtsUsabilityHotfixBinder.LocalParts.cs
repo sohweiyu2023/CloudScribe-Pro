@@ -40,7 +40,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             create.Click += async (_, _) =>
             {
                 create.IsEnabled = false;
-                try { int count = await model.CreateLocalNarrationPartsAsync(chunks, original).ConfigureAwait(true); status.Text = $"Created {count} parts. Open them in Library; no synthesis was sent."; }
+                try { int count = await model.CreateLocalNarrationPartsAsync(chunks, original).ConfigureAwait(true); status.Text = count == 0 ? "Existing verified parts were reused; no documents or audio were generated." : $"Created {count} parts. Expand their original article in Library; no synthesis was sent."; }
                 catch (Exception e) when (e is IOException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
                 { status.Text = "Could not finish creating all parts. Check Library for parts already saved; the original remains unchanged. Preview again only after checking for duplicates."; }
             };

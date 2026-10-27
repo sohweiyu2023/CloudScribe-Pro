@@ -4,6 +4,10 @@ namespace CloudScribe.Application.Logging;
 
 public static class CloudScribeEventIds
 {
+    public static readonly EventId GoogleGenerationRequestContext = new(1600, nameof(GoogleGenerationRequestContext));
+    public static readonly EventId GoogleGenerationOutcome = new(1601, nameof(GoogleGenerationOutcome));
+    public static readonly EventId GoogleGenerationStopped = new(1602, nameof(GoogleGenerationStopped));
+    public static readonly EventId GoogleSynthesisTransportStage = new(1603, nameof(GoogleSynthesisTransportStage));
     public static readonly EventId ApplicationStarting = new(1000, nameof(ApplicationStarting));
     public static readonly EventId ApplicationReady = new(1001, nameof(ApplicationReady));
     public static readonly EventId ApplicationStopping = new(1002, nameof(ApplicationStopping));

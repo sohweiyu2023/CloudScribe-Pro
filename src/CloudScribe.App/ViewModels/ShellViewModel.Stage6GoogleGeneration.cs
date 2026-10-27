@@ -1,6 +1,10 @@
+using System.Security.Cryptography;
 using CloudScribe.App.Navigation;
 using CloudScribe.Application.Generation;
+using CloudScribe.Application.Logging;
+using CloudScribe.Domain.Generation;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.App.ViewModels;
 
@@ -195,6 +199,11 @@ public sealed partial class ShellViewModel
             var state = executionContext.Snapshot
                 ?? throw new InvalidOperationException("Google generation UI state is unavailable.");
             StatusMessage = "Google generation · validating current account, voice, pricing and trust";
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                string payloadHash = Convert.ToHexStringLower(SHA256.HashData(state.ProviderRequest.CompiledPayload.Span));
+                CloudScribeLog.GoogleGenerationRequestContext(_logger, payloadHash, state.ProviderRequest.CompiledPayload.Length);
+            }
             GoogleGenerationQueueOutcome outcome = await coordinator.ProcessPersistedTransitionAsync(
                 state.UiSelection, state.AccountAuthorized, state.ProjectAuthorized, state.CapabilityCurrent,
                 state.PricingCurrent, state.ProviderRequest, state.AdmittedTrust, state.PreviousState,
@@ -205,6 +214,7 @@ public sealed partial class ShellViewModel
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            CloudScribeLog.GoogleGenerationStopped(_logger, "caller-cancelled");
             StatusMessage = "Google generation cancelled · approval cleared; check queue status before another request";
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
@@ -212,6 +222,7 @@ public sealed partial class ShellViewModel
             // A failure may occur after dispatch. Keep the durable queue authoritative and do
             // not imply that repeating the request is free or safe. Provider exception text can
             // contain private request details, so it does not belong in the visible status.
+            CloudScribeLog.GoogleGenerationStopped(_logger, "guard-or-execution-failure");
             StatusMessage = "Google generation stopped · approval cleared; review queue status before preparing another request";
         }
         finally
@@ -262,14 +273,25 @@ public sealed partial class ShellViewModel
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outcome);
+        string diagnostic = GoogleGenerationOutcomeDiagnostic.Sanitize(outcome.Response?.DiagnosticCode);
+        GoogleErrorStatus errorStatus = outcome.Response is { } response && Enum.IsDefined(response.ErrorStatus)
+            ? response.ErrorStatus : GoogleErrorStatus.Unknown;
+        CloudScribeLog.GoogleGenerationOutcome(_logger, diagnostic, outcome.RequiresReconciliation,
+            outcome.Response?.IsAccepted == true, errorStatus);
+        string errorLabel = errorStatus == GoogleErrorStatus.NotProvided ? string.Empty : $" · {errorStatus}";
         if (outcome.RequiresReconciliation)
         {
-            StatusMessage = "Google generation · reconciliation required; no output file exposed";
+            StatusMessage = $"Google generation · {diagnostic} · reconciliation required; no output exposed. Keep the reservation; do not resubmit.";
             return;
         }
         if (outcome.Response?.IsAccepted != true)
         {
-            StatusMessage = $"Google generation · not accepted · {outcome.Decision.Reason}";
+            StatusMessage = $"Google generation · not accepted · {diagnostic}{errorLabel}. Charge is not confirmed; keep the reservation and review request status before retrying.";
+            return;
+        }
+        if (string.Equals(diagnostic, "google-accepted-invalid-media", StringComparison.Ordinal))
+        {
+            StatusMessage = "Google accepted the request but returned unusable audio. Keep the reservation; do not generate it again to recover the output.";
             return;
         }
         var persist = _persistAcceptedGoogleMp3

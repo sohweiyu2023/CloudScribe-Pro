@@ -33,10 +33,12 @@ Cancellation or a lost response does not prove a dispatched request was uncharge
 
 ## Build and validation
 
-Building requires the exact SDK in `global.json`, currently **.NET SDK 10.0.401**. See [Windows build and validation](BUILDING-WINDOWS.txt), [installation and updates](docs/WINDOWS_INSTALLATION.md), and [verified release uploads](docs/R2_RELEASE_UPLOADS.md).
+Building requires the exact SDK in `global.json`, currently **.NET SDK 10.0.402**. See [Windows build and validation](BUILDING-WINDOWS.txt), [installation and updates](docs/WINDOWS_INSTALLATION.md), and [verified release uploads](docs/R2_RELEASE_UPLOADS.md).
 
 As of 21 October 2026, source CI passes 718 compiled mocked/local tests plus strict Release build and formatting. These are separate from the historical 19 October live check: two short Google Standard MP3 requests passed decoding/export checks, with the first user-confirmed audible; that repair had 662 compiled tests. Neither result is a claim that every voice or long-document workflow has been live-tested. Historical stage certification details remain in the development records.
 
 ## License
 
 Original CloudScribe Pro project code is available under the [MIT License](LICENSE), copyright (c) 2026 Soh Wei Yu. Third-party packages, native components and incorporated upstream material retain their own licenses and notices; see [Third-party notices](THIRD-PARTY-NOTICES.md). The MIT grant covers only rights the project copyright holder can grant. It does not change provider-service terms or license the separately distributed Cosmic Transcriber project/reference archive. Existing About provenance and credits are retained.
+
+See [voice recommendations and Chirp controls](docs/VOICE_RECOMMENDATIONS.md) for exact-language defaults, premium pricing and preserved manual choices.

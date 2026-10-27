@@ -34,15 +34,7 @@ public static class GoogleVoiceComparisonInformation
         _ => "Catalog/reference entry. No compatible priced short-sample workflow is asserted for this family.",
     };
 
-    public static string LocaleLabel(string locale) => locale switch
-    {
-        "en-US" => "English (United States)",
-        "en-GB" => "English (United Kingdom)",
-        "en-AU" => "English (Australia)",
-        "en-IN" => "English (India)",
-        "en-CA" => "English (Canada)",
-        _ => locale,
-    };
+    public static string LocaleLabel(string locale) => LanguageDisplayNames.Name(locale);
 
     public static CharacterRate? Rate(V222ControlSet controls, string voice)
     {

@@ -25,6 +25,10 @@ public static class GoogleGenerationPersistedQueueTransitionPolicy
             !string.Equals(previous.IdempotencyKey, next.IdempotencyKey, StringComparison.Ordinal))
             throw new InvalidOperationException("Persisted Google queue identity is immutable across state transitions.");
 
+        if (previous.SubmissionAttempted && !next.SubmissionAttempted)
+            throw new InvalidOperationException("A submission-attempt barrier cannot be reset.");
+        if (previous.LocalAttemptId is not null && !string.Equals(previous.LocalAttemptId, next.LocalAttemptId, StringComparison.Ordinal))
+            throw new InvalidOperationException("An owned local attempt identity cannot be replaced.");
         var previousProviderRequestId = NormalizeOptional(previous.ProviderRequestId);
         var nextProviderRequestId = NormalizeOptional(next.ProviderRequestId);
 
@@ -34,13 +38,12 @@ public static class GoogleGenerationPersistedQueueTransitionPolicy
 
         if (previous.UnresolvedSubmission)
         {
-            if (previousProviderRequestId is null)
-                throw new InvalidOperationException("Unresolved persisted Google state is missing provider reconciliation identity.");
-
             if (!next.UnresolvedSubmission)
             {
-                if (nextProviderRequestId is null)
-                    throw new InvalidOperationException("Resolving an ambiguous Google submission cannot discard the provider request identity.");
+                if (previous.LocalAttemptId is not null && !GoogleGenerationOutcomeDiagnostic.IsConfirmedTerminal(next.DiagnosticCode))
+                    throw new InvalidOperationException("An uncertain owned outcome cannot be marked reconciled.");
+                if (previousProviderRequestId is null && (previous.LocalAttemptId is null || next.DiagnosticCode is null))
+                    throw new InvalidOperationException("Resolving a no-provider-ID submission requires its owned local claim and terminal outcome metadata.");
                 if (resolutionEvidence == GoogleGenerationReconciliationResolutionEvidence.None)
                     throw new InvalidOperationException("Resolving an ambiguous Google submission requires explicit provider-terminal or durable-receipt reconciliation evidence.");
             }
@@ -54,8 +57,8 @@ public static class GoogleGenerationPersistedQueueTransitionPolicy
             if (resolutionEvidence != GoogleGenerationReconciliationResolutionEvidence.None)
                 throw new InvalidOperationException("Google reconciliation resolution evidence is only valid when clearing an unresolved submission.");
 
-            if (next.UnresolvedSubmission && nextProviderRequestId is null)
-                throw new InvalidOperationException("Entering unresolved submission state requires the persisted provider request identity.");
+            if (next.UnresolvedSubmission && nextProviderRequestId is null && next.LocalAttemptId is null)
+                throw new InvalidOperationException("Entering unresolved state requires a genuine local dispatch claim or provider identity.");
         }
 
         return next;

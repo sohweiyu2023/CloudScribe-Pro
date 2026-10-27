@@ -1,4 +1,5 @@
 using CloudScribe.Application.Providers;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -7,15 +8,18 @@ public sealed class GoogleGenerationProductionTransportFactory
     private readonly HttpClient _httpClient;
     private readonly ITransientCredentialResolver _credentialResolver;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<GoogleGenerationHttpTransport>? _logger;
 
     public GoogleGenerationProductionTransportFactory(
         HttpClient httpClient,
         ITransientCredentialResolver credentialResolver,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ILogger<GoogleGenerationHttpTransport>? logger = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _credentialResolver = credentialResolver ?? throw new ArgumentNullException(nameof(credentialResolver));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _logger = logger;
     }
 
     public GoogleGenerationProductionTransport Create(
@@ -54,7 +58,7 @@ public sealed class GoogleGenerationProductionTransportFactory
         var transport = new GoogleGenerationHttpTransport(
             _httpClient,
             _credentialResolver,
-            submissionAccount.Endpoint);
+            submissionAccount.Endpoint, _logger);
 
         return new GoogleGenerationProductionTransport(submissionAccount, transport);
     }
