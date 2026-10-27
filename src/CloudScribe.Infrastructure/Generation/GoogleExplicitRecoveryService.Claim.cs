@@ -20,7 +20,7 @@ public sealed partial class GoogleExplicitRecoveryService
         using var transaction = connection.BeginTransaction(deferred: false);
         using var find = Command(connection, transaction, """
             SELECT EnvelopeJson,Currency,Scale,EstimateMinorUnits,ReservedMinorUnits,ApprovedFinancialSha256,Consumed,DocumentId,RevisionId,TextSha256,
-            LogicalItemId,RootHistoricalKey,RootHistoricalStateSha256,AdmissionSha256
+            LogicalItemId,RootHistoricalKey,RootHistoricalStateSha256,AdmissionSha256,GrantMaximumNewAttempts,GrantMaximumAdditionalMinorUnits
             FROM google_recovery_attempts WHERE AuthorizationId=$id AND ChildKey=$child AND ReviewSha256=$review
             AND AccountId=$account AND OperationId=$operation AND ProjectId=$project;
             """, ("$id", approval.AuthorizationId.ToString("N")), ("$child", approval.IdempotencyKey), ("$review", approval.ReviewSha256),
@@ -36,10 +36,12 @@ public sealed partial class GoogleExplicitRecoveryService
                 throw new InvalidOperationException("Recovery approval does not authorize this exact current envelope and estimate.");
             financial = row.GetString(5);
             documentId = row.GetString(7); revisionId = row.GetString(8); textHash = row.GetString(9);
-            association = new(row.GetString(10), row.GetString(11), row.GetString(12), row.GetString(13));
+            if (row.IsDBNull(14) || row.IsDBNull(15)) return false;
+            association = new(row.GetString(10), row.GetString(11), row.GetString(12), row.GetString(13), row.GetInt32(14), row.GetInt64(15));
         }
         await RequireAssociationCurrentAsync(association, claim.AccountId, claim.OperationStableId, currentProjectId,
             Guid.Parse(documentId), Guid.Parse(revisionId), textHash, currentEnvelope.CompiledPayloadSha256, cancellationToken).ConfigureAwait(false);
+        await RequireGrantCapacityAsync(connection, transaction, association, claim.AccountId, currentProjectId, 0, creating: false, cancellationToken).ConfigureAwait(false);
         using (var document = Command(connection, transaction, "SELECT CurrentRevisionId,DraftText,Status FROM documents WHERE lower(Id)=$document;", ("$document", documentId)))
         using (var row = await document.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
             if (!await row.ReadAsync(cancellationToken).ConfigureAwait(false) || !string.Equals(row.GetString(0), revisionId, StringComparison.OrdinalIgnoreCase)

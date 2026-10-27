@@ -74,11 +74,11 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
                 GoogleGenerationSpendAuthorization.Create(pending.Envelope, "USD", 2, 3, 3), TestContext.Current.CancellationToken).ConfigureAwait(false);
             var prior = new GoogleRecoveryPredecessorEvidence("synthetic-logical", Selection.AccountStableId, initial.OperationStableId, RootKey,
                 JsonHash(held), Selection.ProjectStableId, doc.Id, doc.CurrentRevisionId!.Value, ArticleAudioManifest.HashText(doc.Text),
-                pending.Envelope.CompiledPayloadSha256, new string('b', 64), DateTimeOffset.UtcNow.AddHours(1));
+                pending.Envelope.CompiledPayloadSha256, new string('b', 64), DateTimeOffset.UtcNow.AddHours(1), 1, 3);
             string moduleHash = Convert.ToHexStringLower(SHA256.HashData("synthetic-module"u8));
             var baseline = new RecoveryBudgetBaseline(250, 1000, 10, 80, new string('a', 64),
                 await PinsAsync("google_generation_queue_states", 3).ConfigureAwait(false), await PinsAsync("google_generation_spend_authorizations", 1).ConfigureAwait(false), []);
-            var policy = new RecoveryAdmissionPolicy(1, moduleHash, moduleHash, InstalledRecoveryAdmissionStore.ProfileHash(_root),
+            var policy = new RecoveryAdmissionPolicy(2, moduleHash, moduleHash, InstalledRecoveryAdmissionStore.ProfileHash(_root),
                 Selection.AccountStableId, Selection.ProjectStableId, "USD", 2, DateTimeOffset.UtcNow.AddHours(1), baseline, [], [prior]);
             byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(policy);
             File.WriteAllBytes(Path.Combine(_root, "install", "recovery-admission-policy.json"), bytes);

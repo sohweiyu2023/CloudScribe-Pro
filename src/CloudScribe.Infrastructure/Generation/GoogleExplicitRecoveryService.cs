@@ -33,6 +33,8 @@ public sealed partial class GoogleExplicitRecoveryService(
         RequireIntent(intent, budget, additionalMaximumMinorUnits);
         var previous = await LoadPreviousAsync(connection, transaction, intent, cancellationToken).ConfigureAwait(false);
         var association = await ResolveLogicalIdentityAsync(connection, transaction, intent, previous, cancellationToken).ConfigureAwait(false);
+        await RequireGrantCapacityAsync(connection, transaction, association, intent.Envelope.AccountId, intent.ProjectId,
+            additionalMaximumMinorUnits, creating: true, cancellationToken).ConfigureAwait(false);
         string logical = association.LogicalNarrationId;
         await RequireHeadAndBudgetAsync(connection, transaction, intent, budget, additionalMaximumMinorUnits, logical, cancellationToken).ConfigureAwait(false);
         string digest = Digest(new { intent, previous, budget, additionalMaximumMinorUnits, financial, association });
@@ -71,6 +73,8 @@ public sealed partial class GoogleExplicitRecoveryService(
             throw new InvalidOperationException("Financial or predecessor evidence changed; prepare a fresh review.");
         if (await ResolveLogicalIdentityAsync(connection, transaction, p.Intent, p.PreviousState, cancellationToken).ConfigureAwait(false) != p.AssociationProof)
             throw new InvalidOperationException("Independent predecessor association changed.");
+        await RequireGrantCapacityAsync(connection, transaction, p.AssociationProof, p.Intent.Envelope.AccountId, p.Intent.ProjectId,
+            p.AdditionalMaximumMinorUnits, creating: true, cancellationToken).ConfigureAwait(false);
         await RequireHeadAndBudgetAsync(connection, transaction, p.Intent, p.Budget, p.AdditionalMaximumMinorUnits, p.LogicalItemId, cancellationToken).ConfigureAwait(false);
         Guid authorizationId = Guid.NewGuid();
         string childKey = KeyPrefix + authorizationId.ToString("N");

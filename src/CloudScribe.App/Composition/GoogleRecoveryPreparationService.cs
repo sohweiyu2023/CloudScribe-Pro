@@ -55,7 +55,8 @@ public sealed partial class GoogleRecoveryPreparationService
     {
         if (maximum != existing.Approval.ReservedMinorUnits || existing.Budget is null)
             throw new InvalidOperationException("Resume requires review of the exact existing reserved maximum; it cannot reserve another amount.");
-        var proof = new GoogleRecoveryAssociationProof(root.LogicalNarrationId, root.HistoricalKey, root.HistoricalStateSha256, root.AdmissionSha256);
+        var proof = new GoogleRecoveryAssociationProof(root.LogicalNarrationId, root.HistoricalKey, root.HistoricalStateSha256, root.AdmissionSha256,
+            root.MaximumNewAttempts, root.MaximumAdditionalReservationMinorUnits);
         string digest = Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new
         {
             Kind = "resume-existing-reservation-v1",

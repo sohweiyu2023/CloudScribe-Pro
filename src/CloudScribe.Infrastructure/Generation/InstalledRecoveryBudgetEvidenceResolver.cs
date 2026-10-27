@@ -42,6 +42,16 @@ public sealed partial class InstalledRecoveryBudgetEvidenceResolver(InstalledRec
             if (reservation is null || !children.Add(reservation.Value.Child)) return null;
             additional = checked(additional + reservation.Value.Reserved);
         }
+        foreach (var grant in policy.Predecessors)
+        {
+            var retained = snapshot.Recovery.Where(x => Equals(x[7], grant.AdmissionSha256)).ToArray();
+            if (retained.Length > grant.MaximumNewAttempts || retained.Any(x => x.Length != 29
+                || !Equals(x[27], (long)grant.MaximumNewAttempts) || !Equals(x[28], grant.MaximumAdditionalReservationMinorUnits)
+                || x[22] is not long value || value < 0)) return null;
+            long total = 0;
+            foreach (var attempt in retained) total = checked(total + (long)attempt[22]!);
+            if (total > grant.MaximumAdditionalReservationMinorUnits) return null;
+        }
         var extraQueueIdentities = queueExtra.Select(x => RecoveryFinancialSnapshot.Identity(x, 3)).ToHashSet(StringComparer.Ordinal);
         if (!extraQueueIdentities.SetEquals(children.Select(child => RecoveryFinancialSnapshot.Hash(new object?[]
             { policy.AccountId, GoogleGenerationProvider.SynthesizeOperationStableId, child })))) return null;

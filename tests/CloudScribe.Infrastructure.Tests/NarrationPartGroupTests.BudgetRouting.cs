@@ -127,7 +127,7 @@ public sealed partial class NarrationPartGroupTests
         var baseline = new RecoveryBudgetBaseline(250, 1000, 10, 80, new string('a', 64),
             await RowPinsAsync(f, "google_generation_queue_states", 3).ConfigureAwait(false), await RowPinsAsync(f, "google_generation_spend_authorizations", 1).ConfigureAwait(false),
             await RowPinsAsync(f, "google_recovery_attempts", 1).ConfigureAwait(false));
-        var policy = new RecoveryAdmissionPolicy(1, moduleHash, moduleHash, InstalledRecoveryAdmissionStore.ProfileHash(f.Paths.RootDirectory),
+        var policy = new RecoveryAdmissionPolicy(2, moduleHash, moduleHash, InstalledRecoveryAdmissionStore.ProfileHash(f.Paths.RootDirectory),
             e.Intent.Envelope.AccountId, e.Intent.ProjectId, "USD", 2, DateTimeOffset.UtcNow.AddHours(1), baseline, [], [e.Association.Value!]);
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(policy);
         File.WriteAllBytes(Path.Combine(install, "recovery-admission-policy.json"), bytes);

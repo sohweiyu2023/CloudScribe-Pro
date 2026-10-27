@@ -9,7 +9,7 @@ public sealed partial class InstalledRecoveryBudgetEvidenceResolver
     private static (string Child, long Reserved)? ValidateAdditionalReservation(RecoveryAdmissionPolicy p, object?[] row,
         IReadOnlyList<RecoveryFinancialSnapshot.QueueState> queues)
     {
-        if (row.Length != 27 || row[0] is not string id || !Guid.TryParseExact(id, "N", out var authorizationId)
+        if (row.Length != 29 || row[0] is not string id || !Guid.TryParseExact(id, "N", out var authorizationId)
             || row[13] is not string child || !string.Equals(child, GoogleExplicitRecoveryService.KeyPrefix + id, StringComparison.Ordinal)
             || !Equals(row[8], p.AccountId) || !Equals(row[9], p.ProjectId)
             || !Equals(row[10], GoogleGenerationProvider.SynthesizeOperationStableId)
@@ -19,7 +19,8 @@ public sealed partial class InstalledRecoveryBudgetEvidenceResolver
         var anchors = p.Predecessors.Where(x => Equals(row[5], x.HistoricalKey) && Equals(row[6], x.HistoricalStateSha256)
             && Equals(row[7], x.AdmissionSha256) && Equals(row[1], x.LogicalNarrationId)
             && Equals(row[2], x.DocumentId.ToString("D")) && Equals(row[3], x.RevisionId.ToString("D"))
-            && Equals(row[4], x.TextSha256) && Equals(row[17], x.OriginalPayloadSha256)).ToArray();
+            && Equals(row[4], x.TextSha256) && Equals(row[17], x.OriginalPayloadSha256)
+            && Equals(row[27], (long)x.MaximumNewAttempts) && Equals(row[28], x.MaximumAdditionalReservationMinorUnits)).ToArray();
         if (anchors.Length != 1 || row[15] is not string json || json.Length > 16384) return null;
         GoogleGenerationSubmissionEnvelope? envelope;
         try { envelope = JsonSerializer.Deserialize<GoogleGenerationSubmissionEnvelope>(json, EnvelopeJson); }

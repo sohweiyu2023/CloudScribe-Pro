@@ -235,7 +235,7 @@ public sealed partial class NarrationPartGroupTests
         var intent = new GoogleRecoveryIntent(document.Id, document.CurrentRevisionId!.Value, "synthetic-project", initial.IdempotencyKey, envelope, "USD", 2, 3, payload);
         var predecessor = new GoogleRecoveryPredecessorEvidence("synthetic-logical-narration", initial.AccountId, initial.OperationStableId,
             initial.IdempotencyKey, Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(claim))), intent.ProjectId,
-            document.Id, document.CurrentRevisionId.Value, Hash(document.Text), envelope.CompiledPayloadSha256, new string('b', 64), DateTimeOffset.UtcNow.AddHours(1));
+            document.Id, document.CurrentRevisionId.Value, Hash(document.Text), envelope.CompiledPayloadSha256, new string('b', 64), DateTimeOffset.UtcNow.AddHours(1), 2, 6);
         return new(document, intent, claim, oldSpend, new(f), new() { Value = predecessor });
     }
 
