@@ -74,6 +74,8 @@ public static class CompositionRoot
         services.AddSingleton<LocalRequestStatusReader>();
         services.AddSingleton<GoogleTtsUsabilityHotfixBinder>();
         services.AddSingleton<GoogleGenerationAcceptedMp3OutputService>();
+        services.AddSingleton<INativeMediaTool, BoundedNativeMediaTool>();
+        services.AddSingleton<ArticleAudioExportService>();
     }
 
     private static void RegisterShell(IServiceCollection services)
@@ -187,5 +189,6 @@ public static class CompositionRoot
                 return persisted.Path;
             },
             output.PlayAsync);
+        viewModel.ConfigureArticleAudioRecording(serviceProvider.GetRequiredService<ArticleAudioExportService>().RecordAcceptedAsync);
     }
 }

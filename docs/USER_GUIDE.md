@@ -36,6 +36,8 @@ Official references: [Google Text-to-Speech setup](https://cloud.google.com/text
 
 ## Review pricing and create an MP3
 
+For an article prepared as local parts, **Library → Export complete article MP3** checks exact revision and accepted-output evidence before joining them into one new file. It requires every part and an existing FFmpeg installation; it never generates missing audio, overwrites an existing file or changes financial holds. Earlier session-only outputs need separate provenance review. See [continuous article export](ARTICLE_MP3_EXPORT.md).
+
 1. Choose **Create MP3** in the toolbar. Check the current document and remembered voice. Selecting a named setup restores its voice/language preference; **Refresh real Google voices** validates it using the saved connection. Choose an actual returned voice.
 2. The active pricing status is shown. If pricing is unavailable or needs review, expand **Review pricing source if pricing is unavailable**, compare the official rates with the included catalog, confirm the match yourself, and activate the observed source. Fetching a page does not verify its rates automatically.
 3. Choose **Review current text, voice and cost**. This compiles the exact current request and shows a conservative list estimate without generating audio.

@@ -26,7 +26,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     StudioPreferencesStore preferences,
     IProviderAccountStore accounts,
     AppPaths paths,
-    LocalRequestStatusReader requestStatus)
+    LocalRequestStatusReader requestStatus,
+    ArticleAudioExportService articleAudio,
+    CloudScribe.Application.Documents.INarrationPartGroupStore articleGroups)
 {
     private static readonly string[] ProviderControlHostNames =
     [
@@ -91,6 +93,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         if (mounted && window.FindControl<Button>("AboutButton") is { } about)
             about.Click += async (_, _) => await CloudScribeAbout.ShowAsync(window).ConfigureAwait(true);
         if (mounted) AnchoredWalkthrough.Prepare(window);
+        if (mounted) viewModel.ArticleExportRequested += (_, _) => _ = OpenArticleExportAsync(window, viewModel);
         if (mounted && preferences.IsFreshProfile && !preferences.State.QuickStartSeen)
         {
             if (window.IsVisible)

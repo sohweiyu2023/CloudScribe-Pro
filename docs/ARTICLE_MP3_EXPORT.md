@@ -1,0 +1,15 @@
+# One continuous MP3 per article
+
+In **Library**, choose **Export complete article MP3**, then select the original article. The dialog checks the saved part group and reports how many parts have exact accepted-output provenance. Export stays unavailable until every required part is present with compatible evidence. It never submits synthesis or changes spend approval, reservations or the queue.
+
+Choose an existing `ffmpeg.exe` installation with `ffprobe.exe` alongside it, then a **new** local MP3 filename. Existing files are refused even if the system picker offers an overwrite confirmation. CloudScribe snapshots the verified accepted inputs in their recorded article order, reuses its FFmpeg assembly backend, checks duration and fully decodes the result before publishing it. This produces one re-encoded continuous MP3, without an automatic one-hour split, inserted silence or per-part fades. Original MP3s remain unchanged. Closing the dialog cancels an active assembly. The temporary directory may remain if Windows prevents cleanup; it is never treated as a completed export.
+
+Export rejects missing, changed, duplicated, uncertain or incompatible evidence. All children must still match the recorded revisions and hashes, and their exact text must concatenate to the original revision. Accepted local outputs must retain their own audio hash, durable accepted queue outcome, real local-attempt identity, compiled-payload hash and matching plain-text revision. All parts must use the same actual requested voice and language. Audio integrity, compatible stream format and current document/queue evidence are rechecked before publication. The existing conservative financial guards are unchanged.
+
+Newly accepted plain-text Google MP3s receive a bounded local provenance receipt after their accepted bytes are safely saved. A receipt failure preserves the MP3 and financial hold; **do not regenerate audio to repair provenance**. Receipts contain local identifiers, hashes and paths, not document text, raw provider bodies or credentials. Diagnostic messages use typed operation/phase and exception identity only.
+
+## Earlier saved MP3s
+
+Older versions retained verified replay evidence only for their current process. A filename, a folder listing or a playable MP3 does not prove which accepted request produced it. Earlier files are preserved, but are not automatically enrolled as accepted article parts. Their original document/revision, exact request payload hash, durable accepted queue attempt and accepted audio hash must be reconciled through a separately reviewed local recovery before export. This feature must never manufacture missing acceptance evidence or repeat a paid request for presentation changes. Incomplete status is expected while an article is still being generated.
+
+The output verification is local decoding and duration checking. It does not claim that a human heard the entire narration or that the provider pronounced every word correctly. Startup instrumentation and article export do not resolve the historical crash or earlier startup-timeout cause.

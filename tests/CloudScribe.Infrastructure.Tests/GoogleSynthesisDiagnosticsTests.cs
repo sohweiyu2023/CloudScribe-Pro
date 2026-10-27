@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Tests;
 
-public sealed class GoogleSynthesisDiagnosticsTests
+public sealed partial class GoogleSynthesisDiagnosticsTests
 {
     [Theory]
     [InlineData("{\"error\":{\"status\":\"PERMISSION_DENIED\",\"message\":\"secret\",\"details\":[\"private\"]}}", GoogleErrorStatus.PermissionDenied)]

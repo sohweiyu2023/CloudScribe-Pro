@@ -14,6 +14,7 @@
           <TextBlock Text="LOCAL DOCUMENT LIBRARY" Foreground="{DynamicResource Brush.CyanBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
           <TextBlock Text="Documents stay on this device" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Title}" />
           <TextBlock Text="Open, search, import or create documents without provider credentials." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
+          <Button Content="Export complete article MP3" Command="{Binding RequestArticleExportCommand}" Classes="secondary" AutomationProperties.Name="Export complete article MP3" />
         </StackPanel>
         <Button Grid.Column="1" Classes="secondary" Content="Refresh" Command="{Binding RefreshDocumentLibraryCommand}" VerticalAlignment="Center" />
         <Button Grid.Column="2" Classes="secondary" Content="Import…" Command="{Binding ImportDocumentCommand}" VerticalAlignment="Center" AutomationProperties.Name="Import a local document" />
