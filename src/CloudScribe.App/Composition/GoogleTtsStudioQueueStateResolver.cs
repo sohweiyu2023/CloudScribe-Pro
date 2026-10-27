@@ -57,7 +57,7 @@ internal sealed class GoogleTtsStudioQueueStateResolver(
         }
 
         persisted.Validate();
-        if (persisted.UnresolvedSubmission)
+        if (persisted.UnresolvedSubmission || persisted.SubmissionAttempted || persisted.ProviderRequestId is not null)
         {
             throw new InvalidOperationException(
                 "This exact Google generation request has an unresolved prior submission. Reconcile the persisted provider request before preparing new spend approval.");

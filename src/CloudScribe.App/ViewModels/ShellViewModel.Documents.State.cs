@@ -19,8 +19,11 @@ public sealed partial class ShellViewModel
     private long _autosaveSequence;
     private int _documentWorkspaceStarted;
     private bool _suppressDocumentChangeTracking;
+    private INarrationPartGroupStore? _narrationPartGroups;
+    private int _libraryRefreshVersion;
 
     public ObservableCollection<DocumentSummary> LocalDocuments { get; } = [];
+    public ObservableCollection<LibraryArticleViewModel> LibraryArticles { get; } = [];
 
     [ObservableProperty]
     private bool _isDocumentDirty;
@@ -47,7 +50,8 @@ public sealed partial class ShellViewModel
 
     public void ConfigureStage3DocumentWorkflow(
         IDocumentLibrary documentLibrary,
-        DocumentAutosaveCoordinator documentAutosave)
+        DocumentAutosaveCoordinator documentAutosave,
+        INarrationPartGroupStore? narrationPartGroups = null)
     {
         ArgumentNullException.ThrowIfNull(documentLibrary);
         ArgumentNullException.ThrowIfNull(documentAutosave);
@@ -58,6 +62,7 @@ public sealed partial class ShellViewModel
 
         _documentLibrary = documentLibrary;
         _documentAutosave = documentAutosave;
+        _narrationPartGroups = narrationPartGroups;
         PropertyChanged += OnDocumentWorkspacePropertyChanged;
 
         RoutePageViewModel libraryPage = _pages[AppRoute.Library];
@@ -148,6 +153,16 @@ public sealed partial class ShellViewModel
         try
         {
             await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
+            if (_studioPreferences?.State.LastDocumentId is Guid lastId)
+            {
+                // A remembered technical part may be outside the bounded root list.
+                var remembered = await _documentLibrary!.OpenAsync(lastId).ConfigureAwait(true);
+                if (remembered is not null)
+                {
+                    ApplyDocumentSnapshot(remembered, "Opened remembered local document");
+                    return;
+                }
+            }
             DocumentSummary? first = LocalDocuments.FirstOrDefault(d => d.Id == _studioPreferences?.State.LastDocumentId)
                 ?? LocalDocuments.FirstOrDefault();
             if (first is null)
@@ -184,21 +199,32 @@ public sealed partial class ShellViewModel
     private async Task RefreshDocumentLibraryCoreAsync()
     {
         EnsureDocumentWorkflowConfigured();
+        int refreshVersion = Interlocked.Increment(ref _libraryRefreshVersion);
+        string query = LibrarySearchQuery;
         IReadOnlyList<DocumentSummary> documents = string.IsNullOrWhiteSpace(LibrarySearchQuery)
             ? await _documentLibrary!.ListAsync(limit: 200).ConfigureAwait(true)
             : await _documentLibrary!.SearchAsync(LibrarySearchQuery.Trim(), limit: 200).ConfigureAwait(true);
 
+        IReadOnlyList<NarrationLibraryArticle> articles = _narrationPartGroups is null
+            ? documents.Select(document => new NarrationLibraryArticle(document, [], false)).ToArray()
+            : await _narrationPartGroups.QueryLibraryAsync(query).ConfigureAwait(true);
+        if (refreshVersion != Volatile.Read(ref _libraryRefreshVersion)) return;
         LocalDocuments.Clear();
         foreach (DocumentSummary document in documents)
         {
             LocalDocuments.Add(document);
         }
 
+        LibraryArticles.Clear();
+        foreach (var article in articles)
+            LibraryArticles.Add(new LibraryArticleViewModel(article, OpenDocumentCommand, !string.IsNullOrWhiteSpace(query)));
         RoutePageViewModel page = _pages[AppRoute.Library];
         page.StateKind = documents.Count == 0 ? "EMPTY" : "LOCAL";
         page.StateTitle = documents.Count == 0
             ? "No local documents"
             : $"{documents.Count:N0} local document{(documents.Count == 1 ? string.Empty : "s")}";
+        if (_narrationPartGroups is not null)
+            page.StateTitle = $"{articles.Count:N0} articles · {articles.Sum(article => article.Parts.Count):N0} technical parts (up to 200 articles)";
         page.Detail = documents.Count == 0
             ? "Create a document to begin. Network access is not required."
             : string.Join(" · ", documents.Take(4).Select(document => document.Title));

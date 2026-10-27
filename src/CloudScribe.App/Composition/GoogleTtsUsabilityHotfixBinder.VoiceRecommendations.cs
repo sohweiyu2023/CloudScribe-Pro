@@ -32,7 +32,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 use.IsEnabled = recommendation is not null && price?.IsUsable(DateTimeOffset.UtcNow) == true;
                 details.Text = recommendation is null
                     ? "Set an exact language (for example en-US or cmn-CN), then load verified voices. No compatible recommendation is available for this policy; use the manual voice list."
-                    : "Language match: " + model.VoiceLabLocaleFilter + ". Suggested: " + recommendation.VoiceStableId
+                    : "Language match: " + LanguageDisplayNames.WithCode(model.VoiceLabLocaleFilter!) + ". Suggested: " + recommendation.VoiceStableId
                         + " (" + GoogleVoiceComparisonInformation.Family(recommendation.VoiceStableId) + "). "
                         + (price?.Describe(DateTimeOffset.UtcNow) ?? "Reference price unavailable; no price is guessed.")
                         + (hd ? " Premium alternative: plain text and default controls only; no SSML, pitch or volume adjustments are offered."

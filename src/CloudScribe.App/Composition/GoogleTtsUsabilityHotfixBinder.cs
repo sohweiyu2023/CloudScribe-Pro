@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Platform.Storage;
 using CloudScribe.App.Diagnostics;
 using CloudScribe.App.ViewModels;
@@ -275,7 +276,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             locale.IsEnabled = !loading;
             search.IsEnabled = !loading;
             status.Text = viewModel.ConnectedVoiceCatalogStatus;
-            applied.Text = "Applied language: " + (string.IsNullOrWhiteSpace(viewModel.VoiceLabLocaleFilter) ? "all languages" : viewModel.VoiceLabLocaleFilter) +
+            applied.Text = "Applied language: " + (string.IsNullOrWhiteSpace(viewModel.VoiceLabLocaleFilter) ? "all languages" : LanguageDisplayNames.WithCode(viewModel.VoiceLabLocaleFilter)) +
                 ". Search: " + (string.IsNullOrWhiteSpace(viewModel.VoiceLabSearchText) ? "none" : viewModel.VoiceLabSearchText) + ". Change filters above, then refresh to apply them.";
         }
         refresh.Click += async (_, _) => await RefreshAsync().ConfigureAwait(true);
@@ -303,6 +304,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     {
         AddVoiceRecommendations(host, viewModel, lifetime);
         ComboBox voices = new() { PlaceholderText = "Select a verified Google voice" };
+        voices.ItemTemplate = new FuncDataTemplate<string>((label, _) => NewDescription(label ?? string.Empty));
         AddField(host, "Voice", voices);
         AutomationProperties.SetName(voices, "Verified Google voice");
         TextBlock selected = NewDescription(string.Empty);
@@ -315,12 +317,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             try
             {
                 snapshot = viewModel.VoiceLabCatalogResults.ToArray();
-                voices.ItemsSource = snapshot.Select(item => item.VoiceStableId).ToArray();
+                voices.ItemsSource = snapshot.Select(item => LanguageDisplayNames.Names(item.LanguageCodes) + "\n" +
+                    item.VoiceStableId + (item.LanguageCodes is { Count: > 0 } codes
+                        ? " · " + string.Join(", ", codes) : string.Empty)).ToArray();
                 int index = Array.FindIndex(snapshot, item => SameVoice(item, viewModel.SelectedVoiceLabVoice));
                 voices.SelectedIndex = index;
                 voices.IsEnabled = snapshot.Length > 0 && !viewModel.IsConnectedVoiceCatalogLoading;
                 selected.Text = viewModel.SelectedVoiceLabVoice is { } choice
-                    ? "Selected verified voice: " + choice.VoiceStableId
+                    ? "Selected verified voice: " + LanguageDisplayNames.WithCodes(choice.LanguageCodes) + "\n" + choice.VoiceStableId
                     : "No verified voice selected. Load the list above, then choose a voice. Remembered names alone do not approve a request.";
             }
             finally

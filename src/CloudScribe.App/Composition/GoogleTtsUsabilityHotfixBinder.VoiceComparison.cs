@@ -131,7 +131,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             string language = (row?.Selection?.LanguageCodes is { Count: > 0 } languages ? languages[0] : null)
                 ?? (row?.Name is { Length: >= 5 } name ? name[..5] : "not available");
             string gender = row?.Selection?.SsmlGender ?? "not returned — no inference from voice letters";
-            details.Text = row is null ? "Choose a voice." : row.Name + "\n" + GoogleVoiceComparisonInformation.LocaleLabel(language) +
+            details.Text = row is null ? "Choose a voice." : row.Name + "\n" + LanguageDisplayNames.WithCode(language) +
                 " · Provider gender label: " + gender + "\n" + GoogleVoiceComparisonInformation.Description(row.Name) + "\n" +
                 (row.Selection is null ? "Reference only: not currently loaded from the connected catalog." :
                  GoogleVoiceComparisonInformation.SupportsSampleFamily(row.Name) ? "Connected catalog entry; generation still requires current independent checks." :

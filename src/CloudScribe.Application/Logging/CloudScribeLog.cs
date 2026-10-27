@@ -1,10 +1,23 @@
 using CloudScribe.Application.Activation;
+using CloudScribe.Application.Generation;
+using CloudScribe.Domain.Generation;
 using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Application.Logging;
 
 public static partial class CloudScribeLog
 {
+    [LoggerMessage(EventId = 1603, Level = LogLevel.Information, Message = "Google synthesis {Correlation}: payload {PayloadSha256}, stage {Stage}, HTTP {HttpStatus}, error status {ErrorStatus}. No credentials or response contents are retained.")]
+    public static partial void GoogleSynthesisTransportStage(ILogger logger, string correlation, string payloadSha256, GoogleSynthesisStage stage, int httpStatus, GoogleErrorStatus errorStatus);
+    [LoggerMessage(EventId = 1600, Level = LogLevel.Information, Message = "Google request reached execution: payload SHA256 {PayloadSha256}, compiled bytes {PayloadBytes}. No request contents are logged.")]
+    public static partial void GoogleGenerationRequestContext(ILogger logger, string payloadSha256, int payloadBytes);
+
+    [LoggerMessage(EventId = 1601, Level = LogLevel.Information, Message = "Google outcome {DiagnosticCode}; reconciliation required {RequiresReconciliation}; accepted {Accepted}, error status {ErrorStatus}. Reservation settlement is not implied.")]
+    public static partial void GoogleGenerationOutcome(ILogger logger, string diagnosticCode, bool requiresReconciliation, bool accepted, GoogleErrorStatus errorStatus);
+
+    [LoggerMessage(EventId = 1602, Level = LogLevel.Warning, Message = "Google request stopped: {SafeCategory}. Inspect durable queue state; do not infer no charge or retry permission.")]
+    public static partial void GoogleGenerationStopped(ILogger logger, string safeCategory);
+
     [LoggerMessage(EventId = 1000, Level = LogLevel.Information, Message = "CloudScribe Pro is starting in {Mode} mode.")]
     public static partial void ApplicationStarting(ILogger logger, string mode);
 

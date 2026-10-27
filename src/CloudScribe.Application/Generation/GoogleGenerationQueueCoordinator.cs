@@ -13,13 +13,21 @@ public sealed class GoogleGenerationQueueCoordinator
         _submit = submit ?? throw new ArgumentNullException(nameof(submit));
     }
 
-    public async Task<GoogleGenerationQueueOutcome> ProcessAsync(
+    public Task<GoogleGenerationQueueOutcome> ProcessAsync(
+        GenerationProviderRequest request, bool admissionCurrent, bool accountCredentialAvailable,
+        bool pricingApproved, bool postCompileLimitsSatisfied, bool unresolvedPriorSubmission,
+        CancellationToken cancellationToken = default) =>
+        ProcessClaimedAsync(request, admissionCurrent, accountCredentialAvailable, pricingApproved,
+            postCompileLimitsSatisfied, unresolvedPriorSubmission, null, cancellationToken);
+
+    public async Task<GoogleGenerationQueueOutcome> ProcessClaimedAsync(
         GenerationProviderRequest request,
         bool admissionCurrent,
         bool accountCredentialAvailable,
         bool pricingApproved,
         bool postCompileLimitsSatisfied,
         bool unresolvedPriorSubmission,
+        Func<CancellationToken, Task>? beforeSubmit,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -40,6 +48,9 @@ public sealed class GoogleGenerationQueueCoordinator
             return new(decision, null);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+        if (beforeSubmit is not null)
+            await beforeSubmit(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var response = await _submit(request, decision, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Google submit delegate returned no response.");

@@ -104,7 +104,8 @@ public static class CompositionRoot
     {
         viewModel.ConfigureStage3DocumentWorkflow(
             serviceProvider.GetRequiredService<IDocumentLibrary>(),
-            serviceProvider.GetRequiredService<DocumentAutosaveCoordinator>());
+            serviceProvider.GetRequiredService<DocumentAutosaveCoordinator>(),
+            serviceProvider.GetRequiredService<INarrationPartGroupStore>());
         viewModel.ConfigureStage3ImportWorkflow(
             serviceProvider.GetRequiredService<ILocalDocumentImporter>(),
             serviceProvider.GetRequiredService<DocumentPreprocessor>());

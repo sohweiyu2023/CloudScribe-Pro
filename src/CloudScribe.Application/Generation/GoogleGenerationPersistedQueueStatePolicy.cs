@@ -26,5 +26,7 @@ public static class GoogleGenerationPersistedQueueStatePolicy
 
         if (persisted.UnresolvedSubmission)
             throw new InvalidOperationException("Persisted Google submission is unresolved; duplicate billable submission is forbidden until reconciliation completes.");
+        if (persisted.SubmissionAttempted || persisted.ProviderRequestId is not null)
+            throw new InvalidOperationException("This exact Google request was previously attempted or accepted. Replaying it is forbidden; retain its reservation and inspect existing receipts.");
     }
 }

@@ -8,7 +8,8 @@ public sealed record GenerationProviderResponse(
     ReadOnlyMemory<byte> MediaBytes,
     string? MediaContentType,
     TimeSpan? RetryAfter,
-    string DiagnosticCode)
+    string DiagnosticCode,
+    GoogleErrorStatus ErrorStatus = GoogleErrorStatus.NotProvided)
 {
     public bool IsAccepted => Disposition == SubmissionDisposition.Accepted;
 }

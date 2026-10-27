@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Providers.Abstractions;
 
@@ -104,11 +105,11 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         {
             parsed = GoogleGenerationResponseParser.Parse(response.Body, _maximumAudioBytes);
         }
-        catch (InvalidDataException)
+        catch (Exception error) when (error is InvalidDataException or JsonException)
         {
             return new GenerationProviderResponse(
                 SubmissionDisposition.Accepted,
-                "google-response-unusable",
+                null,
                 ReadOnlyMemory<byte>.Empty,
                 null,
                 null,
@@ -117,7 +118,7 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
 
         return new GenerationProviderResponse(
             SubmissionDisposition.Accepted,
-            parsed.ProviderOperationId ?? "google-sync-response",
+            parsed.ProviderOperationId,
             parsed.AudioBytes,
             ContentTypeFor(outputFormat),
             null,
@@ -127,8 +128,8 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
     private static GenerationProviderResponse CreateRejectedResponse(GoogleHttpTransportResponse response)
     {
         var classification = GoogleProviderResponsePolicy.Classify((int)response.StatusCode, response.RetryAfter, false);
-        var disposition = classification.Disposition is GoogleRetryDisposition.RetryAfter or GoogleRetryDisposition.Backoff
-            ? SubmissionDisposition.RejectedSafeToRetry
+        var disposition = classification.Disposition == GoogleRetryDisposition.ReconcileBeforeRetry
+            ? SubmissionDisposition.UnknownRequiresReconciliation
             : SubmissionDisposition.NotSubmitted;
 
         return new GenerationProviderResponse(
@@ -137,7 +138,7 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
             ReadOnlyMemory<byte>.Empty,
             null,
             response.RetryAfter,
-            $"google-http-{(int)response.StatusCode}");
+            $"google-http-{(int)response.StatusCode}", response.ErrorStatus);
     }
 
     private static GenerationProviderResponse Unknown(string diagnosticCode) => new(

@@ -78,6 +78,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<LegacyDatabaseMigrationBridge>();
         services.AddSingleton<DocumentContentStore>();
         services.AddSingleton<IDocumentLibrary, EfDocumentLibrary>();
+        services.AddSingleton<INarrationPartGroupStore, EfNarrationPartGroupStore>();
         services.AddTransient<DocumentAutosaveCoordinator>();
         services.AddSingleton<ILocalDocumentImporter, BoundedLocalDocumentImporter>();
         services.AddSingleton<DocumentPreprocessor>();
