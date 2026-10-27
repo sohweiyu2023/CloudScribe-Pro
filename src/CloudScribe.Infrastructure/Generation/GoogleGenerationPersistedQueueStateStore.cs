@@ -85,6 +85,8 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
     public async Task<bool> TryClaimSubmissionAsync(GoogleGenerationPersistedQueueState claim, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
+        if (claim.IdempotencyKey.StartsWith(GoogleExplicitRecoveryService.KeyPrefix, StringComparison.Ordinal))
+            throw new InvalidOperationException("An additional attempt requires its dedicated full-identity recovery approval claim.");
         claim.Validate();
         if (!claim.SubmissionAttempted || !claim.UnresolvedSubmission || claim.ProviderRequestId is not null
             || claim.LocalAttemptId is null || !string.Equals(claim.DiagnosticCode, "google-dispatch-claimed", StringComparison.Ordinal)

@@ -71,6 +71,13 @@ public sealed record GoogleGenerationProductionRuntimeRequest(
     {
         if (Snapshot.ProviderRequest is null)
             throw new InvalidOperationException("Google runtime request requires a bound provider request.");
+        if (SubmissionEnvelope.RecoveryAuthorizationId is { } recoveryId)
+        {
+            if (!string.Equals(Snapshot.ProviderRequest.IdempotencyKey, GoogleExplicitRecoveryService.KeyPrefix + recoveryId.ToString("N"), StringComparison.Ordinal))
+                throw new InvalidOperationException("Recovery runtime request differs from its exact durable child identity.");
+        }
+        else if (Snapshot.ProviderRequest.IdempotencyKey.StartsWith(GoogleExplicitRecoveryService.KeyPrefix, StringComparison.Ordinal))
+            throw new InvalidOperationException("Recovery child identity cannot use ordinary spend approval.");
         if (!string.Equals(AccountId, Snapshot.ProviderRequest.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("Google runtime request account differs from the bound provider request.");
         if (!string.Equals(GoogleGenerationProvider.StableProviderId, Snapshot.ProviderRequest.ProviderStableId, StringComparison.Ordinal))

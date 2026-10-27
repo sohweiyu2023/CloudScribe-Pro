@@ -29,6 +29,15 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
         GoogleGenerationProductionCompileEvidence evidence,
         CancellationToken cancellationToken = default)
     {
+        var pending = await CompileForReviewAsync(evidence, cancellationToken).ConfigureAwait(false);
+        return _pendingApprovalPublisher.Publish(evidence.Account, evidence.Capabilities, evidence.PricingProvenanceId,
+            evidence.RequestRevision, pending.Snapshot, evidence.Currency, evidence.Scale, evidence.CurrentEstimateMinorUnits, evidence.NowUtc);
+    }
+
+    /// <summary>Read-only compile validation. Does not publish ordinary pending approval or initialize a queue identity.</summary>
+    public async Task<GoogleGenerationProductionPendingApprovalStateOwner.PendingState> CompileForReviewAsync(
+        GoogleGenerationProductionCompileEvidence evidence, CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(evidence);
         ValidateInputs(evidence);
         cancellationToken.ThrowIfCancellationRequested();
@@ -54,16 +63,10 @@ public sealed class GoogleGenerationProductionCompileAndPrepareService
         GenerationProviderRequest providerRequest = BuildProviderRequest(evidence, compilation);
         GoogleGenerationUiExecutionSnapshot snapshot = BuildPendingApprovalSnapshot(evidence, providerRequest);
 
-        return _pendingApprovalPublisher.Publish(
-            evidence.Account,
-            evidence.Capabilities,
-            evidence.PricingProvenanceId,
-            evidence.RequestRevision,
-            snapshot,
-            evidence.Currency,
-            evidence.Scale,
-            evidence.CurrentEstimateMinorUnits,
-            evidence.NowUtc);
+        return new GoogleGenerationProductionPendingApprovalStateOwner.PendingState(
+            GoogleGenerationSubmissionEnvelope.Create(evidence.Account, evidence.Capabilities, evidence.PricingProvenanceId,
+                evidence.RequestRevision, evidence.CompilationOptions.VoiceName, evidence.CompilationOptions.AudioEncoding,
+                providerRequest.CompiledPayload.Span, evidence.NowUtc), snapshot, evidence.Currency, evidence.Scale, evidence.CurrentEstimateMinorUnits).Validate();
     }
 
     private static void ValidateCurrentPersistedEvidence(

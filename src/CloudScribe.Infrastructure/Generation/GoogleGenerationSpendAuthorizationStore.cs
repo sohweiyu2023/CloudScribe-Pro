@@ -6,13 +6,15 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed class GoogleGenerationSpendAuthorizationStore(
     IDbContextFactory<CloudScribeDbContext> contextFactory,
-    TimeProvider timeProvider) : IGoogleGenerationSpendAuthorizationStore
+    TimeProvider timeProvider, GoogleExplicitRecoveryService? recovery = null) : IGoogleGenerationSpendAuthorizationStore
 {
     public async Task SaveApprovedAsync(
         GoogleGenerationSpendAuthorization authorization,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(authorization);
+        if (authorization.Envelope.RecoveryAuthorizationId is not null)
+            throw new InvalidOperationException("Recovery authorization must be appended by its dedicated reviewed transaction, never saved as generic spend.");
 
         CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (context.ConfigureAwait(false))
@@ -64,6 +66,8 @@ public sealed class GoogleGenerationSpendAuthorizationStore(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);
+        if (envelope.RecoveryAuthorizationId is not null)
+            return recovery is null ? null : (await recovery.LoadExecutionAuthorizationAsync(envelope, cancellationToken).ConfigureAwait(false))?.SpendAuthorization;
 
         CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (context.ConfigureAwait(false))

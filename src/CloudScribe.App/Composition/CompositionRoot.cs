@@ -3,6 +3,7 @@ using CloudScribe.Application.Documents;
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Providers;
+using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.DependencyInjection;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Safety;
@@ -75,6 +76,17 @@ public static class CompositionRoot
         services.AddSingleton<GoogleTtsUsabilityHotfixBinder>();
         services.AddSingleton<GoogleGenerationAcceptedMp3OutputService>();
         services.AddSingleton<INativeMediaTool, BoundedNativeMediaTool>();
+        services.AddSingleton(serviceProvider => new InstalledRecoveryAdmissionStore(AppContext.BaseDirectory,
+            serviceProvider.GetRequiredService<AppPaths>(), serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<IReviewedHistoricalAudioAnchorStore>(serviceProvider => serviceProvider.GetRequiredService<InstalledRecoveryAdmissionStore>());
+        services.AddSingleton<IGoogleRecoveryPredecessorEvidenceResolver>(serviceProvider => serviceProvider.GetRequiredService<InstalledRecoveryAdmissionStore>());
+        services.AddSingleton<IGoogleRecoveryBudgetEvidenceResolver, InstalledRecoveryBudgetEvidenceResolver>();
+        services.AddSingleton<GoogleExplicitRecoveryService>();
+        services.AddSingleton<IGoogleRecoveryCurrentCompilation>(serviceProvider => new GoogleRecoveryCurrentCompilation(
+            serviceProvider.GetRequiredService<GoogleTtsStudioPreflightEvidenceResolver>(), serviceProvider.GetRequiredService<GoogleTtsStudioRequestIntentFactory>(),
+            serviceProvider.GetRequiredService<GoogleTtsStudioTrustContextFactory>(), serviceProvider.GetRequiredService<GoogleGenerationProductionCompileAndPrepareService>(),
+            serviceProvider.GetRequiredService<CloudScribe.Infrastructure.Pricing.V222ControlSet>(), serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<GoogleRecoveryPreparationService>();
         services.AddSingleton<ArticleAudioExportService>();
     }
 
@@ -128,6 +140,8 @@ public static class CompositionRoot
             serviceProvider.GetRequiredService<GoogleGenerationProductionRuntimeRequestSource>().ResolveAsync);
         ConfigureGooglePreparationAndSpend(viewModel, serviceProvider);
         ConfigureGoogleOutput(viewModel, serviceProvider);
+        var recovery = serviceProvider.GetRequiredService<GoogleRecoveryPreparationService>();
+        viewModel.ConfigureGoogleRecovery(recovery.PrepareAsync, recovery.ApproveAsync);
         serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
         serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);
         Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(

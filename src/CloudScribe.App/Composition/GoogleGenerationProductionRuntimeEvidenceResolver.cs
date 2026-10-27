@@ -18,6 +18,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
     private readonly IPricingCatalogHistoryStore _pricingCatalogHistoryStore;
     private readonly GoogleGenerationProductionTransportFactory _transportFactory;
     private readonly TimeProvider _timeProvider;
+    private readonly IGoogleGenerationProjectAuthorizationStore? _projectAuthorizations;
 
     public GoogleGenerationProductionRuntimeEvidenceResolver(
         GoogleGenerationProductionEvidenceResolver productionEvidenceResolver,
@@ -25,7 +26,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
         GoogleGenerationCurrentSpendAuthorizationResolver spendAuthorizationResolver,
         IPricingCatalogHistoryStore pricingCatalogHistoryStore,
         GoogleGenerationProductionTransportFactory transportFactory,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider, IGoogleGenerationProjectAuthorizationStore? projectAuthorizations = null)
     {
         _productionEvidenceResolver = productionEvidenceResolver ?? throw new ArgumentNullException(nameof(productionEvidenceResolver));
         _accountFactory = accountFactory ?? throw new ArgumentNullException(nameof(accountFactory));
@@ -33,6 +34,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
         _pricingCatalogHistoryStore = pricingCatalogHistoryStore ?? throw new ArgumentNullException(nameof(pricingCatalogHistoryStore));
         _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _projectAuthorizations = projectAuthorizations;
     }
 
     public async Task<GoogleGenerationAuthorizedRuntimeEvidence> ResolveAsync(
@@ -48,7 +50,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
             .ConfigureAwait(false);
         DateTimeOffset nowUtc = _timeProvider.GetUtcNow();
         current.Validate(nowUtc);
-        await ValidatePricingCurrentAsync(request.PricingProvenanceId, cancellationToken).ConfigureAwait(false);
+        await ValidateCurrentRuntimeAuthoritiesAsync(request, nowUtc, cancellationToken).ConfigureAwait(false);
 
         GoogleGenerationAccount account = await _accountFactory
             .CreateSubmissionAccountAsync(current, cancellationToken)
@@ -98,6 +100,29 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
             request.Scale,
             request.CurrentEstimateMinorUnits,
             request.Snapshot);
+    }
+
+    private async Task ValidateCurrentRuntimeAuthoritiesAsync(GoogleGenerationProductionRuntimeRequest request,
+        DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        await ValidatePricingCurrentAsync(request.PricingProvenanceId, cancellationToken).ConfigureAwait(false);
+        if (request.SubmissionEnvelope.RecoveryAuthorizationId is not null)
+            await ValidateRecoveryProjectCurrentAsync(request, nowUtc, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ValidateRecoveryProjectCurrentAsync(GoogleGenerationProductionRuntimeRequest request,
+        DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        var store = _projectAuthorizations ?? throw new InvalidOperationException("Current recovery project authority is unavailable.");
+        var authorization = await store.LoadCurrentAsync(request.AccountId, request.Snapshot.UiSelection.ProjectId,
+            request.SubmissionEnvelope.VoiceName, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Current recovery project authority is missing.");
+        authorization.Validate(nowUtc);
+        if (!authorization.IsCurrent(nowUtc) || !string.Equals(authorization.AccountId, request.AccountId, StringComparison.Ordinal)
+            || !string.Equals(authorization.ProjectId, request.Snapshot.UiSelection.ProjectId, StringComparison.Ordinal)
+            || !string.Equals(authorization.ModelId, request.Snapshot.UiSelection.ModelId, StringComparison.Ordinal)
+            || !string.Equals(authorization.CapabilityProvenanceId, request.SubmissionEnvelope.CapabilityProvenanceId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Recovery project/model/capability authorization changed before execution.");
     }
 
     private async Task ValidatePricingCurrentAsync(

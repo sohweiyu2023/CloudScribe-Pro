@@ -13,6 +13,18 @@ public sealed class GoogleGenerationProductionCompileAndPrepareServiceTests
     private static readonly Uri Endpoint = new("https://texttospeech.googleapis.com/", UriKind.Absolute);
 
     [Fact]
+    public async Task ReadonlyRecoveryCompileDoesNotPublishOrdinaryPendingApproval()
+    {
+        var owner = new GoogleGenerationProductionPendingApprovalStateOwner();
+        var service = CreateService(owner, CreatePersistedAccount("credential-current"), "capability-1");
+        var pending = await service.CompileForReviewAsync(CreateEvidence("credential-current", "capability-1"), TestContext.Current.CancellationToken);
+        Assert.NotEmpty(pending.Snapshot.ProviderRequest.CompiledPayload.ToArray());
+        Assert.False(pending.Snapshot.PricingApproved);
+        Assert.Null(pending.Envelope.RecoveryAuthorizationId);
+        Assert.Null(await owner.ResolveCurrentAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task CompileAndPrepareAsyncRejectsDisabledPersistedAccountBeforePublishing()
     {
         ProviderAccountSnapshot persisted = CreatePersistedAccount("credential-current", isEnabled: false);
