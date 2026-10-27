@@ -33,13 +33,13 @@ public sealed partial class NarrationPartGroupTests
         using (var context = f.CreateDbContext())
             await context.Database.ExecuteSqlRawAsync("CREATE TRIGGER synthetic_claim_failure BEFORE UPDATE ON google_generation_queue_states WHEN NEW.IdempotencyKey LIKE 'recovery-google-tts:%' BEGIN SELECT RAISE(ABORT,'synthetic-claim-interruption'); END;", TestContext.Current.CancellationToken);
         var claim = ClaimRecovery(e, approved);
-        await Assert.ThrowsAsync<SqliteException>(() => service.TryClaimAsync(approved, claim, e.Intent.Envelope, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<SqliteException>(() => service.TryClaimAsync(approved, claim, e.Intent.Envelope with { RecoveryAuthorizationId = approved.AuthorizationId }, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
         using (var context = f.CreateDbContext())
         {
             Assert.Equal(0, await context.Database.SqlQueryRaw<long>("SELECT Consumed AS Value FROM google_recovery_attempts").SingleAsync(TestContext.Current.CancellationToken));
             await context.Database.ExecuteSqlRawAsync("DROP TRIGGER synthetic_claim_failure;", TestContext.Current.CancellationToken);
         }
-        Assert.True(await service.TryClaimAsync(approved, claim, e.Intent.Envelope, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
+        Assert.True(await service.TryClaimAsync(approved, claim, e.Intent.Envelope with { RecoveryAuthorizationId = approved.AuthorizationId }, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
         Assert.Equal(e.Previous, await new GoogleGenerationPersistedQueueStateStore(f).LoadAsync(e.Previous.AccountId, e.Previous.OperationStableId, e.Previous.IdempotencyKey, TestContext.Current.CancellationToken));
     }
     [Fact]
@@ -71,10 +71,10 @@ public sealed partial class NarrationPartGroupTests
         Assert.Equal(e.Previous, await store.LoadAsync(e.Previous.AccountId, e.Previous.OperationStableId, e.Previous.IdempotencyKey, TestContext.Current.CancellationToken));
         var claim = ClaimRecovery(e, approval);
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.TryClaimSubmissionAsync(claim, TestContext.Current.CancellationToken));
-        bool[] claims = await Task.WhenAll(service.TryClaimAsync(approval, claim, e.Intent.Envelope, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken),
-            restarted.TryClaimAsync(approval, claim with { LocalAttemptId = Guid.NewGuid().ToString("N") }, e.Intent.Envelope, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
+        bool[] claims = await Task.WhenAll(service.TryClaimAsync(approval, claim, e.Intent.Envelope with { RecoveryAuthorizationId = approval.AuthorizationId }, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken),
+            restarted.TryClaimAsync(approval, claim with { LocalAttemptId = Guid.NewGuid().ToString("N") }, e.Intent.Envelope with { RecoveryAuthorizationId = approval.AuthorizationId }, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
         Assert.Single(claims, x => x);
-        Assert.False(await restarted.TryClaimAsync(approval, claim, e.Intent.Envelope, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
+        Assert.False(await restarted.TryClaimAsync(approval, claim, e.Intent.Envelope with { RecoveryAuthorizationId = approval.AuthorizationId }, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
         Assert.Equal(e.Previous, await store.LoadAsync(e.Previous.AccountId, e.Previous.OperationStableId, e.Previous.IdempotencyKey, TestContext.Current.CancellationToken));
         Assert.Equal(e.OldSpend, await new GoogleGenerationSpendAuthorizationStore(f, TimeProvider.System).LoadApprovedAsync(e.Intent.Envelope, TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApproveAsync(Confirmation(preview), TestContext.Current.CancellationToken));
@@ -91,7 +91,11 @@ public sealed partial class NarrationPartGroupTests
         var service = new GoogleExplicitRecoveryService(f, TimeProvider.System, e.Budget, e.Association);
         var p = await service.PrepareAsync(e.Intent, 3, TestContext.Current.CancellationToken);
         var approved = await service.ApproveAsync(Confirmation(p), TestContext.Current.CancellationToken);
-        var envelope = string.Equals(drift, "envelope", StringComparison.Ordinal) ? e.Intent.Envelope with { CapabilityProvenanceId = "changed-capability" } : e.Intent.Envelope;
+        var envelope = e.Intent.Envelope with
+        {
+            RecoveryAuthorizationId = approved.AuthorizationId,
+            CapabilityProvenanceId = string.Equals(drift, "envelope", StringComparison.Ordinal) ? "changed-capability" : e.Intent.Envelope.CapabilityProvenanceId
+        };
         if (string.Equals(drift, "document", StringComparison.Ordinal))
             await f.Library.SaveAsync(new DocumentSaveRequest(e.Document.Id, e.Document.Title, e.Document.Text + "edited", e.Document.ConcurrencyVersion, DocumentRevisionKind.Checkpoint), TestContext.Current.CancellationToken);
         if (string.Equals(drift, "project", StringComparison.Ordinal))
@@ -128,7 +132,7 @@ public sealed partial class NarrationPartGroupTests
         var approved = await service.ApproveAsync(Confirmation(p), TestContext.Current.CancellationToken);
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.PrepareAsync(e.Intent, 3, TestContext.Current.CancellationToken));
         var claim = ClaimRecovery(e, approved);
-        Assert.True(await service.TryClaimAsync(approved, claim, e.Intent.Envelope, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
+        Assert.True(await service.TryClaimAsync(approved, claim, e.Intent.Envelope with { RecoveryAuthorizationId = approved.AuthorizationId }, e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
         // Simulate restart after dispatch with no outcome: old and child uncertainty remain durable.
         var restarted = new GoogleExplicitRecoveryService(f, TimeProvider.System, e.Budget, e.Association);
         var next = e.Intent with { PreviousIdempotencyKey = approved.IdempotencyKey };
@@ -179,7 +183,7 @@ public sealed partial class NarrationPartGroupTests
         p = await service.PrepareAsync(e.Intent, 3, TestContext.Current.CancellationToken);
         var a = await service.ApproveAsync(Confirmation(p), TestContext.Current.CancellationToken);
         e.Association.Value = null;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.TryClaimAsync(a, ClaimRecovery(e, a), e.Intent.Envelope,
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.TryClaimAsync(a, ClaimRecovery(e, a), e.Intent.Envelope with { RecoveryAuthorizationId = a.AuthorizationId },
             e.Intent.ProjectId, "USD", 2, 3, TestContext.Current.CancellationToken));
         var child = await new GoogleGenerationPersistedQueueStateStore(f).LoadAsync(e.Previous.AccountId, e.Previous.OperationStableId, a.IdempotencyKey, TestContext.Current.CancellationToken);
         Assert.False(child!.SubmissionAttempted);

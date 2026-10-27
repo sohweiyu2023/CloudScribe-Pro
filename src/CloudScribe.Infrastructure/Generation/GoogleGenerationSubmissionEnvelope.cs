@@ -11,7 +11,8 @@ public sealed record GoogleGenerationSubmissionEnvelope(
     string VoiceName,
     string AudioEncoding,
     string CompiledPayloadSha256,
-    int CompiledPayloadBytes)
+    int CompiledPayloadBytes,
+    Guid? RecoveryAuthorizationId = null)
 {
     public static GoogleGenerationSubmissionEnvelope Create(
         GoogleGenerationAccount account,
@@ -65,7 +66,8 @@ public sealed record GoogleGenerationSubmissionEnvelope(
             VoiceName,
             AudioEncoding,
             compiledPayload,
-            nowUtc);
+            nowUtc) with
+        { RecoveryAuthorizationId = RecoveryAuthorizationId };
         if (current != this)
         {
             throw new InvalidOperationException("Google billable submission authorization changed after approval; regenerate estimate/approval before submitting.");

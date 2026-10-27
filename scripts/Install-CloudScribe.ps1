@@ -2,11 +2,15 @@
 param(
     [string]$PackageRoot=$PSScriptRoot,
     [string]$MigrateProfileFrom,
+    [string]$ReviewedRecoveryPolicyPath,
+    [string]$ReviewedRecoveryPolicySha256,
     [switch]$ValidateOnly,
     [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
 if($ValidatePackageOnly -and ($ValidateOnly -or $MigrateProfileFrom)){throw 'ValidatePackageOnly cannot be combined with installation or migration preflight.'}
+if($ValidatePackageOnly -and ($ReviewedRecoveryPolicyPath -or $ReviewedRecoveryPolicySha256)){throw 'A private recovery policy is not part of a clean package.'}
+if([bool]$ReviewedRecoveryPolicyPath -ne [bool]$ReviewedRecoveryPolicySha256){throw 'Recovery policy admission requires both the separately reviewed file and its independently approved SHA256.'}
 $package=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $PackageRoot).Path)
 if($package.Length -gt [IO.Path]::GetPathRoot($package).Length){$package=$package.TrimEnd([char[]]@('\','/'))}
 $packagePrefix=$package.TrimEnd([char[]]@('\','/'))+[IO.Path]::DirectorySeparatorChar
@@ -16,6 +20,98 @@ function Assert-NoLinks([string]$Path){
         if((Test-Path -LiteralPath $current) -and ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw "Linked install/profile path is not allowed: $current"}
         $current=Split-Path -Parent $current
     }
+}
+function Assert-UniqueRecoveryJson($Element){
+    if($Element.ValueKind -eq [Text.Json.JsonValueKind]::Object){
+        $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach($property in $Element.EnumerateObject()){
+            if(-not $seen.Add($property.Name)){throw 'Recovery policy has ambiguous properties.'}
+            Assert-UniqueRecoveryJson $property.Value
+        }
+    }elseif($Element.ValueKind -eq [Text.Json.JsonValueKind]::Array){
+        foreach($item in $Element.EnumerateArray()){Assert-UniqueRecoveryJson $item}
+    }
+}
+function Assert-RecoveryRecord($Element,[hashtable]$Fields){
+    if($Element.ValueKind -ne [Text.Json.JsonValueKind]::Object -or @($Element.EnumerateObject()).Count -ne $Fields.Count){throw 'Recovery policy record shape is invalid.'}
+    foreach($property in $Element.EnumerateObject()){
+        if($property.Name -cnotin @($Fields.Keys)){throw 'Recovery policy contains an unknown record field.'}
+        $value=$property.Value
+        switch($Fields[$property.Name]){
+            'String' {if($value.ValueKind -ne [Text.Json.JsonValueKind]::String){throw 'Recovery policy string is invalid.'}}
+            'Int32' {$null=$value.GetInt32()}
+            'Int64' {$null=$value.GetInt64()}
+            'Guid' {$null=$value.GetGuid()}
+            'Date' {$null=$value.GetDateTimeOffset()}
+            'Array' {if($value.ValueKind -ne [Text.Json.JsonValueKind]::Array){throw 'Recovery policy array is invalid.'}}
+            'Object' {if($value.ValueKind -ne [Text.Json.JsonValueKind]::Object){throw 'Recovery policy object is invalid.'}}
+            default {throw 'Unknown recovery policy validation type.'}
+        }
+    }
+}
+function Assert-RecoveryNestedPolicy($Root){
+    Assert-RecoveryRecord $Root @{SchemaVersion='Int32';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';AccountId='String';ProjectId='String';Currency='String';Scale='Int32';ExpiresAtUtc='Date';Budget='Object';HistoricalAudio='Array';Predecessors='Array'}
+    if([string]::IsNullOrWhiteSpace($Root.GetProperty('AccountId').GetString()) -or [string]::IsNullOrWhiteSpace($Root.GetProperty('ProjectId').GetString()) -or $Root.GetProperty('Currency').GetString() -cnotmatch '^[A-Z]{3}$' -or $Root.GetProperty('Scale').GetInt32() -notin 0..9){throw 'Recovery policy scope is invalid.'}
+    foreach($name in @('AppSha256','InfrastructureSha256','ProfileRootSha256')){if($Root.GetProperty($name).GetString() -notmatch '^[a-fA-F0-9]{64}$'){throw 'Recovery policy hash is invalid.'}}
+    $budget=$Root.GetProperty('Budget')
+    Assert-RecoveryRecord $budget @{ProjectCommittedMinorUnits='Int64';ProjectCeilingMinorUnits='Int64';AllocationCommittedMinorUnits='Int64';AllocationCeilingMinorUnits='Int64';ReviewedEvidenceSha256='String';QueueRows='Array';SpendRows='Array';RecoveryRows='Array'}
+    if($budget.GetProperty('ProjectCommittedMinorUnits').GetInt64() -lt 0 -or $budget.GetProperty('AllocationCommittedMinorUnits').GetInt64() -lt 0 -or $budget.GetProperty('ProjectCeilingMinorUnits').GetInt64() -lt $budget.GetProperty('ProjectCommittedMinorUnits').GetInt64() -or $budget.GetProperty('AllocationCeilingMinorUnits').GetInt64() -lt $budget.GetProperty('AllocationCommittedMinorUnits').GetInt64() -or $budget.GetProperty('ReviewedEvidenceSha256').GetString() -notmatch '^[a-fA-F0-9]{64}$'){throw 'Recovery policy budget bounds are invalid.'}
+    foreach($name in @('QueueRows','SpendRows','RecoveryRows')){
+        $pins=$budget.GetProperty($name)
+        if($pins.GetArrayLength() -gt 10000){throw 'Recovery policy row bound exceeded.'}
+        $identities=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach($pin in $pins.EnumerateArray()){
+            Assert-RecoveryRecord $pin @{Identity='String';Sha256='String'}
+            $identity=$pin.GetProperty('Identity').GetString()
+            if([string]::IsNullOrWhiteSpace($identity) -or -not $identities.Add($identity) -or $pin.GetProperty('Sha256').GetString() -notmatch '^[a-fA-F0-9]{64}$'){throw 'Recovery policy financial pins are invalid.'}
+        }
+    }
+    $historical=$Root.GetProperty('HistoricalAudio');$predecessors=$Root.GetProperty('Predecessors')
+    if($historical.GetArrayLength() -gt 200 -or $predecessors.GetArrayLength() -gt 200){throw 'Recovery policy admission count exceeded.'}
+    $ids=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach($entry in $historical.EnumerateArray()){
+        Assert-RecoveryRecord $entry @{EvidenceId='String';Anchor='Object'}
+        $id=$entry.GetProperty('EvidenceId').GetString()
+        if([string]::IsNullOrWhiteSpace($id) -or -not $ids.Add($id)){throw 'Recovery policy evidence identity is invalid.'}
+        $anchor=$entry.GetProperty('Anchor')
+        Assert-RecoveryRecord $anchor @{ParentId='Guid';ParentRevisionId='Guid';ParentSha256='String';Ordinal='Int32';DocumentId='Guid';RevisionId='Guid';TextSha256='String';AccountId='String';OperationId='String';IdempotencyKey='String';LocalAttemptId='String';PayloadSha256='String';PayloadBytes='Int32';AudioSha256='String';AudioBytes='Int64';VoiceName='String';LanguageCode='String';EvidenceSha256='String'}
+        if($anchor.GetProperty('AccountId').GetString() -cne $Root.GetProperty('AccountId').GetString() -or $anchor.GetProperty('OperationId').GetString() -cne 'synthesize-speech'){throw 'Recovery policy historical scope is invalid.'}
+    }
+    $keys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach($entry in $predecessors.EnumerateArray()){
+        Assert-RecoveryRecord $entry @{LogicalNarrationId='String';AccountId='String';OperationId='String';HistoricalKey='String';HistoricalStateSha256='String';ProjectId='String';DocumentId='Guid';RevisionId='Guid';TextSha256='String';OriginalPayloadSha256='String';AdmissionSha256='String';ExpiresAtUtc='Date'}
+        if(-not $keys.Add($entry.GetProperty('HistoricalKey').GetString()) -or $entry.GetProperty('AccountId').GetString() -cne $Root.GetProperty('AccountId').GetString() -or $entry.GetProperty('ProjectId').GetString() -cne $Root.GetProperty('ProjectId').GetString() -or $entry.GetProperty('OperationId').GetString() -cne 'synthesize-speech'){throw 'Recovery policy predecessor scope is invalid.'}
+    }
+}
+function Get-ReviewedRecoveryPolicy([string]$Profile){
+    if(-not $ReviewedRecoveryPolicyPath){return $null}
+    if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8){throw 'Optional recovery policy admission requires PowerShell 7 on .NET 8 or later. Ordinary updates without a recovery policy remain supported in Windows PowerShell.'}
+    if(-not $Profile -or $ReviewedRecoveryPolicySha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'Recovery policy requires an inspected existing profile and independent hash.'}
+    $path=(Resolve-Path -LiteralPath $ReviewedRecoveryPolicyPath).Path
+    Assert-NoLinks $path
+    $stream=[IO.FileStream]::new($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+    try{
+        if($stream.Length -lt 1 -or $stream.Length -gt 1048576){throw 'Recovery policy exceeds its reviewed size bound.'}
+        $bytes=[byte[]]::new([int]$stream.Length);$stream.ReadExactly($bytes)
+    }finally{$stream.Dispose()}
+    $sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    if($sha -ne $ReviewedRecoveryPolicySha256){throw 'Recovery policy does not match the independently approved SHA256.'}
+    $options=[Text.Json.JsonDocumentOptions]::new();$options.MaxDepth=16
+    $json=[Text.Json.JsonDocument]::Parse([ReadOnlyMemory[byte]]::new($bytes),$options)
+    try{
+        Assert-UniqueRecoveryJson $json.RootElement
+        $root=$json.RootElement
+        Assert-RecoveryNestedPolicy $root
+        $allowed=@('SchemaVersion','AppSha256','InfrastructureSha256','ProfileRootSha256','AccountId','ProjectId','Currency','Scale','ExpiresAtUtc','Budget','HistoricalAudio','Predecessors')
+        if(@($root.EnumerateObject()).Count -ne $allowed.Count -or @($root.EnumerateObject() | Where-Object {$_.Name -cnotin $allowed}).Count){throw 'Recovery policy schema is incomplete or unknown.'}
+        if($root.GetProperty('SchemaVersion').GetInt32() -ne 1 -or $root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow){throw 'Recovery policy is incompatible or expired.'}
+        if($root.GetProperty('InfrastructureSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash){throw 'Recovery policy belongs to another exact build.'}
+        if($root.GetProperty('AppSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash){throw 'Recovery policy belongs to another exact app build.'}
+        $canonical=[IO.Path]::GetFullPath($Profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()
+        $profileSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical)))
+        if($root.GetProperty('ProfileRootSha256').GetString() -ne $profileSha){throw 'Recovery policy belongs to another profile.'}
+    }finally{$json.Dispose()}
+    return [pscustomobject]@{Bytes=$bytes;Sha256=$sha}
 }
 function Get-AllowedNoticeFiles {
     $inventoryPath=Join-Path $package 'licenses/third-party/components.json'
@@ -104,7 +200,8 @@ if($MigrateProfileFrom){
     Assert-NoLinks $profile
     if(Test-Path -LiteralPath $profile){throw 'Migration destination already exists; no user data will be overwritten.'}
 }
-if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration};return}
+$reviewedRecovery=Get-ReviewedRecoveryPolicy $profile
+if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery};return}
 if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close every CloudScribe window normally before installing/updating. No process will be killed.'}
 [IO.Directory]::CreateDirectory($programs) | Out-Null
 $suffix=[Guid]::NewGuid().ToString('N')
@@ -127,7 +224,13 @@ if($profile){
     $settings.CloudScribe.AppDataDirectoryOverride=$profile
     $settings | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $stage 'app/appsettings.json') -Encoding utf8
 }
-@{Product='CloudScribe Pro';Version=1;Profile=$profile;AppSha256=(Get-FileHash -LiteralPath (Join-Path $stage 'app/CloudScribe.dll')).Hash} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'cloudscribe-install.json') -Encoding utf8
+$installMarker=@{Product='CloudScribe Pro';Version=1;Profile=$profile;AppSha256=(Get-FileHash -LiteralPath (Join-Path $stage 'app/CloudScribe.dll')).Hash}
+if($reviewedRecovery){
+    [IO.File]::WriteAllBytes((Join-Path $stage 'recovery-admission-policy.json'),$reviewedRecovery.Bytes)
+    $installMarker.RecoveryPolicySha256=$reviewedRecovery.Sha256
+}
+# An ordinary update does not copy or silently re-admit any previous private recovery authority.
+$installMarker | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'cloudscribe-install.json') -Encoding utf8
 $hadPrevious=Test-Path -LiteralPath $target
 if($hadPrevious){Move-Item -LiteralPath $target -Destination $backup}
 try{Move-Item -LiteralPath $stage -Destination $target}catch{if($hadPrevious -and -not (Test-Path -LiteralPath $target)){Move-Item -LiteralPath $backup -Destination $target};throw}

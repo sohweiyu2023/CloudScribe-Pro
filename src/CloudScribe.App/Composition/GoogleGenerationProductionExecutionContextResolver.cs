@@ -12,17 +12,19 @@ public sealed class GoogleGenerationProductionExecutionContextResolver
     private readonly GoogleGenerationProductionRuntimeEvidenceResolver _runtimeEvidenceResolver;
     private readonly IGoogleGenerationPersistedQueueStateStore _persistedQueueStateStore;
     private readonly TimeProvider _timeProvider;
+    private readonly GoogleExplicitRecoveryService? _recovery;
 
     public GoogleGenerationProductionExecutionContextResolver(
         GoogleGenerationProductionRuntimeEvidenceResolver runtimeEvidenceResolver,
         IGoogleGenerationPersistedQueueStateStore persistedQueueStateStore,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider, GoogleExplicitRecoveryService? recovery = null)
     {
         _runtimeEvidenceResolver = runtimeEvidenceResolver
             ?? throw new ArgumentNullException(nameof(runtimeEvidenceResolver));
         _persistedQueueStateStore = persistedQueueStateStore
             ?? throw new ArgumentNullException(nameof(persistedQueueStateStore));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _recovery = recovery;
     }
 
     public async Task<GoogleGenerationUiExecutionContext> ResolveAsync(
@@ -57,6 +59,6 @@ public sealed class GoogleGenerationProductionExecutionContextResolver
         return GoogleGenerationUiExecutionContextFactory.Create(
             evidence,
             _persistedQueueStateStore,
-            _timeProvider);
+            _timeProvider, _recovery);
     }
 }

@@ -67,7 +67,7 @@ public sealed partial class GoogleExplicitRecoveryService
         return true;
     }
 
-    private async Task RequireCurrentBudgetAsync(SqliteConnection connection, SqliteTransaction transaction, string accountId,
+    private async Task<GoogleRecoveryBudgetReview> RequireCurrentBudgetAsync(SqliteConnection connection, SqliteTransaction transaction, string accountId,
         string currentProjectId, string currency, int scale, string financial, CancellationToken cancellationToken)
     {
         var budget = await ResolveBudgetAsync(accountId, currentProjectId, currency, scale, financial, cancellationToken).ConfigureAwait(false);
@@ -80,6 +80,7 @@ public sealed partial class GoogleExplicitRecoveryService
                 || budget.ProjectCeilingMinorUnits != row.GetInt64(1) || budget.RemainingAllocationMinorUnits > row.GetInt64(2)
                 || budget.ProjectCeilingMinorUnits < budget.RetainedCommittedMinorUnits || budget.RemainingAllocationMinorUnits < 0)
                 throw new InvalidOperationException("Authoritative recovery budget no longer retains this reservation.");
+        return budget;
     }
 
     private static void RequireClaim(GoogleRecoveryApprovedAttempt approval, GoogleGenerationPersistedQueueState claim,
@@ -88,7 +89,8 @@ public sealed partial class GoogleExplicitRecoveryService
         ArgumentNullException.ThrowIfNull(approval);
         ArgumentNullException.ThrowIfNull(claim);
         claim.Validate();
-        if (!string.Equals(claim.IdempotencyKey, approval.IdempotencyKey, StringComparison.Ordinal) || !claim.IdempotencyKey.StartsWith(KeyPrefix, StringComparison.Ordinal)
+        if (currentEnvelope.RecoveryAuthorizationId != approval.AuthorizationId
+            || !string.Equals(claim.IdempotencyKey, approval.IdempotencyKey, StringComparison.Ordinal) || !claim.IdempotencyKey.StartsWith(KeyPrefix, StringComparison.Ordinal)
             || !claim.SubmissionAttempted || !claim.UnresolvedSubmission || claim.ProviderRequestId is not null
             || claim.LocalAttemptId is null || !string.Equals(claim.DiagnosticCode, "google-dispatch-claimed"
 , StringComparison.Ordinal) || !string.Equals(claim.PayloadSha256, currentEnvelope.CompiledPayloadSha256, StringComparison.Ordinal) || claim.PayloadBytes != currentEnvelope.CompiledPayloadBytes

@@ -16,6 +16,9 @@ public sealed partial class GoogleExplicitRecoveryService(
     public const string KeyPrefix = "recovery-google-tts:";
     private readonly ConcurrentDictionary<Guid, PendingReview> _reviews = new();
 
+    /// <summary>Discards only an unapproved in-memory preview; never deletes durable authority or financial holds.</summary>
+    public void DiscardUnapprovedPreview(Guid previewId) => _reviews.TryRemove(previewId, out _);
+
     public async Task<GoogleRecoveryPreview> PrepareAsync(GoogleRecoveryIntent intent,
         long additionalMaximumMinorUnits, CancellationToken cancellationToken = default)
     {
@@ -79,7 +82,7 @@ public sealed partial class GoogleExplicitRecoveryService(
 
     private static void RequireIntent(GoogleRecoveryIntent intent, GoogleRecoveryBudgetReview budget, long maximum)
     {
-        if (intent.DocumentId == Guid.Empty || intent.RevisionId == Guid.Empty || string.IsNullOrWhiteSpace(intent.ProjectId)
+        if (intent.Envelope.RecoveryAuthorizationId is not null || intent.DocumentId == Guid.Empty || intent.RevisionId == Guid.Empty || string.IsNullOrWhiteSpace(intent.ProjectId)
             || string.IsNullOrWhiteSpace(intent.PreviousIdempotencyKey) || intent.Scale is < 0 or > 9
             || intent.Currency.Length != 3 || intent.EstimateMinorUnits < 0 || maximum < intent.EstimateMinorUnits
             || budget.RetainedCommittedMinorUnits < 0 || budget.RemainingAllocationMinorUnits < maximum

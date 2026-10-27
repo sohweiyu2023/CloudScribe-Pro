@@ -28,6 +28,8 @@ public sealed class GoogleGenerationProductionSubmissionStateOwner
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(snapshot);
+        if (authorization.Envelope.RecoveryAuthorizationId is not null)
+            throw new InvalidOperationException("Recovery requires activation of its exact dedicated durable approval, not ordinary spend approval.");
         cancellationToken.ThrowIfCancellationRequested();
 
         _ = GoogleGenerationProductionRuntimeRequestFactory.Create(
@@ -53,6 +55,21 @@ public sealed class GoogleGenerationProductionSubmissionStateOwner
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(Volatile.Read(ref _current));
+    }
+
+    public async Task ActivateRecoveryAsync(GoogleGenerationSubmissionEnvelope envelope,
+        GoogleGenerationUiExecutionSnapshot snapshot, long estimate, CancellationToken cancellationToken = default)
+    {
+        if (envelope.RecoveryAuthorizationId is not { } id
+            || !string.Equals(snapshot.ProviderRequest.IdempotencyKey, GoogleExplicitRecoveryService.KeyPrefix + id.ToString("N"), StringComparison.Ordinal))
+            throw new InvalidOperationException("Recovery activation requires the exact durable child identity.");
+        var authorization = await _authorizationStore.LoadApprovedAsync(envelope, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The exact durable recovery authorization is unavailable.");
+        if (authorization.Envelope != envelope) throw new InvalidOperationException("Durable recovery authority differs from the exact requested envelope.");
+        GoogleGenerationProductionUiSnapshotValidator.Validate(snapshot);
+        _ = GoogleGenerationProductionRuntimeRequestFactory.Create(authorization, snapshot, estimate).Validate();
+        cancellationToken.ThrowIfCancellationRequested();
+        Volatile.Write(ref _current, new(envelope, snapshot, estimate));
     }
 
     public void Invalidate()

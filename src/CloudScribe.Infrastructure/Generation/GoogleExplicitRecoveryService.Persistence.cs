@@ -33,7 +33,7 @@ public sealed partial class GoogleExplicitRecoveryService
             ("$document", i.DocumentId.ToString("D")), ("$revision", i.RevisionId.ToString("D")), ("$text", TextHash(i.CompiledPayload)),
             ("$rootKey", p.AssociationProof.RootHistoricalKey), ("$rootState", p.AssociationProof.RootHistoricalStateSha256), ("$admission", p.AssociationProof.AdmissionSha256),
             ("$operation", GoogleGenerationProvider.SynthesizeOperationStableId), ("$previous", i.PreviousIdempotencyKey), ("$previousHash", Digest(p.PreviousState)),
-            ("$child", child), ("$review", p.ReviewSha256), ("$envelope", JsonSerializer.Serialize(i.Envelope)), ("$financial", financial),
+            ("$child", child), ("$review", p.ReviewSha256), ("$envelope", JsonSerializer.Serialize(i.Envelope with { RecoveryAuthorizationId = id })), ("$financial", financial),
             ("$payload", i.Envelope.CompiledPayloadSha256), ("$bytes", i.Envelope.CompiledPayloadBytes), ("$currency", i.Currency), ("$scale", i.Scale),
             ("$estimate", i.EstimateMinorUnits), ("$reserved", p.AdditionalMaximumMinorUnits), ("$evidence", p.Budget.EvidenceSha256),
             ("$approved", timeProvider.GetUtcNow().ToUnixTimeMilliseconds()));
