@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Infrastructure.Generation;
@@ -38,13 +39,24 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         finally { _recoveryDialogOpen = false; }
     }
 
-    private static RecoveryControls CreateRecoveryControls(IReadOnlyList<string> keys) => new(
-        new ComboBox { ItemsSource = keys.Select((_, i) => $"Historical attempt {i + 1}").ToArray(), IsEnabled = keys.Count > 0 },
-        new NumericUpDown { Minimum = 0, Maximum = long.MaxValue, Increment = 1, Value = 0, FormatString = "0" },
-        NewButton("Prepare exact recovery review"), new CheckBox { Content = "Earlier uncertain attempts may still be charged. Retain all their holds.", IsEnabled = false },
-        NewButton("Reserve one additional attempt; do not generate"), NewDescription(keys.Count == 0
+    private static RecoveryControls CreateRecoveryControls(IReadOnlyList<string> keys)
+    {
+        var choice = new ComboBox
+        {
+            ItemsSource = keys.Select((_, i) => $"Historical attempt {i + 1}").ToArray(),
+            IsEnabled = keys.Count > 0,
+            SelectedIndex = keys.Count == 1 ? 0 : -1,
+            MinWidth = 240
+        };
+        AutomationProperties.SetName(choice, "Independently admitted historical narration attempt");
+        var maximum = new NumericUpDown { Minimum = 0, Maximum = long.MaxValue, Increment = 1, Value = 0, FormatString = "0" };
+        AutomationProperties.SetName(maximum, "Additional reservation maximum in smallest currency units");
+        return new(choice, maximum,
+            NewButton("Prepare exact recovery review"), new CheckBox { Content = "Earlier uncertain attempts may still be charged. Retain all their holds.", IsEnabled = false },
+            NewButton("Reserve one additional attempt; do not generate"), NewDescription(keys.Count == 0
             ? "No independently admitted historical narration matches the selected saved document and current account/project. No recovery is available."
             : "This review never sends audio requests. Enter the additional maximum in smallest currency units (for USD, cents). Independently reviewed project and allocation limits still apply."));
+    }
 
     private void BindRecoveryControls(Window dialog, ShellViewModel model, RecoveryControls c, RecoveryDialogState state,
         IReadOnlyList<string> keys, CancellationToken cancellationToken)
