@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using CloudScribe.Domain.Generation;
 
@@ -45,7 +46,8 @@ public static partial class GoogleErrorDetailParser
             }
             return result;
         }
-        catch (JsonException) { return GoogleErrorDetailCategories.Unknown; }
+        catch (Exception error) when (error is JsonException or DecoderFallbackException or InvalidOperationException)
+        { return GoogleErrorDetailCategories.Unknown; }
         catch (InvalidDataException) { return GoogleErrorDetailCategories.Unknown; }
     }
 

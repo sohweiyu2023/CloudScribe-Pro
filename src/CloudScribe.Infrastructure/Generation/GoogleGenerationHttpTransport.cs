@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class GoogleGenerationHttpTransport
+public sealed partial class GoogleGenerationHttpTransport
 {
     private readonly HttpClient _httpClient;
     private readonly ITransientCredentialResolver _credentialResolver;
@@ -30,9 +30,10 @@ public sealed class GoogleGenerationHttpTransport
         if (string.IsNullOrWhiteSpace(request.CredentialReferenceId))
             throw new ArgumentException("Credential reference ID is required.", nameof(request));
         ValidateBoundedRequest(request.Payload, request.MaximumResponseBytes);
+        byte[] wirePayload = request.Payload.ToArray();
 
         string correlation = Guid.NewGuid().ToString("N");
-        string payloadHash = _logger.IsEnabled(LogLevel.Information) ? Convert.ToHexStringLower(SHA256.HashData(request.Payload.Span)) : "logging-disabled";
+        string payloadHash = _logger.IsEnabled(LogLevel.Information) ? Convert.ToHexStringLower(SHA256.HashData(wirePayload)) : "logging-disabled";
         int status = 0;
         void Log(GoogleSynthesisStage stage, GoogleErrorStatus category = GoogleErrorStatus.NotProvided) =>
             CloudScribeLog.GoogleSynthesisTransportStage(_logger, correlation, payloadHash, stage, status, category);
@@ -45,21 +46,23 @@ public sealed class GoogleGenerationHttpTransport
             using var message = new HttpRequestMessage(HttpMethod.Post, request.Endpoint);
             message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            message.Content = new ByteArrayContent(request.Payload.ToArray());
+            message.Content = new ByteArrayContent(wirePayload);
             message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
             Log(GoogleSynthesisStage.Dispatching);
+            ObserveWireContent(correlation, payloadHash, wirePayload.Length, request.Endpoint);
             using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             status = (int)response.StatusCode;
             Log(GoogleSynthesisStage.ResponseHeaders);
             var retryAfter = ParseRetryAfter(response.Headers.RetryAfter);
-            byte[] bytes = await ReadResponseBytesAsync(response, request.MaximumResponseBytes, cancellationToken).ConfigureAwait(false);
+            byte[] bytes = await ReadObservedResponseAsync(response, request.MaximumResponseBytes, correlation, cancellationToken).ConfigureAwait(false);
             var category = response.StatusCode == System.Net.HttpStatusCode.OK ? GoogleErrorStatus.NotProvided : GoogleErrorStatusParser.Parse(bytes);
             Log(GoogleSynthesisStage.ResponseReadCompleted, category);
             if (status != 200)
             {
                 var details = GoogleErrorDetailParser.Parse(bytes);
                 CloudScribeLog.GoogleSynthesisErrorDetails(_logger, correlation, status, details.Reason, details.Domain, details.Field);
+                ObserveErrorParse(correlation, status, bytes);
             }
             return new GoogleHttpTransportResponse(response.StatusCode, bytes, retryAfter, category);
         }
@@ -73,23 +76,6 @@ public sealed class GoogleGenerationHttpTransport
             Log(GoogleSynthesisStage.Failed);
             throw;
         }
-    }
-
-    private static async Task<byte[]> ReadResponseBytesAsync(HttpResponseMessage response, int maximumResponseBytes, CancellationToken cancellationToken)
-    {
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var buffer = new MemoryStream();
-        var rented = new byte[81920];
-        while (true)
-        {
-            var read = await stream.ReadAsync(rented.AsMemory(), cancellationToken).ConfigureAwait(false);
-            if (read == 0) break;
-            if (buffer.Length + read > maximumResponseBytes)
-                throw new InvalidDataException("Google response exceeded the configured bounded response size.");
-            buffer.Write(rented, 0, read);
-        }
-
-        return buffer.ToArray();
     }
 
     private static void ValidateBoundedRequest(ReadOnlyMemory<byte> payload, int maximumResponseBytes)

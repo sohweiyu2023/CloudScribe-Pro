@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using CloudScribe.Domain.Generation;
 
@@ -36,6 +37,7 @@ public static class GoogleErrorStatusParser
                 _ => GoogleErrorStatus.Unknown,
             };
         }
-        catch (JsonException) { return GoogleErrorStatus.Unknown; }
+        catch (Exception error) when (error is JsonException or DecoderFallbackException or InvalidOperationException)
+        { return GoogleErrorStatus.Unknown; }
     }
 }
