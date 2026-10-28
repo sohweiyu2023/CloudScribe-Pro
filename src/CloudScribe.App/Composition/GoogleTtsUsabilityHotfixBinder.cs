@@ -29,7 +29,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     LocalRequestStatusReader requestStatus,
     ArticleAudioExportService articleAudio,
     CloudScribe.Application.Documents.INarrationPartGroupStore articleGroups,
-    InstalledRecoveryAdmissionStore recoveryAdmission, GoogleRecoveryPreparationService recoveryPreparation)
+    InstalledRecoveryAdmissionStore recoveryAdmission, GoogleRecoveryPreparationService recoveryPreparation,
+    GooglePrivateErrorDiagnostics privateDiagnostics, IGoogleRecoveryCurrentCompilation privateDiagnosticCompilation)
 {
     private static readonly string[] ProviderControlHostNames =
     [
@@ -57,6 +58,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(viewModel);
+        ConfigurePrivateDiagnostics(window, viewModel);
         if (TryMount(window, viewModel))
             return;
 
@@ -121,6 +123,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         StackPanel advanced = AddSection(host, "Advanced tools and connection settings", expanded: false);
         AddLocalPartsControls(window, advanced, viewModel);
         AddRecoveryReviewControl(window, advanced, viewModel);
+        AddPrivateDiagnosticsControl(window, advanced, viewModel);
         Expander connectionSetup = new() { Header = "Connect or change Google account", IsExpanded = false };
         StackPanel connectionFields = new() { Spacing = 10 };
         connectionSetup.Content = connectionFields;

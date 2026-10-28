@@ -26,6 +26,7 @@ public sealed partial class ShellViewModel
 
     private void ClearChangedGoogleRequest()
     {
+        InvalidatePrivateGoogleDiagnostic();
         PreparedGoogleGenerationSpendApproved = false;
         PreparedGoogleGenerationSpendReview = null;
         _googleSamplePrepared = false;

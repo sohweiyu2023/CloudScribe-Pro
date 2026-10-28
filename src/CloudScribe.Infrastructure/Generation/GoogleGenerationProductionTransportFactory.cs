@@ -9,17 +9,19 @@ public sealed class GoogleGenerationProductionTransportFactory
     private readonly ITransientCredentialResolver _credentialResolver;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<GoogleGenerationHttpTransport>? _logger;
+    private readonly GooglePrivateErrorDiagnostics? _privateDiagnostics;
 
     public GoogleGenerationProductionTransportFactory(
         HttpClient httpClient,
         ITransientCredentialResolver credentialResolver,
         TimeProvider? timeProvider = null,
-        ILogger<GoogleGenerationHttpTransport>? logger = null)
+        ILogger<GoogleGenerationHttpTransport>? logger = null, GooglePrivateErrorDiagnostics? privateDiagnostics = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _credentialResolver = credentialResolver ?? throw new ArgumentNullException(nameof(credentialResolver));
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
+        _privateDiagnostics = privateDiagnostics;
     }
 
     public GoogleGenerationProductionTransport Create(
@@ -58,7 +60,7 @@ public sealed class GoogleGenerationProductionTransportFactory
         var transport = new GoogleGenerationHttpTransport(
             _httpClient,
             _credentialResolver,
-            submissionAccount.Endpoint, _logger);
+            submissionAccount.Endpoint, _logger, _privateDiagnostics);
 
         return new GoogleGenerationProductionTransport(submissionAccount, transport);
     }

@@ -14,13 +14,15 @@ public sealed partial class GoogleGenerationHttpTransport
     private readonly ITransientCredentialResolver _credentialResolver;
     private readonly Uri _allowedOrigin;
     private readonly ILogger<GoogleGenerationHttpTransport> _logger;
+    private readonly GooglePrivateErrorDiagnostics? _privateDiagnostics;
 
-    public GoogleGenerationHttpTransport(HttpClient httpClient, ITransientCredentialResolver credentialResolver, Uri allowedOrigin, ILogger<GoogleGenerationHttpTransport>? logger = null)
+    public GoogleGenerationHttpTransport(HttpClient httpClient, ITransientCredentialResolver credentialResolver, Uri allowedOrigin, ILogger<GoogleGenerationHttpTransport>? logger = null, GooglePrivateErrorDiagnostics? privateDiagnostics = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _credentialResolver = credentialResolver ?? throw new ArgumentNullException(nameof(credentialResolver));
         _allowedOrigin = ValidateOrigin(allowedOrigin);
         _logger = logger ?? NullLogger<GoogleGenerationHttpTransport>.Instance;
+        _privateDiagnostics = privateDiagnostics;
     }
 
     public async Task<GoogleHttpTransportResponse> SendAsync(GoogleHttpTransportRequest request, CancellationToken cancellationToken = default)
@@ -64,6 +66,7 @@ public sealed partial class GoogleGenerationHttpTransport
                 CloudScribeLog.GoogleSynthesisErrorDetails(_logger, correlation, status, details.Reason, details.Domain, details.Field);
                 ObserveErrorParse(correlation, status, bytes);
             }
+            _privateDiagnostics?.Observe(request.PrivateDiagnosticTicket, status, bytes, wirePayload, token, correlation);
             return new GoogleHttpTransportResponse(response.StatusCode, bytes, retryAfter, category);
         }
         catch (OperationCanceledException)
@@ -76,7 +79,15 @@ public sealed partial class GoogleGenerationHttpTransport
             Log(GoogleSynthesisStage.Failed);
             throw;
         }
+        finally { _privateDiagnostics?.End(request.PrivateDiagnosticTicket); }
     }
+
+    internal Guid? BeginPrivateCapture(CloudScribe.Providers.Abstractions.GenerationProviderRequest request, string credentialReference)
+    {
+        try { return _privateDiagnostics?.Begin(request, credentialReference); }
+        catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException) { return null; }
+    }
+    internal void EndPrivateCapture(Guid? ticket) => _privateDiagnostics?.End(ticket);
 
     private static void ValidateBoundedRequest(ReadOnlyMemory<byte> payload, int maximumResponseBytes)
     {

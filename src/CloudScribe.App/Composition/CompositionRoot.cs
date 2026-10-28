@@ -42,6 +42,7 @@ public static class CompositionRoot
     private static void RegisterProductionServices(IServiceCollection services)
     {
         services.AddSingleton<HttpClient>();
+        RegisterPrivateProviderDiagnostics(services);
         services.AddSingleton<GoogleGenerationProductionTransportFactory>();
         services.AddSingleton<GoogleGenerationProductionRuntimeEvidenceResolver>();
         services.AddSingleton<GoogleGenerationProductionExecutionContextResolver>();
@@ -88,6 +89,18 @@ public static class CompositionRoot
             serviceProvider.GetRequiredService<CloudScribe.Infrastructure.Pricing.V222ControlSet>(), serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<GoogleRecoveryPreparationService>();
         services.AddSingleton<ArticleAudioExportService>();
+    }
+
+    private static void RegisterPrivateProviderDiagnostics(IServiceCollection services)
+    {
+        services.AddSingleton(serviceProvider =>
+        {
+            var paths = serviceProvider.GetRequiredService<AppPaths>();
+            // A sibling of the exact configured profile, never a real-user fallback for isolated QA profiles.
+            string root = Path.Combine(Path.GetDirectoryName(paths.RootDirectory)!, ".cloudscribe-private-diagnostics",
+                InstalledRecoveryAdmissionStore.ProfileHash(paths.RootDirectory));
+            return new GooglePrivateErrorDiagnostics(root, serviceProvider.GetRequiredService<TimeProvider>());
+        });
     }
 
     private static void RegisterShell(IServiceCollection services)
