@@ -23,7 +23,18 @@ public sealed partial class GoogleExplicitRecoveryService
                     throw new InvalidOperationException("Recovery cannot change its retained logical narration association.");
                 if (row.IsDBNull(9) || row.IsDBNull(10)) throw new InvalidOperationException("Legacy recovery requires independently reviewed bounded admission.");
                 var proof = new GoogleRecoveryAssociationProof(row.GetString(0), row.GetString(6), row.GetString(7), row.GetString(8), row.GetInt32(9), row.GetInt64(10));
-                await RequireAssociationCurrentAsync(proof, previous.AccountId, previous.OperationStableId, intent.ProjectId,
+                var successor = await predecessorEvidence.ResolveAsync(previous.AccountId, previous.OperationStableId,
+                    proof.RootHistoricalKey, proof.RootHistoricalStateSha256, cancellationToken).ConfigureAwait(false);
+                if (successor?.Successor is { } link && string.Equals(link.PriorChildKey, previous.IdempotencyKey, StringComparison.Ordinal))
+                {
+                    if (!string.Equals(successor.LogicalNarrationId, proof.LogicalNarrationId, StringComparison.Ordinal) || !string.Equals(successor.HistoricalKey, proof.RootHistoricalKey, StringComparison.Ordinal) || !string.Equals(successor.HistoricalStateSha256, proof.RootHistoricalStateSha256, StringComparison.Ordinal) || !string.Equals(successor.AccountId, previous.AccountId, StringComparison.Ordinal) || !string.Equals(successor.OperationId, previous.OperationStableId, StringComparison.Ordinal) || !string.Equals(successor.ProjectId, intent.ProjectId, StringComparison.Ordinal) || successor.DocumentId != intent.DocumentId || successor.RevisionId != intent.RevisionId
+                        || !string.Equals(successor.TextSha256, TextHash(intent.CompiledPayload), StringComparison.Ordinal) || !string.Equals(successor.OriginalPayloadSha256, intent.Envelope.CompiledPayloadSha256, StringComparison.Ordinal) || successor.ExpiresAtUtc <= timeProvider.GetUtcNow() || !IsDigest(successor.AdmissionSha256))
+                        throw new InvalidOperationException("Successor narration scope changed.");
+                    await RequireSuccessorAsync(connection, transaction, successor, creating: true, cancellationToken).ConfigureAwait(false);
+                    return new(successor.LogicalNarrationId, successor.HistoricalKey, successor.HistoricalStateSha256,
+                        successor.AdmissionSha256, successor.MaximumNewAttempts, successor.MaximumAdditionalReservationMinorUnits, true);
+                }
+                await RequireAssociationCurrentAsync(connection, transaction, proof, previous.AccountId, previous.OperationStableId, intent.ProjectId,
                     intent.DocumentId, intent.RevisionId, TextHash(intent.CompiledPayload), intent.Envelope.CompiledPayloadSha256, cancellationToken).ConfigureAwait(false);
                 return proof;
             }
@@ -32,7 +43,7 @@ public sealed partial class GoogleExplicitRecoveryService
             throw new InvalidOperationException("Recovery history is missing; no new association may be invented.");
         var evidence = await predecessorEvidence.ResolveAsync(previous.AccountId, previous.OperationStableId, previous.IdempotencyKey,
             Digest(previous), cancellationToken).ConfigureAwait(false);
-        if (evidence is null || string.IsNullOrWhiteSpace(evidence.LogicalNarrationId)
+        if (evidence is null || evidence.Successor is not null || string.IsNullOrWhiteSpace(evidence.LogicalNarrationId)
             || !string.Equals(evidence.AccountId, previous.AccountId, StringComparison.Ordinal)
             || !string.Equals(evidence.OperationId, previous.OperationStableId, StringComparison.Ordinal)
             || !string.Equals(evidence.HistoricalKey, previous.IdempotencyKey, StringComparison.Ordinal)
@@ -49,7 +60,7 @@ public sealed partial class GoogleExplicitRecoveryService
             evidence.MaximumNewAttempts, evidence.MaximumAdditionalReservationMinorUnits);
     }
 
-    private async Task RequireAssociationCurrentAsync(GoogleRecoveryAssociationProof proof, string account, string operation,
+    private async Task RequireAssociationCurrentAsync(SqliteConnection connection, SqliteTransaction transaction, GoogleRecoveryAssociationProof proof, string account, string operation,
         string project, Guid document, Guid revision, string textHash, string payloadHash, CancellationToken cancellationToken)
     {
         var e = await predecessorEvidence.ResolveAsync(account, operation, proof.RootHistoricalKey, proof.RootHistoricalStateSha256, cancellationToken).ConfigureAwait(false);
@@ -63,5 +74,7 @@ public sealed partial class GoogleExplicitRecoveryService
             || e.ExpiresAtUtc <= timeProvider.GetUtcNow() || e.MaximumNewAttempts != proof.MaximumNewAttempts
             || e.MaximumAdditionalReservationMinorUnits != proof.MaximumAdditionalReservationMinorUnits)
             throw new InvalidOperationException("Independent predecessor admission was revoked or changed.");
+        if (e.Successor is not null)
+            await RequireSuccessorAsync(connection, transaction, e, creating: false, cancellationToken).ConfigureAwait(false);
     }
 }

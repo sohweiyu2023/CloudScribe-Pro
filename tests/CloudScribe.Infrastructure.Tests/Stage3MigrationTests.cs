@@ -261,6 +261,7 @@ public sealed class Stage3MigrationTests
                 NarrationPartGroups.MigrationId,
                 GoogleExplicitRecovery.MigrationId,
                 GoogleRecoveryAdmissionLimits.MigrationId,
+                GoogleRecoverySuccessorGrants.MigrationId,
             ],
             migrations);
     }

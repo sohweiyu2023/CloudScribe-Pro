@@ -47,3 +47,10 @@ Unreadable or future-version preferences are preserved instead of overwritten. A
 App updates preserve the existing profile selection; see [Windows installation and updates](WINDOWS_INSTALLATION.md). Documents and preferences live in the app-data profile; generated MP3s use `%LOCALAPPDATA%\CloudScribe Pro\Generated`, a separate folder. Back up exported audio as well as the closed profile. Windows Credential Manager bindings do not transfer by copying ordinary files.
 
 Close the running app normally before updating or backing up its profile. Retain your own closed-profile backup and rollback package. The Settings restore action verifies an existing interrupted-restore journal; it is not a general backup wizard or a way to clear uncertain provider submissions.
+
+
+## Separately approved successor attempts
+
+An exhausted grant remains exhausted. A new attempt after a completed HTTP 400 invalid-argument rejection needs a new independently reviewed installer-admitted schema3 policy and a fresh explicit review. The policy binds the unchanged saved document/revision, request bytes, account/project, installed modules/profile, exact latest consumed child and earlier grant, current financial pins, source approval and short expiry. It permits one new attempt with at most three additional USD cents and carries no historical audio-import authority. Pending, unknown, accepted and unresolved attempts cannot use this path. No automatic retry is created.
+
+If separately approved, an allocation increase binds the exact previous scope and approved old/new allocation ceiling. The project cap and retained commitments cannot be reduced or reset. Reservation, scope transition and append-only grant audit are committed together; interruptions roll back all of them. Reopening a committed reservation resumes only its existing identity, with no duplicate charge reservation. The same source approval cannot be rotated into another successor grant for that narration. Expired or changed authority prevents dispatch while preserving all earlier holds. This mechanism does not settle billing or explain a provider rejection.

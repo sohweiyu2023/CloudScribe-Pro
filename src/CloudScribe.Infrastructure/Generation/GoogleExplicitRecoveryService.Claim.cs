@@ -39,7 +39,7 @@ public sealed partial class GoogleExplicitRecoveryService
             if (row.IsDBNull(14) || row.IsDBNull(15)) return false;
             association = new(row.GetString(10), row.GetString(11), row.GetString(12), row.GetString(13), row.GetInt32(14), row.GetInt64(15));
         }
-        await RequireAssociationCurrentAsync(association, claim.AccountId, claim.OperationStableId, currentProjectId,
+        await RequireAssociationCurrentAsync(connection, transaction, association, claim.AccountId, claim.OperationStableId, currentProjectId,
             Guid.Parse(documentId), Guid.Parse(revisionId), textHash, currentEnvelope.CompiledPayloadSha256, cancellationToken).ConfigureAwait(false);
         await RequireGrantCapacityAsync(connection, transaction, association, claim.AccountId, currentProjectId, 0, creating: false, cancellationToken).ConfigureAwait(false);
         using (var document = Command(connection, transaction, "SELECT CurrentRevisionId,DraftText,Status FROM documents WHERE lower(Id)=$document;", ("$document", documentId)))

@@ -31,6 +31,8 @@ public sealed partial class InstalledRecoveryAdmissionStore(string applicationDi
             && string.Equals(x.OperationId, operationId, StringComparison.Ordinal) && string.Equals(x.HistoricalKey, historicalKey, StringComparison.Ordinal)
             && string.Equals(x.HistoricalStateSha256, exactHistoricalStateSha256, StringComparison.Ordinal)).ToArray();
         if (matches is not { Length: 1 } || matches[0].ExpiresAtUtc <= clock.GetUtcNow()) return null;
+        // A canonical successor digest binds its exact expiry; schema3 validation already requires it within policy expiry.
+        if (matches[0].Successor is not null) return matches[0];
         return matches[0] with { ExpiresAtUtc = matches[0].ExpiresAtUtc < policy!.ExpiresAtUtc ? matches[0].ExpiresAtUtc : policy.ExpiresAtUtc };
     }
 

@@ -244,6 +244,7 @@ public sealed class DatabaseRecoveryTests
                 NarrationPartGroups.MigrationId,
                 GoogleExplicitRecovery.MigrationId,
                 GoogleRecoveryAdmissionLimits.MigrationId,
+                GoogleRecoverySuccessorGrants.MigrationId,
             ],
             currentMigrations);
     }

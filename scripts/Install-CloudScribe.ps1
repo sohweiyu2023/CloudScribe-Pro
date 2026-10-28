@@ -44,20 +44,57 @@ function Assert-RecoveryRecord($Element,[hashtable]$Fields){
             'Guid' {$null=$value.GetGuid()}
             'Date' {$null=$value.GetDateTimeOffset()}
             'Array' {if($value.ValueKind -ne [Text.Json.JsonValueKind]::Array){throw 'Recovery policy array is invalid.'}}
+            'Any' {if($value.ValueKind -notin @([Text.Json.JsonValueKind]::Object,[Text.Json.JsonValueKind]::Null)){throw 'Nullable recovery record is invalid.'}}
             'Object' {if($value.ValueKind -ne [Text.Json.JsonValueKind]::Object){throw 'Recovery policy object is invalid.'}}
             default {throw 'Unknown recovery policy validation type.'}
         }
     }
 }
+function Write-RecoveryCanonicalRecord($Writer,$Element,[string]$Kind){
+    $fields=switch($Kind){
+        'Predecessor' {@('LogicalNarrationId:String','AccountId:String','OperationId:String','HistoricalKey:String','HistoricalStateSha256:String','ProjectId:String','DocumentId:Guid','RevisionId:Guid','TextSha256:String','OriginalPayloadSha256:String','AdmissionSha256:Empty','ExpiresAtUtc:Date','MaximumNewAttempts:Number','MaximumAdditionalReservationMinorUnits:Number','Successor:Successor')}
+        'Successor' {@('PriorAuthorizationId:Guid','PriorChildKey:String','PriorStateSha256:String','PriorAdmissionSha256:String','FinancialStateSha256:String','SourceApprovalSha256:String','AllocationTransition:Allocation')}
+        'Allocation' {@('PriorScopeSha256:String','PriorAllocationCeilingMinorUnits:Number','NewAllocationCeilingMinorUnits:Number','NewRemainingMinorUnits:Number','SourceApprovalSha256:String')}
+        default {throw 'Unknown canonical recovery record.'}
+    }
+    $Writer.WriteStartObject()
+    foreach($field in $fields){
+        $name,$type=$field.Split(':',2);$value=$Element.GetProperty($name)
+        switch($type){
+            'String' {$Writer.WriteString([string]$name,[string]$value.GetString())}
+            'Empty' {$Writer.WriteString([string]$name,[string]'')}
+            'Guid' {$Writer.WriteString([string]$name,[guid]$value.GetGuid())}
+            'Date' {$Writer.WriteString([string]$name,[DateTimeOffset]$value.GetDateTimeOffset())}
+            'Number' {$Writer.WriteNumber([string]$name,[long]$value.GetInt64())}
+            default {
+                $Writer.WritePropertyName([string]$name)
+                if($value.ValueKind -eq [Text.Json.JsonValueKind]::Null){$Writer.WriteNullValue()}
+                else{Write-RecoveryCanonicalRecord $Writer $value $type}
+            }
+        }
+    }
+    $Writer.WriteEndObject()
+}
+function Get-RecoveryCanonicalGrantSha256($Element){
+    $stream=[IO.MemoryStream]::new();$writer=[Text.Json.Utf8JsonWriter]::new($stream)
+    try{
+        Write-RecoveryCanonicalRecord $writer $Element 'Predecessor';$writer.Flush()
+        return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream.ToArray())).ToLowerInvariant()
+    }finally{$writer.Dispose();$stream.Dispose()}
+}
 function Assert-RecoveryNestedPolicy($Root){
     Assert-RecoveryRecord $Root @{SchemaVersion='Int32';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';AccountId='String';ProjectId='String';Currency='String';Scale='Int32';ExpiresAtUtc='Date';Budget='Object';HistoricalAudio='Array';Predecessors='Array'}
-    if($Root.GetProperty('SchemaVersion').GetInt32() -ne 2){throw 'Recovery policy requires bounded-grant schema2.'}
+    if($Root.GetProperty('SchemaVersion').GetInt32() -notin @(2,3)){throw 'Recovery policy requires bounded-grant schema2 or explicit-successor schema3.'}
     if([string]::IsNullOrWhiteSpace($Root.GetProperty('AccountId').GetString()) -or [string]::IsNullOrWhiteSpace($Root.GetProperty('ProjectId').GetString()) -or $Root.GetProperty('Currency').GetString() -cnotmatch '^[A-Z]{3}$' -or $Root.GetProperty('Scale').GetInt32() -notin 0..9){throw 'Recovery policy scope is invalid.'}
     foreach($name in @('AppSha256','InfrastructureSha256','ProfileRootSha256')){if($Root.GetProperty($name).GetString() -notmatch '^[a-fA-F0-9]{64}$'){throw 'Recovery policy hash is invalid.'}}
     $budget=$Root.GetProperty('Budget')
-    Assert-RecoveryRecord $budget @{ProjectCommittedMinorUnits='Int64';ProjectCeilingMinorUnits='Int64';AllocationCommittedMinorUnits='Int64';AllocationCeilingMinorUnits='Int64';ReviewedEvidenceSha256='String';QueueRows='Array';SpendRows='Array';RecoveryRows='Array'}
+    $budgetFields=@{ProjectCommittedMinorUnits='Int64';ProjectCeilingMinorUnits='Int64';AllocationCommittedMinorUnits='Int64';AllocationCeilingMinorUnits='Int64';ReviewedEvidenceSha256='String';QueueRows='Array';SpendRows='Array';RecoveryRows='Array'}
+    if($Root.GetProperty('SchemaVersion').GetInt32() -eq 3){$budgetFields['TransitionRows']='Array'}
+    Assert-RecoveryRecord $budget $budgetFields
     if($budget.GetProperty('ProjectCommittedMinorUnits').GetInt64() -lt 0 -or $budget.GetProperty('AllocationCommittedMinorUnits').GetInt64() -lt 0 -or $budget.GetProperty('ProjectCeilingMinorUnits').GetInt64() -lt $budget.GetProperty('ProjectCommittedMinorUnits').GetInt64() -or $budget.GetProperty('AllocationCeilingMinorUnits').GetInt64() -lt $budget.GetProperty('AllocationCommittedMinorUnits').GetInt64() -or $budget.GetProperty('ReviewedEvidenceSha256').GetString() -notmatch '^[a-fA-F0-9]{64}$'){throw 'Recovery policy budget bounds are invalid.'}
-    foreach($name in @('QueueRows','SpendRows','RecoveryRows')){
+    $pinNames=@('QueueRows','SpendRows','RecoveryRows')
+    if($Root.GetProperty('SchemaVersion').GetInt32() -eq 3){$pinNames+='TransitionRows'}
+    foreach($name in $pinNames){
         $pins=$budget.GetProperty($name)
         if($pins.GetArrayLength() -gt 10000){throw 'Recovery policy row bound exceeded.'}
         $identities=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -81,7 +118,24 @@ function Assert-RecoveryNestedPolicy($Root){
     $keys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $grants=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach($entry in $predecessors.EnumerateArray()){
-        Assert-RecoveryRecord $entry @{LogicalNarrationId='String';AccountId='String';OperationId='String';HistoricalKey='String';HistoricalStateSha256='String';ProjectId='String';DocumentId='Guid';RevisionId='Guid';TextSha256='String';OriginalPayloadSha256='String';AdmissionSha256='String';ExpiresAtUtc='Date';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
+        $fields=@{LogicalNarrationId='String';AccountId='String';OperationId='String';HistoricalKey='String';HistoricalStateSha256='String';ProjectId='String';DocumentId='Guid';RevisionId='Guid';TextSha256='String';OriginalPayloadSha256='String';AdmissionSha256='String';ExpiresAtUtc='Date';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
+        if($Root.GetProperty('SchemaVersion').GetInt32() -eq 3){$fields['Successor']='Object'}
+        Assert-RecoveryRecord $entry $fields
+        if($Root.GetProperty('SchemaVersion').GetInt32() -eq 3){
+            if($Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2){throw 'Successor admission requires USD cents.'}
+            if($entry.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -gt $Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset()){throw 'Successor expiry exceeds policy expiry.'}
+            if($historical.GetArrayLength() -ne 0 -or $predecessors.GetArrayLength() -ne 1 -or $entry.GetProperty('MaximumNewAttempts').GetInt32() -ne 1 -or $entry.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -ne 3){throw 'Successor admission requires one distinct one-attempt/three-cent grant and no import authority.'}
+            $successor=$entry.GetProperty('Successor')
+            Assert-RecoveryRecord $successor @{PriorAuthorizationId='Guid';PriorChildKey='String';PriorStateSha256='String';PriorAdmissionSha256='String';FinancialStateSha256='String';SourceApprovalSha256='String';AllocationTransition='Any'}
+            if($successor.GetProperty('PriorAuthorizationId').GetGuid() -eq [guid]::Empty -or $successor.GetProperty('PriorChildKey').GetString() -cne ('recovery-google-tts:'+$successor.GetProperty('PriorAuthorizationId').GetGuid().ToString('N')) -or $successor.GetProperty('PriorAdmissionSha256').GetString() -ceq $entry.GetProperty('AdmissionSha256').GetString()){throw 'Successor lineage identity is invalid.'}
+            foreach($name in @('PriorStateSha256','PriorAdmissionSha256','FinancialStateSha256','SourceApprovalSha256')){if($successor.GetProperty($name).GetString() -cnotmatch '^[a-f0-9]{64}$'){throw 'Successor digest is invalid.'}}
+            $transition=$successor.GetProperty('AllocationTransition')
+            if($transition.ValueKind -ne [Text.Json.JsonValueKind]::Null){
+                Assert-RecoveryRecord $transition @{PriorScopeSha256='String';PriorAllocationCeilingMinorUnits='Int64';NewAllocationCeilingMinorUnits='Int64';NewRemainingMinorUnits='Int64';SourceApprovalSha256='String'}
+                if($transition.GetProperty('PriorScopeSha256').GetString() -cnotmatch '^[a-f0-9]{64}$' -or $transition.GetProperty('SourceApprovalSha256').GetString() -cne $successor.GetProperty('SourceApprovalSha256').GetString() -or $transition.GetProperty('PriorAllocationCeilingMinorUnits').GetInt64() -lt 0 -or $transition.GetProperty('NewAllocationCeilingMinorUnits').GetInt64() -le $transition.GetProperty('PriorAllocationCeilingMinorUnits').GetInt64() -or $transition.GetProperty('NewAllocationCeilingMinorUnits').GetInt64() -ne $budget.GetProperty('AllocationCeilingMinorUnits').GetInt64() -or $transition.GetProperty('NewRemainingMinorUnits').GetInt64() -ne ($budget.GetProperty('AllocationCeilingMinorUnits').GetInt64()-$budget.GetProperty('AllocationCommittedMinorUnits').GetInt64())){throw 'Allocation transition is invalid.'}
+            }
+        }
+        if($Root.GetProperty('SchemaVersion').GetInt32() -eq 3 -and $entry.GetProperty('AdmissionSha256').GetString() -cne (Get-RecoveryCanonicalGrantSha256 $entry)){throw 'Successor grant digest does not bind its full canonical authority.'}
         if($entry.GetProperty('MaximumNewAttempts').GetInt32() -notin 1..200 -or $entry.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -lt 0 -or $entry.GetProperty('AdmissionSha256').GetString() -notmatch '^[a-fA-F0-9]{64}$' -or -not $grants.Add($entry.GetProperty('AdmissionSha256').GetString())){throw 'Recovery policy grant bounds or identity are invalid.'}
         if(-not $keys.Add($entry.GetProperty('HistoricalKey').GetString()) -or $entry.GetProperty('AccountId').GetString() -cne $Root.GetProperty('AccountId').GetString() -or $entry.GetProperty('ProjectId').GetString() -cne $Root.GetProperty('ProjectId').GetString() -or $entry.GetProperty('OperationId').GetString() -cne 'synthesize-speech'){throw 'Recovery policy predecessor scope is invalid.'}
     }

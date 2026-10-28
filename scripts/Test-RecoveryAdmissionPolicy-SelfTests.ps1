@@ -4,7 +4,7 @@ if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8)
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer source failed parsing.'}
-foreach($name in @('Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-RecoveryNestedPolicy')){
+foreach($name in @('Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Write-RecoveryCanonicalRecord','Get-RecoveryCanonicalGrantSha256','Assert-RecoveryNestedPolicy')){
     $function=$ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true)
     if(@($function).Count -ne 1){throw 'Expected one reviewed validator function.'}
     Invoke-Expression $function[0].Extent.Text
@@ -46,5 +46,42 @@ foreach($failure in @('unknown-nested','missing-field','wrong-type','negative-bu
     $rejected=$false
     try{Test-PolicyJson $json}catch{$rejected=$true}
     if(-not $rejected){throw "Synthetic invalid policy was not rejected: $failure"};$passed++
+}
+function New-SuccessorPolicy {
+    $p=New-SyntheticPolicy
+    $p.SchemaVersion=3;$p.HistoricalAudio=@();$p.Budget.TransitionRows=@()
+    $p.Budget.AllocationCommittedMinorUnits=13;$p.Budget.AllocationCeilingMinorUnits=83
+    $id=[Guid]::NewGuid()
+    $p.Predecessors[0].Successor=@{PriorAuthorizationId=$id.ToString('D');PriorChildKey=('recovery-google-tts:'+$id.ToString('N'));PriorStateSha256=$sha;PriorAdmissionSha256=('b'*64);FinancialStateSha256=$sha;SourceApprovalSha256=('c'*64);AllocationTransition=@{PriorScopeSha256=$sha;PriorAllocationCeilingMinorUnits=80;NewAllocationCeilingMinorUnits=83;NewRemainingMinorUnits=70;SourceApprovalSha256=('c'*64)}}
+    $doc=[Text.Json.JsonDocument]::Parse(($p|ConvertTo-Json -Depth 16 -Compress))
+    try{$p.Predecessors[0].AdmissionSha256=Get-RecoveryCanonicalGrantSha256 $doc.RootElement.GetProperty('Predecessors')[0]}finally{$doc.Dispose()}
+    return $p
+}
+Test-PolicyJson ((New-SuccessorPolicy) | ConvertTo-Json -Depth 16 -Compress);$passed++
+foreach($failure in @('missing-link','unknown-link','missing-audit-pins','wrong-child','same-old-grant','bad-financial-hash','unbounded','import','transition-source','transition-remaining','transition-ceiling','unknown-transition','wrong-nullable-type','schema2-link','schema2-pins','currency','scale','canonical-digest')){
+    $p=New-SuccessorPolicy
+    switch($failure){
+        'missing-link' {$p.Predecessors[0].Remove('Successor')}
+        'unknown-link' {$p.Predecessors[0].Successor.Other='unexpected'}
+        'missing-audit-pins' {$p.Budget.Remove('TransitionRows')}
+        'wrong-child' {$p.Predecessors[0].Successor.PriorChildKey='wrong-child'}
+        'same-old-grant' {$p.Predecessors[0].Successor.PriorAdmissionSha256=$p.Predecessors[0].AdmissionSha256}
+        'bad-financial-hash' {$p.Predecessors[0].Successor.FinancialStateSha256='invalid'}
+        'unbounded' {$p.Predecessors[0].MaximumNewAttempts=2}
+        'import' {$p.HistoricalAudio=(New-SyntheticPolicy).HistoricalAudio}
+        'transition-source' {$p.Predecessors[0].Successor.AllocationTransition.SourceApprovalSha256=$sha}
+        'transition-remaining' {$p.Predecessors[0].Successor.AllocationTransition.NewRemainingMinorUnits=71}
+        'transition-ceiling' {$p.Predecessors[0].Successor.AllocationTransition.NewAllocationCeilingMinorUnits=80}
+        'unknown-transition' {$p.Predecessors[0].Successor.AllocationTransition.Extra=1}
+        'wrong-nullable-type' {$p.Predecessors[0].Successor.AllocationTransition='invalid'}
+        'canonical-digest' {$p.Predecessors[0].AdmissionSha256=$sha}
+        'currency' {$p.Currency='EUR'}
+        'scale' {$p.Scale=3}
+        'schema2-pins' {$p=New-SyntheticPolicy;$p.Budget.TransitionRows=@()}
+        'schema2-link' {$p.SchemaVersion=2;$p.Budget.Remove('TransitionRows')}
+    }
+    $rejected=$false
+    try{Test-PolicyJson ($p|ConvertTo-Json -Depth 16 -Compress)}catch{$rejected=$true}
+    if(-not $rejected){throw "Synthetic invalid successor policy was not rejected: $failure"};$passed++
 }
 [pscustomobject]@{Passed=$passed;Failed=0;SyntheticOnly=$true;InstallerExecuted=$false;ProviderCalls=0}
