@@ -98,7 +98,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     {
         string reservation = p.ExistingApproval is null ? $"Additional maximum {p.AdditionalMaximumMinorUnits}."
             : $"Resume the SAME existing reserved attempt ({p.AdditionalMaximumMinorUnits}); additional reservation now ZERO.";
-        return $"{p.Intent.Currency}, scale {p.Intent.Scale}: current estimate {p.Intent.EstimateMinorUnits}. {reservation} This admission permits at most {p.AssociationProof.MaximumNewAttempts} new attempt(s), with cumulative additional reservations at most {p.AssociationProof.MaximumAdditionalReservationMinorUnits}. Retained commitments {p.Budget.RetainedCommittedMinorUnits}; project ceiling {p.Budget.ProjectCeilingMinorUnits}; remaining allocation {p.Budget.RemainingAllocationMinorUnits}. Voice {p.Intent.Envelope.VoiceName}. Earlier holds stay reserved. Confirmation does not generate audio.";
+        string successor = p.AssociationProof.RequiresSuccessorAudit ? "This is a separately approved new grant; earlier exhausted grants stay exhausted. " : string.Empty;
+        string allocation = p.Budget.AllocationTransition is { } t
+            ? $"Separately reviewed allocation ceiling: {t.PriorAllocationCeilingMinorUnits} to {t.NewAllocationCeilingMinorUnits}; no earlier commitment is released. " : string.Empty;
+        return $"{successor}{allocation}{p.Intent.Currency}, scale {p.Intent.Scale}: current estimate {p.Intent.EstimateMinorUnits}. {reservation} This admission permits at most {p.AssociationProof.MaximumNewAttempts} new attempt(s), with cumulative additional reservations at most {p.AssociationProof.MaximumAdditionalReservationMinorUnits}. Retained commitments {p.Budget.RetainedCommittedMinorUnits}; project ceiling {p.Budget.ProjectCeilingMinorUnits}; remaining allocation {p.Budget.RemainingAllocationMinorUnits}. Voice {p.Intent.Envelope.VoiceName}. Earlier holds stay reserved. Confirmation does not generate audio.";
     }
 
     private static async Task RunRecoveryDialogActionAsync(RecoveryControls c, RecoveryDialogState state, Func<Task> action, CancellationToken cancellationToken)

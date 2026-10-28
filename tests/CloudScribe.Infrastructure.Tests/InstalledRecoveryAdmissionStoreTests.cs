@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace CloudScribe.Infrastructure.Tests;
 
-public sealed class InstalledRecoveryAdmissionStoreTests
+public sealed partial class InstalledRecoveryAdmissionStoreTests
 {
     [Theory]
     [InlineData(false)]

@@ -50,7 +50,7 @@ public sealed partial class GoogleExplicitRecoveryService
         }
         if (!string.Equals(await FinancialDigestAsync(connection, transaction, cancellationToken).ConfigureAwait(false), financial, StringComparison.Ordinal))
             throw new InvalidOperationException("Financial evidence changed after recovery approval.");
-        await RequireAssociationCurrentAsync(association, envelope.AccountId, GoogleGenerationProvider.SynthesizeOperationStableId,
+        await RequireAssociationCurrentAsync(connection, transaction, association, envelope.AccountId, GoogleGenerationProvider.SynthesizeOperationStableId,
             result.ProjectId, documentId, revisionId, textHash, envelope.CompiledPayloadSha256, cancellationToken).ConfigureAwait(false);
         await RequireGrantCapacityAsync(connection, transaction, association, envelope.AccountId, result.ProjectId, 0, creating: false, cancellationToken).ConfigureAwait(false);
         var budget = await RequireCurrentBudgetAsync(connection, transaction, envelope.AccountId, result.ProjectId, result.SpendAuthorization.Currency,

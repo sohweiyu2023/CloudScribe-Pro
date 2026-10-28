@@ -6,4 +6,5 @@ public sealed record GoogleRecoveryPredecessorEvidence(string LogicalNarrationId
     string HistoricalKey, string HistoricalStateSha256, string ProjectId, Guid DocumentId, Guid RevisionId,
     string TextSha256, string OriginalPayloadSha256, string AdmissionSha256, DateTimeOffset ExpiresAtUtc,
     [property: JsonRequired] int MaximumNewAttempts = 0,
-    [property: JsonRequired] long MaximumAdditionalReservationMinorUnits = 0);
+    [property: JsonRequired] long MaximumAdditionalReservationMinorUnits = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RecoverySuccessorGrant? Successor = null);

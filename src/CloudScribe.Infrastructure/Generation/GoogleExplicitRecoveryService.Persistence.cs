@@ -9,6 +9,13 @@ public sealed partial class GoogleExplicitRecoveryService
         Guid id, string child, CancellationToken cancellationToken)
     {
         var i = p.Intent;
+        var authority = await predecessorEvidence.ResolveAsync(i.Envelope.AccountId, GoogleGenerationProvider.SynthesizeOperationStableId,
+            p.AssociationProof.RootHistoricalKey, p.AssociationProof.RootHistoricalStateSha256, cancellationToken).ConfigureAwait(false);
+        if (authority is null || !string.Equals(authority.AdmissionSha256, p.AssociationProof.AdmissionSha256, StringComparison.Ordinal)
+            || authority.ExpiresAtUtc <= timeProvider.GetUtcNow()
+            || (authority.Successor is not null) != p.AssociationProof.RequiresSuccessorAudit
+            || (authority.Successor is not null && !string.Equals(Digest(authority with { AdmissionSha256 = "" }), authority.AdmissionSha256, StringComparison.Ordinal)))
+            throw new InvalidOperationException("Exact prepared authority was revoked or changed before atomic approval.");
         using (var scope = Command(connection, transaction, """
             INSERT INTO google_recovery_scopes VALUES($account,$project,$currency,$scale,$floor,$cap,$remaining)
             ON CONFLICT(AccountId,ProjectId,Currency,Scale) DO UPDATE SET
@@ -39,5 +46,15 @@ public sealed partial class GoogleExplicitRecoveryService
             ("$approved", timeProvider.GetUtcNow().ToUnixTimeMilliseconds()),
             ("$grantAttempts", p.AssociationProof.MaximumNewAttempts), ("$grantMinor", p.AssociationProof.MaximumAdditionalReservationMinorUnits));
         await approval.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        if (authority.Successor is { } successor)
+        {
+            if (!string.Equals(authority.AdmissionSha256, p.AssociationProof.AdmissionSha256, StringComparison.Ordinal))
+                throw new InvalidOperationException("Successor authority changed before audit persistence.");
+            using var audit = Command(connection, transaction,
+                "INSERT INTO google_recovery_grant_transitions VALUES($grant,$authorization,$source,$logical,$evidence);",
+                ("$grant", authority.AdmissionSha256), ("$authorization", id.ToString("N")),
+                ("$source", successor.SourceApprovalSha256), ("$logical", authority.LogicalNarrationId), ("$evidence", JsonSerializer.Serialize(authority)));
+            await audit.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 }

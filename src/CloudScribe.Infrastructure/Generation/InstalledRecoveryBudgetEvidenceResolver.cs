@@ -34,6 +34,7 @@ public sealed partial class InstalledRecoveryBudgetEvidenceResolver(InstalledRec
         var spendExtra = CheckBaseline(snapshot.Spend, baseline.SpendRows, 1);
         var recoveryExtra = CheckBaseline(snapshot.Recovery, baseline.RecoveryRows, 1);
         if (queueExtra is null || spendExtra is not { Length: 0 } || recoveryExtra is null) return null;
+        if (!ValidTransitionRows(policy, snapshot, recoveryExtra)) return null;
         long additional = 0;
         HashSet<string> children = new(StringComparer.Ordinal);
         foreach (var attempt in recoveryExtra)
@@ -61,9 +62,45 @@ public sealed partial class InstalledRecoveryBudgetEvidenceResolver(InstalledRec
         var scopes = snapshot.Scopes.Where(x => Equals(x[0], policy.AccountId) && Equals(x[1], policy.ProjectId)
             && Equals(x[2], policy.Currency) && Equals(x[3], (long)policy.Scale)).ToArray();
         if (scopes.Length > 1 || (scopes.Length == 0 && recoveryExtra.Length != 0)) return null;
-        if (scopes.Length == 1 && (scopes[0][4] is not long floor || floor > committed
-            || !Equals(scopes[0][5], baseline.ProjectCeilingMinorUnits) || scopes[0][6] is not long allocation || remaining > allocation)) return null;
-        return new(committed, baseline.ProjectCeilingMinorUnits, remaining, baseline.ReviewedEvidenceSha256);
+        return ResolveAllocation(policy, baseline, scopes, committed, remaining, recoveryExtra.Length, queueExtra.Length);
+    }
+
+    private static GoogleRecoveryBudgetReview? ResolveAllocation(RecoveryAdmissionPolicy policy, RecoveryBudgetBaseline baseline,
+        object?[][] scopes, long committed, long remaining, int recoveryExtraCount, int queueExtraCount)
+    {
+        RecoveryAllocationTransition? transition = null;
+        if (scopes.Length == 1)
+        {
+            if (scopes[0][4] is not long floor || floor > committed || !Equals(scopes[0][5], baseline.ProjectCeilingMinorUnits)
+                || scopes[0][6] is not long allocation) return null;
+            if (remaining > allocation)
+            {
+                transition = policy.Predecessors.SingleOrDefault()?.Successor?.AllocationTransition;
+                if (transition is null || recoveryExtraCount != 0 || queueExtraCount != 0
+                    || !string.Equals(transition.PriorScopeSha256, RecoveryFinancialSnapshot.Hash(scopes[0]), StringComparison.Ordinal) || transition.NewRemainingMinorUnits != remaining
+                    || transition.NewAllocationCeilingMinorUnits != baseline.AllocationCeilingMinorUnits
+                    || transition.NewAllocationCeilingMinorUnits - transition.PriorAllocationCeilingMinorUnits != remaining - allocation) return null;
+            }
+        }
+        return new(committed, baseline.ProjectCeilingMinorUnits, remaining, baseline.ReviewedEvidenceSha256, transition);
+    }
+
+    private static bool ValidTransitionRows(RecoveryAdmissionPolicy policy, RecoveryFinancialSnapshot snapshot, object?[][] recoveryExtra)
+    {
+        var transitionExtra = CheckBaseline(snapshot.Transitions, policy.Budget.TransitionRows ?? [], 1);
+        if (transitionExtra is null) return false;
+        if (policy.SchemaVersion == 2 && transitionExtra.Length != 0) return false;
+        if (policy.SchemaVersion == 3)
+        {
+            if (transitionExtra.Length != recoveryExtra.Length) return false;
+            var authority = policy.Predecessors.Single();
+            foreach (var audit in transitionExtra)
+                if (audit.Length != 5 || !Equals(audit[0], authority.AdmissionSha256)
+                    || !Equals(audit[2], authority.Successor!.SourceApprovalSha256) || !Equals(audit[3], authority.LogicalNarrationId)
+                    || !Equals(audit[4], System.Text.Json.JsonSerializer.Serialize(authority))
+                    || !recoveryExtra.Any(x => Equals(x[0], audit[1]) && Equals(x[7], audit[0]))) return false;
+        }
+        return true;
     }
 
     private static object?[][]? CheckBaseline(IReadOnlyList<object?[]> current,

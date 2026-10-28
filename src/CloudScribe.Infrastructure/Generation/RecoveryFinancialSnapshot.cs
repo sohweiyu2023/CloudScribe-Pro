@@ -6,7 +6,8 @@ namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Canonical bounded snapshot data, not an authority or a mechanism for admitting its own pins.</summary>
 internal sealed record RecoveryFinancialSnapshot(IReadOnlyList<object?[]> Queue, IReadOnlyList<object?[]> Spend,
-    IReadOnlyList<object?[]> Recovery, IReadOnlyList<object?[]> Scopes, IReadOnlyList<RecoveryFinancialSnapshot.QueueState> QueueStates)
+    IReadOnlyList<object?[]> Recovery, IReadOnlyList<object?[]> Scopes, IReadOnlyList<RecoveryFinancialSnapshot.QueueState> QueueStates,
+    IReadOnlyList<object?[]> Transitions)
 {
     public string FinancialSha256 => Hash(Queue.Concat(Spend));
     public static string Hash<T>(T value) => Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
@@ -18,7 +19,8 @@ internal sealed record RecoveryFinancialSnapshot(IReadOnlyList<object?[]> Queue,
             await ReadTableAsync(connection, transaction, "google_generation_spend_authorizations", cancellationToken).ConfigureAwait(false),
             await ReadTableAsync(connection, transaction, "google_recovery_attempts", cancellationToken).ConfigureAwait(false),
             await ReadTableAsync(connection, transaction, "google_recovery_scopes", cancellationToken).ConfigureAwait(false),
-            await ReadQueuesAsync(connection, transaction, cancellationToken).ConfigureAwait(false));
+            await ReadQueuesAsync(connection, transaction, cancellationToken).ConfigureAwait(false),
+            await ReadTableAsync(connection, transaction, "google_recovery_grant_transitions", cancellationToken).ConfigureAwait(false));
 
     internal sealed record QueueState(string Account, string Operation, string Key, long Attempted, long Unresolved,
         string? ProviderId, string? LocalAttempt, string? PayloadSha256, long? PayloadBytes);

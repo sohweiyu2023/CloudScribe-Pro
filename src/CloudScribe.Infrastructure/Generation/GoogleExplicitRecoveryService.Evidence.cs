@@ -77,10 +77,24 @@ public sealed partial class GoogleExplicitRecoveryService
             WHERE AccountId=$account AND ProjectId=$project AND Currency=$currency AND Scale=$scale;
             """, ("$account", intent.Envelope.AccountId), ("$project", intent.ProjectId), ("$currency", intent.Currency), ("$scale", intent.Scale));
         using var row = await scope.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        if (await row.ReadAsync(cancellationToken).ConfigureAwait(false)
-            && (budget.RetainedCommittedMinorUnits < row.GetInt64(0) || budget.ProjectCeilingMinorUnits != row.GetInt64(1)
-                || budget.RemainingAllocationMinorUnits > row.GetInt64(2) || maximum > row.GetInt64(2)))
-            throw new InvalidOperationException("Recovery cannot lower retained holds or expand an existing budget scope.");
+        if (await row.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (budget.RetainedCommittedMinorUnits < row.GetInt64(0) || budget.ProjectCeilingMinorUnits != row.GetInt64(1))
+                throw new InvalidOperationException("Recovery cannot lower retained holds or change the project cap.");
+            if (budget.RemainingAllocationMinorUnits > row.GetInt64(2))
+            {
+                var t = budget.AllocationTransition;
+                object?[] old = [intent.Envelope.AccountId, intent.ProjectId, intent.Currency, (long)intent.Scale,
+                    row.GetInt64(0), row.GetInt64(1), row.GetInt64(2)];
+                if (t is null || !IsDigest(t.SourceApprovalSha256) || !string.Equals(t.PriorScopeSha256, Digest(old)
+, StringComparison.Ordinal) || t.NewRemainingMinorUnits != budget.RemainingAllocationMinorUnits || t.PriorAllocationCeilingMinorUnits < 0
+                    || t.NewAllocationCeilingMinorUnits <= t.PriorAllocationCeilingMinorUnits
+                    || t.NewAllocationCeilingMinorUnits - t.PriorAllocationCeilingMinorUnits != budget.RemainingAllocationMinorUnits - row.GetInt64(2))
+                    throw new InvalidOperationException("An exact independently admitted allocation transition is required.");
+            }
+            if (maximum > budget.RemainingAllocationMinorUnits)
+                throw new InvalidOperationException("Recovery exceeds the reviewed allocation.");
+        }
     }
 
     private static async Task<string> FinancialDigestAsync(SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
