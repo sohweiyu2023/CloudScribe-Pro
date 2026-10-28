@@ -161,7 +161,7 @@ function Get-ReviewedRecoveryPolicy([string]$Profile){
         Assert-RecoveryNestedPolicy $root
         $allowed=@('SchemaVersion','AppSha256','InfrastructureSha256','ProfileRootSha256','AccountId','ProjectId','Currency','Scale','ExpiresAtUtc','Budget','HistoricalAudio','Predecessors')
         if(@($root.EnumerateObject()).Count -ne $allowed.Count -or @($root.EnumerateObject() | Where-Object {$_.Name -cnotin $allowed}).Count){throw 'Recovery policy schema is incomplete or unknown.'}
-        if($root.GetProperty('SchemaVersion').GetInt32() -ne 2 -or $root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow){throw 'Recovery policy is incompatible or expired.'}
+        if($root.GetProperty('SchemaVersion').GetInt32() -notin @(2,3) -or $root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow){throw 'Recovery policy is incompatible or expired.'}
         if($root.GetProperty('InfrastructureSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash){throw 'Recovery policy belongs to another exact build.'}
         if($root.GetProperty('AppSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash){throw 'Recovery policy belongs to another exact app build.'}
         $canonical=[IO.Path]::GetFullPath($Profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()

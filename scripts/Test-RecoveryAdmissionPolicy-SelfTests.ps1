@@ -1,10 +1,10 @@
 $ErrorActionPreference='Stop'
-# Pure synthetic parser/validator fixtures. No installer execution, profiles, policy admission or provider access.
+# Pure synthetic parser/outer-entry fixtures. No installation, real profiles, policy admission or provider access.
 if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8){throw 'These optional-policy fixtures require PowerShell 7 on .NET 8 or later.'}
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer source failed parsing.'}
-foreach($name in @('Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Write-RecoveryCanonicalRecord','Get-RecoveryCanonicalGrantSha256','Assert-RecoveryNestedPolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Write-RecoveryCanonicalRecord','Get-RecoveryCanonicalGrantSha256','Assert-RecoveryNestedPolicy','Get-ReviewedRecoveryPolicy')){
     $function=$ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true)
     if(@($function).Count -ne 1){throw 'Expected one reviewed validator function.'}
     Invoke-Expression $function[0].Extent.Text
@@ -84,4 +84,52 @@ foreach($failure in @('missing-link','unknown-link','missing-audit-pins','wrong-
     try{Test-PolicyJson ($p|ConvertTo-Json -Depth 16 -Compress)}catch{$rejected=$true}
     if(-not $rejected){throw "Synthetic invalid successor policy was not rejected: $failure"};$passed++
 }
-[pscustomobject]@{Passed=$passed;Failed=0;SyntheticOnly=$true;InstallerExecuted=$false;ProviderCalls=0}
+# Exercise the actual reviewed-policy entry, including the outer version/expiry/build/profile/hash checks.
+# The prior nested-only fixtures could not detect an outer schema2-only regression.
+$fixtureRoot=Join-Path ([IO.Path]::GetTempPath()) ('cloudscribe-policy-entry-'+[Guid]::NewGuid().ToString('N'))
+$package=Join-Path $fixtureRoot 'package'
+$profile=Join-Path $fixtureRoot 'synthetic-profile'
+try{
+    [IO.Directory]::CreateDirectory((Join-Path $package 'app')) | Out-Null
+    [IO.Directory]::CreateDirectory($profile) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $package 'app/CloudScribe.dll'),'Inert synthetic app bytes; never execute.')
+    [IO.File]::WriteAllText((Join-Path $package 'app/CloudScribe.Infrastructure.dll'),'Inert synthetic infrastructure bytes; never execute.')
+    $ReviewedRecoveryPolicyPath=Join-Path $fixtureRoot 'policy.json'
+    foreach($case in @('schema2','schema3','schema1','schema4','expired','wrong-app','wrong-infrastructure','wrong-profile','wrong-file-digest','wrong-canonical-digest')){
+        $p=if($case -eq 'schema2'){New-SyntheticPolicy}else{New-SuccessorPolicy}
+        $p.AppSha256=(Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash
+        $p.InfrastructureSha256=(Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash
+        $canonical=[IO.Path]::GetFullPath($profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()
+        $p.ProfileRootSha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical)))
+        switch($case){
+            'schema1' {$p.SchemaVersion=1}
+            'schema4' {$p.SchemaVersion=4}
+            'expired' {$p.ExpiresAtUtc=[DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('O')}
+            'wrong-app' {$p.AppSha256='b'*64}
+            'wrong-infrastructure' {$p.InfrastructureSha256='b'*64}
+            'wrong-profile' {$p.ProfileRootSha256='b'*64}
+            'wrong-canonical-digest' {$p.Predecessors[0].AdmissionSha256='a'*64}
+        }
+        [IO.File]::WriteAllText($ReviewedRecoveryPolicyPath,($p|ConvertTo-Json -Depth 16 -Compress))
+        $ReviewedRecoveryPolicySha256=(Get-FileHash -LiteralPath $ReviewedRecoveryPolicyPath).Hash
+        if($case -eq 'wrong-file-digest'){$ReviewedRecoveryPolicySha256='b'*64}
+        $rejected=$false;$result=$null
+        try{$result=Get-ReviewedRecoveryPolicy $profile}catch{$rejected=$true}
+        if($case -in @('schema2','schema3')){
+            if($rejected -or $result.Sha256 -ne $ReviewedRecoveryPolicySha256 -or -not $result.Bytes.Length){throw "Valid outer-entry policy rejected: $case"}
+        }elseif(-not $rejected){throw "Invalid outer-entry policy accepted: $case"}
+        $passed++
+    }
+}finally{
+    # Only remove known fixture files and now-empty directories; no recursive traversal or unrelated paths.
+    foreach($relative in @('policy.json','package/app/CloudScribe.dll','package/app/CloudScribe.Infrastructure.dll')){
+        $path=Join-Path $fixtureRoot $relative
+        if(Test-Path -LiteralPath $path){Assert-NoLinks $path;[IO.File]::Delete($path)}
+    }
+    foreach($relative in @('package/app','package','synthetic-profile')){
+        $path=Join-Path $fixtureRoot $relative
+        if(Test-Path -LiteralPath $path){Assert-NoLinks $path;[IO.Directory]::Delete($path,$false)}
+    }
+    if(Test-Path -LiteralPath $fixtureRoot){Assert-NoLinks $fixtureRoot;[IO.Directory]::Delete($fixtureRoot,$false)}
+}
+[pscustomobject]@{Passed=$passed;Failed=0;SyntheticOnly=$true;OuterEntryFixtures=10;InstallerExecuted=$false;ProviderCalls=0}
