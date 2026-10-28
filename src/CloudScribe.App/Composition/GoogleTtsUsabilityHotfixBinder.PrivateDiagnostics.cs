@@ -54,7 +54,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             var status = NewDescription(string.Empty);
             var body = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 12 };
             body.Children.Add(NewDescription("Private, possibly sensitive provider text. Known credentials and input echoes are redacted; anonymity is not guaranteed. Local only: excluded from normal logs, exports and uploads. Active records expire after 24 hours and are removed on store access; external copies may persist."));
-            var consent = new CheckBox { Content = "Observe one response for this exact saved request; retain only HTTP400/INVALID_ARGUMENT messages. Sends and approves nothing." };
+            const string consentText = "Observe one response for this exact saved request; retain only HTTP400/INVALID_ARGUMENT messages. Sends and approves nothing.";
+            var consent = new CheckBox { Content = new TextBlock { Text = consentText, TextWrapping = TextWrapping.Wrap, MaxWidth = 520 } };
+            AutomationProperties.SetName(consent, consentText);
             var arm = NewButton("Enable once for selected saved request (10 minutes)"); arm.IsEnabled = false;
             var cancel = NewButton("Disable private capture"); var refresh = NewButton("Read private local records");
             var view = new TextBox { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 180, MaxHeight = 320 };
