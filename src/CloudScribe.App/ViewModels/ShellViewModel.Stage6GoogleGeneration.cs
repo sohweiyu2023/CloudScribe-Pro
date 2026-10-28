@@ -224,6 +224,7 @@ public sealed partial class ShellViewModel
                 string payloadHash = Convert.ToHexStringLower(SHA256.HashData(state.ProviderRequest.CompiledPayload.Span));
                 CloudScribeLog.GoogleGenerationRequestContext(_logger, payloadHash, state.ProviderRequest.CompiledPayload.Length);
             }
+            AttachPrivateGoogleDiagnostic(state.ProviderRequest, articleRequestVersion);
             GoogleGenerationQueueOutcome outcome = await coordinator.ProcessPersistedTransitionAsync(
                 state.UiSelection, state.AccountAuthorized, state.ProjectAuthorized, state.CapabilityCurrent,
                 state.PricingCurrent, state.ProviderRequest, state.AdmittedTrust, state.PreviousState,
@@ -232,6 +233,7 @@ public sealed partial class ShellViewModel
                 cancellationToken).ConfigureAwait(true);
             await HandleGoogleGenerationOutcomeAsync(outcome, cancellationToken).ConfigureAwait(true);
             await RecordArticleAudioOutcomeAsync(articleDocument, state.ProviderRequest, outcome, cancellationToken).ConfigureAwait(true);
+            InvalidatePrivateGoogleDiagnostic();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -251,6 +253,7 @@ public sealed partial class ShellViewModel
             // Spend approval is single-use at the desktop boundary. Whether the guarded Stage6
             // transition succeeds, rejects, or requires reconciliation, another provider attempt
             // must be freshly prepared and explicitly approved against its exact compiled bytes.
+            InvalidatePrivateGoogleDiagnostic();
             PreparedGoogleGenerationSpendApproved = false;
             PreparedGoogleGenerationSpendReview = null;
             ExitGoogleGenerationOperation();

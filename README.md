@@ -43,3 +43,7 @@ As of 21 October 2026, source CI passes 718 compiled mocked/local tests plus str
 Original CloudScribe Pro project code is available under the [MIT License](LICENSE), copyright (c) 2026 Soh Wei Yu. Third-party packages, native components and incorporated upstream material retain their own licenses and notices; see [Third-party notices](THIRD-PARTY-NOTICES.md). The MIT grant covers only rights the project copyright holder can grant. It does not change provider-service terms or license the separately distributed Cosmic Transcriber project/reference archive. Existing About provenance and credits are retained.
 
 See [voice recommendations and Chirp controls](docs/VOICE_RECOMMENDATIONS.md) for exact-language defaults, premium pricing and preserved manual choices.
+
+## Private validation diagnostics
+
+Optional [private provider diagnostics](docs/PRIVATE_PROVIDER_DIAGNOSTICS.md) can retain unfamiliar validation messages locally after redaction. Capture is off by default, applies to one exact saved request, and never grants spending or retry permission.

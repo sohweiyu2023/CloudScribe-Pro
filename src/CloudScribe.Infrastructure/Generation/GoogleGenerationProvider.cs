@@ -74,13 +74,14 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         GenerationProviderRequest request,
         CancellationToken cancellationToken)
     {
+        Guid? privateTicket = _transport.BeginPrivateCapture(request, _account.CredentialReferenceId);
         try
         {
             var response = await _transport.SendAsync(
                 new GoogleHttpTransportRequest(
                     _account.Endpoint,
                     _account.CredentialReferenceId,
-                    request.CompiledPayload),
+                    request.CompiledPayload, PrivateDiagnosticTicket: privateTicket),
                 cancellationToken).ConfigureAwait(false);
             return (response, false);
         }
@@ -96,6 +97,7 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         {
             return null;
         }
+        finally { _transport.EndPrivateCapture(privateTicket); }
     }
 
     private GenerationProviderResponse CreateAcceptedResponse(GoogleHttpTransportResponse response, string outputFormat)
