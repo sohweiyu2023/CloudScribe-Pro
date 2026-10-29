@@ -21,6 +21,7 @@ public sealed partial class NarrationPartGroupTests
     [InlineData("null-article")]
     [InlineData("null-proposal")]
     [InlineData("oversized")]
+    [InlineData("null-supplement")]
     public async Task ChirpOnlyExactInstallerPinnedPolicyCanSupplyFreshAuthority(string failure)
     {
         using var f = new Fixture(); await f.InitializeAsync(); var e = await ChirpEvidenceAsync(f);
@@ -43,6 +44,7 @@ public sealed partial class NarrationPartGroupTests
         string json = JsonSerializer.Serialize(policy);
         if (string.Equals(failure, "duplicate", StringComparison.Ordinal)) json = "{\"SchemaVersion\":1," + json[1..];
         if (string.Equals(failure, "unknown", StringComparison.Ordinal)) json = "{\"CallerApprovedUnlimited\":true," + json[1..];
+        if (string.Equals(failure, "null-supplement", StringComparison.Ordinal)) json = "{\"LegacyAssociations\":null,\"LegacyAssociationRows\":null," + json[1..];
         if (string.Equals(failure, "oversized", StringComparison.Ordinal)) json += new string(' ', 8 * 1024 * 1024);
         byte[] bytes = Encoding.UTF8.GetBytes(json);
         string policyFile = Path.Combine(install, "chirp-article-admission-policy.json"), marker = Path.Combine(install, "cloudscribe-install.json");

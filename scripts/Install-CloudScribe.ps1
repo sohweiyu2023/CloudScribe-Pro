@@ -190,7 +190,11 @@ function Assert-ChirpRange($Range){
     if($Range.GetProperty('StartScalar').GetInt32() -lt 0 -or $Range.GetProperty('EndScalarExclusive').GetInt32() -le $Range.GetProperty('StartScalar').GetInt32()){throw 'Article coverage range is invalid.'}
 }
 function Assert-ChirpPolicy($Root){
-    Assert-RecoveryRecord $Root @{SchemaVersion='Int32';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';AccountId='String';ProjectId='String';Currency='String';Scale='Int32';ExpiresAtUtc='Date';SourceApprovalSha256='String';Budget='Object';ScopeRows='Array';PriorArticleAttemptRows='Array';Articles='Array';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
+    $fields=@{SchemaVersion='Int32';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';AccountId='String';ProjectId='String';Currency='String';Scale='Int32';ExpiresAtUtc='Date';SourceApprovalSha256='String';Budget='Object';ScopeRows='Array';PriorArticleAttemptRows='Array';Articles='Array';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
+    $legacy=@($Root.EnumerateObject().Name) -ccontains 'LegacyAssociations'
+    if($legacy){$fields.LegacyAssociations='Array';$fields.LegacyAssociationRows='Array'}
+    Assert-RecoveryRecord $Root $fields
+    if($legacy){Assert-ChirpLegacyAssociations $Root}
     if($Root.GetProperty('SchemaVersion').GetInt32() -ne 1 -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
         $Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow -or ($Root.GetProperty('MaximumNewAttempts').GetInt32() -lt 1 -or $Root.GetProperty('MaximumNewAttempts').GetInt32() -gt 10000) -or
         $Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -lt 1){throw 'Article grant identity, expiry or limits are invalid.'}
@@ -248,6 +252,32 @@ function Assert-ChirpPolicy($Root){
             Assert-RecoveryRecord $audio.GetProperty('Audio') @{DocumentId='NonemptyGuid';RevisionId='NonemptyGuid';TextSha256='String';AccountId='String';OperationId='String';IdempotencyKey='String';LocalAttemptId='String';PayloadSha256='String';AudioPath='String';AudioBytes='Int64';AudioSha256='String';VoiceName='String';LanguageCode='String';HistoricalEvidenceSha256='NullableString';HistoricalAnchorSha256='NullableString'}
         }
     }
+}
+function Assert-ChirpLegacyAssociations($Root){
+    $items=$Root.GetProperty('LegacyAssociations');$pins=$Root.GetProperty('LegacyAssociationRows')
+    if($items.GetArrayLength() -lt 1 -or $items.GetArrayLength() -gt 200 -or $pins.GetArrayLength() -gt 10000){throw 'Historical association count is invalid.'}
+    $seenPins=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach($pin in $pins.EnumerateArray()){
+        Assert-RecoveryRecord $pin @{Identity='String';Sha256='String'}
+        if($pin.GetProperty('Identity').GetString() -cnotmatch '^[a-f0-9]{64}$' -or -not $seenPins.Add($pin.GetProperty('Identity').GetString())){throw 'Historical audit pins are ambiguous.'}
+    }
+    $keys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal);$spends=[Collections.Generic.HashSet[Guid]]::new();$retained=0L
+    foreach($a in $items.EnumerateArray()){
+        Assert-RecoveryRecord $a @{PlanSha256='String';DocumentId='NonemptyGuid';RevisionId='NonemptyGuid';StartScalar='Int32';EndScalarExclusive='Int32';TextSha256='String';AccountId='String';ProjectId='String';OperationId='String';IdempotencyKey='String';QueueRowSha256='String';SpendAuthorizationId='NonemptyGuid';SpendRowSha256='String';OriginalPayloadSha256='String';OriginalPayloadBytes='Int32';RetainedReservationMinorUnits='Int64';ReviewedEvidenceSha256='String'}
+        $key=$a.GetProperty('IdempotencyKey').GetString();$cost=$a.GetProperty('RetainedReservationMinorUnits').GetInt64()
+        if([string]::IsNullOrWhiteSpace($key) -or $key.Length -gt 128 -or $key.StartsWith('chirp-article:',[StringComparison]::Ordinal) -or -not $keys.Add($key) -or -not $spends.Add($a.GetProperty('SpendAuthorizationId').GetGuid()) -or
+            $a.GetProperty('AccountId').GetString() -cne $Root.GetProperty('AccountId').GetString() -or $a.GetProperty('ProjectId').GetString() -cne $Root.GetProperty('ProjectId').GetString() -or $a.GetProperty('OperationId').GetString() -cne 'synthesize-speech' -or
+            $cost -lt 1 -or $a.GetProperty('OriginalPayloadBytes').GetInt32() -lt 1 -or $a.GetProperty('OriginalPayloadBytes').GetInt32() -gt 5000 -or $a.GetProperty('StartScalar').GetInt32() -lt 0 -or $a.GetProperty('EndScalarExclusive').GetInt32() -le $a.GetProperty('StartScalar').GetInt32()){throw 'Historical association identity or reservation is invalid.'}
+        $retained=[long]($retained+$cost)
+        $article=@($Root.GetProperty('Articles').EnumerateArray() | Where-Object {$_.GetProperty('Proposal').GetProperty('PlanSha256').GetString() -ceq $a.GetProperty('PlanSha256').GetString()})
+        if($article.Count -ne 1){throw 'Historical association article is missing or ambiguous.'}
+        $native=@($article[0].GetProperty('Lineage').GetProperty('History').EnumerateArray() | Where-Object {$_.GetProperty('DocumentId').GetGuid() -eq $a.GetProperty('DocumentId').GetGuid() -and $_.GetProperty('RevisionId').GetGuid() -eq $a.GetProperty('RevisionId').GetGuid() -and $_.GetProperty('StartScalar').GetInt32() -eq $a.GetProperty('StartScalar').GetInt32() -and $_.GetProperty('EndScalarExclusive').GetInt32() -eq $a.GetProperty('EndScalarExclusive').GetInt32() -and $_.GetProperty('TextSha256').GetString() -ceq $a.GetProperty('TextSha256').GetString()})
+        if($native.Count -ne 1 -or @($article[0].GetProperty('Lineage').GetProperty('History').EnumerateArray() | ForEach-Object {$_.GetProperty('Attempts').EnumerateArray()} | Where-Object {$_.GetProperty('IdempotencyKey').GetString() -ceq $key}).Count){throw 'Historical association duplicates or changes native coverage.'}
+        foreach($pair in @(@('QueueRows','QueueRowSha256'),@('SpendRows','SpendRowSha256'))){
+            if(-not @($Root.GetProperty('Budget').GetProperty($pair[0]).EnumerateArray() | Where-Object {$_.GetProperty('Sha256').GetString() -ceq $a.GetProperty($pair[1]).GetString()}).Count){throw 'Historical association is absent from independent financial pins.'}
+        }
+    }
+    if($retained -gt $Root.GetProperty('Budget').GetProperty('ProjectCommittedMinorUnits').GetInt64() -or $retained -gt $Root.GetProperty('Budget').GetProperty('AllocationCommittedMinorUnits').GetInt64()){throw 'Historical holds are missing from the retained baseline.'}
 }
 function Assert-ChirpLineage($Lineage){
     Assert-RecoveryRecord $Lineage @{History='Array';Ranges='Array'}

@@ -37,6 +37,7 @@ public sealed partial class ChirpArticleService
         RequireCapacity(policy, financial, confirmation.MaximumMinorUnits);
         await RequirePolicyCurrentAsync(policy, cancellationToken).ConfigureAwait(false);
         await AppendPlanAsync(connection, transaction, policy, current.Article, cancellationToken).ConfigureAwait(false);
+        await AppendLegacyAssociationsAsync(connection, transaction, policy, current.Article.Proposal.PlanSha256, cancellationToken).ConfigureAwait(false);
         var approved = new ChirpApprovedAttempt(Guid.NewGuid(), Key(current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal), confirmation.MaximumMinorUnits);
         await AppendAttemptAsync(connection, transaction, policy, pending, approved, cancellationToken).ConfigureAwait(false);
         var after = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);

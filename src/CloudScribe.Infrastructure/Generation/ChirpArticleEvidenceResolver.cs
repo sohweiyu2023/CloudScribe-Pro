@@ -11,11 +11,16 @@ namespace CloudScribe.Infrastructure.Generation;
 internal sealed partial class ChirpArticleEvidenceResolver(AppPaths paths)
 {
     internal async Task<(DocumentSnapshot Document, AdmittedChirpArticle Article)> ResolveAsync(SqliteConnection connection,
-        SqliteTransaction transaction, ChirpArticleAdmissionPolicy policy, Guid documentId, RecoveryFinancialSnapshot financial, CancellationToken token)
+        SqliteTransaction transaction, ChirpArticleAdmissionPolicy policy, Guid documentId, RecoveryFinancialSnapshot financial, CancellationToken token,
+        bool requirePersistedLegacy = false)
     {
         var matches = policy.Articles.Where(x => x.Proposal.DocumentId == documentId).ToArray();
         if (matches.Length != 1) throw new InvalidOperationException("The saved article has no unique independently admitted internal plan.");
-        return await ResolveSnapshotAsync(connection, transaction, matches[0], policy.AccountId, policy.ProjectId, financial, token).ConfigureAwait(false);
+        var result = await ResolveSnapshotAsync(connection, transaction, matches[0], policy.AccountId, policy.ProjectId, financial, token).ConfigureAwait(false);
+        await RequireMissingLegacyAsync(connection, transaction, matches[0], policy, financial, token).ConfigureAwait(false);
+        await RequireLegacyAsync(connection, transaction, matches[0], policy.AccountId, policy.ProjectId, financial,
+            (policy.LegacyAssociations ?? []).Where(x => string.Equals(x.PlanSha256, matches[0].Proposal.PlanSha256, StringComparison.Ordinal)).ToArray(), requirePersistedLegacy, token).ConfigureAwait(false);
+        return result;
     }
 
     // Local readback/export uses immutable stored provenance, never treating it as current paid authority.
@@ -32,6 +37,9 @@ internal sealed partial class ChirpArticleEvidenceResolver(AppPaths paths)
         ChirpPlanLineageMapper.RequireExact(admitted.Lineage, mapped);
         foreach (var retained in admitted.ReusedAudio)
             await RequireReusedAsync(connection, transaction, document, admitted, retained, financial, token).ConfigureAwait(false);
+        // Historical readback/export can inspect committed supplements without granting new paid authority.
+        var legacy = await StoredLegacyAsync(connection, transaction, admitted.Proposal.PlanSha256, token).ConfigureAwait(false);
+        await RequireLegacyAsync(connection, transaction, admitted, accountId, projectId, financial, legacy, true, token).ConfigureAwait(false);
         return (document, admitted);
     }
 

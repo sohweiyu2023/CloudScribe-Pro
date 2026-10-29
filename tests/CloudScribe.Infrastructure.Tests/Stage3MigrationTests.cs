@@ -263,6 +263,7 @@ public sealed partial class Stage3MigrationTests
                 GoogleRecoveryAdmissionLimits.MigrationId,
                 GoogleRecoverySuccessorGrants.MigrationId,
                 ChirpArticlePlans.MigrationId,
+                ChirpLegacyAssociations.MigrationId,
             ],
             migrations);
     }

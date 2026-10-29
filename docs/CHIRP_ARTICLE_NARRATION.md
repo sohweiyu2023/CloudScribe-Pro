@@ -16,6 +16,12 @@ Closing a review before reservation cancels only that review. Closing or restart
 
 Each request retains its own upward cent-rounded reservation. All prior failed/uncertain holds remain counted once in the independently reviewed baseline; overlaps with several new slices do not multiply or erase those holds. Legacy paid routes are blocked for an account with active article admission or retained internal reservations so they cannot omit the new financial history. A later budget reconciliation requires a separately reviewed supported change, never deleting rows.
 
+## Historical requests with missing wire metadata
+
+An older submitted queue entry may lack its original wire hash or byte count. A matching text or filename alone cannot establish its relationship to a retained spend approval. Before replacement coverage overlaps that history, independently reviewed admission must bind the exact saved native revision/range, original compiled request, complete unchanged queue row and one exact retained spend authorization. Missing or ambiguous evidence blocks the request. An unknown historical response or charge remains unknown.
+
+This association is an additive audit record. It preserves the original queue fields, financial hold, immutable article plan/lineage, accepted receipts and audio. The association and new request reservation commit together, or neither commits. Restart verifies the same audit and current admission; renewal must explicitly pin the old audit rather than rewriting it. Historical readback/export can inspect committed association provenance after expiry, but that evidence cannot authorize another request. No automatic retry, hold release or new paid identity follows from adding an association.
+
 ## Accepted audio, restart and final export
 
 Verified previously accepted audio can cover its exact original range once, with original native IDs, text/voice/request identity and file/receipt hashes checked. It is reused without import repetition or regeneration. New accepted responses use an append-only output journal, an owned local audio snapshot and verified private files. Caller cancellation does not cancel the bounded local completion of already accepted audio. A local write failure retains one full response in the running session for repair. **Recover saved local outputs (no provider call)** completes a verified local journal/file/receipt without paid authority. A hard process loss before bytes reach durable storage is not claimed recoverable; preserve its financial hold and investigate rather than regenerating.

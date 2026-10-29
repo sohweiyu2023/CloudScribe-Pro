@@ -15,7 +15,7 @@ internal static class ChirpArticleSql
     internal static async Task<IReadOnlyList<object?[]>> ReadAsync(SqliteConnection connection, SqliteTransaction transaction,
         string table, CancellationToken token)
     {
-        if (table is not ("chirp_article_attempts" or "chirp_article_plans" or "chirp_article_receipts" or "chirp_article_output_journals"))
+        if (table is not ("chirp_article_attempts" or "chirp_article_plans" or "chirp_article_receipts" or "chirp_article_output_journals" or "chirp_article_legacy_associations"))
             throw new InvalidOperationException("Unsupported article evidence table.");
         using var command = Command(connection, transaction, "SELECT * FROM " + table + " ORDER BY rowid LIMIT 10001;");
         using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);

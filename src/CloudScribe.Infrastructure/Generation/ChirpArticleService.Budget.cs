@@ -10,6 +10,7 @@ public sealed partial class ChirpArticleService
     {
         var old = await RecoveryFinancialSnapshot.ReadAsync(connection, transaction, token).ConfigureAwait(false);
         var attempts = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_attempts", token).ConfigureAwait(false);
+        var associations = await AuditRowsAsync(connection, transaction, policy, token).ConfigureAwait(false);
         var queueExtra = ChirpArticleSql.Extra(old.Queue, policy.Budget.QueueRows, 3);
         ChirpArticleSql.Exact(old.Spend, policy.Budget.SpendRows, 1);
         ChirpArticleSql.Exact(old.Recovery, policy.Budget.RecoveryRows, 1);
@@ -32,7 +33,7 @@ public sealed partial class ChirpArticleService
         long remaining = checked(policy.Budget.AllocationCeilingMinorUnits - policy.Budget.AllocationCommittedMinorUnits - additional);
         if (committed > policy.Budget.ProjectCeilingMinorUnits || remaining < 0)
             throw new InvalidOperationException("Retained project or article allocation ceiling would be exceeded.");
-        string digest = FinancialDigest(old, attempts);
+        string digest = FinancialDigest(old, attempts, associations);
         return new(old, attempts, extra, digest, committed, remaining, additional);
     }
 
@@ -64,7 +65,7 @@ public sealed partial class ChirpArticleService
             throw new InvalidOperationException("The article attempt no longer owns its durable queue barrier.");
     }
 
-    private static string FinancialDigest(RecoveryFinancialSnapshot old, IReadOnlyList<object?[]> attempts) =>
+    private static string FinancialDigest(RecoveryFinancialSnapshot old, IReadOnlyList<object?[]> attempts, IReadOnlyList<object?[]> associations) =>
         ChirpPolicyValidation.Hash(new
         {
             old.Queue,
@@ -72,6 +73,7 @@ public sealed partial class ChirpArticleService
             old.Recovery,
             old.Scopes,
             old.Transitions,
+            LegacyAssociations = associations,
             ArticleAttempts = attempts.Select(x => x.Select((value, i) => i == 14 ? null : value).ToArray()).ToArray()
         });
 
