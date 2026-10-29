@@ -9,7 +9,8 @@ public sealed record GenerationProviderResponse(
     string? MediaContentType,
     TimeSpan? RetryAfter,
     string DiagnosticCode,
-    GoogleErrorStatus ErrorStatus = GoogleErrorStatus.NotProvided)
+    GoogleErrorStatus ErrorStatus = GoogleErrorStatus.NotProvided,
+    GoogleValidationMessageHint ValidationHint = GoogleValidationMessageHint.NotProvided)
 {
     public bool IsAccepted => Disposition == SubmissionDisposition.Accepted;
 }

@@ -29,6 +29,7 @@ public sealed partial class GoogleExplicitRecoveryService
         var connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: true);
+        await ChirpLegacySpendGuard.RequireNoArticleReservationsAsync(connection, transaction, envelope.AccountId, cancellationToken, articleAdmission).ConfigureAwait(false);
         using var command = Command(connection, transaction, """
             SELECT ChildKey,ReviewSha256,ProjectId,Currency,Scale,EstimateMinorUnits,ReservedMinorUnits,Consumed,EnvelopeJson,
             LogicalItemId,RootHistoricalKey,RootHistoricalStateSha256,AdmissionSha256,DocumentId,RevisionId,TextSha256,ApprovedFinancialSha256,GrantMaximumNewAttempts,GrantMaximumAdditionalMinorUnits

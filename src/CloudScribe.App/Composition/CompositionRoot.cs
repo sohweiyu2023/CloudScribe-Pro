@@ -75,7 +75,8 @@ public static class CompositionRoot
         services.AddSingleton<StudioPreferencesStore>();
         services.AddSingleton<LocalRequestStatusReader>();
         services.AddSingleton<GoogleTtsUsabilityHotfixBinder>();
-        services.AddSingleton<GoogleGenerationAcceptedMp3OutputService>();
+        services.AddSingleton(serviceProvider => GoogleGenerationAcceptedMp3OutputService.WithArticleOutputRoot(
+            Path.Combine(serviceProvider.GetRequiredService<AppPaths>().RootDirectory, "accepted-chirp-article-audio")));
         services.AddSingleton<INativeMediaTool, BoundedNativeMediaTool>();
         services.AddSingleton(serviceProvider => new InstalledRecoveryAdmissionStore(AppContext.BaseDirectory,
             serviceProvider.GetRequiredService<AppPaths>(), serviceProvider.GetRequiredService<TimeProvider>()));
@@ -88,6 +89,15 @@ public static class CompositionRoot
             serviceProvider.GetRequiredService<GoogleTtsStudioTrustContextFactory>(), serviceProvider.GetRequiredService<GoogleGenerationProductionCompileAndPrepareService>(),
             serviceProvider.GetRequiredService<CloudScribe.Infrastructure.Pricing.V222ControlSet>(), serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<GoogleRecoveryPreparationService>();
+        RegisterArticleNarration(services);
+    }
+
+    private static void RegisterArticleNarration(IServiceCollection services)
+    {
+        services.AddSingleton<IChirpArticleAdmissionStore>(serviceProvider => new InstalledChirpArticleAdmissionStore(AppContext.BaseDirectory,
+            serviceProvider.GetRequiredService<AppPaths>(), serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<ChirpArticleService>();
+        services.AddSingleton<ChirpArticlePreparationService>();
         services.AddSingleton<ArticleAudioExportService>();
     }
 
@@ -155,6 +165,14 @@ public static class CompositionRoot
         ConfigureGoogleOutput(viewModel, serviceProvider);
         var recovery = serviceProvider.GetRequiredService<GoogleRecoveryPreparationService>();
         viewModel.ConfigureGoogleRecovery(recovery.PrepareAsync, recovery.ApproveAsync);
+        var chirp = serviceProvider.GetRequiredService<ChirpArticlePreparationService>();
+        viewModel.ConfigureChirpArticle(chirp.PrepareAsync, chirp.ApproveAsync, async (request, outcome, token) =>
+        {
+            string file = await serviceProvider.GetRequiredService<ChirpArticleService>().PersistAcceptedAsync(request, outcome, token).ConfigureAwait(false);
+            using var localCompletion = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await serviceProvider.GetRequiredService<GoogleGenerationAcceptedMp3OutputService>().RegisterAcceptedAsync(outcome, file, localCompletion.Token).ConfigureAwait(false);
+            return file;
+        });
         serviceProvider.GetRequiredService<Stage7VoiceLabCatalogShellBinder>().Bind(viewModel);
         serviceProvider.GetRequiredService<Stage7VoiceLabAuditionShellBinder>().Bind(viewModel);
         Stage8RestoreRecoveryShellBinder.ConfigurePersistedRecovery(

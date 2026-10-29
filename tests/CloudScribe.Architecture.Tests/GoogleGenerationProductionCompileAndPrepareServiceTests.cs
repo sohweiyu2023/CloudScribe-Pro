@@ -7,7 +7,7 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Architecture.Tests;
 
-public sealed class GoogleGenerationProductionCompileAndPrepareServiceTests
+public sealed partial class GoogleGenerationProductionCompileAndPrepareServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 4, 5, 0, 0, TimeSpan.Zero);
     private static readonly Uri Endpoint = new("https://texttospeech.googleapis.com/", UriKind.Absolute);

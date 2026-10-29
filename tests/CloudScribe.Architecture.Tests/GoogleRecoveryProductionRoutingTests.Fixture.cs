@@ -17,7 +17,7 @@ namespace CloudScribe.Architecture.Tests;
 
 public sealed partial class GoogleRecoveryProductionRoutingTests
 {
-    private sealed class Fixture : IDbContextFactory<CloudScribeDbContext>, IDisposable
+    private sealed partial class Fixture : IDbContextFactory<CloudScribeDbContext>, IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "cloudscribe-recovery-routing-tests", Guid.NewGuid().ToString("N"));
         private readonly AppPaths _paths;

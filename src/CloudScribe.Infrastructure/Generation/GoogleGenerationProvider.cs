@@ -140,7 +140,7 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
             ReadOnlyMemory<byte>.Empty,
             null,
             response.RetryAfter,
-            $"google-http-{(int)response.StatusCode}", response.ErrorStatus);
+            $"google-http-{(int)response.StatusCode}", response.ErrorStatus, response.ValidationHint);
     }
 
     private static GenerationProviderResponse Unknown(string diagnosticCode) => new(

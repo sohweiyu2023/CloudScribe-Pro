@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace CloudScribe.Infrastructure.Generation;
 
 public sealed class GoogleGenerationPersistedQueueStateStore(
-    IDbContextFactory<CloudScribeDbContext> contextFactory) : IGoogleGenerationPersistedQueueStateStore
+    IDbContextFactory<CloudScribeDbContext> contextFactory, IChirpArticleAdmissionStore? articleAdmission = null) : IGoogleGenerationPersistedQueueStateStore
 {
     public async Task<GoogleGenerationPersistedQueueState?> LoadAsync(
         string accountId,
@@ -60,6 +60,8 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
     public async Task SaveAsync(GoogleGenerationPersistedQueueState state, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(state);
+        if (state.IdempotencyKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal))
+            throw new InvalidOperationException("Internal article identities must be initialized by their dedicated approval transaction.");
         state.Validate();
         if (state.SubmissionAttempted || state.UnresolvedSubmission || state.ProviderRequestId is not null
             || state.LocalAttemptId is not null || state.DiagnosticCode is not null || state.PayloadSha256 is not null
@@ -69,6 +71,9 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
         SqliteConnection connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using SqliteCommand command = connection.CreateCommand();
+        using var initialization = connection.BeginTransaction(deferred: false);
+        await ChirpLegacySpendGuard.RequireNoArticleReservationsAsync(connection, initialization, state.AccountId, cancellationToken, articleAdmission).ConfigureAwait(false);
+        command.Transaction = initialization;
         command.CommandText = """
             INSERT INTO google_generation_queue_states
                 (AccountId, OperationStableId, IdempotencyKey, UnresolvedSubmission, ProviderRequestId, SubmissionAttempted)
@@ -77,6 +82,7 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
             """;
         AddIdentity(command, state);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested(); initialization.Commit();
         var current = await LoadAsync(state.AccountId, state.OperationStableId, state.IdempotencyKey, cancellationToken).ConfigureAwait(false);
         if (current != state)
             throw new InvalidOperationException("Existing queue state cannot be overwritten by initialization.");
@@ -85,7 +91,8 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
     public async Task<bool> TryClaimSubmissionAsync(GoogleGenerationPersistedQueueState claim, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
-        if (claim.IdempotencyKey.StartsWith(GoogleExplicitRecoveryService.KeyPrefix, StringComparison.Ordinal))
+        if (claim.IdempotencyKey.StartsWith(GoogleExplicitRecoveryService.KeyPrefix, StringComparison.Ordinal)
+            || claim.IdempotencyKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal))
             throw new InvalidOperationException("An additional attempt requires its dedicated full-identity recovery approval claim.");
         claim.Validate();
         if (!claim.SubmissionAttempted || !claim.UnresolvedSubmission || claim.ProviderRequestId is not null
@@ -96,6 +103,9 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
         SqliteConnection connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using SqliteCommand command = connection.CreateCommand();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        await ChirpLegacySpendGuard.RequireNoArticleReservationsAsync(connection, transaction, claim.AccountId, cancellationToken, articleAdmission).ConfigureAwait(false);
+        command.Transaction = transaction;
         command.CommandText = """
             UPDATE google_generation_queue_states SET
                 SubmissionAttempted = 1, UnresolvedSubmission = 1, LocalAttemptId = $attempt,
@@ -105,7 +115,8 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
               AND SubmissionAttempted = 0 AND UnresolvedSubmission = 0 AND ProviderRequestId IS NULL AND LocalAttemptId IS NULL;
             """;
         AddMetadata(command, claim);
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+        bool claimed = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+        cancellationToken.ThrowIfCancellationRequested(); transaction.Commit(); return claimed;
     }
 
     public async Task SaveOutcomeAsync(GoogleGenerationPersistedQueueState outcome, CancellationToken cancellationToken = default)

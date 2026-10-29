@@ -63,6 +63,9 @@ jobs:
           ./scripts/Test-ThirdPartyNotices-SelfTests.ps1
       - name: Installer package validation and rejection tests
         shell: pwsh
-        run: ./scripts/Test-InstallCloudScribe-SelfTests.ps1
+        run: |
+          ./scripts/Test-InstallCloudScribe-SelfTests.ps1
+          ./scripts/Test-RecoveryAdmissionPolicy-SelfTests.ps1
+          ./scripts/Test-ChirpArticlePolicy-SelfTests.ps1
       - name: Mocked and local tests only
         run: dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore --output Detailed

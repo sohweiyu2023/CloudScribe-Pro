@@ -109,3 +109,5 @@ The displayed provider diagnostic is sanitized metadata such as google-http-403 
 Before dispatch, CloudScribe atomically records a local attempt and durable uncertainty barrier. Cancellation cannot erase it. Attempted identities, including accepted and historical records, cannot be resubmitted through this path. HTTP408/429/5xx require reconciliation; Retry-After alone is not permission for another billed request. A successful response with unusable audio remains an attempted/accepted request, not a free retry. Diagnostics never reset the queue or historical spend authorizations.
 
 The first previously recorded attempt without retained HTTP metadata remains unknown: the update cannot reconstruct its status, recover a provider ID or settle its charge. Do not retry it under a new identity to bypass this hold.
+
+For lossless smaller Chirp requests, retained accepted audio and one continuous export per original, see [Chirp 3 internal article narration](CHIRP_ARTICLE_NARRATION.md). Its local sentence-boundary heuristic is not a Google acceptance guarantee, and preparation/reservation never starts synthesis automatically.

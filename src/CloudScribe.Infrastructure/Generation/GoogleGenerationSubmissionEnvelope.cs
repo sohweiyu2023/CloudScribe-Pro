@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -12,7 +13,8 @@ public sealed record GoogleGenerationSubmissionEnvelope(
     string AudioEncoding,
     string CompiledPayloadSha256,
     int CompiledPayloadBytes,
-    Guid? RecoveryAuthorizationId = null)
+    Guid? RecoveryAuthorizationId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ChirpAuthorizationId = null)
 {
     public static GoogleGenerationSubmissionEnvelope Create(
         GoogleGenerationAccount account,
@@ -67,7 +69,7 @@ public sealed record GoogleGenerationSubmissionEnvelope(
             AudioEncoding,
             compiledPayload,
             nowUtc) with
-        { RecoveryAuthorizationId = RecoveryAuthorizationId };
+        { RecoveryAuthorizationId = RecoveryAuthorizationId, ChirpAuthorizationId = ChirpAuthorizationId };
         if (current != this)
         {
             throw new InvalidOperationException("Google billable submission authorization changed after approval; regenerate estimate/approval before submitting.");

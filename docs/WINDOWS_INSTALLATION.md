@@ -26,3 +26,9 @@ If an update fails before the staged folder switch completes, the installer rest
 
 
 An update that adds durable submission-attempt barriers treats historical queue rows conservatively as already attempted. It does not infer that any historical request was free and does not reset reservations. An older executable may ignore those safeguards even if its database reads still succeed; binary rollback therefore requires a specific compatibility and spend-safety review, not merely a successful startup.
+
+## Reviewed internal article admission
+
+The optional `-ReviewedChirpArticlePolicyPath` and `-ReviewedChirpArticlePolicySha256` arguments form a separate, independently reviewed private admission boundary for [Chirp article narration](CHIRP_ARTICLE_NARRATION.md). Both are required together. The installer checks exact package application/infrastructure hashes, inspected profile identity, expiry, strict bounded schema, native coverage, financial pins and request limits before staging anything. It refuses simultaneous article and historical-recovery policies. `-ValidateOnly` checks admission preflight without installing or granting it.
+
+An admitted policy is kept outside `app` beside the installation marker with its exact digest pinned in that marker. It is private evidence, never part of a clean package or public source. Runtime readers recheck build/profile/pin/expiry and exact live native/financial evidence; a plan file or UI checkbox alone grants no authority. An ordinary update does not inherit a prior policy. Retained article attempts remain in the profile regardless of policy expiry and require spend-safe compatibility review before rollback. Do not edit the policy, marker or database to renew permission or clear holds.

@@ -11,7 +11,7 @@ namespace CloudScribe.Infrastructure.Generation;
 /// <summary>Opt-in recovery boundary. No provider, credential or automatic approval dependency.</summary>
 public sealed partial class GoogleExplicitRecoveryService(
     IDbContextFactory<CloudScribeDbContext> factory, TimeProvider timeProvider, IGoogleRecoveryBudgetEvidenceResolver budgetEvidence,
-    IGoogleRecoveryPredecessorEvidenceResolver predecessorEvidence)
+    IGoogleRecoveryPredecessorEvidenceResolver predecessorEvidence, IChirpArticleAdmissionStore? articleAdmission = null)
 {
     public const string KeyPrefix = "recovery-google-tts:";
     private readonly ConcurrentDictionary<Guid, PendingReview> _reviews = new();
@@ -29,6 +29,7 @@ public sealed partial class GoogleExplicitRecoveryService(
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: false);
         string financial = await FinancialDigestAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+        await ChirpLegacySpendGuard.RequireNoArticleReservationsAsync(connection, transaction, intent.Envelope.AccountId, cancellationToken, articleAdmission).ConfigureAwait(false);
         var budget = await ResolveBudgetAsync(intent.Envelope.AccountId, intent.ProjectId, intent.Currency, intent.Scale, financial, cancellationToken).ConfigureAwait(false);
         RequireIntent(intent, budget, additionalMaximumMinorUnits);
         var previous = await LoadPreviousAsync(connection, transaction, intent, cancellationToken).ConfigureAwait(false);
@@ -67,6 +68,7 @@ public sealed partial class GoogleExplicitRecoveryService(
         using var transaction = connection.BeginTransaction(deferred: false);
         var currentBudget = await ResolveBudgetAsync(p.Intent.Envelope.AccountId, p.Intent.ProjectId, p.Intent.Currency, p.Intent.Scale,
             p.FinancialStateSha256, cancellationToken).ConfigureAwait(false);
+        await ChirpLegacySpendGuard.RequireNoArticleReservationsAsync(connection, transaction, p.Intent.Envelope.AccountId, cancellationToken, articleAdmission).ConfigureAwait(false);
         if (currentBudget != p.Budget) throw new InvalidOperationException("Approved budget evidence changed; prepare a new review.");
         if (!string.Equals(await FinancialDigestAsync(connection, transaction, cancellationToken).ConfigureAwait(false), p.FinancialStateSha256
 , StringComparison.Ordinal) || await LoadPreviousAsync(connection, transaction, p.Intent, cancellationToken).ConfigureAwait(false) != p.PreviousState)

@@ -13,7 +13,7 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed partial class ArticleAudioExportService(
     IDbContextFactory<CloudScribeDbContext> factory, IDocumentLibrary library,
     IGoogleGenerationPersistedQueueStateStore queue, AppPaths paths, INativeMediaTool native,
-    IReviewedHistoricalAudioAnchorStore? historicalAnchors = null)
+    IReviewedHistoricalAudioAnchorStore? historicalAnchors = null, ChirpArticleService? chirpArticles = null)
 {
     private readonly string _receipts = Path.Combine(paths.RootDirectory, "accepted-article-audio");
     private int _exportInFlight;

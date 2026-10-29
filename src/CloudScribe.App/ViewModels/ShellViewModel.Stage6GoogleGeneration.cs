@@ -3,6 +3,7 @@ using CloudScribe.App.Navigation;
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Logging;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Generation;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 
@@ -231,7 +232,7 @@ public sealed partial class ShellViewModel
                 state.CurrentState, state.ResolutionEvidence, state.AdmissionCurrent,
                 state.AccountCredentialAvailable, state.PricingApproved, state.PostCompileLimitsSatisfied,
                 cancellationToken).ConfigureAwait(true);
-            await HandleGoogleGenerationOutcomeAsync(outcome, cancellationToken).ConfigureAwait(true);
+            await HandleGoogleGenerationOutcomeAsync(outcome, state.ProviderRequest, cancellationToken).ConfigureAwait(true);
             await RecordArticleAudioOutcomeAsync(articleDocument, state.ProviderRequest, outcome, cancellationToken).ConfigureAwait(true);
             InvalidatePrivateGoogleDiagnostic();
         }
@@ -265,6 +266,7 @@ public sealed partial class ShellViewModel
         CancellationToken cancellationToken)
     {
         if (_recordArticleAudio is not null && articleDocument is not null && string.Equals(outcome.Response?.DiagnosticCode, "google-accepted", StringComparison.Ordinal)
+            && !request.IdempotencyKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal)
             && !outcome.RequiresReconciliation && LastGeneratedGoogleMp3Path is { } acceptedPath)
         {
             try { await _recordArticleAudio(articleDocument, request, outcome, acceptedPath, cancellationToken).ConfigureAwait(true); }
@@ -310,6 +312,7 @@ public sealed partial class ShellViewModel
 
     private async Task HandleGoogleGenerationOutcomeAsync(
         GoogleGenerationQueueOutcome outcome,
+        CloudScribe.Providers.Abstractions.GenerationProviderRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outcome);
@@ -327,6 +330,8 @@ public sealed partial class ShellViewModel
         if (outcome.Response?.IsAccepted != true)
         {
             StatusMessage = $"Google generation · not accepted · {diagnostic}{errorLabel}. Charge is not confirmed; keep the reservation and review request status before retrying.";
+            StatusMessage += GoogleValidationGuidance.For(diagnostic, errorStatus,
+                outcome.Response?.ValidationHint ?? GoogleValidationMessageHint.NotProvided);
             return;
         }
         if (string.Equals(diagnostic, "google-accepted-invalid-media", StringComparison.Ordinal))
@@ -336,7 +341,9 @@ public sealed partial class ShellViewModel
         }
         var persist = _persistAcceptedGoogleMp3
             ?? throw new InvalidOperationException("Verified Google MP3 persistence is not configured.");
-        LastGeneratedGoogleMp3Path = await persist(outcome, cancellationToken).ConfigureAwait(true);
+        LastGeneratedGoogleMp3Path = request.IdempotencyKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal)
+            ? await (_persistAcceptedChirpMp3 ?? throw new InvalidOperationException("Durable internal article output is unavailable."))(request, outcome, cancellationToken).ConfigureAwait(true)
+            : await persist(outcome, cancellationToken).ConfigureAwait(true);
         StatusMessage = $"Google generation · verified MP3 ready · {LastGeneratedGoogleMp3Path}";
     }
 

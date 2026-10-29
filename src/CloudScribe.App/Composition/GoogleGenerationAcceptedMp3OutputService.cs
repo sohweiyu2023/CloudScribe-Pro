@@ -17,6 +17,7 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
 {
     private const string ExpectedContentType = "audio/mpeg";
     private readonly string _outputDirectory;
+    private readonly string[] _verifiedRoots;
     private readonly ConcurrentDictionary<string, AcceptedPlaybackIntegrity> _acceptedPlaybackIntegrity =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -25,10 +26,30 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
     {
     }
 
-    public GoogleGenerationAcceptedMp3OutputService(string outputDirectory)
+    public GoogleGenerationAcceptedMp3OutputService(string outputDirectory, IReadOnlyList<string>? additionalVerifiedRoots = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
         _outputDirectory = Path.GetFullPath(outputDirectory);
+        if (additionalVerifiedRoots?.Count > 4) throw new ArgumentException("Too many verified local output roots.", nameof(additionalVerifiedRoots));
+        _verifiedRoots = new[] { _outputDirectory }.Concat(additionalVerifiedRoots ?? []).Select(Path.GetFullPath).ToArray();
+    }
+
+    public static GoogleGenerationAcceptedMp3OutputService WithArticleOutputRoot(string root) => new(GetDefaultOutputDirectory(), [root]);
+
+    /// <summary>Adopts only byte-identical accepted output already durably saved by the article journal. No generation permission is created.</summary>
+    public async Task RegisterAcceptedAsync(GoogleGenerationQueueOutcome outcome, string path, CancellationToken cancellationToken = default)
+    {
+        if (outcome.RequiresReconciliation || outcome.Response is not { IsAccepted: true } response || response.MediaBytes.IsEmpty
+            || !string.Equals(response.DiagnosticCode, "google-accepted", StringComparison.Ordinal)
+            || !string.Equals(response.MediaContentType, ExpectedContentType, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Accepted MP3 response evidence is unavailable.");
+        string full = Path.GetFullPath(path);
+        RequireOutputRoot(full);
+        if (new FileInfo(full).Length != response.MediaBytes.Length || response.MediaBytes.Length > 256 * 1024 * 1024)
+            throw new InvalidOperationException("Saved MP3 size differs from accepted output.");
+        byte[] bytes = await File.ReadAllBytesAsync(full, cancellationToken).ConfigureAwait(false);
+        if (!bytes.AsSpan().SequenceEqual(response.MediaBytes.Span)) throw new InvalidOperationException("Saved MP3 differs from accepted provider bytes.");
+        _acceptedPlaybackIntegrity[full] = new(bytes.LongLength, SHA256.HashData(bytes));
     }
 
     private static string GetDefaultOutputDirectory()
@@ -155,11 +176,7 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string fullPath = Path.GetFullPath(path);
-        string outputRoot = Path.EndsInDirectorySeparator(_outputDirectory)
-            ? _outputDirectory
-            : _outputDirectory + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(outputRoot, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Google MP3 access is restricted to CloudScribe's verified generated-output directory.");
+        RequireOutputRoot(fullPath);
         if (!File.Exists(fullPath) || !string.Equals(Path.GetExtension(fullPath), ".mp3", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Verified Google MP3 output is no longer available.");
         if (!_acceptedPlaybackIntegrity.TryGetValue(fullPath, out AcceptedPlaybackIntegrity? expected))
@@ -176,6 +193,19 @@ public sealed class GoogleGenerationAcceptedMp3OutputService
             throw;
         }
         return fullPath;
+    }
+
+    private void RequireOutputRoot(string path)
+    {
+        if (!_verifiedRoots.Any(root => path.StartsWith(Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Google MP3 access is restricted to configured verified output directories.");
+        string? current = path;
+        while (current is not null)
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) && File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
+                throw new InvalidOperationException("Linked output paths are not supported.");
+            current = Path.GetDirectoryName(current);
+        }
     }
 
     private static void VerifyBytes(

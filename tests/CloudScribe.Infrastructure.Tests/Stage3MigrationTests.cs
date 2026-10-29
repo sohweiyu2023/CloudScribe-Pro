@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace CloudScribe.Infrastructure.Tests;
 
-public sealed class Stage3MigrationTests
+public sealed partial class Stage3MigrationTests
 {
     [Fact]
     public async Task FreshDatabaseAppliesExecutableStage2ThroughStage7Migrations()
@@ -262,6 +262,7 @@ public sealed class Stage3MigrationTests
                 GoogleExplicitRecovery.MigrationId,
                 GoogleRecoveryAdmissionLimits.MigrationId,
                 GoogleRecoverySuccessorGrants.MigrationId,
+                ChirpArticlePlans.MigrationId,
             ],
             migrations);
     }

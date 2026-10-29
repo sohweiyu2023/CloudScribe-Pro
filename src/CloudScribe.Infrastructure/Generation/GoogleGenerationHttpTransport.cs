@@ -67,7 +67,8 @@ public sealed partial class GoogleGenerationHttpTransport
                 ObserveErrorParse(correlation, status, bytes);
             }
             _privateDiagnostics?.Observe(request.PrivateDiagnosticTicket, status, bytes, wirePayload, token, correlation);
-            return new GoogleHttpTransportResponse(response.StatusCode, bytes, retryAfter, category);
+            var hint = status == 400 ? GoogleErrorResponseDiagnosticParser.Parse(bytes).MessageHint : GoogleValidationMessageHint.NotExamined;
+            return new GoogleHttpTransportResponse(response.StatusCode, bytes, retryAfter, category, hint);
         }
         catch (OperationCanceledException)
         {

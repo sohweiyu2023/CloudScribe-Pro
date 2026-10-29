@@ -9,7 +9,7 @@ public static class GoogleGenerationUiExecutionContextFactory
     public static GoogleGenerationUiExecutionContext Create(
         GoogleGenerationAuthorizedRuntimeEvidence evidence,
         IGoogleGenerationPersistedQueueStateStore persistedQueueStateStore,
-        TimeProvider? timeProvider = null, GoogleExplicitRecoveryService? recovery = null)
+        TimeProvider? timeProvider = null, GoogleExplicitRecoveryService? recovery = null, ChirpArticleService? articles = null)
     {
         ArgumentNullException.ThrowIfNull(evidence);
         ArgumentNullException.ThrowIfNull(persistedQueueStateStore);
@@ -22,7 +22,7 @@ public static class GoogleGenerationUiExecutionContextFactory
         GenerationProviderRequest request = ValidateCurrentRequest(evidence, account);
         RevalidateAuthorization(evidence, account, capabilities, request, nowUtc);
 
-        return BuildContext(evidence, account, capabilities, persistedQueueStateStore, clock, recovery);
+        return BuildContext(evidence, account, capabilities, persistedQueueStateStore, clock, recovery, articles);
     }
 
     private static void ValidateRequiredEvidence(GoogleGenerationAuthorizedRuntimeEvidence evidence)
@@ -124,7 +124,7 @@ public static class GoogleGenerationUiExecutionContextFactory
         GoogleGenerationAccount account,
         GoogleCapabilitySnapshot capabilities,
         IGoogleGenerationPersistedQueueStateStore persistedQueueStateStore,
-        TimeProvider clock, GoogleExplicitRecoveryService? recovery)
+        TimeProvider clock, GoogleExplicitRecoveryService? recovery, ChirpArticleService? articles)
     {
         var provider = new GoogleGenerationProvider(account, evidence.Transport);
         var executor = new GoogleAuthorizedGenerationExecutor(
@@ -144,7 +144,11 @@ public static class GoogleGenerationUiExecutionContextFactory
             queue,
             persistedQueueStateStore.LoadAsync,
             persistedQueueStateStore.SaveAsync,
-            evidence.SpendAuthorization.Envelope.RecoveryAuthorizationId is null ? persistedQueueStateStore.TryClaimSubmissionAsync
+            evidence.SpendAuthorization.Envelope.ChirpAuthorizationId is not null
+                ? articles is null ? throw new InvalidOperationException("Article claim service is unavailable.")
+                    : (claim, token) => articles.TryClaimAuthorizedAsync(evidence.SpendAuthorization.Envelope,
+                        evidence.Snapshot.UiSelection.ProjectId, evidence.Currency, evidence.Scale, evidence.CurrentEstimateMinorUnits, claim, token)
+                : evidence.SpendAuthorization.Envelope.RecoveryAuthorizationId is null ? persistedQueueStateStore.TryClaimSubmissionAsync
                 : recovery is null ? throw new InvalidOperationException("Recovery claim service is unavailable.")
                 : (claim, token) => recovery.TryClaimAuthorizedAsync(evidence.SpendAuthorization.Envelope,
                     evidence.Snapshot.UiSelection.ProjectId, evidence.Currency, evidence.Scale, evidence.CurrentEstimateMinorUnits, claim, token),

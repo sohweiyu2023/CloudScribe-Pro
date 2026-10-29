@@ -4,6 +4,8 @@ param(
     [string]$MigrateProfileFrom,
     [string]$ReviewedRecoveryPolicyPath,
     [string]$ReviewedRecoveryPolicySha256,
+    [string]$ReviewedChirpArticlePolicyPath,
+    [string]$ReviewedChirpArticlePolicySha256,
     [switch]$ValidateOnly,
     [switch]$ValidatePackageOnly
 )
@@ -11,6 +13,9 @@ $ErrorActionPreference='Stop'
 if($ValidatePackageOnly -and ($ValidateOnly -or $MigrateProfileFrom)){throw 'ValidatePackageOnly cannot be combined with installation or migration preflight.'}
 if($ValidatePackageOnly -and ($ReviewedRecoveryPolicyPath -or $ReviewedRecoveryPolicySha256)){throw 'A private recovery policy is not part of a clean package.'}
 if([bool]$ReviewedRecoveryPolicyPath -ne [bool]$ReviewedRecoveryPolicySha256){throw 'Recovery policy admission requires both the separately reviewed file and its independently approved SHA256.'}
+if($ValidatePackageOnly -and ($ReviewedChirpArticlePolicyPath -or $ReviewedChirpArticlePolicySha256)){throw 'A private article policy is not part of a clean package.'}
+if([bool]$ReviewedChirpArticlePolicyPath -ne [bool]$ReviewedChirpArticlePolicySha256){throw 'Article policy admission requires its separate reviewed file and independently approved SHA256.'}
+if($ReviewedRecoveryPolicyPath -and $ReviewedChirpArticlePolicyPath){throw 'Admit one paid recovery/article authority at a time; historical output import is a separate local operation.'}
 $package=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $PackageRoot).Path)
 if($package.Length -gt [IO.Path]::GetPathRoot($package).Length){$package=$package.TrimEnd([char[]]@('\','/'))}
 $packagePrefix=$package.TrimEnd([char[]]@('\','/'))+[IO.Path]::DirectorySeparatorChar
@@ -42,6 +47,8 @@ function Assert-RecoveryRecord($Element,[hashtable]$Fields){
             'Int32' {$null=$value.GetInt32()}
             'Int64' {$null=$value.GetInt64()}
             'Guid' {$null=$value.GetGuid()}
+            'NonemptyGuid' {if($value.GetGuid() -eq [Guid]::Empty){throw 'Native identity is empty.'}}
+            'NullableString' {if($value.ValueKind -notin @([Text.Json.JsonValueKind]::String,[Text.Json.JsonValueKind]::Null)){throw 'Nullable evidence string is invalid.'}}
             'Date' {$null=$value.GetDateTimeOffset()}
             'Array' {if($value.ValueKind -ne [Text.Json.JsonValueKind]::Array){throw 'Recovery policy array is invalid.'}}
             'Any' {if($value.ValueKind -notin @([Text.Json.JsonValueKind]::Object,[Text.Json.JsonValueKind]::Null)){throw 'Nullable recovery record is invalid.'}}
@@ -170,6 +177,115 @@ function Get-ReviewedRecoveryPolicy([string]$Profile){
     }finally{$json.Dispose()}
     return [pscustomobject]@{Bytes=$bytes;Sha256=$sha}
 }
+function Assert-ChirpPolicyHashes($Element){
+    if($Element.ValueKind -eq [Text.Json.JsonValueKind]::Object){
+        foreach($property in $Element.EnumerateObject()){
+            if($property.Name -cmatch 'Sha256$' -and $property.Value.ValueKind -ne [Text.Json.JsonValueKind]::Null -and $property.Value.GetString() -cnotmatch '^[a-f0-9]{64}$'){throw 'Article evidence hash is invalid.'}
+            Assert-ChirpPolicyHashes $property.Value
+        }
+    }elseif($Element.ValueKind -eq [Text.Json.JsonValueKind]::Array){foreach($item in $Element.EnumerateArray()){Assert-ChirpPolicyHashes $item}}
+}
+function Assert-ChirpRange($Range){
+    Assert-RecoveryRecord $Range @{StartScalar='Int32';EndScalarExclusive='Int32';TextSha256='String';ReusedReceiptSha256='NullableString'}
+    if($Range.GetProperty('StartScalar').GetInt32() -lt 0 -or $Range.GetProperty('EndScalarExclusive').GetInt32() -le $Range.GetProperty('StartScalar').GetInt32()){throw 'Article coverage range is invalid.'}
+}
+function Assert-ChirpPolicy($Root){
+    Assert-RecoveryRecord $Root @{SchemaVersion='Int32';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';AccountId='String';ProjectId='String';Currency='String';Scale='Int32';ExpiresAtUtc='Date';SourceApprovalSha256='String';Budget='Object';ScopeRows='Array';PriorArticleAttemptRows='Array';Articles='Array';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
+    if($Root.GetProperty('SchemaVersion').GetInt32() -ne 1 -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
+        $Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow -or ($Root.GetProperty('MaximumNewAttempts').GetInt32() -lt 1 -or $Root.GetProperty('MaximumNewAttempts').GetInt32() -gt 10000) -or
+        $Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -lt 1){throw 'Article grant identity, expiry or limits are invalid.'}
+    if([string]::IsNullOrWhiteSpace($Root.GetProperty('AccountId').GetString()) -or [string]::IsNullOrWhiteSpace($Root.GetProperty('ProjectId').GetString())){throw 'Article account/project is missing.'}
+    Assert-ChirpPolicyHashes $Root
+    $budget=$Root.GetProperty('Budget')
+    Assert-RecoveryRecord $budget @{ProjectCommittedMinorUnits='Int64';ProjectCeilingMinorUnits='Int64';AllocationCommittedMinorUnits='Int64';AllocationCeilingMinorUnits='Int64';ReviewedEvidenceSha256='String';QueueRows='Array';SpendRows='Array';RecoveryRows='Array';TransitionRows='Array'}
+    $maximum=$Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64()
+    foreach($kind in @('Project','Allocation')){
+        $committed=$budget.GetProperty($kind+'CommittedMinorUnits').GetInt64();$ceiling=$budget.GetProperty($kind+'CeilingMinorUnits').GetInt64()
+        if($committed -lt 0 -or $ceiling -lt $committed -or $maximum -gt $ceiling-$committed){throw 'Article allocation omits retained commitments or exceeds its ceiling.'}
+    }
+    $pinSets=@($Root.GetProperty('ScopeRows'),$Root.GetProperty('PriorArticleAttemptRows'),$budget.GetProperty('QueueRows'),$budget.GetProperty('SpendRows'),$budget.GetProperty('RecoveryRows'),$budget.GetProperty('TransitionRows'))
+    foreach($pins in $pinSets){
+        if($pins.GetArrayLength() -gt 10000){throw 'Article financial baseline exceeds its bound.'}
+        $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach($pin in $pins.EnumerateArray()){
+            Assert-RecoveryRecord $pin @{Identity='String';Sha256='String'}
+            if($pin.GetProperty('Identity').GetString() -cnotmatch '^[a-f0-9]{64}$' -or -not $seen.Add($pin.GetProperty('Identity').GetString())){throw 'Article financial pins are ambiguous.'}
+        }
+    }
+    $articles=$Root.GetProperty('Articles');if($articles.GetArrayLength() -lt 1 -or $articles.GetArrayLength() -gt 200){throw 'Article admission count is invalid.'}
+    $documents=[Collections.Generic.HashSet[Guid]]::new()
+    foreach($article in $articles.EnumerateArray()){
+        Assert-RecoveryRecord $article @{Proposal='Object';Lineage='Object';ReusedAudio='Array';AllowedSegments='Array'}
+        $plan=$article.GetProperty('Proposal')
+        Assert-RecoveryRecord $plan @{DocumentId='NonemptyGuid';RevisionId='NonemptyGuid';SourceSha256='String';SourceScalars='Int32';LanguageCode='String';VoiceName='String';PlannerVersion='String';PlanSha256='String';Parts='Array'}
+        if(-not $documents.Add($plan.GetProperty('DocumentId').GetGuid()) -or ($plan.GetProperty('SourceScalars').GetInt32() -lt 1 -or $plan.GetProperty('SourceScalars').GetInt32() -gt 1000000) -or $plan.GetProperty('PlannerVersion').GetString() -cne 'chirp3-existing-boundaries-v1' -or
+            -not $plan.GetProperty('VoiceName').GetString().Contains('-Chirp3-HD-')){throw 'Native article plan identity is incompatible.'}
+        $parts=$plan.GetProperty('Parts');if($parts.GetArrayLength() -lt 1 -or $parts.GetArrayLength() -gt 10000){throw 'Internal coverage count is invalid.'}
+        $ordinal=0;$cursor=0;$reusable=[Collections.Generic.HashSet[int]]::new()
+        foreach($part in $parts.EnumerateArray()){
+            Assert-RecoveryRecord $part @{CoverageOrdinal='Int32';Range='Object';PayloadSha256='NullableString';PayloadBytes='Int32'}
+            $ordinal++;if($part.GetProperty('CoverageOrdinal').GetInt32() -ne $ordinal){throw 'Internal coverage order is invalid.'}
+            $range=$part.GetProperty('Range');Assert-ChirpRange $range
+            if($range.GetProperty('StartScalar').GetInt32() -ne $cursor){throw 'Internal coverage has a gap or overlap.'};$cursor=$range.GetProperty('EndScalarExclusive').GetInt32()
+            if($range.GetProperty('ReusedReceiptSha256').ValueKind -eq [Text.Json.JsonValueKind]::Null){
+                if($part.GetProperty('PayloadSha256').ValueKind -ne [Text.Json.JsonValueKind]::String -or ($part.GetProperty('PayloadBytes').GetInt32() -lt 1 -or $part.GetProperty('PayloadBytes').GetInt32() -gt 5000) -or $cursor-$range.GetProperty('StartScalar').GetInt32() -gt 333){throw 'Internal compiled request is invalid.'}
+            }else{
+                if($part.GetProperty('PayloadSha256').ValueKind -ne [Text.Json.JsonValueKind]::Null -or $part.GetProperty('PayloadBytes').GetInt32() -ne 0){throw 'Accepted coverage cannot be regenerated.'};$null=$reusable.Add($ordinal)
+            }
+        }
+        if($cursor -ne $plan.GetProperty('SourceScalars').GetInt32()){throw 'Internal coverage changes the article cutoff.'}
+        $allowed=$article.GetProperty('AllowedSegments');if($allowed.GetArrayLength() -lt 1 -or $allowed.GetArrayLength() -gt 10000){throw 'No exact internal request scope is admitted.'}
+        $seen=[Collections.Generic.HashSet[int]]::new()
+        foreach($item in $allowed.EnumerateArray()){
+            Assert-RecoveryRecord $item @{CoverageOrdinal='Int32';MaximumMinorUnits='Int64'}
+            $n=$item.GetProperty('CoverageOrdinal').GetInt32();$cost=$item.GetProperty('MaximumMinorUnits').GetInt64()
+            if($n -lt 1 -or $n -gt $ordinal -or -not $seen.Add($n) -or $reusable.Contains($n) -or $cost -lt 1 -or $cost -gt $maximum){throw 'Internal request allowance is invalid or duplicates accepted coverage.'}
+        }
+        Assert-ChirpLineage $article.GetProperty('Lineage')
+        foreach($audio in $article.GetProperty('ReusedAudio').EnumerateArray()){
+            Assert-RecoveryRecord $audio @{ParentDocumentId='NonemptyGuid';ParentRevisionId='NonemptyGuid';ReceiptSha256='String';Range='Object';Audio='Object'}
+            Assert-ChirpRange $audio.GetProperty('Range')
+            Assert-RecoveryRecord $audio.GetProperty('Audio') @{DocumentId='NonemptyGuid';RevisionId='NonemptyGuid';TextSha256='String';AccountId='String';OperationId='String';IdempotencyKey='String';LocalAttemptId='String';PayloadSha256='String';AudioPath='String';AudioBytes='Int64';AudioSha256='String';VoiceName='String';LanguageCode='String';HistoricalEvidenceSha256='NullableString';HistoricalAnchorSha256='NullableString'}
+        }
+    }
+}
+function Assert-ChirpLineage($Lineage){
+    Assert-RecoveryRecord $Lineage @{History='Array';Ranges='Array'}
+    $history=$Lineage.GetProperty('History');if($history.GetArrayLength() -lt 1 -or $history.GetArrayLength() -gt 10000){throw 'Historical article lineage is absent or unbounded.'}
+    $keys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach($old in $history.EnumerateArray()){
+        Assert-RecoveryRecord $old @{DocumentId='NonemptyGuid';RevisionId='NonemptyGuid';StartScalar='Int32';EndScalarExclusive='Int32';TextSha256='String';Attempts='Array'}
+        foreach($attempt in $old.GetProperty('Attempts').EnumerateArray()){
+            Assert-RecoveryRecord $attempt @{IdempotencyKey='String';StateSha256='String';RetainedReservationMinorUnits='Int64'}
+            if($keys.Count -ge 10000 -or -not $keys.Add($attempt.GetProperty('IdempotencyKey').GetString()) -or $attempt.GetProperty('RetainedReservationMinorUnits').GetInt64() -lt 0){throw 'Historical attempt lineage is invalid.'}
+        }
+    }
+    if($Lineage.GetProperty('Ranges').GetArrayLength() -gt 10000){throw 'Historical indexed coverage exceeds its bound.'}
+    foreach($range in $Lineage.GetProperty('Ranges').EnumerateArray()){
+        Assert-RecoveryRecord $range @{CoverageOrdinal='Int32';HistoricalRangeIndexes='Array'}
+        foreach($index in $range.GetProperty('HistoricalRangeIndexes').EnumerateArray()){if($index.GetInt32() -lt 0 -or $index.GetInt32() -ge $history.GetArrayLength()){throw 'Historical overlap index is invalid.'}}
+    }
+}
+function Get-ReviewedChirpPolicy([string]$Profile){
+    if(-not $ReviewedChirpArticlePolicyPath){return $null}
+    if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8){throw 'Article policy admission requires PowerShell 7 on .NET 8 or later.'}
+    if(-not $Profile -or $ReviewedChirpArticlePolicySha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'Article policy requires an inspected profile and independently approved hash.'}
+    $path=(Resolve-Path -LiteralPath $ReviewedChirpArticlePolicyPath).Path;Assert-NoLinks $path
+    $stream=[IO.FileStream]::new($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+    try{if($stream.Length -lt 1 -or $stream.Length -gt 8388608){throw 'Article policy exceeds its bound.'};$bytes=[byte[]]::new([int]$stream.Length);$stream.ReadExactly($bytes)}finally{$stream.Dispose()}
+    $sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+    if($sha -ne $ReviewedChirpArticlePolicySha256){throw 'Article policy differs from the independently approved hash.'}
+    $options=[Text.Json.JsonDocumentOptions]::new();$options.MaxDepth=24;$json=[Text.Json.JsonDocument]::Parse([ReadOnlyMemory[byte]]::new($bytes),$options)
+    try{
+        Assert-UniqueRecoveryJson $json.RootElement;Assert-ChirpPolicy $json.RootElement;$root=$json.RootElement
+        if($root.GetProperty('AppSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash -or
+            $root.GetProperty('InfrastructureSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash){throw 'Article policy belongs to another exact build.'}
+        $canonical=[IO.Path]::GetFullPath($Profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()
+        $profileSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical)))
+        if($root.GetProperty('ProfileRootSha256').GetString() -ne $profileSha){throw 'Article policy belongs to another profile.'}
+    }finally{$json.Dispose()}
+    return [pscustomobject]@{Bytes=$bytes;Sha256=$sha}
+}
 function Get-AllowedNoticeFiles {
     $inventoryPath=Join-Path $package 'licenses/third-party/components.json'
     # Refresh this pin only alongside the reviewed source inventory and its fixture tests.
@@ -258,7 +374,8 @@ if($MigrateProfileFrom){
     if(Test-Path -LiteralPath $profile){throw 'Migration destination already exists; no user data will be overwritten.'}
 }
 $reviewedRecovery=Get-ReviewedRecoveryPolicy $profile
-if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery};return}
+$reviewedChirp=Get-ReviewedChirpPolicy $profile
+if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery;ReviewedChirpArticlePolicy=[bool]$reviewedChirp};return}
 if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close every CloudScribe window normally before installing/updating. No process will be killed.'}
 [IO.Directory]::CreateDirectory($programs) | Out-Null
 $suffix=[Guid]::NewGuid().ToString('N')
@@ -285,6 +402,10 @@ $installMarker=@{Product='CloudScribe Pro';Version=1;Profile=$profile;AppSha256=
 if($reviewedRecovery){
     [IO.File]::WriteAllBytes((Join-Path $stage 'recovery-admission-policy.json'),$reviewedRecovery.Bytes)
     $installMarker.RecoveryPolicySha256=$reviewedRecovery.Sha256
+}
+if($reviewedChirp){
+    [IO.File]::WriteAllBytes((Join-Path $stage 'chirp-article-admission-policy.json'),$reviewedChirp.Bytes)
+    $installMarker.ChirpArticlePolicySha256=$reviewedChirp.Sha256
 }
 # An ordinary update does not copy or silently re-admit any previous private recovery authority.
 $installMarker | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'cloudscribe-install.json') -Encoding utf8

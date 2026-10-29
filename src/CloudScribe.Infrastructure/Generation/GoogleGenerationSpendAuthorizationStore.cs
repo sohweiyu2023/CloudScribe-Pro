@@ -6,14 +6,15 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed class GoogleGenerationSpendAuthorizationStore(
     IDbContextFactory<CloudScribeDbContext> contextFactory,
-    TimeProvider timeProvider, GoogleExplicitRecoveryService? recovery = null) : IGoogleGenerationSpendAuthorizationStore
+    TimeProvider timeProvider, GoogleExplicitRecoveryService? recovery = null, ChirpArticleService? articles = null,
+    IChirpArticleAdmissionStore? articleAdmission = null) : IGoogleGenerationSpendAuthorizationStore
 {
     public async Task SaveApprovedAsync(
         GoogleGenerationSpendAuthorization authorization,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(authorization);
-        if (authorization.Envelope.RecoveryAuthorizationId is not null)
+        if (authorization.Envelope.RecoveryAuthorizationId is not null || authorization.Envelope.ChirpAuthorizationId is not null)
             throw new InvalidOperationException("Recovery authorization must be appended by its dedicated reviewed transaction, never saved as generic spend.");
 
         CloudScribeDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -24,6 +25,7 @@ public sealed class GoogleGenerationSpendAuthorizationStore(
             DbTransaction transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             await using (transaction.ConfigureAwait(false))
             {
+                await ChirpLegacySpendGuard.RequireNoArticleReservationsAsync(connection, transaction, authorization.Envelope.AccountId, cancellationToken, articleAdmission).ConfigureAwait(false);
                 DbCommand delete = CreateEnvelopeCommand(connection, authorization.Envelope);
                 await using (delete.ConfigureAwait(false))
                 {
@@ -66,6 +68,8 @@ public sealed class GoogleGenerationSpendAuthorizationStore(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);
+        if (envelope.ChirpAuthorizationId is not null)
+            return articles is null ? null : await articles.LoadSpendAsync(envelope, cancellationToken).ConfigureAwait(false);
         if (envelope.RecoveryAuthorizationId is not null)
             return recovery is null ? null : (await recovery.LoadExecutionAuthorizationAsync(envelope, cancellationToken).ConfigureAwait(false))?.SpendAuthorization;
 
@@ -74,6 +78,7 @@ public sealed class GoogleGenerationSpendAuthorizationStore(
         {
             DbConnection connection = context.Database.GetDbConnection();
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await ChirpLegacySpendGuard.RequireNoArticleReservationsAsync(connection, null, envelope.AccountId, cancellationToken, articleAdmission).ConfigureAwait(false);
             DbCommand command = CreateEnvelopeCommand(connection, envelope);
             await using (command.ConfigureAwait(false))
             {

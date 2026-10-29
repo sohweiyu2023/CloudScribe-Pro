@@ -8,6 +8,25 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class GoogleProviderUncertainResponseTests
 {
     [Theory]
+    [InlineData(400, "INVALID_ARGUMENT", GoogleValidationMessageHint.SentenceLengthReported)]
+    [InlineData(503, "INVALID_ARGUMENT", GoogleValidationMessageHint.NotExamined)]
+    [InlineData(400, "UNAVAILABLE", GoogleValidationMessageHint.NotExamined)]
+    public async Task SafeValidationHintSurvivesTransportWithoutChangingFinancialDisposition(int status, string errorStatus, GoogleValidationMessageHint hint)
+    {
+        string body = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            error = new { status = errorStatus, message = "This request contains sentences that are too long." },
+        });
+        using var http = new HttpClient(new ResponseHandler((HttpStatusCode)status, body));
+        var response = await Create(http).SubmitAsync(Request(), TestContext.Current.CancellationToken);
+        Assert.Equal(hint, response.ValidationHint);
+        Assert.Equal(status == 400 ? SubmissionDisposition.NotSubmitted : SubmissionDisposition.UnknownRequiresReconciliation, response.Disposition);
+        Assert.Null(response.ProviderRequestId);
+        Assert.True(response.MediaBytes.IsEmpty);
+        Assert.DoesNotContain("This request", System.Text.Json.JsonSerializer.Serialize(response), StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(408)]
     [InlineData(429)]
     [InlineData(500)]

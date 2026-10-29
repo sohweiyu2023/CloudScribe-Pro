@@ -129,3 +129,8 @@ SESSION_STATE.json retains historical Stage8 1.0.0 governance while the app is
 1.0.1; do not rewrite the historical stage identity to match the application.
 Historical batch records remain verifier inputs. Superseded handovers and unused
 transport fragments are recoverable from Git history and the external backup.
+Chirp internal article integration additionally uses synthetic admission parser/outer-entry tests:
+  pwsh -NoProfile -File scripts/Test-RecoveryAdmissionPolicy-SelfTests.ps1
+  pwsh -NoProfile -File scripts/Test-ChirpArticlePolicy-SelfTests.ps1
+These checks do not install, admit live authority or submit provider requests. Full local tests use
+synthetic profiles/fake providers; production/native and paid acceptance remain separate gates.
