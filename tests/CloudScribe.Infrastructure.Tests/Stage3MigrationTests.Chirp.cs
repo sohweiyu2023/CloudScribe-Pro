@@ -12,6 +12,28 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed partial class Stage3MigrationTests
 {
     [Fact]
+    public async Task ChirpLegacyMigrationLeavesExistingImmutablePlanAndEveryPriorRowExact()
+    {
+        string root = CreateTemporaryRoot(), file = Path.Combine(root, "pre-association.db");
+        try
+        {
+            using var db = CreateContext(file);
+            await db.GetService<IMigrator>().MigrateAsync(ChirpArticlePlans.MigrationId, TestContext.Current.CancellationToken);
+            await db.Database.ExecuteSqlRawAsync("INSERT INTO chirp_article_plans VALUES({0},{1},{2},{3},{4},{5},{6},{7});",
+                [new string('a', 64), Guid.NewGuid().ToString("D"), Guid.NewGuid().ToString("D"), "synthetic-account", "synthetic-project", "{\"immutable\":\"proposal\"}", "{\"immutable\":\"lineage\"}", "[]"], TestContext.Current.CancellationToken);
+            var before = await ChirpBusinessRowsAsync(db);
+            await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            var after = await ChirpBusinessRowsAsync(db);
+            Assert.Equal(before.Count + 1, after.Count);
+            foreach (var (table, rows) in before) Assert.Equal(rows, after[table]);
+            Assert.Equal("[]", after["chirp_article_legacy_associations"]);
+            await Assert.ThrowsAsync<NotSupportedException>(() => db.GetService<IMigrator>().MigrateAsync(ChirpArticlePlans.MigrationId, TestContext.Current.CancellationToken));
+            foreach (var (table, rows) in before) Assert.Equal(rows, (await ChirpBusinessRowsAsync(db))[table]);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); DeleteTemporaryRoot(root); }
+    }
+
+    [Fact]
     public async Task ChirpAdditiveMigrationPreservesEveryPriorBusinessRowAndRefusesHistoryDiscard()
     {
         string root = CreateTemporaryRoot(), file = Path.Combine(root, "pre-article.db");
@@ -42,7 +64,7 @@ public sealed partial class Stage3MigrationTests
             await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
             var after = await ChirpBusinessRowsAsync(db);
             foreach (var (table, rows) in before) Assert.Equal(rows, after[table]);
-            Assert.Equal(4, after.Count - before.Count);
+            Assert.Equal(5, after.Count - before.Count);
             Assert.All(after.Where(x => !before.ContainsKey(x.Key)), x => Assert.Equal("[]", x.Value));
             await Assert.ThrowsAsync<NotSupportedException>(() => db.GetService<IMigrator>().MigrateAsync(GoogleRecoverySuccessorGrants.MigrationId, TestContext.Current.CancellationToken));
             Assert.Contains(ChirpArticlePlans.MigrationId, await db.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken), StringComparer.Ordinal);

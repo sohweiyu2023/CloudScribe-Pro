@@ -20,6 +20,9 @@ public sealed class InstalledChirpArticleAdmissionStore(string applicationDirect
                 || !marker.RootElement.TryGetProperty("ChirpArticlePolicySha256", out var pin) || !ChirpPolicyValidation.IsHash(pin.GetString())) return null;
             byte[] bytes = await ChirpPolicyFiles.ReadAsync(Path.Combine(install, "chirp-article-admission-policy.json"), 8 * 1024 * 1024, cancellationToken).ConfigureAwait(false);
             if (!string.Equals(pin.GetString(), ChirpPolicyFiles.Hash(bytes), StringComparison.Ordinal)) return null;
+            using var shape = JsonDocument.Parse(bytes);
+            foreach (string optional in new[] { "LegacyAssociations", "LegacyAssociationRows" })
+                if (shape.RootElement.TryGetProperty(optional, out var value) && value.ValueKind != JsonValueKind.Array) return null;
             var policy = ChirpPolicyFiles.Parse<ChirpArticleAdmissionPolicy>(bytes);
             ChirpPolicyValidation.RequireValid(policy, clock.GetUtcNow());
             string appHash = ChirpPolicyFiles.Hash(await ChirpPolicyFiles.ReadAsync(Path.Combine(app, "CloudScribe.dll"), 512 * 1024 * 1024, cancellationToken).ConfigureAwait(false));

@@ -5,4 +5,8 @@ public sealed record ChirpArticleAdmissionPolicy(int SchemaVersion, string AppSh
     string ProfileRootSha256, string AccountId, string ProjectId, string Currency, int Scale,
     DateTimeOffset ExpiresAtUtc, string SourceApprovalSha256, RecoveryBudgetBaseline Budget,
     IReadOnlyList<RecoveryFinancialRowPin> ScopeRows, IReadOnlyList<RecoveryFinancialRowPin> PriorArticleAttemptRows,
-    IReadOnlyList<AdmittedChirpArticle> Articles, int MaximumNewAttempts, long MaximumAdditionalReservationMinorUnits);
+    IReadOnlyList<AdmittedChirpArticle> Articles, int MaximumNewAttempts, long MaximumAdditionalReservationMinorUnits,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<ChirpLegacyAttemptAssociation>? LegacyAssociations = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<RecoveryFinancialRowPin>? LegacyAssociationRows = null);

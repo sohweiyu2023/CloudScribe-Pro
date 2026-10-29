@@ -79,7 +79,8 @@ public sealed partial class ChirpArticleService
         if (!string.Equals(financial.Sha256, financialHash, StringComparison.Ordinal))
             throw new InvalidOperationException("Financial state changed after article approval; no dispatch is allowed.");
         var article = policy.Articles.Single(x => string.Equals(x.Proposal.PlanSha256, plan, StringComparison.Ordinal));
-        var current = await _evidence.ResolveAsync(connection, transaction, policy, article.Proposal.DocumentId, financial.Old, token).ConfigureAwait(false);
+        var current = await _evidence.ResolveAsync(connection, transaction, policy, article.Proposal.DocumentId, financial.Old, token,
+            requirePersistedLegacy: true).ConfigureAwait(false);
         var part = article.Proposal.Parts.Single(x => x.CoverageOrdinal == ordinal);
         string text = ChirpNarrationPlanner.Slice(current.Document.Text, part.Range);
         var compiled = GoogleSpeechPlanCompiler.Compile(new SpeechPlan(article.Proposal.LanguageCode, [new SpeechText(text)], ChirpNarrationPlanner.Version),

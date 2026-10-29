@@ -4,7 +4,7 @@ if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8)
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer failed parsing.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpLegacyAssociations','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
     $functions=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Expected exactly one reviewed validator.'};Invoke-Expression $functions[0].Extent.Text
 }
@@ -21,6 +21,34 @@ function Test-ArticleJson([string]$Text){
 }
 $passed=0
 Test-ArticleJson ((New-ArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+function New-LegacyArticlePolicy {
+    $p=New-ArticlePolicy
+    $p.Articles[0].Lineage.History[0].Attempts=@()
+    $p.Budget.SpendRows=@(@{Identity=$sha;Sha256=$sha})
+    $p.LegacyAssociationRows=@()
+    $p.LegacyAssociations=@(@{PlanSha256=$sha;DocumentId=$id;RevisionId=$id;StartScalar=0;EndScalarExclusive=3;TextSha256=$sha;AccountId='synthetic-account';ProjectId='synthetic-project';OperationId='synthesize-speech';IdempotencyKey='synthetic-old-hold';QueueRowSha256=$sha;SpendAuthorizationId=$id;SpendRowSha256=$sha;OriginalPayloadSha256=$sha;OriginalPayloadBytes=100;RetainedReservationMinorUnits=3;ReviewedEvidenceSha256=$sha})
+    return $p
+}
+Test-ArticleJson ((New-LegacyArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+foreach($case in @('missing-pair','empty','unknown-field','duplicate-spend','queue-pin','spend-pin','account','operation','native','wire-size','cost','audit-pin')){
+    $p=New-LegacyArticlePolicy
+    switch($case){
+        'missing-pair' {$p.Remove('LegacyAssociationRows')}
+        'empty' {$p.LegacyAssociations=@()}
+        'unknown-field' {$p.LegacyAssociations[0].CallerApproved=$true}
+        'duplicate-spend' {$p.LegacyAssociations+= $p.LegacyAssociations[0].Clone();$p.LegacyAssociations[1].IdempotencyKey='synthetic-other'}
+        'queue-pin' {$p.Budget.QueueRows=@()}
+        'spend-pin' {$p.Budget.SpendRows=@()}
+        'account' {$p.LegacyAssociations[0].AccountId='other'}
+        'operation' {$p.LegacyAssociations[0].OperationId='other'}
+        'native' {$p.LegacyAssociations[0].RevisionId=[Guid]::NewGuid().ToString('D')}
+        'wire-size' {$p.LegacyAssociations[0].OriginalPayloadBytes=5001}
+        'cost' {$p.LegacyAssociations[0].RetainedReservationMinorUnits=149}
+        'audit-pin' {$p.LegacyAssociationRows=@(@{Identity='bad';Sha256=$sha})}
+    }
+    $rejected=$false;try{Test-ArticleJson ($p|ConvertTo-Json -Depth 24 -Compress)}catch{$rejected=$true}
+    if(-not $rejected){throw "Invalid supplemental association accepted: $case"};$passed++
+}
 foreach($failure in @('unknown','duplicate','missing','wrong-type','expired','unbounded-count','unbounded-cost','budget','duplicate-pin','unknown-nested','gap','cutoff','order','regenerate-reuse','duplicate-allowance','missing-ordinal','range-cap','bad-hash','invalid-native','overlap-index','duplicate-history')){
     $p=New-ArticlePolicy
     switch($failure){

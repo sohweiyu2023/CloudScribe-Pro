@@ -24,6 +24,7 @@ public static class ChirpPolicyValidation
             || p.MaximumAdditionalReservationMinorUnits > b.AllocationCeilingMinorUnits - b.AllocationCommittedMinorUnits)
             throw new InvalidDataException("The article-plan budget does not preserve its reviewed retained baseline.");
         foreach (var pins in new[] { b.QueueRows, b.SpendRows, b.RecoveryRows, b.TransitionRows, p.ScopeRows, p.PriorArticleAttemptRows }) RequirePins(pins);
+        RequireLegacyAssociations(p);
         if (p.Articles.Select(x => x.Proposal.DocumentId).Distinct().Count() != p.Articles.Count
             || p.Articles.Select(x => x.Proposal.PlanSha256).Distinct(StringComparer.Ordinal).Count() != p.Articles.Count)
             throw new InvalidDataException("Article-plan identities are ambiguous.");
@@ -36,6 +37,35 @@ public static class ChirpPolicyValidation
                     || article.Proposal.Parts.Count(y => y.CoverageOrdinal == x.CoverageOrdinal && y.Range.ReusedReceiptSha256 is null) != 1))
                 throw new InvalidDataException("The allowed internal requests are missing, duplicated or refer to accepted coverage.");
         }
+    }
+
+    private static void RequireLegacyAssociations(ChirpArticleAdmissionPolicy p)
+    {
+        if (p.LegacyAssociations is null && p.LegacyAssociationRows is null) return;
+        RequirePins(p.LegacyAssociationRows);
+        if (p.LegacyAssociations is not { Count: >= 1 and <= 200 } associations
+            || associations.Select(x => x.IdempotencyKey).Distinct(StringComparer.Ordinal).Count() != associations.Count
+            || associations.Select(x => x.SpendAuthorizationId).Distinct().Count() != associations.Count)
+            throw new InvalidDataException("Supplemental historical associations are absent or ambiguous.");
+        foreach (var a in associations)
+        {
+            var article = p.Articles.SingleOrDefault(x => string.Equals(x.Proposal.PlanSha256, a.PlanSha256, StringComparison.Ordinal));
+            if (article is null || a.DocumentId == Guid.Empty || a.RevisionId == Guid.Empty || a.SpendAuthorizationId == Guid.Empty
+                || a.StartScalar < 0 || a.EndScalarExclusive <= a.StartScalar || a.OriginalPayloadBytes is < 1 or > 5000
+                || a.RetainedReservationMinorUnits < 1 || !string.Equals(a.AccountId, p.AccountId, StringComparison.Ordinal) || !string.Equals(a.ProjectId, p.ProjectId
+, StringComparison.Ordinal) || !string.Equals(a.OperationId, GoogleGenerationProvider.SynthesizeOperationStableId, StringComparison.Ordinal) || string.IsNullOrWhiteSpace(a.IdempotencyKey)
+                || a.IdempotencyKey.Length > 128 || a.IdempotencyKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal)
+                || new[] { a.PlanSha256, a.TextSha256, a.QueueRowSha256, a.SpendRowSha256, a.OriginalPayloadSha256, a.ReviewedEvidenceSha256 }.Any(x => !IsHash(x))
+                || !bPin(p.Budget.QueueRows, a.QueueRowSha256) || !bPin(p.Budget.SpendRows, a.SpendRowSha256)
+                || article.Lineage.History.Count(x => x.DocumentId == a.DocumentId && x.RevisionId == a.RevisionId
+                    && x.StartScalar == a.StartScalar && x.EndScalarExclusive == a.EndScalarExclusive && string.Equals(x.TextSha256, a.TextSha256, StringComparison.Ordinal)) != 1
+                || article.Lineage.History.Any(x => x.Attempts.Any(y => string.Equals(y.IdempotencyKey, a.IdempotencyKey, StringComparison.Ordinal))))
+                throw new InvalidDataException("A supplemental association lacks exact independently pinned historical coverage.");
+        }
+        if (associations.Sum(x => x.RetainedReservationMinorUnits) > p.Budget.AllocationCommittedMinorUnits
+            || associations.Sum(x => x.RetainedReservationMinorUnits) > p.Budget.ProjectCommittedMinorUnits)
+            throw new InvalidDataException("Supplemental historical reservations are absent from the retained budget.");
+        static bool bPin(IReadOnlyList<RecoveryFinancialRowPin> pins, string hash) => pins.Any(x => string.Equals(x.Sha256, hash, StringComparison.Ordinal));
     }
 
     private static void RequirePins(IReadOnlyList<RecoveryFinancialRowPin>? pins)
