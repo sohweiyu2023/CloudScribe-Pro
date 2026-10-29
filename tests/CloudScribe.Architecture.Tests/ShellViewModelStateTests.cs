@@ -305,7 +305,7 @@ public sealed partial class ShellViewModelStateTests
         Assert.True(viewModel.CanRefreshVoiceLabCatalog);
         Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
         Assert.Equal(
-            "The voice list could not be verified. Inspect the saved connection in Setups, check the language/search filters, then refresh. No speech was requested and no key was changed.",
+            "The voice list could not be verified. Inspect the saved connection in Setups, check the language/search filters, then refresh. No speech was requested and no key was changed. Diagnostic: verification at UiQuery.",
             viewModel.StatusMessage);
     }
 
@@ -329,7 +329,7 @@ public sealed partial class ShellViewModelStateTests
         Assert.Equal(1, requests);
         Assert.True(viewModel.RefreshVoiceLabCatalogCommand.CanExecute(null));
         Assert.Equal(
-            "The voice list could not be verified. Inspect the saved connection in Setups, check the language/search filters, then refresh. No speech was requested and no key was changed.",
+            "The voice list could not be verified. Inspect the saved connection in Setups, check the language/search filters, then refresh. No speech was requested and no key was changed. Diagnostic: verification at UiQuery.",
             viewModel.StatusMessage);
 
         await viewModel.RefreshVoiceLabCatalogCommand.ExecuteAsync(null);

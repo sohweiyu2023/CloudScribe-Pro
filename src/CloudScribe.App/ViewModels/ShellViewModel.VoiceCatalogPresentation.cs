@@ -20,4 +20,6 @@ public sealed partial class ShellViewModel
     public bool VoiceLabCatalogLastRefreshSucceeded { get; private set; }
 
     public Task RefreshVoiceCatalogForUiAsync(CancellationToken token) => RefreshVoiceLabCatalogAsync(token);
+
+    public Task RefreshVoiceCatalogForUiAsync(Guid refreshId, CancellationToken token) => RefreshVoiceLabCatalogObservedAsync(refreshId, token);
 }
