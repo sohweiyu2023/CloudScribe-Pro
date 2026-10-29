@@ -37,6 +37,31 @@ public sealed class GoogleOAuthDiagnosticsTests
     public Task HeadersThenStalledBodyKeepsOriginalHttpFailureWithinShortDeadline() =>
         CheckAsync(string.Empty, GoogleOAuthFailure.TimedOut, stalled: true);
 
+    [Fact]
+    public async Task MissingPrivateKeyStopsBeforeOAuthWithLocalCredentialCategory()
+    {
+        var vault = new MemoryVault();
+        using var key = RSA.Create(2048);
+        string json = JsonSerializer.Serialize(new
+        {
+            type = "service_account",
+            project_id = "synthetic-project",
+            client_email = "synthetic@synthetic-project.iam.gserviceaccount.com",
+            private_key_id = "synthetic-key-id",
+            private_key = key.ExportPkcs8PrivateKeyPem(),
+            token_uri = "https://oauth2.googleapis.com/token",
+        });
+        var token = TestContext.Current.CancellationToken;
+        await new GoogleServiceAccountCredentialOnboardingService(vault).ImportAsync("synthetic", json.AsMemory(), token);
+        await vault.DeleteAsync(new CredentialReference("synthetic.google-service-account-private-key"), token);
+        using var handler = new Reject("must-not-be-requested", false);
+        using var client = new HttpClient(handler);
+        using var resolver = new VaultBackedTransientCredentialResolver(vault, client, TimeProvider.System);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAccessTokenAsync("synthetic", token).AsTask());
+        Assert.Equal("saved-credential-unavailable", GoogleCatalogRefreshDiagnostics.Category(error));
+        Assert.Equal(0, handler.Calls);
+    }
+
     private static async Task CheckAsync(string body, GoogleOAuthFailure expected, bool stalled = false)
     {
         var vault = new MemoryVault();

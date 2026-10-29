@@ -12,6 +12,19 @@ public static partial class GoogleCatalogRefreshDiagnostics
     private static readonly object HttpContextKey = new();
     private static readonly object PhaseContextKey = new();
     private static readonly object OAuthContextKey = new();
+    private static readonly object MissingCredentialKey = new();
+
+    private static object? Context(Exception exception, object key)
+    {
+        try { return exception.Data[key]; }
+        catch (Exception failure) when (IsNonFatal(failure)) { return null; }
+    }
+
+    internal static T MissingCredential<T>(T exception) where T : Exception
+    {
+        exception.Data[MissingCredentialKey] = true;
+        return exception;
+    }
 
     // Preserve the original exception type while carrying only our typed local response metadata.
     internal static T WithHttpContext<T>(T exception, HttpStatusCode status, GoogleCatalogRefreshPhase phase) where T : Exception
@@ -27,20 +40,21 @@ public static partial class GoogleCatalogRefreshDiagnostics
         return exception;
     }
 
-    public static GoogleOAuthFailure OAuthFailure(Exception exception) => exception.Data[OAuthContextKey] is GoogleOAuthFailure reason
+    public static GoogleOAuthFailure OAuthFailure(Exception exception) => Context(exception, OAuthContextKey) is GoogleOAuthFailure reason
         && Enum.IsDefined(reason) ? reason : GoogleOAuthFailure.None;
 
     public static int HttpStatus(Exception exception) => exception is HttpRequestException { StatusCode: { } status }
-        ? (int)status : exception.Data[HttpContextKey] is int code and >= 100 and <= 599 ? code : 0;
+        ? (int)status : Context(exception, HttpContextKey) is int code and >= 100 and <= 599 ? code : 0;
 
     public static GoogleCatalogRefreshPhase? ReportedPhase(Exception exception, GoogleCatalogRefreshPhase? fallback) =>
-        exception.Data[PhaseContextKey] is GoogleCatalogRefreshPhase phase && Enum.IsDefined(phase) ? phase : fallback;
+        Context(exception, PhaseContextKey) is GoogleCatalogRefreshPhase phase && Enum.IsDefined(phase) ? phase : fallback;
 
     public static bool IsNonFatal(Exception exception) => exception is not OutOfMemoryException
         and not StackOverflowException and not AccessViolationException;
 
     public static string Category(Exception exception) => exception switch
     {
+        _ when Context(exception, MissingCredentialKey) is true => "saved-credential-unavailable",
         OperationCanceledException => "cancelled-or-timeout",
         HttpRequestException { StatusCode: not null } => "http-rejected",
         HttpRequestException => "transport",

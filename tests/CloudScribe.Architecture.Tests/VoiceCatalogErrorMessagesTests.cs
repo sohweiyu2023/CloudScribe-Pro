@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Net;
 using CloudScribe.App.Composition;
+using CloudScribe.Application.Security;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
 
@@ -55,6 +57,36 @@ public sealed class VoiceCatalogErrorMessagesTests
         Assert.DoesNotContain("403", message, StringComparison.Ordinal);
         Assert.DoesNotContain("private-account-name", message, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-token", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MissingLocalConnectionGuidesRecoveryWithoutSuggestingKeyReplacement()
+    {
+        var service = new GoogleServiceAccountCredentialOnboardingService(new MissingVault());
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ResolveVoiceCatalogEndpointAsync("synthetic", TestContext.Current.CancellationToken));
+        string message = VoiceCatalogErrorMessages.For(error, GoogleCatalogRefreshPhase.UiBootstrap);
+        Assert.Contains("local credential material is unavailable", message, StringComparison.Ordinal);
+        Assert.Contains("saved-credential-unavailable", message, StringComparison.Ordinal);
+        Assert.Contains("no key was changed", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BrokenExceptionMetadataCannotBreakSafeErrorPresentation()
+    {
+        string message = VoiceCatalogErrorMessages.For(new BrokenData(), GoogleCatalogRefreshPhase.UiQuery);
+        Assert.Contains("unexpected", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-data", message, StringComparison.Ordinal);
+    }
+
+    private sealed class BrokenData : Exception
+    {
+        public override IDictionary Data => throw new InvalidOperationException("private-data");
+    }
+    private sealed class MissingVault : ICredentialVault
+    {
+        public ValueTask<CredentialSecret?> ReadAsync(CredentialReference reference, CancellationToken token = default) => ValueTask.FromResult<CredentialSecret?>(null);
+        public ValueTask StoreAsync(CredentialReference reference, ReadOnlyMemory<char> secret, CancellationToken token = default) => throw new NotSupportedException();
+        public ValueTask<bool> DeleteAsync(CredentialReference reference, CancellationToken token = default) => throw new NotSupportedException();
     }
 
     private sealed class ForbiddenProbe : HttpMessageHandler

@@ -111,6 +111,20 @@ public sealed partial class GoogleCatalogBootstrapTests
             Assert.Equal(id, fields.Single(x => string.Equals(x.Key, "RefreshId", StringComparison.Ordinal)).Value);
     }
 
+    [Fact]
+    public async Task MissingSavedMetadataHasActionableCategoryWithoutAnyProviderCall()
+    {
+        using var fixture = new DiagnosticFixture();
+        await fixture.ConfigureAsync(); fixture.Clear();
+        await fixture.Vault.DeleteAsync(new CloudScribe.Providers.Abstractions.CredentialReference("synthetic-credential.google-service-account-metadata"), TestContext.Current.CancellationToken);
+        int before = fixture.Handler.Calls;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.RefreshConfiguredAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("saved-credential-unavailable", GoogleCatalogRefreshDiagnostics.Category(error));
+        Assert.Equal(before, fixture.Handler.Calls);
+        Assert.Contains(fixture.Bootstrap.Messages, line => line.Contains("CredentialIdentity", StringComparison.Ordinal) && line.Contains("saved-credential-unavailable", StringComparison.Ordinal));
+        fixture.AssertPrivateValuesAbsent();
+    }
+
     private sealed class DiagnosticFixture : IDisposable
     {
         public Clock Clock { get; } = new();

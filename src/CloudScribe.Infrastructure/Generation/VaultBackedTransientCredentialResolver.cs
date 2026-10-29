@@ -53,7 +53,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         CredentialReference reference = new(credentialReferenceId);
         using CredentialSecret? secret = await _credentialVault.ReadAsync(reference, cancellationToken).ConfigureAwait(false);
         if (secret is null)
-            throw new InvalidOperationException("The explicitly configured provider credential reference is unavailable.");
+            throw GoogleCatalogRefreshDiagnostics.MissingCredential(new InvalidOperationException("The explicitly configured provider credential reference is unavailable."));
 
         string storedMaterial = new(secret.Value.Span);
         if (string.IsNullOrWhiteSpace(storedMaterial))
@@ -169,7 +169,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
     private async Task<CredentialSecret> ReadRequiredSecretAsync(string targetName, CancellationToken cancellationToken)
     {
         CredentialSecret? secret = await _credentialVault.ReadAsync(new CredentialReference(targetName), cancellationToken).ConfigureAwait(false);
-        return secret ?? throw new InvalidOperationException("Required Google service-account credential material is unavailable.");
+        return secret ?? throw GoogleCatalogRefreshDiagnostics.MissingCredential(new InvalidOperationException("Required Google service-account credential material is unavailable."));
     }
 
     private static string CreateSignedAssertion(

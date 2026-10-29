@@ -32,6 +32,7 @@ public sealed class VaultBackedTransientCredentialResolverTests
                 TestContext.Current.CancellationToken).AsTask()).ConfigureAwait(true);
 
         Assert.Contains("unavailable", error.Message, StringComparison.Ordinal);
+        Assert.Equal("saved-credential-unavailable", GoogleCatalogRefreshDiagnostics.Category(error));
     }
 
     [Fact]

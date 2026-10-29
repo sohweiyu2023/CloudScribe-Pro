@@ -21,6 +21,8 @@ These events exclude credentials, tokens, account/project identifiers, credentia
 
 An HTTP response at `OAuthTokenRequest`, `CatalogRequest` or `ProbeRequest` identifies the responding step. A later parse/storage/verification failure is a different class of failure. The last logged stage alone does not establish an underlying cause, and an absent HTTP status does not prove that no request reached the service.
 
+The `saved-credential-unavailable` category means the configured credential reader returned no usable material for a required saved role in the current Windows context. It does not prove deletion or identify why that material is unavailable. Check the Windows account and saved connection; retain the original approved service-account file for secure recovery. Do not create replacement keys, invent metadata or erase the saved account/financial history merely to retry.
+
 A remembered voice name or exact saved payload cannot manufacture current catalog, account, project or capability authority. Previously persisted evidence can survive restart only while it still passes its existing freshness and binding checks. Bootstrap evidence expires after30minutes; the lifetime and admission requirements are unchanged. Refresh through the supported saved connection rather than editing catalog/authorization rows, replaying stale evidence or fabricating a selection.
 
 For a controlled check, preserve documents and spending holds, run one refresh, then inspect its result and local diagnostic stages. Stop on an error or uncertain outcome. Do not interpret a successful catalog/probe check as successful speech synthesis, an audio playback test, or authorization to make another paid request.
