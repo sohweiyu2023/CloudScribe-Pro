@@ -35,6 +35,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         Button close = NewButton("Close local narration parts"); close.Click += (_, _) => dialog.Close(); body.Children.Add(close);
         try
         {
+            if (voice.Contains("-Chirp3-HD-", StringComparison.OrdinalIgnoreCase))
+            {
+                var preview = CloudScribe.Application.Generation.ChirpNarrationPlanner.Plan(original);
+                status.Text = $"{preview.Count} text-only internal requests proposed with a local 333-scalar boundary heuristic; this is not a Google limit or acceptance guarantee. No documents will be created. This preview does not inspect accepted audio. Use Internal article narration for independently reviewed coverage, accepted-audio reuse and request approval.";
+                create.IsVisible = false; dialog.Content = body;
+                await dialog.ShowDialog(owner).ConfigureAwait(true); return;
+            }
             IReadOnlyList<string> chunks = LocalNarrationChunker.Split(original, language, voice);
             status.Text = $"{chunks.Count} parts planned for {voice}, {language}. The original stays unchanged and every character is retained. Each part needs its own current voice/price checks and explicit approval before synthesis. This action creates text documents only.";
             create.Click += async (_, _) =>

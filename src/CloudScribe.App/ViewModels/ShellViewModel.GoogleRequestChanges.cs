@@ -31,6 +31,7 @@ public sealed partial class ShellViewModel
         PreparedGoogleGenerationSpendReview = null;
         _googleSamplePrepared = false;
         _currentRecoveryReview = null;
+        _currentChirpReview = null;
         _invalidateGoogleProductionRequest?.Invoke();
     }
 

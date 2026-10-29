@@ -103,7 +103,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         arm.IsEnabled = false;
         try
         {
-            var binding = await new GooglePrivateDiagnosticOptIn(privateDiagnostics, privateDiagnosticCompilation)
+            var binding = await new GooglePrivateDiagnosticOptIn(privateDiagnostics, (IGoogleRecoveryCurrentCompilation?)chirpPreparation ?? privateDiagnosticCompilation)
                 .PrepareAsync(model, confirmed, token).ConfigureAwait(true);
             if (binding is null) return;
             _privateCaptureUiBinding = binding;

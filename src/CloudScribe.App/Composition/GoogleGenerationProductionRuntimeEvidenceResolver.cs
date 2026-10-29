@@ -106,7 +106,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
         DateTimeOffset nowUtc, CancellationToken cancellationToken)
     {
         await ValidatePricingCurrentAsync(request.PricingProvenanceId, cancellationToken).ConfigureAwait(false);
-        if (request.SubmissionEnvelope.RecoveryAuthorizationId is not null)
+        if (request.SubmissionEnvelope.RecoveryAuthorizationId is not null || request.SubmissionEnvelope.ChirpAuthorizationId is not null)
             await ValidateRecoveryProjectCurrentAsync(request, nowUtc, cancellationToken).ConfigureAwait(false);
     }
 

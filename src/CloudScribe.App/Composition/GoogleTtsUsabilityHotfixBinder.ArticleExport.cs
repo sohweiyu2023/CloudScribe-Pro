@@ -121,6 +121,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
     private async Task<(bool Complete, string Status)> InspectArticlePresentationAsync(Guid parentId)
     {
+        if (chirpArticles is not null && await chirpArticles.HasStoredPlanAsync(parentId).ConfigureAwait(true))
+        {
+            var progress = await chirpArticles.ProgressAsync(parentId).ConfigureAwait(true);
+            return (progress.Complete, $"{progress.SavedCoverageParts}/{progress.TotalCoverageParts} exact internal coverage parts are saved/reused. One continuous MP3 is enabled only when every range is complete. No regeneration or financial change.");
+        }
         var inspected = await articleAudio.InspectAsync(parentId).ConfigureAwait(true);
         int available = inspected.Manifest.Members.Count(member => inspected.Audio.Count(x => x.DocumentId == member.DocumentId
             && x.RevisionId == member.RevisionId && string.Equals(x.TextSha256, member.TextSha256, StringComparison.Ordinal)) == 1);

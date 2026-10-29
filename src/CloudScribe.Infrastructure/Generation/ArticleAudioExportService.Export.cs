@@ -19,8 +19,8 @@ public sealed partial class ArticleAudioExportService
             destination = resolved.Destination;
             ffmpegPath = resolved.Ffmpeg;
             string ffprobePath = resolved.Ffprobe;
-            var inspection = await InspectAsync(parentId, cancellationToken).ConfigureAwait(false);
-            var ordered = inspection.Manifest.RequireComplete(inspection.Audio);
+            var inspection = await InspectForAssemblyAsync(parentId, cancellationToken).ConfigureAwait(false);
+            var ordered = inspection.Ordered;
             temporary = Path.Combine(Path.GetDirectoryName(destination)!, ".cloudscribe-article-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(temporary);
             var segments = await SnapshotInputsAsync(ordered, ffprobePath, temporary, cancellationToken).ConfigureAwait(false);
@@ -38,10 +38,9 @@ public sealed partial class ArticleAudioExportService
                 ["-hide_banner", "-nostdin", "-v", "error", "-xerror", "-i", resultPath, "-f", "null", "-"],
                 temporary, TimeSpan.FromMinutes(30), 4096), cancellationToken).ConfigureAwait(false);
             if (!decode.Succeeded) throw new InvalidOperationException("Continuous MP3 failed local decoding verification.");
-            var current = await InspectAsync(parentId, cancellationToken).ConfigureAwait(false);
-            if (!current.Manifest.Members.SequenceEqual(inspection.Manifest.Members)
-                || current.Manifest.ParentRevisionId != inspection.Manifest.ParentRevisionId
-                || !current.Manifest.RequireComplete(current.Audio).SequenceEqual(ordered))
+            var current = await InspectForAssemblyAsync(parentId, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(current.Fingerprint, inspection.Fingerprint, StringComparison.Ordinal)
+                || !current.Ordered.SequenceEqual(ordered))
                 throw new InvalidOperationException("Article evidence changed during export.");
             foreach (var receipt in ordered) await VerifyQueueAsync(receipt, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
@@ -103,7 +102,7 @@ public sealed partial class ArticleAudioExportService
             channels ??= probe.Channels;
             if (sampleRate != probe.Rate || channels != probe.Channels)
                 throw new InvalidOperationException("Article audio formats differ; no continuous export was created.");
-            segments.Add(new(receipt.DocumentId.ToString("N"), copy, "audio/mpeg", probe.Duration, receipt.AudioSha256));
+            segments.Add(new(receipt.LocalAttemptId, copy, "audio/mpeg", probe.Duration, receipt.AudioSha256));
         }
         return segments;
     }
@@ -126,4 +125,17 @@ public sealed partial class ArticleAudioExportService
             throw new InvalidOperationException("Article audio measurements are outside supported bounds.");
         return (TimeSpan.FromSeconds(duration), rate, channels);
     }
+
+    private async Task<AssemblyInspection> InspectForAssemblyAsync(Guid parentId, CancellationToken token)
+    {
+        if (chirpArticles is not null && await chirpArticles.HasStoredPlanAsync(parentId, token).ConfigureAwait(false))
+        {
+            var article = await chirpArticles.InspectCompleteAsync(parentId, token).ConfigureAwait(false);
+            return new(ChirpPolicyValidation.Hash(article.Plan), article.Ordered);
+        }
+        var legacy = await InspectAsync(parentId, token).ConfigureAwait(false);
+        return new(ChirpPolicyValidation.Hash(legacy.Manifest), legacy.Manifest.RequireComplete(legacy.Audio));
+    }
+
+    private sealed record AssemblyInspection(string Fingerprint, IReadOnlyList<ArticleAcceptedAudio> Ordered);
 }

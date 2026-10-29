@@ -30,7 +30,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     ArticleAudioExportService articleAudio,
     CloudScribe.Application.Documents.INarrationPartGroupStore articleGroups,
     InstalledRecoveryAdmissionStore recoveryAdmission, GoogleRecoveryPreparationService recoveryPreparation,
-    GooglePrivateErrorDiagnostics privateDiagnostics, IGoogleRecoveryCurrentCompilation privateDiagnosticCompilation)
+    GooglePrivateErrorDiagnostics privateDiagnostics, IGoogleRecoveryCurrentCompilation privateDiagnosticCompilation,
+    ChirpArticleService? chirpArticles = null, ChirpArticlePreparationService? chirpPreparation = null)
 {
     private static readonly string[] ProviderControlHostNames =
     [
@@ -122,6 +123,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
 
         StackPanel advanced = AddSection(host, "Advanced tools and connection settings", expanded: false);
         AddLocalPartsControls(window, advanced, viewModel);
+        AddChirpArticleControls(window, advanced, viewModel);
         AddRecoveryReviewControl(window, advanced, viewModel);
         AddPrivateDiagnosticsControl(window, advanced, viewModel);
         Expander connectionSetup = new() { Header = "Connect or change Google account", IsExpanded = false };
