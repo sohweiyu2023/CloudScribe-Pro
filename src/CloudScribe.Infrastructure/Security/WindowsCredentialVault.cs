@@ -6,7 +6,7 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Security;
 
-public sealed class WindowsCredentialVault : ICredentialVault
+public sealed class WindowsCredentialVault : ICredentialVault, ICredentialPresenceReader
 {
     private const uint GenericCredentialType = 1;
     private const uint PersistLocalMachine = 2;
@@ -14,6 +14,27 @@ public sealed class WindowsCredentialVault : ICredentialVault
     private const int ErrorNotFound = 1168;
     private const string TargetPrefix = "CloudScribePro/";
     private static ReadOnlySpan<byte> Utf8EnvelopePrefix => "CSU8"u8;
+
+    public ValueTask<CredentialRolePresence> InspectAsync(CredentialReference reference, CancellationToken cancellationToken = default)
+    {
+        EnsureWindows();
+        ArgumentNullException.ThrowIfNull(reference);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!CredRead(BuildTarget(reference), GenericCredentialType, 0, out IntPtr pointer))
+        {
+            int error = Marshal.GetLastPInvokeError();
+            if (error == ErrorNotFound)
+                return ValueTask.FromResult(CredentialRolePresence.Absent);
+            throw new Win32Exception(error, "Credential presence metadata could not be read.");
+        }
+        try
+        {
+            NativeCredential credential = Marshal.PtrToStructure<NativeCredential>(pointer);
+            return ValueTask.FromResult(credential.CredentialBlobSize > 0 && credential.CredentialBlob != IntPtr.Zero
+                ? CredentialRolePresence.Present : CredentialRolePresence.Unknown);
+        }
+        finally { CredFree(pointer); }
+    }
 
     public ValueTask StoreAsync(
         CredentialReference reference,

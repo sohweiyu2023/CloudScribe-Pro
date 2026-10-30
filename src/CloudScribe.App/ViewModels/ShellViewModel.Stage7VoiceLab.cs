@@ -43,6 +43,7 @@ public sealed partial class ShellViewModel
         Volatile.Read(ref _voiceLabCatalogRefreshInFlight) == 0;
 
     public bool CanAuditionSelectedVoice =>
+        Volatile.Read(ref _googleCredentialRepairActive) == 0 &&
         SelectedVoiceLabVoice is not null &&
         _createVoiceLabAuditionService is not null &&
         _captureVoiceLabAuditionRequest is not null &&
@@ -152,8 +153,13 @@ public sealed partial class ShellViewModel
     [RelayCommand(CanExecute = nameof(CanAuditionSelectedVoice))]
     private async Task AuditionSelectedVoiceAsync(CancellationToken cancellationToken)
     {
-        if (Interlocked.CompareExchange(ref _voiceLabAuditionInFlight, 1, 0) != 0)
-            throw new InvalidOperationException("A Voice Lab audition is already in progress.");
+        lock (_googleCredentialOperationGate)
+        {
+            if (Volatile.Read(ref _googleCredentialRepairActive) != 0)
+                throw new InvalidOperationException("Credential repair must finish before auditions.");
+            if (Interlocked.CompareExchange(ref _voiceLabAuditionInFlight, 1, 0) != 0)
+                throw new InvalidOperationException("A Voice Lab audition is already in progress.");
+        }
 
         OnPropertyChanged(nameof(CanAuditionSelectedVoice));
         AuditionSelectedVoiceCommand.NotifyCanExecuteChanged();

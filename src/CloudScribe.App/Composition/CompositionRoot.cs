@@ -33,6 +33,7 @@ public static class CompositionRoot
         builder.Logging.SetMinimumLevel(LogLevel.Information);
 
         builder.Services.AddCloudScribeInfrastructure(builder.Configuration);
+        RegisterCredentialRepair(builder.Services);
         RegisterProductionServices(builder.Services);
         RegisterShell(builder.Services);
 
@@ -90,6 +91,18 @@ public static class CompositionRoot
             serviceProvider.GetRequiredService<CloudScribe.Infrastructure.Pricing.V222ControlSet>(), serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<GoogleRecoveryPreparationService>();
         RegisterArticleNarration(services);
+    }
+
+    private static void RegisterCredentialRepair(IServiceCollection services)
+    {
+        services.AddSingleton(provider => new GoogleCredentialRepairVerifier(new HttpClient(new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+        })
+        { Timeout = TimeSpan.FromSeconds(20) }, provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILoggerFactory>()));
+        services.AddSingleton<GoogleCredentialRepairJournalStore>();
+        services.AddSingleton<GoogleCredentialRepairService>();
     }
 
     private static void RegisterArticleNarration(IServiceCollection services)

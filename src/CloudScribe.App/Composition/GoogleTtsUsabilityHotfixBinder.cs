@@ -33,7 +33,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     InstalledRecoveryAdmissionStore recoveryAdmission, GoogleRecoveryPreparationService recoveryPreparation,
     GooglePrivateErrorDiagnostics privateDiagnostics, IGoogleRecoveryCurrentCompilation privateDiagnosticCompilation,
     ChirpArticleService? chirpArticles = null, ChirpArticlePreparationService? chirpPreparation = null,
-    ILogger<GoogleTtsUsabilityHotfixBinder>? catalogLogger = null)
+    ILogger<GoogleTtsUsabilityHotfixBinder>? catalogLogger = null, GoogleCredentialRepairService? credentialRepair = null)
 {
     private static readonly string[] ProviderControlHostNames =
     [
