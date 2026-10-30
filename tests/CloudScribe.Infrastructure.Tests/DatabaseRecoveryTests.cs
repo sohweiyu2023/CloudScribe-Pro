@@ -247,6 +247,7 @@ public sealed class DatabaseRecoveryTests
                 GoogleRecoverySuccessorGrants.MigrationId,
                 ChirpArticlePlans.MigrationId,
                 ChirpLegacyAssociations.MigrationId,
+                GoogleCredentialRepairs.MigrationId,
             ],
             currentMigrations);
     }

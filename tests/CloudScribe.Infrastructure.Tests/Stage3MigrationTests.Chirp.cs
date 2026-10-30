@@ -22,7 +22,7 @@ public sealed partial class Stage3MigrationTests
             await db.Database.ExecuteSqlRawAsync("INSERT INTO chirp_article_plans VALUES({0},{1},{2},{3},{4},{5},{6},{7});",
                 [new string('a', 64), Guid.NewGuid().ToString("D"), Guid.NewGuid().ToString("D"), "synthetic-account", "synthetic-project", "{\"immutable\":\"proposal\"}", "{\"immutable\":\"lineage\"}", "[]"], TestContext.Current.CancellationToken);
             var before = await ChirpBusinessRowsAsync(db);
-            await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            await db.GetService<IMigrator>().MigrateAsync(ChirpLegacyAssociations.MigrationId, TestContext.Current.CancellationToken);
             var after = await ChirpBusinessRowsAsync(db);
             Assert.Equal(before.Count + 1, after.Count);
             foreach (var (table, rows) in before) Assert.Equal(rows, after[table]);
@@ -61,7 +61,7 @@ public sealed partial class Stage3MigrationTests
             await new GoogleGenerationSpendAuthorizationStore(new ChirpMigrationFactory(file), TimeProvider.System).SaveApprovedAsync(
                 GoogleGenerationSpendAuthorization.Create(envelope, "USD", 2, 3, 3), TestContext.Current.CancellationToken);
             var before = await ChirpBusinessRowsAsync(db);
-            await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            await db.GetService<IMigrator>().MigrateAsync(ChirpLegacyAssociations.MigrationId, TestContext.Current.CancellationToken);
             var after = await ChirpBusinessRowsAsync(db);
             foreach (var (table, rows) in before) Assert.Equal(rows, after[table]);
             Assert.Equal(5, after.Count - before.Count);

@@ -31,6 +31,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         TextBlock Text(string value) => new() { Text = value, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
         body.Children.Add(Text("Documents autosave locally after a short pause. Ctrl+S creates a checkpoint; Library reopens saved documents."));
         TextBlock connection = Text("Reading saved connection metadata locally..."); body.Children.Add(connection);
+        Button repair = NewButton("Repair existing Google connection");
+        repair.IsEnabled = credentialRepair is not null;
+        repair.Click += async (_, _) => await OpenCredentialRepairAsync(dialog, model, connection).ConfigureAwait(true);
+        body.Children.Add(repair);
         body.Children.Add(Text("Named voice setups remember language and voice only. They never contain keys, text, prices, capability evidence or spend approval."));
         ComboBox saved = new() { PlaceholderText = "Choose a saved voice setup", HorizontalAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetName(saved, "Saved voice setups"); body.Children.Add(saved);

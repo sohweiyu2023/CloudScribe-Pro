@@ -19,11 +19,14 @@ public sealed class WindowsCredentialVaultTests
         char[] secret = "stage4-ephemeral-test-secret".ToCharArray();
         try
         {
+            Assert.Equal(CredentialRolePresence.Absent, await vault.InspectAsync(reference, TestContext.Current.CancellationToken));
             await vault.StoreAsync(reference, secret, TestContext.Current.CancellationToken);
+            Assert.Equal(CredentialRolePresence.Present, await vault.InspectAsync(reference, TestContext.Current.CancellationToken));
             using CredentialSecret? loaded = await vault.ReadAsync(reference, TestContext.Current.CancellationToken);
             Assert.NotNull(loaded);
             Assert.True(loaded!.Value.Span.SequenceEqual(secret));
             Assert.True(await vault.DeleteAsync(reference, TestContext.Current.CancellationToken));
+            Assert.Equal(CredentialRolePresence.Absent, await vault.InspectAsync(reference, TestContext.Current.CancellationToken));
             Assert.Null(await vault.ReadAsync(reference, TestContext.Current.CancellationToken));
         }
         finally

@@ -134,7 +134,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPricingCatalogAdmissionService, PricingCatalogAdmissionService>();
         services.AddSingleton<IPricingCatalogHistoryStore, EfPricingCatalogHistoryStore>();
         services.AddSingleton<IPricingContractOverrideStore, EfPricingContractOverrideStore>();
-        services.AddSingleton<ICredentialVault, WindowsCredentialVault>();
+        services.AddSingleton<WindowsCredentialVault>();
+        services.AddSingleton<ICredentialVault>(provider => provider.GetRequiredService<WindowsCredentialVault>());
+        services.AddSingleton<ICredentialPresenceReader>(provider => provider.GetRequiredService<WindowsCredentialVault>());
         services.AddSingleton<GoogleServiceAccountCredentialOnboardingService>();
         services.AddSingleton<ITransientCredentialResolver, VaultBackedTransientCredentialResolver>();
         services.AddSingleton<IGenerationPrivateCacheKeyProvider, VaultBackedGenerationPrivateCacheKeyProvider>();

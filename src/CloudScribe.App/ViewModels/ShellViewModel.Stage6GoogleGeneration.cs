@@ -33,16 +33,19 @@ public sealed partial class ShellViewModel
         string, CancellationToken, Task> record) => _recordArticleAudio = record;
 
     public bool CanGenerateWithGoogle =>
+        Volatile.Read(ref _googleCredentialRepairActive) == 0 &&
         _resolveGoogleGenerationExecutionContext is not null &&
         _persistAcceptedGoogleMp3 is not null &&
         PreparedGoogleGenerationSpendApproved &&
         Volatile.Read(ref _googleGenerationInFlight) == 0;
 
     public bool CanPrepareGoogleGenerationSpend =>
+        Volatile.Read(ref _googleCredentialRepairActive) == 0 &&
         _prepareGoogleGenerationForApproval is not null &&
         Volatile.Read(ref _googleGenerationInFlight) == 0;
 
     public bool CanApproveGoogleGenerationSpend =>
+        Volatile.Read(ref _googleCredentialRepairActive) == 0 &&
         _approveGoogleGenerationSpend is not null &&
         PreparedGoogleGenerationSpendReview is not null &&
         !PreparedGoogleGenerationSpendApproved &&
@@ -349,8 +352,13 @@ public sealed partial class ShellViewModel
 
     private void EnterGoogleGenerationOperation()
     {
-        if (Interlocked.CompareExchange(ref _googleGenerationInFlight, 1, 0) != 0)
-            throw new InvalidOperationException("A Google generation approval or submission is already in progress.");
+        lock (_googleCredentialOperationGate)
+        {
+            if (Volatile.Read(ref _googleCredentialRepairActive) != 0)
+                throw new InvalidOperationException("Credential repair must finish before generation.");
+            if (Interlocked.CompareExchange(ref _googleGenerationInFlight, 1, 0) != 0)
+                throw new InvalidOperationException("A Google generation approval or submission is already in progress.");
+        }
         RefreshGoogleGenerationCommands();
     }
 
