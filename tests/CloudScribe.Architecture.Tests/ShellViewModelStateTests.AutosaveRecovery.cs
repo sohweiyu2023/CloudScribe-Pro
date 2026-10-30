@@ -78,7 +78,7 @@ public sealed partial class ShellViewModelStateTests
     {
         public AppPaths Paths { get; } = paths;
         public EfDocumentLibrary NewLibrary() => new(new AutosaveContextFactory(options), new DocumentContentStore(Paths), TimeProvider.System);
-        public static async Task<AutosaveDiskFixture> CreateAsync()
+        public static async Task<AutosaveDiskFixture> CreateAsync(string? migration = null)
         {
             string root = Path.Combine(Path.GetTempPath(), "cloudscribe-synthetic-autosave", Guid.NewGuid().ToString("N"));
             AppPaths paths = new(Options.Create(new CloudScribeOptions { AppDataDirectoryOverride = root }));
@@ -87,7 +87,8 @@ public sealed partial class ShellViewModelStateTests
                 .UseSqlite(new SqliteConnectionStringBuilder { DataSource = paths.DatabasePath, ForeignKeys = true }.ConnectionString).Options;
             var context = new CloudScribeDbContext(options);
             await using (context.ConfigureAwait(false))
-                await context.Database.MigrateAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+                await Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>(context)
+                    .MigrateAsync(migration, TestContext.Current.CancellationToken).ConfigureAwait(false);
             return new AutosaveDiskFixture(root, paths, options);
         }
 

@@ -84,6 +84,26 @@ public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorP
         }
     }
 
+    internal bool IsReadyFor(GenerationProviderRequest request, string credentialReference)
+    {
+        lock (_gate)
+        {
+            var ticket = _ticket;
+            return !_disposed && ticket is not null && ReferenceEquals(ticket.Request, request)
+                && string.Equals(ticket.Binding.AccountId, request.AccountId, StringComparison.Ordinal)
+                && string.Equals(ticket.Binding.CredentialReferenceId, credentialReference, StringComparison.Ordinal)
+                && string.Equals(ticket.Binding.PayloadSha256, Hash(request.CompiledPayload.Span), StringComparison.Ordinal)
+                && !Expired(ticket.ExpiresUtc, ticket.Started);
+        }
+    }
+
+    internal bool IsActiveFor(Guid? ticket, ReadOnlyMemory<byte> payload)
+    {
+        lock (_gate)
+            return !_disposed && ticket is not null && ticket == _active && !Expired(_activeExpires, _activeStarted)
+                && string.Equals(_activePayloadSha256, Hash(payload.Span), StringComparison.Ordinal);
+    }
+
     internal void Observe(Guid? ticket, int status, ReadOnlyMemory<byte> response, ReadOnlyMemory<byte> input, string token, string correlation)
     {
         lock (_gate)

@@ -265,6 +265,7 @@ public sealed partial class Stage3MigrationTests
                 ChirpArticlePlans.MigrationId,
                 ChirpLegacyAssociations.MigrationId,
                 GoogleCredentialRepairs.MigrationId,
+                ChirpArticleSuccessors.MigrationId,
             ],
             migrations);
     }

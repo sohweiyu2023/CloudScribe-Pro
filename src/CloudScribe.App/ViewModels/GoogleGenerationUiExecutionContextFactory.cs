@@ -146,9 +146,13 @@ public static class GoogleGenerationUiExecutionContextFactory
             persistedQueueStateStore.SaveAsync,
             evidence.SpendAuthorization.Envelope.ChirpAuthorizationId is not null
                 ? articles is null ? throw new InvalidOperationException("Article claim service is unavailable.")
-                    : (claim, token) => articles.TryClaimAuthorizedAsync(evidence.SpendAuthorization.Envelope,
-                        evidence.Snapshot.UiSelection.ProjectId, evidence.Currency, evidence.Scale, evidence.CurrentEstimateMinorUnits, claim, token)
-                : evidence.SpendAuthorization.Envelope.RecoveryAuthorizationId is null ? persistedQueueStateStore.TryClaimSubmissionAsync
+                    : async (claim, token) =>
+                    {
+                        provider.RequirePrivateDiagnosticsReady(evidence.Snapshot.ProviderRequest);
+                        return await articles.TryClaimAuthorizedAsync(evidence.SpendAuthorization.Envelope,
+                            evidence.Snapshot.UiSelection.ProjectId, evidence.Currency, evidence.Scale, evidence.CurrentEstimateMinorUnits, claim, token).ConfigureAwait(false);
+                    }
+        : evidence.SpendAuthorization.Envelope.RecoveryAuthorizationId is null ? persistedQueueStateStore.TryClaimSubmissionAsync
                 : recovery is null ? throw new InvalidOperationException("Recovery claim service is unavailable.")
                 : (claim, token) => recovery.TryClaimAuthorizedAsync(evidence.SpendAuthorization.Envelope,
                     evidence.Snapshot.UiSelection.ProjectId, evidence.Currency, evidence.Scale, evidence.CurrentEstimateMinorUnits, claim, token),

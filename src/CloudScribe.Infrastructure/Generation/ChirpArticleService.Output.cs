@@ -55,7 +55,7 @@ public sealed partial class ChirpArticleService
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(token).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: false);
         using var command = ChirpArticleSql.Command(connection, transaction, """
-            SELECT AuthorizationId,PlanSha256,CoverageOrdinal,ClaimedLocalAttemptId,EnvelopeJson FROM chirp_article_attempts
+            SELECT AuthorizationId,PlanSha256,CoverageOrdinal,ClaimedLocalAttemptId,EnvelopeJson FROM chirp_article_owned_attempts
             WHERE ChildKey=$key AND AccountId=$account AND Consumed=1;
             """, ("$key", request.IdempotencyKey), ("$account", request.AccountId));
         string id, plan, attempt; int ordinal; GoogleGenerationSubmissionEnvelope envelope;

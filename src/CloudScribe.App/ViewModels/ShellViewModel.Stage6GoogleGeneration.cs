@@ -223,10 +223,10 @@ public sealed partial class ShellViewModel
                 || articleDocument?.CurrentRevisionId != articleRevisionAtStart || IsDocumentDirty || IsDocumentSaving
                 || articleRequestVersion != Volatile.Read(ref _googleRequestVersion)) articleDocument = null;
             StatusMessage = "Google generation · validating current account, voice, pricing and trust";
-            if (_logger.IsEnabled(LogLevel.Information))
+            if (CloudScribeLog.ObserveIsEnabled(_logger, LogLevel.Information))
             {
                 string payloadHash = Convert.ToHexStringLower(SHA256.HashData(state.ProviderRequest.CompiledPayload.Span));
-                CloudScribeLog.GoogleGenerationRequestContext(_logger, payloadHash, state.ProviderRequest.CompiledPayload.Length);
+                CloudScribeLog.Observe(() => CloudScribeLog.GoogleGenerationRequestContext(_logger, payloadHash, state.ProviderRequest.CompiledPayload.Length));
             }
             AttachPrivateGoogleDiagnostic(state.ProviderRequest, articleRequestVersion);
             GoogleGenerationQueueOutcome outcome = await coordinator.ProcessPersistedTransitionAsync(
@@ -241,7 +241,7 @@ public sealed partial class ShellViewModel
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            CloudScribeLog.GoogleGenerationStopped(_logger, "caller-cancelled");
+            CloudScribeLog.Observe(() => CloudScribeLog.GoogleGenerationStopped(_logger, "caller-cancelled"));
             StatusMessage = "Google generation cancelled · approval cleared; check queue status before another request";
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
@@ -249,7 +249,8 @@ public sealed partial class ShellViewModel
             // A failure may occur after dispatch. Keep the durable queue authoritative and do
             // not imply that repeating the request is free or safe. Provider exception text can
             // contain private request details, so it does not belong in the visible status.
-            CloudScribeLog.GoogleGenerationStopped(_logger, "guard-or-execution-failure");
+            if (HandleDiagnosticGateFailure(exception)) return;
+            CloudScribeLog.Observe(() => CloudScribeLog.GoogleGenerationStopped(_logger, "guard-or-execution-failure"));
             StatusMessage = "Google generation stopped · approval cleared; review queue status before preparing another request";
         }
         finally
@@ -264,6 +265,14 @@ public sealed partial class ShellViewModel
         }
     }
 
+    private bool HandleDiagnosticGateFailure(Exception error)
+    {
+        if (error is not PrivateDiagnosticNotReadyException) return false;
+        CloudScribeLog.Observe(() => CloudScribeLog.GoogleGenerationStopped(_logger, "private-diagnostics-not-ready"));
+        StatusMessage = "Diagnostic HTTP dispatch stopped: one-response private capture is not ready for this exact reserved successor. Enable capture after reservation, then inspect queue status and retained holds before any separately approved action. No automatic retry.";
+        return true;
+    }
+
     private async Task RecordArticleAudioOutcomeAsync(CloudScribe.Application.Documents.DocumentSnapshot? articleDocument,
         CloudScribe.Providers.Abstractions.GenerationProviderRequest request, GoogleGenerationQueueOutcome outcome,
         CancellationToken cancellationToken)
@@ -275,7 +284,7 @@ public sealed partial class ShellViewModel
             try { await _recordArticleAudio(articleDocument, request, outcome, acceptedPath, cancellationToken).ConfigureAwait(true); }
             catch (Exception error) when (!IsFatalUiException(error))
             {
-                CloudScribeLog.GoogleGenerationStopped(_logger, "article-receipt-unavailable");
+                CloudScribeLog.Observe(() => CloudScribeLog.GoogleGenerationStopped(_logger, "article-receipt-unavailable"));
                 StatusMessage = "Accepted MP3 saved; article provenance could not be recorded. Keep the audio; do not regenerate to repair export.";
             }
         }
@@ -322,8 +331,8 @@ public sealed partial class ShellViewModel
         string diagnostic = GoogleGenerationOutcomeDiagnostic.Sanitize(outcome.Response?.DiagnosticCode);
         GoogleErrorStatus errorStatus = outcome.Response is { } response && Enum.IsDefined(response.ErrorStatus)
             ? response.ErrorStatus : GoogleErrorStatus.Unknown;
-        CloudScribeLog.GoogleGenerationOutcome(_logger, diagnostic, outcome.RequiresReconciliation,
-            outcome.Response?.IsAccepted == true, errorStatus);
+        CloudScribeLog.Observe(() => CloudScribeLog.GoogleGenerationOutcome(_logger, diagnostic, outcome.RequiresReconciliation,
+            outcome.Response?.IsAccepted == true, errorStatus));
         string errorLabel = errorStatus == GoogleErrorStatus.NotProvided ? string.Empty : $" · {errorStatus}";
         if (outcome.RequiresReconciliation)
         {

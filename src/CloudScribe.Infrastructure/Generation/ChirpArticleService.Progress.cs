@@ -44,7 +44,7 @@ public sealed partial class ChirpArticleService
         await _evidence.ResolveSnapshotAsync(connection, transaction, stored.Article, stored.AccountId, stored.ProjectId, snapshot, cancellationToken).ConfigureAwait(false);
         var receipts = await SegmentReceiptsAsync(connection, transaction, stored, snapshot, cancellationToken).ConfigureAwait(false);
         foreach (var receipt in receipts) await VerifyMediaAsync(receipt.Audio.AudioPath, receipt.Audio, cancellationToken).ConfigureAwait(false);
-        var rows = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_attempts", cancellationToken).ConfigureAwait(false);
+        var rows = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_owned_attempts", cancellationToken).ConfigureAwait(false);
         var policyNow = await admission.LoadVerifiedAsync(cancellationToken).ConfigureAwait(false);
         var active = policyNow?.Articles.SingleOrDefault(x => string.Equals(x.Proposal.PlanSha256, plan, StringComparison.Ordinal));
         return DescribeProgress(stored.Article with { AllowedSegments = active?.AllowedSegments ?? [] }, receipts, rows, snapshot.QueueStates);
@@ -57,10 +57,13 @@ public sealed partial class ChirpArticleService
         foreach (var part in article.Proposal.Parts)
         {
             var rows = attempts.Where(x => Equals(x[1], article.Proposal.PlanSha256) && Equals(x[2], (long)part.CoverageOrdinal)).ToArray();
+            var latest = rows.FirstOrDefault(x => Equals(x[16], 0L))
+                ?? rows.FirstOrDefault(x => queues.Any(q => Equals(q.Key, x[7]) && string.Equals(q.DiagnosticCode, "google-accepted", StringComparison.Ordinal)))
+                ?? rows.FirstOrDefault();
             bool saved = receipts.Any(x => x.CoverageOrdinal == part.CoverageOrdinal);
             string status = part.Range.ReusedReceiptSha256 is not null ? "Reused accepted audio" : saved ? "Saved accepted audio"
-                : rows.Length == 0 ? "Not requested" : Equals(rows[0][16], 0L) ? "Reserved; review the same identity to resume"
-                : queues.Any(x => Equals(x.Key, rows[0][7]) && string.Equals(x.DiagnosticCode, "google-accepted", StringComparison.Ordinal))
+                : latest is null ? "Not requested" : Equals(latest[16], 0L) ? "Reserved; review the same identity to resume"
+                : queues.Any(x => Equals(x.Key, latest[7]) && string.Equals(x.DiagnosticCode, "google-accepted", StringComparison.Ordinal))
                     ? "Accepted; recover local output" : "Stopped; reconcile result, no automatic retry";
             progress.Add(new(part.CoverageOrdinal, part.Range.EndScalarExclusive - part.Range.StartScalar, status, part.Range.ReusedReceiptSha256 is not null,
                 article.AllowedSegments.Any(x => x.CoverageOrdinal == part.CoverageOrdinal)));

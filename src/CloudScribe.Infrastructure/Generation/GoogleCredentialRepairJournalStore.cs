@@ -65,7 +65,7 @@ public sealed partial class GoogleCredentialRepairJournalStore(IDbContextFactory
             throw new InvalidOperationException("An uncertain provider attempt requires reconciliation before credential repair.");
         using var pending = ChirpArticleSql.Command(connection, transaction, """
             SELECT (SELECT COUNT(*) FROM google_recovery_attempts WHERE AccountId=$account AND Consumed=0)
-                 + (SELECT COUNT(*) FROM chirp_article_attempts WHERE AccountId=$account AND Consumed=0);
+                 + (SELECT COUNT(*) FROM chirp_article_owned_attempts WHERE AccountId=$account AND Consumed=0);
             """, ("$account", account));
         if (Convert.ToInt64(await pending.ExecuteScalarAsync(token).ConfigureAwait(false), System.Globalization.CultureInfo.InvariantCulture) != 0)
             throw new InvalidOperationException("A reserved request must be reconciled before credential repair.");
@@ -76,16 +76,35 @@ public sealed partial class GoogleCredentialRepairJournalStore(IDbContextFactory
         string projectId = rows.GetString(0);
         if (await rows.ReadAsync(token).ConfigureAwait(false)) throw new InvalidOperationException("Ambiguous retained project binding.");
         await rows.DisposeAsync().ConfigureAwait(false);
-        string financialSha = RecoveryFinancialSnapshot.Hash(new
+        string financialSha = await RepairFinancialShaAsync(connection, transaction, financial, token).ConfigureAwait(false);
+        return new(snapshot, projectId, financialSha, await ActiveAsync(connection, transaction, account, token).ConfigureAwait(false));
+    }
+
+    private static async Task<string> RepairFinancialShaAsync(SqliteConnection connection, SqliteTransaction transaction,
+        RecoveryFinancialSnapshot financial, CancellationToken token)
+    {
+        var roots = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_attempts", token).ConfigureAwait(false);
+        var successors = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_successor_attempts", token).ConfigureAwait(false);
+        if (successors.Count == 0) return RecoveryFinancialSnapshot.Hash(new
         {
             financial.Queue,
             financial.Spend,
             financial.Recovery,
             financial.Scopes,
             financial.Transitions,
-            Chirp = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_attempts", token).ConfigureAwait(false)
+            Chirp = roots
         });
-        return new(snapshot, projectId, financialSha, await ActiveAsync(connection, transaction, account, token).ConfigureAwait(false));
+        return RecoveryFinancialSnapshot.Hash(new
+        {
+            financial.Queue,
+            financial.Spend,
+            financial.Recovery,
+            financial.Scopes,
+            financial.Transitions,
+            Chirp = roots,
+            SuccessorVersion = 1,
+            SuccessorAttempts = successors,
+        });
     }
 
     private static ProviderAccountSnapshot Map(ProviderAccountEntity value) => new(

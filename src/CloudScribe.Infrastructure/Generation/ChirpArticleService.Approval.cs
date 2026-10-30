@@ -25,7 +25,7 @@ public sealed partial class ChirpArticleService
         var financial = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(financial.Sha256, pending.FinancialSha256, StringComparison.Ordinal))
             throw new InvalidOperationException("Financial evidence changed after review; all reservations remain retained.");
-        var existing = await FindExistingAsync(connection, transaction, current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal, cancellationToken).ConfigureAwait(false);
+        var existing = await FindExistingAsync(connection, transaction, policy, current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
             await RequireExistingAsync(connection, transaction, policy, pending.Intent, existing.AuthorizationId, financial, cancellationToken).ConfigureAwait(false);
@@ -38,11 +38,15 @@ public sealed partial class ChirpArticleService
         await RequirePolicyCurrentAsync(policy, cancellationToken).ConfigureAwait(false);
         await AppendPlanAsync(connection, transaction, policy, current.Article, cancellationToken).ConfigureAwait(false);
         await AppendLegacyAssociationsAsync(connection, transaction, policy, current.Article.Proposal.PlanSha256, cancellationToken).ConfigureAwait(false);
-        var approved = new ChirpApprovedAttempt(Guid.NewGuid(), Key(current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal), confirmation.MaximumMinorUnits);
+        Guid authorization = Guid.NewGuid();
+        string key = policy.SuccessorGrant is null ? Key(current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal)
+            : SuccessorKey(current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal, authorization);
+        var approved = new ChirpApprovedAttempt(authorization, key, confirmation.MaximumMinorUnits);
         await AppendAttemptAsync(connection, transaction, policy, pending, approved, cancellationToken).ConfigureAwait(false);
         var after = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
+        string table = await AttemptTableAsync(connection, transaction, approved.AuthorizationId.ToString("N"), cancellationToken).ConfigureAwait(false);
         using (var update = ChirpArticleSql.Command(connection, transaction,
-            "UPDATE chirp_article_attempts SET ApprovedFinancialSha256=$sha WHERE AuthorizationId=$id AND ApprovedFinancialSha256='';",
+            "UPDATE " + table + " SET ApprovedFinancialSha256=$sha WHERE AuthorizationId=$id AND ApprovedFinancialSha256='';",
             ("$sha", after.Sha256), ("$id", approved.AuthorizationId.ToString("N"))))
             if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1) throw new InvalidOperationException("Article reservation audit could not be finalized.");
         await RequirePolicyCurrentAsync(policy, cancellationToken).ConfigureAwait(false);
@@ -80,8 +84,10 @@ public sealed partial class ChirpArticleService
     }
 
     private static async Task<ChirpApprovedAttempt?> FindExistingAsync(SqliteConnection connection, SqliteTransaction transaction,
-        string plan, int ordinal, CancellationToken token)
+        ChirpArticleAdmissionPolicy policy, string plan, int ordinal, CancellationToken token)
     {
+        if (policy.SuccessorGrant is { } grant)
+            return await FindSuccessorAsync(connection, transaction, grant, plan, ordinal, token).ConfigureAwait(false);
         using var command = ChirpArticleSql.Command(connection, transaction,
             "SELECT AuthorizationId,ChildKey,ReservedMinorUnits FROM chirp_article_attempts WHERE PlanSha256=$plan AND CoverageOrdinal=$ordinal;",
             ("$plan", plan), ("$ordinal", ordinal));
@@ -93,7 +99,7 @@ public sealed partial class ChirpArticleService
         ChirpRequestIntent intent, Guid id, CurrentFinancial financial, CancellationToken token)
     {
         using var command = ChirpArticleSql.Command(connection, transaction,
-            "SELECT PolicySha256,EnvelopeJson,Consumed,ApprovedFinancialSha256 FROM chirp_article_attempts WHERE AuthorizationId=$id;", ("$id", id.ToString("N")));
+            "SELECT PolicySha256,EnvelopeJson,Consumed,ApprovedFinancialSha256 FROM chirp_article_owned_attempts WHERE AuthorizationId=$id;", ("$id", id.ToString("N")));
         using var row = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
         if (!await row.ReadAsync(token).ConfigureAwait(false) || row.GetInt64(2) != 0
             || !string.Equals(row.GetString(0), ChirpPolicyValidation.Hash(policy), StringComparison.Ordinal)

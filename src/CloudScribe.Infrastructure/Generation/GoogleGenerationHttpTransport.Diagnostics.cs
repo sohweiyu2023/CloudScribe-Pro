@@ -10,6 +10,13 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed partial class GoogleGenerationHttpTransport
 {
+    private void ObserveErrorResponse(string correlation, int status, byte[] bytes) => Observe(() =>
+    {
+        var details = GoogleErrorDetailParser.Parse(bytes);
+        CloudScribeLog.GoogleSynthesisErrorDetails(_logger, correlation, status, details.Reason, details.Domain, details.Field);
+        ObserveErrorParse(correlation, status, bytes);
+    });
+
     private void ObserveWireContent(string correlation, string payloadHash, int bytes, Uri endpoint) => Observe(() =>
     {
         var identity = EndpointIdentity(endpoint);
@@ -43,9 +50,7 @@ public sealed partial class GoogleGenerationHttpTransport
 
     private void Observe(Action action)
     {
-        try { if (_logger.IsEnabled(LogLevel.Information)) action(); }
-        catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { /* Supplemental diagnostics must not turn a completed response into another attempt. */ }
+        if (CloudScribeLog.ObserveIsEnabled(_logger, LogLevel.Information)) CloudScribeLog.Observe(action);
     }
 
     private static string OriginHash(Uri endpoint) => Convert.ToHexStringLower(SHA256.HashData(

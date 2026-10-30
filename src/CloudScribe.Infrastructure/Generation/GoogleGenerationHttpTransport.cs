@@ -35,10 +35,10 @@ public sealed partial class GoogleGenerationHttpTransport
         byte[] wirePayload = request.Payload.ToArray();
 
         string correlation = Guid.NewGuid().ToString("N");
-        string payloadHash = _logger.IsEnabled(LogLevel.Information) ? Convert.ToHexStringLower(SHA256.HashData(wirePayload)) : "logging-disabled";
+        string payloadHash = CloudScribeLog.ObserveIsEnabled(_logger, LogLevel.Information) ? Convert.ToHexStringLower(SHA256.HashData(wirePayload)) : "logging-disabled";
         int status = 0;
         void Log(GoogleSynthesisStage stage, GoogleErrorStatus category = GoogleErrorStatus.NotProvided) =>
-            CloudScribeLog.GoogleSynthesisTransportStage(_logger, correlation, payloadHash, stage, status, category);
+            CloudScribeLog.Observe(() => CloudScribeLog.GoogleSynthesisTransportStage(_logger, correlation, payloadHash, stage, status, category));
         Log(GoogleSynthesisStage.ResolvingCredential);
         try
         {
@@ -53,6 +53,8 @@ public sealed partial class GoogleGenerationHttpTransport
 
             Log(GoogleSynthesisStage.Dispatching);
             ObserveWireContent(correlation, payloadHash, wirePayload.Length, request.Endpoint);
+            if (request.RequirePrivateDiagnosticCapture && _privateDiagnostics?.IsActiveFor(request.PrivateDiagnosticTicket, wirePayload) != true)
+                throw new PrivateDiagnosticNotReadyException();
             using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             status = (int)response.StatusCode;
             Log(GoogleSynthesisStage.ResponseHeaders);
@@ -61,11 +63,7 @@ public sealed partial class GoogleGenerationHttpTransport
             var category = response.StatusCode == System.Net.HttpStatusCode.OK ? GoogleErrorStatus.NotProvided : GoogleErrorStatusParser.Parse(bytes);
             Log(GoogleSynthesisStage.ResponseReadCompleted, category);
             if (status != 200)
-            {
-                var details = GoogleErrorDetailParser.Parse(bytes);
-                CloudScribeLog.GoogleSynthesisErrorDetails(_logger, correlation, status, details.Reason, details.Domain, details.Field);
-                ObserveErrorParse(correlation, status, bytes);
-            }
+                ObserveErrorResponse(correlation, status, bytes);
             _privateDiagnostics?.Observe(request.PrivateDiagnosticTicket, status, bytes, wirePayload, token, correlation);
             var hint = status == 400 ? GoogleErrorResponseDiagnosticParser.Parse(bytes).MessageHint : GoogleValidationMessageHint.NotExamined;
             return new GoogleHttpTransportResponse(response.StatusCode, bytes, retryAfter, category, hint);
@@ -88,6 +86,8 @@ public sealed partial class GoogleGenerationHttpTransport
         try { return _privateDiagnostics?.Begin(request, credentialReference); }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException) { return null; }
     }
+    public bool IsPrivateCaptureReady(CloudScribe.Providers.Abstractions.GenerationProviderRequest request, string credentialReference) =>
+        _privateDiagnostics?.IsReadyFor(request, credentialReference) == true;
     internal void EndPrivateCapture(Guid? ticket) => _privateDiagnostics?.End(ticket);
 
     private static void ValidateBoundedRequest(ReadOnlyMemory<byte> payload, int maximumResponseBytes)

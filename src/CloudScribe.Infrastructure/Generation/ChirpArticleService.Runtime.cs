@@ -44,8 +44,9 @@ public sealed partial class ChirpArticleService
         if (approved is null || !string.Equals(approved.Key, claim.IdempotencyKey, StringComparison.Ordinal)) return false;
         approved.Spend.EnsureStillAuthorized(envelope, currency, scale, estimate);
         await RequirePolicyCurrentAsync(policy, cancellationToken).ConfigureAwait(false);
+        string table = await AttemptTableAsync(connection, transaction, id.ToString("N"), cancellationToken).ConfigureAwait(false);
         using (var consume = ChirpArticleSql.Command(connection, transaction,
-            "UPDATE chirp_article_attempts SET Consumed=1,ClaimedLocalAttemptId=$attempt WHERE AuthorizationId=$id AND Consumed=0;",
+            "UPDATE " + table + " SET Consumed=1,ClaimedLocalAttemptId=$attempt WHERE AuthorizationId=$id AND Consumed=0;",
             ("$id", id.ToString("N")), ("$attempt", claim.LocalAttemptId)))
             if (await consume.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1) return false;
         using (var queue = ChirpArticleSql.Command(connection, transaction, """
@@ -65,7 +66,7 @@ public sealed partial class ChirpArticleService
     {
         using var command = ChirpArticleSql.Command(connection, transaction, """
             SELECT PlanSha256,CoverageOrdinal,EnvelopeJson,Currency,Scale,EstimateMinorUnits,ReservedMinorUnits,Consumed,ApprovedFinancialSha256,ChildKey
-            FROM chirp_article_attempts WHERE AuthorizationId=$id AND AccountId=$account;
+            FROM chirp_article_owned_attempts WHERE AuthorizationId=$id AND AccountId=$account;
             """, ("$id", envelope.ChirpAuthorizationId!.Value.ToString("N")), ("$account", envelope.AccountId));
         string plan, financialHash, key; int ordinal, scale; string currency; long estimate, reserved;
         using (var row = await command.ExecuteReaderAsync(token).ConfigureAwait(false))

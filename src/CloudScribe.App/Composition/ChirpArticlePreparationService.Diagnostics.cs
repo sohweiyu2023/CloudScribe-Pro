@@ -16,7 +16,9 @@ public sealed partial class ChirpArticlePreparationService
         if (await articles.LoadSpendAsync(active.SubmissionEnvelope, cancellationToken).ConfigureAwait(false) is null)
             throw new InvalidOperationException("The exact internal request is no longer eligible for private observation.");
         string[] parts = active.Snapshot.ProviderRequest.IdempotencyKey.Split(':');
-        if (parts.Length != 3 || !string.Equals(parts[0] + ":", ChirpArticleService.KeyPrefix, StringComparison.Ordinal)
+        if (parts.Length is not (3 or 4) || parts.Length == 4 && (!Guid.TryParseExact(parts[3], "N", out var keyAuthorization)
+                || keyAuthorization != active.SubmissionEnvelope.ChirpAuthorizationId)
+            || !string.Equals(parts[0] + ":", ChirpArticleService.KeyPrefix, StringComparison.Ordinal)
             || !int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out int ordinal))
             throw new InvalidOperationException("Internal request identity is invalid.");
         var source = await ResolveSelectionAsync(selection, ordinal, cancellationToken).ConfigureAwait(false);

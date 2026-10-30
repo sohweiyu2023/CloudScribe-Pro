@@ -34,15 +34,23 @@ public sealed partial class ChirpArticleService
             VALUES($account,$operation,$key,0,NULL,0);
             """, ("$account", policy.AccountId), ("$operation", GoogleGenerationProvider.SynthesizeOperationStableId), ("$key", approved.IdempotencyKey)))
             await queue.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-        using var attempt = ChirpArticleSql.Command(connection, transaction, """
-            INSERT INTO chirp_article_attempts(AuthorizationId,PlanSha256,CoverageOrdinal,PolicySha256,SourceApprovalSha256,AccountId,ProjectId,
+        var grant = policy.SuccessorGrant;
+        string table = grant is null ? "chirp_article_attempts" : "chirp_article_successor_attempts";
+        string extraColumns = grant is null ? string.Empty : ",RootAuthorizationId,ParentAuthorizationId,ParentStateSha256,GrantSha256,GrantId";
+        string extraValues = grant is null ? string.Empty : ",$root,$parent,$parentState,$grant,$grantId";
+        string sql = "INSERT INTO " + table + "(" + """
+            AuthorizationId,PlanSha256,CoverageOrdinal,PolicySha256,SourceApprovalSha256,AccountId,ProjectId,
             ChildKey,ReviewSha256,EnvelopeJson,Currency,Scale,EstimateMinorUnits,ReservedMinorUnits,ApprovedFinancialSha256,ApprovedAtUnixMilliseconds)
-            VALUES($id,$plan,$ordinal,$policy,$source,$account,$project,$key,$review,$envelope,$currency,$scale,$estimate,$reserved,'',$now);
-            """, ("$id", approved.AuthorizationId.ToString("N")), ("$plan", pending.Review.PlanSha256), ("$ordinal", intent.CoverageOrdinal),
+            """;
+        sql = sql.TrimEnd().TrimEnd(')') + extraColumns + ") VALUES($id,$plan,$ordinal,$policy,$source,$account,$project,$key,$review,$envelope,$currency,$scale,$estimate,$reserved,'',$now" + extraValues + ");";
+        using var attempt = ChirpArticleSql.Command(connection, transaction, sql,
+            ("$id", approved.AuthorizationId.ToString("N")), ("$plan", pending.Review.PlanSha256), ("$ordinal", intent.CoverageOrdinal),
             ("$policy", pending.PolicySha256), ("$source", policy.SourceApprovalSha256), ("$account", policy.AccountId), ("$project", policy.ProjectId),
             ("$key", approved.IdempotencyKey), ("$review", pending.Review.ReviewSha256), ("$envelope", JsonSerializer.Serialize(intent.Envelope with { ChirpAuthorizationId = approved.AuthorizationId })),
             ("$currency", intent.Currency), ("$scale", intent.Scale), ("$estimate", intent.EstimateMinorUnits), ("$reserved", approved.ReservedMinorUnits),
-            ("$now", clock.GetUtcNow().ToUnixTimeMilliseconds()));
+            ("$now", clock.GetUtcNow().ToUnixTimeMilliseconds()), ("$root", grant?.RootAuthorizationId.ToString("N")),
+            ("$parent", grant?.ParentAuthorizationId.ToString("N")), ("$parentState", grant?.ParentQueueRowSha256),
+            ("$grant", grant is null ? null : ChirpPolicyValidation.Hash(grant)), ("$grantId", grant?.GrantId.ToString("N")));
         await attempt.ExecuteNonQueryAsync(token).ConfigureAwait(false);
     }
 }
