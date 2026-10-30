@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CloudScribe.Infrastructure.Persistence;
 
-public sealed class EfNarrationPartGroupStore(IDbContextFactory<CloudScribeDbContext> factory, IDocumentLibrary library) : INarrationPartGroupStore
+public sealed class EfNarrationPartGroupStore(IDbContextFactory<CloudScribeDbContext> factory, IDocumentLibrary library) : INarrationPartGroupStore, ILibraryPageSource<NarrationLibraryArticle>
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
@@ -143,8 +143,13 @@ public sealed class EfNarrationPartGroupStore(IDbContextFactory<CloudScribeDbCon
     }
 
     public async Task<IReadOnlyList<NarrationLibraryArticle>> QueryLibraryAsync(string query, int limit = 200, CancellationToken cancellationToken = default)
+        => (await QueryPageAsync(query, 0, limit, cancellationToken).ConfigureAwait(false)).Items;
+
+    public async Task<LibraryPage<NarrationLibraryArticle>> QueryPageAsync(string query, int offset = 0, int limit = 200,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 200);
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -152,21 +157,23 @@ public sealed class EfNarrationPartGroupStore(IDbContextFactory<CloudScribeDbCon
         var groups = context.Set<NarrationPartGroupEntity>().AsNoTracking().Where(group => group.Complete);
         var links = context.Set<NarrationPartLinkEntity>().AsNoTracking();
         string term = query.Trim();
-        var roots = await documents.Where(document => document.Status == (int)DocumentStatus.Active
+        var matchingRoots = documents.Where(document => document.Status == (int)DocumentStatus.Active
             && !links.Any(link => link.ChildDocumentId == document.Id && groups.Any(group => group.Id == link.GroupId
                 && documents.Any(parent => parent.Id == group.ParentDocumentId && parent.Status == (int)DocumentStatus.Active))))
             .Where(document => term.Length == 0 || document.Title.Contains(term) || document.DraftText.Contains(term)
                 || groups.Any(group => group.ParentDocumentId == document.Id && links.Any(link => link.GroupId == group.Id
-                    && documents.Any(child => child.Id == link.ChildDocumentId && (child.Title.Contains(term) || child.DraftText.Contains(term))))))
-            .OrderByDescending(document => document.UpdatedAtUnixMilliseconds).ThenBy(document => document.Title)
-            .Take(limit).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+                    && documents.Any(child => child.Id == link.ChildDocumentId && (child.Title.Contains(term) || child.DraftText.Contains(term))))));
+        int total = await matchingRoots.CountAsync(cancellationToken).ConfigureAwait(false);
+        int currentOffset = total == 0 ? 0 : Math.Min(offset, (total - 1) / limit * limit);
+        var roots = await matchingRoots.OrderByDescending(document => document.UpdatedAtUnixMilliseconds).ThenBy(document => document.Title).ThenBy(document => document.Id)
+            .Skip(currentOffset).Take(limit).ToArrayAsync(cancellationToken).ConfigureAwait(false);
         Guid[] rootIds = roots.Select(document => document.Id).ToArray();
         var selectedGroups = await groups.Where(group => rootIds.Contains(group.ParentDocumentId)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
         Guid[] groupIds = selectedGroups.Select(group => group.Id).ToArray();
         var selectedLinks = await links.Where(link => groupIds.Contains(link.GroupId)).OrderBy(link => link.Ordinal).ToArrayAsync(cancellationToken).ConfigureAwait(false);
         Guid[] childIds = selectedLinks.Select(link => link.ChildDocumentId).ToArray();
         var children = await documents.Where(document => childIds.Contains(document.Id)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
-        return roots.Select(root =>
+        var articles = roots.Select(root =>
         {
             var batches = selectedGroups.Where(group => group.ParentDocumentId == root.Id).ToArray();
             Guid[] batchIds = batches.Select(group => group.Id).ToArray();
@@ -178,6 +185,7 @@ public sealed class EfNarrationPartGroupStore(IDbContextFactory<CloudScribeDbCon
             return new NarrationLibraryArticle(Summary(root), parts, batches.Any(group => root.CurrentRevisionId != group.SourceRevisionId)
                 || parts.Any(part => part.ChangedSincePreparation));
         }).ToArray();
+        return new(articles, total, currentOffset, limit);
     }
 
     private static DocumentSummary Summary(DocumentEntity document) => new(document.Id, document.Title,

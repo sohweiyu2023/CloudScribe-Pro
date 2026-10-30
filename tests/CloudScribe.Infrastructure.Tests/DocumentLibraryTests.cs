@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace CloudScribe.Infrastructure.Tests;
 
-public sealed class DocumentLibraryTests
+public sealed partial class DocumentLibraryTests
 {
     [Fact]
     public async Task CreateSaveReopenAndSearchUseDurableVerifiedRevisionFiles()

@@ -7,6 +7,7 @@ public sealed partial class ShellViewModel
 {
     private string? _voiceLabLocaleFilter;
     private string? _voiceLabSearchText;
+    private int _voiceCatalogFilterVersion;
 
     /// <summary>
     /// Optional user-entered BCP-47 locale filter used only to narrow the authenticated
@@ -15,7 +16,15 @@ public sealed partial class ShellViewModel
     public string? VoiceLabLocaleFilter
     {
         get => _voiceLabLocaleFilter;
-        set => SetProperty(ref _voiceLabLocaleFilter, NormalizeOptional(value));
+        set
+        {
+            if (!SetProperty(ref _voiceLabLocaleFilter, NormalizeOptional(value))) return;
+            Interlocked.Increment(ref _voiceCatalogFilterVersion);
+            SelectedVoiceLabVoice = null;
+            VoiceLabCatalogResults.Clear();
+            VoiceLabCatalogLastRefreshSucceeded = false;
+            ConnectedVoiceCatalogStatus = "Language changed. Refresh verified voices before choosing a voice or reviewing cost. Saved voice preferences are retained.";
+        }
     }
 
     /// <summary>
@@ -24,7 +33,11 @@ public sealed partial class ShellViewModel
     public string? VoiceLabSearchText
     {
         get => _voiceLabSearchText;
-        set => SetProperty(ref _voiceLabSearchText, NormalizeOptional(value));
+        set
+        {
+            if (SetProperty(ref _voiceLabSearchText, NormalizeOptional(value)))
+                Interlocked.Increment(ref _voiceCatalogFilterVersion);
+        }
     }
 
     /// <summary>

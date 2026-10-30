@@ -248,7 +248,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 search.Text = viewModel.VoiceLabSearchText;
         });
         host.Children.Add(NewDescription("Apply language and search filters with Refresh voices."));
-        AddField(host, "Language or locale", locale);
+        AddLanguagePicker(host, viewModel, locale, lifetime);
         AddField(host, "Search voices", search);
         AddRefreshControl(host, viewModel, locale, search, lifetime);
         AddVoiceSelector(host, viewModel, lifetime);
