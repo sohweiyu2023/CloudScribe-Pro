@@ -32,6 +32,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
         catch (Exception e) when (e is IOException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
         {
+            _ = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.ConnectionRead, e);
             label.Text = "Could not read connection status. Open Advanced tools to inspect it; no credentials changed.";
             setup.IsVisible = true;
         }
@@ -93,7 +94,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             model.ApplySavedVoiceSetup(setup);
             try { preferences.Remember(setup); }
             catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
-            { model.StatusMessage = "Voice loaded for this session, but its preference could not be saved."; return; }
+            { _ = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.PreferenceWrite, e); model.StatusMessage = "Voice loaded for this session, but its preference could not be saved."; return; }
             model.StatusMessage = "Saved voice chosen. Loading verified voices before cost review.";
             if (reloadVoices is not null) await reloadVoices().ConfigureAwait(true);
         };
@@ -164,7 +165,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             Refresh();
             try { await model.PrepareGoogleGenerationSpendReviewAsync().ConfigureAwait(true); }
             catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-            { model.StatusMessage = "Cost review could not finish. Refresh voices, check the pricing source and current text. For a long document, use Advanced tools to create local parts. No generation was started."; }
+            { model.StatusMessage = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.Review, e); }
             finally { reviewing = false; Refresh(); }
         };
         consent.IsCheckedChanged += (_, _) => Refresh();
@@ -194,7 +195,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 await model.CreateReviewedGoogleMp3Async(displayed, consent.IsChecked == true).ConfigureAwait(true);
             }
             catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-            { model.StatusMessage = "MP3 creation stopped. Review local request status in Setups before retrying; a dispatched request may still be charged."; }
+            { model.StatusMessage = "MP3 creation stopped; a dispatched request may still be charged. " + ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.GenerationDispatch, e); }
             finally { busy = false; consent.IsChecked = false; Refresh(); }
         };
         body.Children.Add(review);

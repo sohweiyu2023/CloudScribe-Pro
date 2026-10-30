@@ -6,4 +6,5 @@ public enum LocalRequestReason
     AdmissionChanged, FinancialChanged, CaptureUnsaved, CaptureSelectionChanged, CaptureIdentityChanged,
     CaptureConsentWithdrawn, Cancelled, Storage, AccessDenied, MalformedState, ValidationRejected, Unexpected,
     CapabilityStale,
+    DocumentConflict,
 }

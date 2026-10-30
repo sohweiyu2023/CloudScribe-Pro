@@ -96,6 +96,7 @@ public sealed partial class ShellViewModel
 
     private void ReportImportFailure(Exception exception)
     {
+        ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.DocumentImport, exception);
         NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Failed, exception);
         IsDocumentSaving = false;
         DocumentSaveState = "Import failed safely";

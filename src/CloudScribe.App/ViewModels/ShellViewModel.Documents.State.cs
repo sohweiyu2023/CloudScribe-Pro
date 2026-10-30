@@ -112,6 +112,7 @@ public sealed partial class ShellViewModel
             IsDocumentSaving = false;
             IsDocumentDirty = false;
             DocumentSaveState = "Create failed";
+            ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.DocumentCreate, exception);
             StatusMessage = "Local document could not be created";
         }
     }
@@ -180,6 +181,7 @@ public sealed partial class ShellViewModel
             HasDocumentConflict = false;
             DocumentSaveState = "Recovery required";
             LifecycleState = WorkspaceLifecycleState.Error;
+            ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.LibraryLoad, exception);
             StatusMessage = "Local document library could not be opened · existing files were left unchanged";
         }
     }
@@ -192,6 +194,7 @@ public sealed partial class ShellViewModel
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
+            ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.LibrarySearch, exception);
             StatusMessage = "Local document search could not be refreshed";
         }
     }
@@ -257,6 +260,7 @@ public sealed partial class ShellViewModel
         {
             IsDocumentSaving = false;
             DocumentSaveState = "Open failed";
+            ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.DocumentOpen, exception);
             StatusMessage = "The selected local document could not be opened";
         }
     }

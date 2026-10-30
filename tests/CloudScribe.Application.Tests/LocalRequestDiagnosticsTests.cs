@@ -47,6 +47,10 @@ public sealed class LocalRequestDiagnosticsTests
     [InlineData(LocalRequestStage.CaptureRead)]
     [InlineData(LocalRequestStage.OutputRepair)]
     [InlineData(LocalRequestStage.Export)]
+    [InlineData(LocalRequestStage.ConnectionRead)]
+    [InlineData(LocalRequestStage.PreferenceWrite)]
+    [InlineData(LocalRequestStage.PricingActivation)]
+    [InlineData(LocalRequestStage.GenerationDispatch)]
     public void UnfamiliarExceptionsRetainStageAndEvidenceWarningWithoutEchoingAnything(LocalRequestStage stage)
     {
         const string sensitive = "-----BEGIN PRIVATE KEY----- synthetic article C:\\Users\\private\\document.txt token=secret";
@@ -76,6 +80,17 @@ public sealed class LocalRequestDiagnosticsTests
             new IOException("private-path and article"), Now);
         Assert.Equal(LocalRequestReason.Storage, report.Reason);
         Assert.True(CloudScribeLog.ObserverFailureCount > before);
+    }
+
+    [Fact]
+    public void DisabledLoggerDoesNotDiscardTheSafeFailureOrEvaluateTheSink()
+    {
+        var logger = new CaptureLogger { Enabled = false, ThrowLog = true };
+        var report = LocalRequestDiagnostics.Failure(logger, Guid.NewGuid(), LocalRequestStage.DocumentSave,
+            new IOException("synthetic private editor fragment"), Now);
+        Assert.Equal(LocalRequestReason.Storage, report.Reason);
+        Assert.Empty(logger.Text);
+        Assert.Empty(logger.Fields);
     }
 
     [Fact]
@@ -114,8 +129,9 @@ public sealed class LocalRequestDiagnosticsTests
         public List<KeyValuePair<string, object?>> Fields { get; } = [];
         public bool ThrowIsEnabled { get; init; }
         public bool ThrowLog { get; init; }
+        public bool Enabled { get; init; } = true;
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(LogLevel logLevel) => ThrowIsEnabled ? throw new IOException("synthetic logger failure") : true;
+        public bool IsEnabled(LogLevel logLevel) => ThrowIsEnabled ? throw new IOException("synthetic logger failure") : Enabled;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             if (ThrowLog) throw new IOException("synthetic sink failure");
