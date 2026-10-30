@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using CloudScribe.Application.Security;
 using CloudScribe.Providers.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -24,6 +25,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
     private readonly ICredentialVault _credentialVault;
     private readonly HttpClient _httpClient;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<VaultBackedTransientCredentialResolver>? _logger;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly ConcurrentDictionary<string, CachedAccessToken> _cache = new(StringComparer.Ordinal);
     private bool _disposed;
@@ -31,11 +33,13 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
     public VaultBackedTransientCredentialResolver(
         ICredentialVault credentialVault,
         HttpClient? httpClient = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ILogger<VaultBackedTransientCredentialResolver>? logger = null)
     {
         _credentialVault = credentialVault ?? throw new ArgumentNullException(nameof(credentialVault));
         _httpClient = httpClient ?? new HttpClient();
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _logger = logger;
     }
 
     public async ValueTask<string> ResolveAccessTokenAsync(
@@ -49,7 +53,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         CredentialReference reference = new(credentialReferenceId);
         using CredentialSecret? secret = await _credentialVault.ReadAsync(reference, cancellationToken).ConfigureAwait(false);
         if (secret is null)
-            throw new InvalidOperationException("The explicitly configured provider credential reference is unavailable.");
+            throw GoogleCatalogRefreshDiagnostics.MissingCredential(new InvalidOperationException("The explicitly configured provider credential reference is unavailable."));
 
         string storedMaterial = new(secret.Value.Span);
         if (string.IsNullOrWhiteSpace(storedMaterial))
@@ -59,6 +63,33 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
             return storedMaterial;
 
         return await ResolveServiceAccountAccessTokenAsync(credentialReferenceId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<OAuthTokenResponse> ReadTokenResponseAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        Guid refreshId = Guid.NewGuid();
+        var phase = GoogleCatalogRefreshPhase.OAuthTokenRequest;
+        try
+        {
+            GoogleCatalogRefreshDiagnostics.Phase(_logger, refreshId, phase);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            GoogleCatalogRefreshDiagnostics.Http(_logger, refreshId, phase, response.StatusCode);
+            if (!response.IsSuccessStatusCode)
+            {
+                var reason = await GoogleOAuthErrorDiagnostics.ReadAsync(response.Content, cancellationToken).ConfigureAwait(false);
+                throw GoogleCatalogRefreshDiagnostics.WithOAuthFailure(
+                    GoogleCatalogRefreshDiagnostics.WithHttpContext(new InvalidOperationException($"Google OAuth token exchange failed with HTTP {(int)response.StatusCode}."), response.StatusCode, phase), reason);
+            }
+            phase = GoogleCatalogRefreshPhase.OAuthTokenRead;
+            GoogleCatalogRefreshDiagnostics.Phase(_logger, refreshId, phase);
+            return await response.Content.ReadFromJsonAsync<OAuthTokenResponse>(cancellationToken: cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidDataException("Google OAuth token exchange returned an empty response.");
+        }
+        catch (Exception exception) when (GoogleCatalogRefreshDiagnostics.IsNonFatal(exception))
+        {
+            GoogleCatalogRefreshDiagnostics.Failure(_logger, refreshId, phase, exception);
+            throw;
+        }
     }
 
     public void Dispose()
@@ -98,16 +129,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
                 ["assertion"] = assertion,
             });
             using HttpRequestMessage request = new(HttpMethod.Post, metadata.TokenUri) { Content = form };
-            using HttpResponseMessage response = await _httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"Google OAuth token exchange failed with HTTP {(int)response.StatusCode}.");
-
-            OAuthTokenResponse tokenResponse = await response.Content.ReadFromJsonAsync<OAuthTokenResponse>(
-                cancellationToken: cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidDataException("Google OAuth token exchange returned an empty response.");
+            OAuthTokenResponse tokenResponse = await ReadTokenResponseAsync(request, cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(tokenResponse.access_token))
                 throw new InvalidDataException("Google OAuth token exchange returned no access token.");
             if (!string.Equals(tokenResponse.token_type, "Bearer", StringComparison.OrdinalIgnoreCase))
@@ -147,7 +169,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
     private async Task<CredentialSecret> ReadRequiredSecretAsync(string targetName, CancellationToken cancellationToken)
     {
         CredentialSecret? secret = await _credentialVault.ReadAsync(new CredentialReference(targetName), cancellationToken).ConfigureAwait(false);
-        return secret ?? throw new InvalidOperationException("Required Google service-account credential material is unavailable.");
+        return secret ?? throw GoogleCatalogRefreshDiagnostics.MissingCredential(new InvalidOperationException("Required Google service-account credential material is unavailable."));
     }
 
     private static string CreateSignedAssertion(

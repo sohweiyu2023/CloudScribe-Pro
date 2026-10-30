@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
 using CloudScribe.Providers.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -12,51 +13,81 @@ namespace CloudScribe.Infrastructure.Generation;
 /// </summary>
 public sealed class GoogleVoiceCatalogClient(
     HttpClient httpClient,
-    ITransientCredentialResolver credentialResolver)
+    ITransientCredentialResolver credentialResolver,
+    ILogger<GoogleVoiceCatalogClient>? logger = null)
 {
-    public async Task<GoogleVoiceCatalogSnapshot> LoadAsync(
+    public Task<GoogleVoiceCatalogSnapshot> LoadAsync(ProviderAccountReference account, Uri catalogEndpoint,
+        CancellationToken cancellationToken = default) => LoadObservedAsync(account, catalogEndpoint, Guid.NewGuid(), cancellationToken);
+
+    internal async Task<GoogleVoiceCatalogSnapshot> LoadObservedAsync(
         ProviderAccountReference account,
         Uri catalogEndpoint,
-        CancellationToken cancellationToken = default)
+        Guid diagnosticRefreshId, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(account);
-        ArgumentNullException.ThrowIfNull(catalogEndpoint);
-
-        ValidateCatalogEndpoint(account, catalogEndpoint);
-        CredentialReference credentialReference = account.CredentialReference
-            ?? throw new InvalidOperationException("Google voice discovery requires an admitted credential reference.");
-
-        string accessToken = await credentialResolver
-            .ResolveAccessTokenAsync(credentialReference.TargetName, cancellationToken)
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(accessToken))
+        Guid refreshId = diagnosticRefreshId;
+        GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.CatalogToken;
+        void At(GoogleCatalogRefreshPhase next)
         {
-            throw new InvalidOperationException("Google voice discovery did not receive a usable transient access token.");
+            phase = next;
+            GoogleCatalogRefreshDiagnostics.Phase(logger, refreshId, phase);
         }
-
-        using HttpRequestMessage request = new(HttpMethod.Get, catalogEndpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        using HttpResponseMessage response = await httpClient
-            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
-        byte[] body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            throw new HttpRequestException(
-                $"Google voice catalog request failed with HTTP {(int)response.StatusCode} ({response.ReasonPhrase}).",
-                inner: null,
-                response.StatusCode);
-        }
+            At(phase);
+            ArgumentNullException.ThrowIfNull(account);
+            ArgumentNullException.ThrowIfNull(catalogEndpoint);
 
-        GoogleVoiceCatalogEntry[] voices = ParseVoices(body);
-        if (voices.Length == 0)
+            ValidateCatalogEndpoint(account, catalogEndpoint);
+            CredentialReference credentialReference = account.CredentialReference
+                ?? throw new InvalidOperationException("Google voice discovery requires an admitted credential reference.");
+
+            string accessToken = await credentialResolver
+                .ResolveAccessTokenAsync(credentialReference.TargetName, cancellationToken)
+                .ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                throw new InvalidOperationException("Google voice discovery did not receive a usable transient access token.");
+            }
+
+            At(GoogleCatalogRefreshPhase.CatalogRequest);
+            using HttpRequestMessage request = new(HttpMethod.Get, catalogEndpoint);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            using HttpResponseMessage response = await httpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+            GoogleCatalogRefreshDiagnostics.Http(logger, refreshId, phase, response.StatusCode);
+            At(GoogleCatalogRefreshPhase.CatalogRead);
+            byte[] body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"Google voice catalog request failed with HTTP {(int)response.StatusCode} ({response.ReasonPhrase}).",
+                    inner: null,
+                    response.StatusCode);
+            }
+
+            At(GoogleCatalogRefreshPhase.CatalogParse);
+            GoogleVoiceCatalogEntry[] voices = ParseVoices(body);
+            if (voices.Length == 0)
+            {
+                throw new InvalidOperationException("Google returned a successful voice catalog response without any usable voices.");
+            }
+
+            return CreateSnapshot(account, catalogEndpoint, body, voices);
+        }
+        catch (Exception exception) when (GoogleCatalogRefreshDiagnostics.IsNonFatal(exception))
         {
-            throw new InvalidOperationException("Google returned a successful voice catalog response without any usable voices.");
+            GoogleCatalogRefreshDiagnostics.Failure(logger, refreshId, phase, exception);
+            throw;
         }
+    }
 
+    private static GoogleVoiceCatalogSnapshot CreateSnapshot(ProviderAccountReference account, Uri catalogEndpoint,
+        byte[] body, GoogleVoiceCatalogEntry[] voices)
+    {
         string contentHash = Convert.ToHexString(SHA256.HashData(body)).ToLowerInvariant();
         return new GoogleVoiceCatalogSnapshot(
             account,

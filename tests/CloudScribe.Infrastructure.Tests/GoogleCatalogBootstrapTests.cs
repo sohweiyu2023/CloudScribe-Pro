@@ -7,7 +7,7 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Tests;
 
-public sealed class GoogleCatalogBootstrapTests
+public sealed partial class GoogleCatalogBootstrapTests
 {
     [Fact]
     public async Task FreshAndRefreshedEvidencePassProductionValidationWithoutReplacingAccountOrKey()
@@ -67,9 +67,12 @@ public sealed class GoogleCatalogBootstrapTests
     {
         public int Calls { get; private set; }
         public bool RejectProbe { get; set; }
+        public bool MalformedCatalog { get; set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Calls++;
+            if (request.Method == HttpMethod.Get && MalformedCatalog)
+                return new(HttpStatusCode.OK) { Content = new StringContent("{private-response-body") };
             if (request.Method == HttpMethod.Get)
                 return new(HttpStatusCode.OK) { Content = new StringContent("{\"voices\":[{\"name\":\"en-US-Standard-C\",\"languageCodes\":[\"en-US\"],\"ssmlGender\":\"FEMALE\",\"naturalSampleRateHertz\":24000}]}") };
             Assert.Equal("{}", await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
@@ -87,10 +90,14 @@ public sealed class GoogleCatalogBootstrapTests
     {
         private readonly Dictionary<string, char[]> _items = new(StringComparer.Ordinal);
         public int Writes { get; private set; }
+        public Exception? ReadFailure { get; set; }
         public ValueTask StoreAsync(CredentialReference reference, ReadOnlyMemory<char> secret, CancellationToken cancellationToken = default)
         { Writes++; _items[reference.TargetName] = secret.ToArray(); return ValueTask.CompletedTask; }
-        public ValueTask<CredentialSecret?> ReadAsync(CredentialReference reference, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(_items.TryGetValue(reference.TargetName, out var value) ? new CredentialSecret(value.ToArray()) : null);
+        public ValueTask<CredentialSecret?> ReadAsync(CredentialReference reference, CancellationToken cancellationToken = default)
+        {
+            if (ReadFailure is { } failure) throw failure;
+            return ValueTask.FromResult(_items.TryGetValue(reference.TargetName, out var value) ? new CredentialSecret(value.ToArray()) : null);
+        }
         public ValueTask<bool> DeleteAsync(CredentialReference reference, CancellationToken cancellationToken = default) => ValueTask.FromResult(_items.Remove(reference.TargetName));
     }
 
@@ -100,20 +107,21 @@ public sealed class GoogleCatalogBootstrapTests
         public StoredProviderCapabilitySnapshot? Capability { get; private set; }
         public GoogleGenerationProjectAuthorizationEvidence? Authorization { get; private set; }
         public int Creates { get; private set; }
+        public string? FailAt { get; set; }
         public Task<ProviderAccountSnapshot> CreateAsync(ProviderAccountReference account, bool isEnabled, CancellationToken cancellationToken = default)
         { Creates++; clock.Now = DateTimeOffset.UtcNow.AddSeconds(1); _account = new(account, isEnabled, 1, clock.Now, clock.Now); return Task.FromResult(_account); }
         public Task<ProviderAccountSnapshot> UpdateAsync(ProviderAccountReference account, bool isEnabled, long expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<ProviderAccountSnapshot?> FindAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default) => Task.FromResult(_account);
         public Task<IReadOnlyList<ProviderAccountSnapshot>> ListAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<ProviderAccountSnapshot>>(_account is null ? [] : [_account]);
         public Task<StoredProviderCapabilitySnapshot> SaveAsync(ProviderCapabilitySnapshot snapshot, DateTimeOffset expiresAtUtc, CancellationToken cancellationToken = default)
-        { Capability = new(Guid.NewGuid(), snapshot, expiresAtUtc); return Task.FromResult(Capability); }
+        { if (string.Equals(FailAt, "capability", StringComparison.Ordinal)) throw new InvalidOperationException("private-storage-detail"); Capability = new(Guid.NewGuid(), snapshot, expiresAtUtc); return Task.FromResult(Capability); }
         public Task<StoredProviderCapabilitySnapshot?> GetLatestAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default) => Task.FromResult(Capability);
         public Task<IReadOnlyList<StoredProviderCapabilitySnapshot>> ListRecentAsync(string providerStableId, string accountId, int maximumCount = 20, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         Task<VoiceLabProjectAuthorizationEvidence?> IVoiceLabProjectAuthorizationStore.LoadCurrentAsync(string providerId, string accountId, string projectId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task SaveVerifiedAsync(VoiceLabProjectAuthorizationEvidence evidence, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SaveVerifiedAsync(VoiceLabProjectAuthorizationEvidence evidence, CancellationToken cancellationToken = default) => string.Equals(FailAt, "project", StringComparison.Ordinal) ? Task.FromException(new InvalidOperationException("private-storage-detail")) : Task.CompletedTask;
         public Task<GoogleGenerationProjectAuthorizationEvidence?> LoadCurrentAsync(string accountId, string projectId, string modelId, CancellationToken cancellationToken = default) => Task.FromResult(Authorization);
         public Task<GoogleGenerationProjectAuthorizationEvidence?> LoadSingleCurrentForProjectAsync(string accountId, string projectId, DateTimeOffset nowUtc, CancellationToken cancellationToken = default) => Task.FromResult(Authorization);
         public Task SaveVerifiedAsync(GoogleGenerationProjectAuthorizationEvidence evidence, CancellationToken cancellationToken = default)
-        { Authorization = evidence; return Task.CompletedTask; }
+        { if (string.Equals(FailAt, "voices", StringComparison.Ordinal)) throw new InvalidOperationException("private-storage-detail"); Authorization = evidence; return Task.CompletedTask; }
     }
 }

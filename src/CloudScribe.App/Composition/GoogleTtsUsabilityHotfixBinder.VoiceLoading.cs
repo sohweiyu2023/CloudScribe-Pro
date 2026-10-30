@@ -14,10 +14,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         model.ConnectedVoiceCatalogStatus = "Loading voices from your saved Google connection. This does not generate speech. You can close this window to stop waiting.";
         model.SelectedVoiceLabVoice = null;
         model.VoiceLabCatalogResults.Clear();
+        Guid refreshId = Guid.NewGuid();
+        GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.UiBootstrap;
         try
         {
-            await _bootstrapService.RefreshConfiguredAsync(token).ConfigureAwait(true);
-            await model.RefreshVoiceCatalogForUiAsync(token).ConfigureAwait(true);
+            GoogleCatalogRefreshDiagnostics.Phase(catalogLogger, refreshId, phase);
+            await _bootstrapService.RefreshConfiguredAsync(refreshId, token).ConfigureAwait(true);
+            phase = GoogleCatalogRefreshPhase.UiQuery;
+            GoogleCatalogRefreshDiagnostics.Phase(catalogLogger, refreshId, phase);
+            await model.RefreshVoiceCatalogForUiAsync(refreshId, token).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
             if (!model.VoiceLabCatalogLastRefreshSucceeded)
             {
@@ -33,7 +38,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             model.SelectedVoiceLabVoice = null;
             model.VoiceLabCatalogResults.Clear();
-            model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception);
+            GoogleCatalogRefreshDiagnostics.Failure(catalogLogger, refreshId, phase, exception);
+            model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception, phase);
             model.StatusMessage = model.ConnectedVoiceCatalogStatus;
             return false;
         }
@@ -52,6 +58,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 : "Several Google connections are enabled. Inspect the connections in Setups before refreshing; no account was selected automatically.";
         }
         catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception); }
+        {
+            GoogleCatalogRefreshDiagnostics.Failure(catalogLogger, Guid.NewGuid(), GoogleCatalogRefreshPhase.UiAccountLookup, exception);
+            model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception, GoogleCatalogRefreshPhase.UiAccountLookup);
+        }
     }
 }

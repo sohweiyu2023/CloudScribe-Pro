@@ -129,7 +129,7 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
             new CredentialReference(credentialReferenceId + MetadataSuffix),
             cancellationToken).ConfigureAwait(false);
         if (secret is null)
-            throw new InvalidOperationException("Google service-account metadata is unavailable for the configured credential.");
+            throw GoogleCatalogRefreshDiagnostics.MissingCredential(new InvalidOperationException("Google service-account metadata is unavailable for the configured credential."));
 
         try
         {

@@ -3,6 +3,7 @@ using CloudScribe.App.Composition;
 using CloudScribe.App.Navigation;
 using CloudScribe.Application.Generation;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Generation;
 using CommunityToolkit.Mvvm.Input;
 
 namespace CloudScribe.App.ViewModels;
@@ -83,7 +84,10 @@ public sealed partial class ShellViewModel
     }
 
     [RelayCommand(CanExecute = nameof(CanRefreshVoiceLabCatalog))]
-    private async Task RefreshVoiceLabCatalogAsync(CancellationToken cancellationToken)
+    private Task RefreshVoiceLabCatalogAsync(CancellationToken cancellationToken) =>
+        RefreshVoiceLabCatalogObservedAsync(Guid.NewGuid(), cancellationToken);
+
+    private async Task RefreshVoiceLabCatalogObservedAsync(Guid refreshId, CancellationToken cancellationToken)
     {
         if (Interlocked.CompareExchange(ref _voiceLabCatalogRefreshInFlight, 1, 0) != 0)
             throw new InvalidOperationException("A Voice Lab catalog refresh is already in progress.");
@@ -133,7 +137,8 @@ public sealed partial class ShellViewModel
         {
             SelectedVoiceLabVoice = null;
             VoiceLabCatalogResults.Clear();
-            StatusMessage = VoiceCatalogErrorMessages.For(exception);
+            GoogleCatalogRefreshDiagnostics.Failure(_logger, refreshId, GoogleCatalogRefreshPhase.UiQuery, exception);
+            StatusMessage = VoiceCatalogErrorMessages.For(exception, GoogleCatalogRefreshPhase.UiQuery);
         }
         finally
         {

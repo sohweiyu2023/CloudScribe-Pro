@@ -11,6 +11,7 @@ using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Pricing;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.App.Composition;
 
@@ -31,7 +32,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     CloudScribe.Application.Documents.INarrationPartGroupStore articleGroups,
     InstalledRecoveryAdmissionStore recoveryAdmission, GoogleRecoveryPreparationService recoveryPreparation,
     GooglePrivateErrorDiagnostics privateDiagnostics, IGoogleRecoveryCurrentCompilation privateDiagnosticCompilation,
-    ChirpArticleService? chirpArticles = null, ChirpArticlePreparationService? chirpPreparation = null)
+    ChirpArticleService? chirpArticles = null, ChirpArticlePreparationService? chirpPreparation = null,
+    ILogger<GoogleTtsUsabilityHotfixBinder>? catalogLogger = null)
 {
     private static readonly string[] ProviderControlHostNames =
     [

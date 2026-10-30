@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CloudScribe.Providers.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -18,63 +19,92 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed class GoogleSynthesisCapabilityProbe(
     HttpClient httpClient,
     ITransientCredentialResolver credentialResolver,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ILogger<GoogleSynthesisCapabilityProbe>? logger = null)
 {
     private const int MaximumEvidenceBodyBytes = 64 * 1024;
 
-    public async Task<GoogleSynthesisCapabilityEvidence> VerifyAsync(
-        ProviderAccountReference account,
-        string projectId,
-        Uri synthesisEndpoint,
-        CancellationToken cancellationToken = default)
+    public Task<GoogleSynthesisCapabilityEvidence> VerifyAsync(ProviderAccountReference account, string projectId,
+        Uri synthesisEndpoint, CancellationToken cancellationToken = default) =>
+        VerifyObservedAsync(account, projectId, synthesisEndpoint, Guid.NewGuid(), cancellationToken);
+
+    internal async Task<GoogleSynthesisCapabilityEvidence> VerifyObservedAsync(
+        ProviderAccountReference account, string projectId, Uri synthesisEndpoint,
+        Guid diagnosticRefreshId, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(account);
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentNullException.ThrowIfNull(synthesisEndpoint);
-        ValidateEndpointBinding(account, synthesisEndpoint);
-
-        CredentialReference credential = account.CredentialReference
-            ?? throw new InvalidOperationException("Google synthesis capability verification requires an admitted credential reference.");
-        string accessToken = await credentialResolver
-            .ResolveAccessTokenAsync(credential.TargetName, cancellationToken)
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(accessToken))
-            throw new InvalidOperationException("Google synthesis capability verification did not receive a transient access token.");
-
-        // Deliberately invalid and input-free: Google cannot synthesize audio from this payload.
-        using HttpRequestMessage request = new(HttpMethod.Post, synthesisEndpoint)
+        Guid refreshId = diagnosticRefreshId;
+        GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.ProbeToken;
+        void At(GoogleCatalogRefreshPhase next)
         {
-            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.TryAddWithoutValidation("x-goog-user-project", projectId.Trim());
-
-        using HttpResponseMessage response = await httpClient
-            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
-        byte[] body = await ReadBoundedBodyAsync(response, cancellationToken).ConfigureAwait(false);
-
-        if (response.StatusCode != HttpStatusCode.BadRequest)
+            phase = next;
+            GoogleCatalogRefreshDiagnostics.Phase(logger, refreshId, phase);
+        }
+        try
         {
-            throw new InvalidOperationException(
-                $"Google synthesis capability probe was not admitted: expected an input-validation rejection but received HTTP {(int)response.StatusCode}.");
+            At(phase);
+            ArgumentNullException.ThrowIfNull(account);
+            ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+            ArgumentNullException.ThrowIfNull(synthesisEndpoint);
+            ValidateEndpointBinding(account, synthesisEndpoint);
+
+            CredentialReference credential = account.CredentialReference
+                ?? throw new InvalidOperationException("Google synthesis capability verification requires an admitted credential reference.");
+            string accessToken = await credentialResolver
+                .ResolveAccessTokenAsync(credential.TargetName, cancellationToken)
+                .ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(accessToken))
+                throw new InvalidOperationException("Google synthesis capability verification did not receive a transient access token.");
+
+            // Deliberately invalid and input-free: Google cannot synthesize audio from this payload.
+            At(GoogleCatalogRefreshPhase.ProbeRequest);
+            using HttpRequestMessage request = new(HttpMethod.Post, synthesisEndpoint)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.TryAddWithoutValidation("x-goog-user-project", projectId.Trim());
+
+            using HttpResponseMessage response = await httpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+            GoogleCatalogRefreshDiagnostics.Http(logger, refreshId, phase, response.StatusCode);
+            At(GoogleCatalogRefreshPhase.ProbeRead);
+            byte[] body = await ReadBoundedBodyAsync(response, cancellationToken).ConfigureAwait(false);
+
+            At(GoogleCatalogRefreshPhase.ProbeValidation);
+            RequireValidationRejection(response.StatusCode, body, phase);
+
+            DateTimeOffset capturedAtUtc = timeProvider.GetUtcNow();
+            if (capturedAtUtc.Offset != TimeSpan.Zero)
+                throw new InvalidOperationException("Google synthesis capability verification requires a UTC time provider.");
+            string evidenceHash = Convert.ToHexString(SHA256.HashData(body)).ToLowerInvariant();
+            return new GoogleSynthesisCapabilityEvidence(
+                capturedAtUtc,
+                $"google-synthesis-probe:invalid-argument:sha256:{evidenceHash}");
+        }
+        catch (Exception exception) when (GoogleCatalogRefreshDiagnostics.IsNonFatal(exception))
+        {
+            GoogleCatalogRefreshDiagnostics.Failure(logger, refreshId, phase, exception);
+            throw;
+        }
+    }
+
+    private static void RequireValidationRejection(HttpStatusCode status, byte[] body, GoogleCatalogRefreshPhase phase)
+    {
+        if (status != HttpStatusCode.BadRequest)
+        {
+            throw GoogleCatalogRefreshDiagnostics.WithHttpContext(new InvalidOperationException(
+                $"Google synthesis capability probe was not admitted: expected an input-validation rejection but received HTTP {(int)status}."), status, phase);
         }
 
         string? providerStatus = TryReadGoogleErrorStatus(body);
         if (!string.Equals(providerStatus, "INVALID_ARGUMENT", StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(
-                "Google synthesis capability probe returned HTTP 400 without provider INVALID_ARGUMENT evidence.");
+            throw GoogleCatalogRefreshDiagnostics.WithHttpContext(new InvalidOperationException(
+                "Google synthesis capability probe returned HTTP 400 without provider INVALID_ARGUMENT evidence."), status, phase);
         }
 
-        DateTimeOffset capturedAtUtc = timeProvider.GetUtcNow();
-        if (capturedAtUtc.Offset != TimeSpan.Zero)
-            throw new InvalidOperationException("Google synthesis capability verification requires a UTC time provider.");
-        string evidenceHash = Convert.ToHexString(SHA256.HashData(body)).ToLowerInvariant();
-        return new GoogleSynthesisCapabilityEvidence(
-            capturedAtUtc,
-            $"google-synthesis-probe:invalid-argument:sha256:{evidenceHash}");
     }
 
     private static async Task<byte[]> ReadBoundedBodyAsync(
