@@ -65,7 +65,7 @@ public sealed partial class ChirpArticleService
     {
         using var command = ChirpArticleSql.Command(connection, transaction, """
             SELECT r.ReceiptJson,r.ReceiptSha256,a.Consumed,a.ClaimedLocalAttemptId,a.ChildKey,a.EnvelopeJson,a.AuthorizationId
-            FROM chirp_article_receipts r JOIN chirp_article_attempts a ON a.AuthorizationId=r.AuthorizationId
+            FROM chirp_article_receipts r JOIN chirp_article_owned_attempts a ON a.AuthorizationId=r.AuthorizationId
             WHERE r.PlanSha256=$plan AND a.AccountId=$account AND a.ProjectId=$project ORDER BY r.CoverageOrdinal LIMIT 10001;
             """, ("$plan", stored.Article.Proposal.PlanSha256), ("$account", stored.AccountId), ("$project", stored.ProjectId));
         using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);

@@ -51,7 +51,10 @@ public static partial class GoogleErrorResponseDiagnosticParser
             return GoogleValidationMessageHint.GenericValidation;
         const string sentence = "This request contains sentences that are too long.";
         if (string.Equals(message, sentence, StringComparison.Ordinal)
-            || message.StartsWith(sentence + " Read more", StringComparison.Ordinal))
+            || message.StartsWith(sentence + " Read more", StringComparison.Ordinal)
+            || message.StartsWith(sentence + " Consider splitting up long sentences.", StringComparison.Ordinal)
+            || message.StartsWith(sentence + " Consider splitting up long sentences with ", StringComparison.Ordinal)
+            || message.StartsWith(sentence + " Consider splitting up long sentences or ", StringComparison.Ordinal))
             return GoogleValidationMessageHint.SentenceLengthReported;
         return GoogleValidationMessageHint.Unrecognized;
     }

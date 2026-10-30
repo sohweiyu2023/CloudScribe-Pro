@@ -110,5 +110,6 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         $"Internal request {review.CoverageOrdinal:D3}; {review.VoiceName}; {review.Currency} estimate {review.EstimateMinorUnits / 100m:F2}, maximum {review.MaximumMinorUnits / 100m:F2} before tax. "
         + $"Project already committed {review.ProjectCommittedMinorUnits / 100m:F2}; allocation remaining {review.AllocationRemainingMinorUnits / 100m:F2}. "
         + $"Payload {review.PayloadSha256}, {review.PayloadBytes} bytes. Admission expires {review.ExpiresAtUtc:O}. "
-        + (review.ExistingAuthorizationId is null ? "This reserves one new request only." : "This resumes the SAME reserved identity without another reservation.");
+        + (review.ExistingAuthorizationId is null ? "This reserves one new request only." : "This resumes the SAME reserved identity without another reservation.")
+        + (review.FailedParentAuthorizationId is { } parent ? $" Diagnostic successor of failed attempt {parent:N}; its historical hold is retained. One new request maximum; no automatic retry." : string.Empty);
 }

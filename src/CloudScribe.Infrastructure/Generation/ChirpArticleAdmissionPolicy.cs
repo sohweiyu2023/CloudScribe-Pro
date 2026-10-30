@@ -9,4 +9,8 @@ public sealed record ChirpArticleAdmissionPolicy(int SchemaVersion, string AppSh
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<ChirpLegacyAttemptAssociation>? LegacyAssociations = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<RecoveryFinancialRowPin>? LegacyAssociationRows = null);
+    IReadOnlyList<RecoveryFinancialRowPin>? LegacyAssociationRows = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ChirpArticleSuccessorGrant? SuccessorGrant = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<RecoveryFinancialRowPin>? PriorSuccessorAttemptRows = null);

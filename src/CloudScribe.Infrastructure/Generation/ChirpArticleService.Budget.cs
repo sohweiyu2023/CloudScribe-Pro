@@ -9,19 +9,26 @@ public sealed partial class ChirpArticleService
         ChirpArticleAdmissionPolicy policy, CancellationToken token)
     {
         var old = await RecoveryFinancialSnapshot.ReadAsync(connection, transaction, token).ConfigureAwait(false);
-        var attempts = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_attempts", token).ConfigureAwait(false);
+        var roots = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_attempts", token).ConfigureAwait(false);
+        var successors = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_successor_attempts", token).ConfigureAwait(false);
+        var attempts = roots.Concat(successors.Select(x => x.Take(18).ToArray())).ToArray();
         var associations = await AuditRowsAsync(connection, transaction, policy, token).ConfigureAwait(false);
         var queueExtra = ChirpArticleSql.Extra(old.Queue, policy.Budget.QueueRows, 3);
         ChirpArticleSql.Exact(old.Spend, policy.Budget.SpendRows, 1);
         ChirpArticleSql.Exact(old.Recovery, policy.Budget.RecoveryRows, 1);
         ChirpArticleSql.Exact(old.Scopes, policy.ScopeRows, 4);
         ChirpArticleSql.Exact(old.Transitions, policy.Budget.TransitionRows!, 1);
-        var extra = ChirpArticleSql.Extra(attempts, policy.PriorArticleAttemptRows, 1);
+        var rootExtra = ChirpArticleSql.Extra(roots, policy.PriorArticleAttemptRows, 1);
+        var successorExtra = ChirpArticleSql.Extra(successors, policy.PriorSuccessorAttemptRows ?? [], 1);
+        if (policy.SuccessorGrant is not null && rootExtra.Length != 0)
+            throw new InvalidOperationException("A diagnostic successor grant cannot authorize any fresh original request.");
+        foreach (var row in successorExtra) ValidateSuccessorRow(policy, row);
+        var extra = rootExtra.Concat(successorExtra.Select(x => x.Take(18).ToArray())).ToArray();
         long additional = 0;
         HashSet<string> keys = new(StringComparer.Ordinal);
         foreach (var row in extra)
         {
-            ValidateAttempt(policy, row, old.QueueStates);
+            ValidateAttempt(policy, row, old.QueueStates, successorExtra.Any(x => Equals(x[0], row[0])));
             if (!keys.Add((string)row[7]!)) throw new InvalidOperationException("Article reservations have duplicate identities.");
             additional = checked(additional + (long)row[13]!);
         }
@@ -33,12 +40,12 @@ public sealed partial class ChirpArticleService
         long remaining = checked(policy.Budget.AllocationCeilingMinorUnits - policy.Budget.AllocationCommittedMinorUnits - additional);
         if (committed > policy.Budget.ProjectCeilingMinorUnits || remaining < 0)
             throw new InvalidOperationException("Retained project or article allocation ceiling would be exceeded.");
-        string digest = FinancialDigest(old, attempts, associations);
-        return new(old, attempts, extra, digest, committed, remaining, additional);
+        string digest = FinancialDigest(old, attempts, associations, successors);
+        return new(old, attempts, extra, digest, committed, remaining, additional, roots, successors);
     }
 
     private static void ValidateAttempt(ChirpArticleAdmissionPolicy policy, object?[] row,
-        IReadOnlyList<RecoveryFinancialSnapshot.QueueState> queues)
+        IReadOnlyList<RecoveryFinancialSnapshot.QueueState> queues, bool successor)
     {
         if (row.Length != 18 || row[0] is not string id || !Guid.TryParseExact(id, "N", out var authorization)
             || !Equals(row[3], ChirpPolicyValidation.Hash(policy)) || !Equals(row[4], policy.SourceApprovalSha256)
@@ -54,7 +61,7 @@ public sealed partial class ChirpArticleService
         var part = article.Proposal.Parts.SingleOrDefault(x => x.CoverageOrdinal == ordinal);
         var envelope = ChirpPolicyFiles.Parse<GoogleGenerationSubmissionEnvelope>(System.Text.Encoding.UTF8.GetBytes(json));
         if (allowance is null || part is null || part.Range.ReusedReceiptSha256 is not null || reserved != allowance.MaximumMinorUnits
-            || !Equals(row[7], Key(article.Proposal.PlanSha256, ordinal)) || envelope.ChirpAuthorizationId != authorization
+            || !Equals(row[7], successor ? SuccessorKey(article.Proposal.PlanSha256, ordinal, authorization) : Key(article.Proposal.PlanSha256, ordinal)) || envelope.ChirpAuthorizationId != authorization
             || envelope.RecoveryAuthorizationId is not null || !Equals(envelope.AccountId, policy.AccountId)
             || !Equals(envelope.VoiceName, article.Proposal.VoiceName) || !Equals(envelope.AudioEncoding, "MP3")
             || !Equals(envelope.CompiledPayloadSha256, part.PayloadSha256) || envelope.CompiledPayloadBytes != part.PayloadBytes)
@@ -65,8 +72,11 @@ public sealed partial class ChirpArticleService
             throw new InvalidOperationException("The article attempt no longer owns its durable queue barrier.");
     }
 
-    private static string FinancialDigest(RecoveryFinancialSnapshot old, IReadOnlyList<object?[]> attempts, IReadOnlyList<object?[]> associations) =>
-        ChirpPolicyValidation.Hash(new
+    private static string FinancialDigest(RecoveryFinancialSnapshot old, IReadOnlyList<object?[]> attempts, IReadOnlyList<object?[]> associations,
+        IReadOnlyList<object?[]> successors)
+    {
+        var normalized = attempts.Select(x => x.Select((value, i) => i == 14 ? null : value).ToArray()).ToArray();
+        if (successors.Count == 0) return ChirpPolicyValidation.Hash(new
         {
             old.Queue,
             old.Spend,
@@ -74,9 +84,22 @@ public sealed partial class ChirpArticleService
             old.Scopes,
             old.Transitions,
             LegacyAssociations = associations,
-            ArticleAttempts = attempts.Select(x => x.Select((value, i) => i == 14 ? null : value).ToArray()).ToArray()
+            ArticleAttempts = normalized
         });
+        return ChirpPolicyValidation.Hash(new
+        {
+            old.Queue,
+            old.Spend,
+            old.Recovery,
+            old.Scopes,
+            old.Transitions,
+            LegacyAssociations = associations,
+            ArticleAttempts = normalized,
+            SuccessorAttempts = successors.Select(x => x.Select((value, i) => i == 14 ? null : value).ToArray()).ToArray(),
+        });
+    }
 
     private sealed record CurrentFinancial(RecoveryFinancialSnapshot Old, IReadOnlyList<object?[]> Attempts, object?[][] Extra,
-        string Sha256, long ProjectCommitted, long AllocationRemaining, long Additional);
+        string Sha256, long ProjectCommitted, long AllocationRemaining, long Additional,
+        IReadOnlyList<object?[]> RootAttempts, IReadOnlyList<object?[]> SuccessorAttempts);
 }

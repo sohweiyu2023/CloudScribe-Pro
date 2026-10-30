@@ -52,9 +52,9 @@ public sealed partial class ShellViewModelStateTests
             });
         }
 
-        internal static async Task<RepairFixture> CreateAsync(ILoggerFactory? loggerFactory = null)
+        internal static async Task<RepairFixture> CreateAsync(ILoggerFactory? loggerFactory = null, string? migration = null)
         {
-            var fixture = new RepairFixture(await AutosaveDiskFixture.CreateAsync().ConfigureAwait(false), loggerFactory);
+            var fixture = new RepairFixture(await AutosaveDiskFixture.CreateAsync(migration).ConfigureAwait(false), loggerFactory);
             var accounts = new EfProviderAccountStore(fixture.Factory, fixture.Clock);
             var reference = new ProviderAccountReference(GoogleGenerationProvider.StableProviderId, Account, "Synthetic Google",
                 new CredentialReference(OldReference), GoogleTextToSpeechEndpointIdentity.Create(Synthesis), "global", new Uri("https://texttospeech.googleapis.com"));

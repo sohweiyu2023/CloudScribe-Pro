@@ -28,6 +28,15 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
 
     public string ProviderStableId => StableProviderId;
 
+    private static bool RequiresPrivateCapture(GenerationProviderRequest request) =>
+        request.IdempotencyKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal) && request.IdempotencyKey.Split(':').Length > 3;
+
+    public void RequirePrivateDiagnosticsReady(GenerationProviderRequest request)
+    {
+        if (RequiresPrivateCapture(request) && !_transport.IsPrivateCaptureReady(request, _account.CredentialReferenceId))
+            throw new PrivateDiagnosticNotReadyException();
+    }
+
     public async Task<GenerationProviderResponse> SubmitAsync(
         GenerationProviderRequest request,
         CancellationToken cancellationToken)
@@ -75,13 +84,15 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         CancellationToken cancellationToken)
     {
         Guid? privateTicket = _transport.BeginPrivateCapture(request, _account.CredentialReferenceId);
+        bool required = RequiresPrivateCapture(request);
+        if (required && privateTicket is null) throw new PrivateDiagnosticNotReadyException();
         try
         {
             var response = await _transport.SendAsync(
                 new GoogleHttpTransportRequest(
                     _account.Endpoint,
                     _account.CredentialReferenceId,
-                    request.CompiledPayload, PrivateDiagnosticTicket: privateTicket),
+                    request.CompiledPayload, PrivateDiagnosticTicket: privateTicket, RequirePrivateDiagnosticCapture: required),
                 cancellationToken).ConfigureAwait(false);
             return (response, false);
         }

@@ -12,7 +12,7 @@ public sealed partial class ChirpArticleService
         if (!Guid.TryParseExact(id, "N", out var authorization)) throw new InvalidDataException("Output journal identity is invalid.");
         using var command = ChirpArticleSql.Command(connection, transaction, """
             SELECT j.ReceiptJson,j.ReceiptSha256,a.PlanSha256,a.CoverageOrdinal,a.ChildKey,a.ClaimedLocalAttemptId,a.Consumed,a.EnvelopeJson,a.AccountId,a.ProjectId
-            FROM chirp_article_output_journals j JOIN chirp_article_attempts a ON a.AuthorizationId=j.AuthorizationId WHERE j.AuthorizationId=$id;
+            FROM chirp_article_output_journals j JOIN chirp_article_owned_attempts a ON a.AuthorizationId=j.AuthorizationId WHERE j.AuthorizationId=$id;
             """, ("$id", id));
         ChirpSegmentAcceptedAudio receipt; string plan, key, attempt, account, project; int ordinal; GoogleGenerationSubmissionEnvelope envelope;
         using (var row = await command.ExecuteReaderAsync(token).ConfigureAwait(false))

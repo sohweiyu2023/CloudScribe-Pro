@@ -29,7 +29,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: false);
         var current = await CurrentAsync(connection, transaction, policy, intent, cancellationToken).ConfigureAwait(false);
-        var existing = await FindExistingAsync(connection, transaction, current.Article.Proposal.PlanSha256, intent.CoverageOrdinal, cancellationToken).ConfigureAwait(false);
+        var existing = await FindExistingAsync(connection, transaction, policy, current.Article.Proposal.PlanSha256, intent.CoverageOrdinal, cancellationToken).ConfigureAwait(false);
         var financial = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
         await RequireReadyAsync(connection, transaction, financial, existing?.AuthorizationId, cancellationToken).ConfigureAwait(false);
         long maximum = current.Article.AllowedSegments.Single(x => x.CoverageOrdinal == intent.CoverageOrdinal).MaximumMinorUnits;
@@ -50,7 +50,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
         var review = new ChirpRequestReview(id, reviewHash, current.Article.Proposal.PlanSha256, intent.CoverageOrdinal,
             current.Document.Id, current.Document.CurrentRevisionId!.Value, intent.Envelope.CompiledPayloadSha256, intent.Envelope.CompiledPayloadBytes,
             intent.Currency, intent.Scale, intent.EstimateMinorUnits, maximum, financial.ProjectCommitted, financial.AllocationRemaining,
-            existing?.AuthorizationId, policy.ExpiresAtUtc, intent.Envelope.PricingProvenanceId, intent.Envelope.VoiceName);
+            existing?.AuthorizationId, policy.ExpiresAtUtc, intent.Envelope.PricingProvenanceId, intent.Envelope.VoiceName, policy.SuccessorGrant?.ParentAuthorizationId);
         foreach (var item in _pending)
             if (clock.GetUtcNow() - item.Value.CreatedAt > TimeSpan.FromMinutes(10)) _pending.TryRemove(item.Key, out _);
         if (_pending.Count >= 32 || !_pending.TryAdd(id, new(intent, review, ChirpPolicyValidation.Hash(policy), financial.Sha256, clock.GetUtcNow())))
@@ -85,6 +85,9 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
             || intent.CompiledPayload.Length != intent.Envelope.CompiledPayloadBytes)
             throw new InvalidOperationException("The current article request does not match independently admitted account/project/compiled evidence.");
         var financial = await ReadFinancialAsync(connection, transaction, policy, token).ConfigureAwait(false);
+        await RequireSuccessorParentAsync(connection, transaction, policy, financial, token).ConfigureAwait(false);
+        if (policy.SuccessorGrant is { } successor && !string.Equals(intent.Envelope.CredentialReferenceId, successor.CredentialReferenceId, StringComparison.Ordinal))
+            throw new InvalidOperationException("The successor's independently admitted credential binding changed.");
         var current = await _evidence.ResolveAsync(connection, transaction, policy, intent.DocumentId, financial.Old, token).ConfigureAwait(false);
         var part = current.Article.Proposal.Parts.SingleOrDefault(x => x.CoverageOrdinal == intent.CoverageOrdinal);
         var allowance = current.Article.AllowedSegments.SingleOrDefault(x => x.CoverageOrdinal == intent.CoverageOrdinal);

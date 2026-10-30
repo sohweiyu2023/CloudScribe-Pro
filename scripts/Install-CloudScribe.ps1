@@ -189,13 +189,35 @@ function Assert-ChirpRange($Range){
     Assert-RecoveryRecord $Range @{StartScalar='Int32';EndScalarExclusive='Int32';TextSha256='String';ReusedReceiptSha256='NullableString'}
     if($Range.GetProperty('StartScalar').GetInt32() -lt 0 -or $Range.GetProperty('EndScalarExclusive').GetInt32() -le $Range.GetProperty('StartScalar').GetInt32()){throw 'Article coverage range is invalid.'}
 }
+function Assert-ChirpSuccessorGrant($Root){
+    if(@($Root.EnumerateObject().Name) -cnotcontains 'SuccessorGrant'){return}
+    $grant=$Root.GetProperty('SuccessorGrant')
+    Assert-RecoveryRecord $grant @{GrantId='NonemptyGuid';RootAuthorizationId='NonemptyGuid';ParentAuthorizationId='NonemptyGuid';PlanSha256='String';CoverageOrdinal='Int32';ParentKey='String';ParentAttemptRowSha256='String';ParentQueueRowSha256='String';ParentLocalAttemptId='String';CredentialReferenceId='String';ReviewedFailureEvidenceSha256='String';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
+    if($grant.GetProperty('MaximumNewAttempts').GetInt32() -ne 1 -or $grant.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -ne 1 -or
+        $Root.GetProperty('MaximumNewAttempts').GetInt32() -ne 1 -or $Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -ne 1 -or
+        $Root.GetProperty('Articles').GetArrayLength() -ne 1 -or $grant.GetProperty('ParentLocalAttemptId').GetString() -cnotmatch '^[a-f0-9]{32}$'){
+        throw 'Diagnostic successor requires one exact consumed parent, one attempt and one new cent.'
+    }
+    $key=$grant.GetProperty('ParentKey').GetString();$credential=$grant.GetProperty('CredentialReferenceId').GetString()
+    if(-not $key.StartsWith('chirp-article:',[StringComparison]::Ordinal) -or $key.Length -gt 128 -or [string]::IsNullOrWhiteSpace($credential) -or $credential.Length -gt 128){throw 'Successor parent or credential binding is invalid.'}
+    $article=$Root.GetProperty('Articles')[0];$segments=$article.GetProperty('AllowedSegments')
+    if($segments.GetArrayLength() -ne 1 -or $segments[0].GetProperty('CoverageOrdinal').GetInt32() -ne $grant.GetProperty('CoverageOrdinal').GetInt32() -or
+        $segments[0].GetProperty('MaximumMinorUnits').GetInt64() -ne 1 -or $article.GetProperty('Proposal').GetProperty('PlanSha256').GetString() -cne $grant.GetProperty('PlanSha256').GetString()){
+        throw 'Diagnostic successor cannot widen or change the selected article coverage.'
+    }
+}
 function Assert-ChirpPolicy($Root){
     $fields=@{SchemaVersion='Int32';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';AccountId='String';ProjectId='String';Currency='String';Scale='Int32';ExpiresAtUtc='Date';SourceApprovalSha256='String';Budget='Object';ScopeRows='Array';PriorArticleAttemptRows='Array';Articles='Array';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
     $legacy=@($Root.EnumerateObject().Name) -ccontains 'LegacyAssociations'
     if($legacy){$fields.LegacyAssociations='Array';$fields.LegacyAssociationRows='Array'}
+    $schema=$Root.GetProperty('SchemaVersion').GetInt32()
+    if($schema -eq 2){
+        $fields.PriorSuccessorAttemptRows='Array'
+        if(@($Root.EnumerateObject().Name) -ccontains 'SuccessorGrant'){$fields.SuccessorGrant='Object'}
+    }
     Assert-RecoveryRecord $Root $fields
     if($legacy){Assert-ChirpLegacyAssociations $Root}
-    if($Root.GetProperty('SchemaVersion').GetInt32() -ne 1 -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
+    if($schema -notin @(1,2) -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
         $Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow -or ($Root.GetProperty('MaximumNewAttempts').GetInt32() -lt 1 -or $Root.GetProperty('MaximumNewAttempts').GetInt32() -gt 10000) -or
         $Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -lt 1){throw 'Article grant identity, expiry or limits are invalid.'}
     if([string]::IsNullOrWhiteSpace($Root.GetProperty('AccountId').GetString()) -or [string]::IsNullOrWhiteSpace($Root.GetProperty('ProjectId').GetString())){throw 'Article account/project is missing.'}
@@ -208,6 +230,7 @@ function Assert-ChirpPolicy($Root){
         if($committed -lt 0 -or $ceiling -lt $committed -or $maximum -gt $ceiling-$committed){throw 'Article allocation omits retained commitments or exceeds its ceiling.'}
     }
     $pinSets=@($Root.GetProperty('ScopeRows'),$Root.GetProperty('PriorArticleAttemptRows'),$budget.GetProperty('QueueRows'),$budget.GetProperty('SpendRows'),$budget.GetProperty('RecoveryRows'),$budget.GetProperty('TransitionRows'))
+    if($schema -eq 2){$pinSets+=@($Root.GetProperty('PriorSuccessorAttemptRows'));Assert-ChirpSuccessorGrant $Root}
     foreach($pins in $pinSets){
         if($pins.GetArrayLength() -gt 10000){throw 'Article financial baseline exceeds its bound.'}
         $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)

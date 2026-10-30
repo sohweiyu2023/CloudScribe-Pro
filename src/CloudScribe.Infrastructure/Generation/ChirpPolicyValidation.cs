@@ -11,7 +11,7 @@ public static class ChirpPolicyValidation
     public static void RequireValid(ChirpArticleAdmissionPolicy p, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(p);
-        if (p.SchemaVersion != 1 || p.ExpiresAtUtc <= now || !IsHash(p.AppSha256) || !IsHash(p.InfrastructureSha256)
+        if (p.SchemaVersion is not (1 or 2) || p.ExpiresAtUtc <= now || !IsHash(p.AppSha256) || !IsHash(p.InfrastructureSha256)
             || !IsHash(p.ProfileRootSha256) || !IsHash(p.SourceApprovalSha256) || string.IsNullOrWhiteSpace(p.AccountId)
             || string.IsNullOrWhiteSpace(p.ProjectId) || !string.Equals(p.Currency, "USD", StringComparison.Ordinal) || p.Scale != 2
             || p.Articles is not { Count: >= 1 and <= 200 } || p.MaximumNewAttempts is < 1 or > 10_000
@@ -25,6 +25,7 @@ public static class ChirpPolicyValidation
             throw new InvalidDataException("The article-plan budget does not preserve its reviewed retained baseline.");
         foreach (var pins in new[] { b.QueueRows, b.SpendRows, b.RecoveryRows, b.TransitionRows, p.ScopeRows, p.PriorArticleAttemptRows }) RequirePins(pins);
         RequireLegacyAssociations(p);
+        RequireSuccessorGrant(p);
         if (p.Articles.Select(x => x.Proposal.DocumentId).Distinct().Count() != p.Articles.Count
             || p.Articles.Select(x => x.Proposal.PlanSha256).Distinct(StringComparer.Ordinal).Count() != p.Articles.Count)
             throw new InvalidDataException("Article-plan identities are ambiguous.");
@@ -37,6 +38,31 @@ public static class ChirpPolicyValidation
                     || article.Proposal.Parts.Count(y => y.CoverageOrdinal == x.CoverageOrdinal && y.Range.ReusedReceiptSha256 is null) != 1))
                 throw new InvalidDataException("The allowed internal requests are missing, duplicated or refer to accepted coverage.");
         }
+    }
+
+    private static void RequireSuccessorGrant(ChirpArticleAdmissionPolicy p)
+    {
+        if (p.SchemaVersion == 1)
+        {
+            if (p.SuccessorGrant is not null || p.PriorSuccessorAttemptRows is not null)
+                throw new InvalidDataException("Successor authority requires the explicit new policy schema.");
+            return;
+        }
+        RequirePins(p.PriorSuccessorAttemptRows);
+        if (p.SuccessorGrant is not { } grant) return;
+        if (grant.GrantId == Guid.Empty || grant.ParentAuthorizationId == Guid.Empty || grant.RootAuthorizationId == Guid.Empty
+            || grant.MaximumNewAttempts != 1 || grant.MaximumAdditionalReservationMinorUnits != 1
+            || p.MaximumNewAttempts != 1 || p.MaximumAdditionalReservationMinorUnits != 1
+            || p.Articles.Count != 1 || p.Articles[0].AllowedSegments.Count != 1
+            || p.Articles[0].AllowedSegments[0].CoverageOrdinal != grant.CoverageOrdinal
+            || p.Articles[0].AllowedSegments[0].MaximumMinorUnits != 1
+            || !string.Equals(p.Articles[0].Proposal.PlanSha256, grant.PlanSha256, StringComparison.Ordinal)
+            || !Guid.TryParseExact(grant.ParentLocalAttemptId, "N", out _)
+            || string.IsNullOrWhiteSpace(grant.CredentialReferenceId) || grant.CredentialReferenceId.Length > 128
+            || string.IsNullOrWhiteSpace(grant.ParentKey) || grant.ParentKey.Length > 128
+            || !grant.ParentKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal)
+            || new[] { grant.ParentAttemptRowSha256, grant.ParentQueueRowSha256, grant.ReviewedFailureEvidenceSha256 }.Any(x => !IsHash(x)))
+            throw new InvalidDataException("The independent diagnostic successor must name one exact failed attempt and at most one new cent.");
     }
 
     private static void RequireLegacyAssociations(ChirpArticleAdmissionPolicy p)

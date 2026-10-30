@@ -4,7 +4,7 @@ if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8)
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer failed parsing.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpLegacyAssociations','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpLegacyAssociations','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
     $functions=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Expected exactly one reviewed validator.'};Invoke-Expression $functions[0].Extent.Text
 }
@@ -21,6 +21,29 @@ function Test-ArticleJson([string]$Text){
 }
 $passed=0
 Test-ArticleJson ((New-ArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+function New-SuccessorArticlePolicy {
+    $p=New-ArticlePolicy;$p.SchemaVersion=2;$p.PriorSuccessorAttemptRows=@()
+    $p.SuccessorGrant=@{GrantId=[Guid]::NewGuid().ToString('D');RootAuthorizationId=$id;ParentAuthorizationId=$id;PlanSha256=$sha;CoverageOrdinal=1;ParentKey=('chirp-article:'+$sha+':1');ParentAttemptRowSha256=$sha;ParentQueueRowSha256=$sha;ParentLocalAttemptId=[Guid]::NewGuid().ToString('N');CredentialReferenceId='synthetic-reference';ReviewedFailureEvidenceSha256=$sha;MaximumNewAttempts=1;MaximumAdditionalReservationMinorUnits=1}
+    return $p
+}
+Test-ArticleJson ((New-SuccessorArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+foreach($case in @('legacy-schema','missing-pins','bound','cost','wrong-range','wrong-plan','missing-identity','unknown-field','credential','attempt')){
+    $p=New-SuccessorArticlePolicy
+    switch($case){
+        'legacy-schema' {$p.SchemaVersion=1}
+        'missing-pins' {$p.Remove('PriorSuccessorAttemptRows')}
+        'bound' {$p.SuccessorGrant.MaximumNewAttempts=2}
+        'cost' {$p.SuccessorGrant.MaximumAdditionalReservationMinorUnits=2}
+        'wrong-range' {$p.SuccessorGrant.CoverageOrdinal=2}
+        'wrong-plan' {$p.SuccessorGrant.PlanSha256='b'*64}
+        'missing-identity' {$p.SuccessorGrant.GrantId=[Guid]::Empty.ToString('D')}
+        'unknown-field' {$p.SuccessorGrant.CallerApproved=$true}
+        'credential' {$p.SuccessorGrant.CredentialReferenceId=''}
+        'attempt' {$p.SuccessorGrant.ParentLocalAttemptId='not-an-attempt'}
+    }
+    $rejected=$false;try{Test-ArticleJson ($p|ConvertTo-Json -Depth 24 -Compress)}catch{$rejected=$true}
+    if(-not $rejected){throw "Invalid successor-policy fixture accepted: $case"};$passed++
+}
 function New-LegacyArticlePolicy {
     $p=New-ArticlePolicy
     $p.Articles[0].Lineage.History[0].Attempts=@()
