@@ -14,6 +14,7 @@ No exception object, exception message, article text, account/credential identif
 | --- | --- | --- |
 | Article open / coverage read | Stage, safe error family; missing detail explicitly incomplete | Check saved source and current admission |
 | Request review | Stage, classified local reason where available | Verify selection before fresh review |
+| Expired Google capability verification | `CapabilityStale`, separate from a ten-minute local-review expiry | Refresh the existing account's voice catalog, preserve explicit voice selection, then review again; no silent renewal or synthesis |
 | Reservation | Missing/expired review, confirmation/selection/compilation/admission/financial changes; distinct expiry metadata | Inspect saved reservation first; prepare a fresh review if appropriate |
 | Local output repair / export | Stage, safe storage/access/validation category | Reuse accepted outputs; no regeneration |
 | Private capture open / read | Stage, safe storage/access/validation category | Inspect local availability; no generation-state change |

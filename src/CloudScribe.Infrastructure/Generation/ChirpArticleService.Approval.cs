@@ -1,7 +1,7 @@
 using System.Text.Json;
+using CloudScribe.Application.Logging;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using CloudScribe.Application.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 

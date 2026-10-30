@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Generation;
+using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
-using CloudScribe.Application.Logging;
 
 namespace CloudScribe.App.Composition;
 

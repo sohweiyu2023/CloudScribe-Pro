@@ -50,6 +50,7 @@ public static partial class LocalRequestDiagnostics
 
     public static string UserMessage(LocalRequestFailure failure) => failure.Reason switch
     {
+        LocalRequestReason.CapabilityStale => "Google capability verification expired. Refresh the voice catalog for the existing account, preserve your selected voice, then review the request again. This action did not contact the audio synthesis service or renew spending permission.",
         LocalRequestReason.ReviewExpired => "The local request review expired after 10 minutes. Review the selected request again and acknowledge it. Admission expiry and earlier holds are unchanged; no audio request was sent.",
         LocalRequestReason.ReviewMissing => "This request review is no longer available. Prepare a fresh review; inspect any saved reservation before reserving again.",
         LocalRequestReason.ConfirmationMismatch => "The displayed request or acknowledgement changed. Review the exact request again; earlier holds remain retained.",

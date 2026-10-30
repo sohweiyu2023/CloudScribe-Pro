@@ -2,8 +2,8 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using CloudScribe.App.ViewModels;
-using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Application.Logging;
+using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.App.Composition;
 
