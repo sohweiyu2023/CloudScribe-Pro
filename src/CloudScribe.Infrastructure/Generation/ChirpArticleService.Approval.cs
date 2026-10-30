@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using CloudScribe.Application.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -8,15 +9,10 @@ public sealed partial class ChirpArticleService
 {
     public async Task<ChirpApprovedAttempt> ApproveAsync(ChirpApprovalConfirmation confirmation, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(confirmation);
-        if (!confirmation.ConfirmedByUser || !confirmation.AcknowledgedHistoricalHolds
-            || !_pending.TryRemove(confirmation.PreviewId, out var pending) || clock.GetUtcNow() - pending.CreatedAt > TimeSpan.FromMinutes(10)
-            || !string.Equals(confirmation.DisplayedReviewSha256, pending.Review.ReviewSha256, StringComparison.Ordinal)
-            || confirmation.MaximumMinorUnits != pending.Review.MaximumMinorUnits)
-            throw new InvalidOperationException("A fresh exact article review and explicit retained-hold acknowledgement are required.");
+        var pending = TakeReviewedPending(confirmation);
         var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
         if (!string.Equals(ChirpPolicyValidation.Hash(policy), pending.PolicySha256, StringComparison.Ordinal))
-            throw new InvalidOperationException("Independent article admission changed; prepare a fresh review.");
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Independent article admission changed; prepare a fresh review."), LocalRequestReason.AdmissionChanged, pending.CreatedAt, pending.Review.ExpiresAtUtc);
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -24,7 +20,7 @@ public sealed partial class ChirpArticleService
         var current = await CurrentAsync(connection, transaction, policy, pending.Intent, cancellationToken).ConfigureAwait(false);
         var financial = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(financial.Sha256, pending.FinancialSha256, StringComparison.Ordinal))
-            throw new InvalidOperationException("Financial evidence changed after review; all reservations remain retained.");
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Financial evidence changed after review; all reservations remain retained."), LocalRequestReason.FinancialChanged, pending.CreatedAt, pending.Review.ExpiresAtUtc);
         var existing = await FindExistingAsync(connection, transaction, policy, current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
@@ -52,6 +48,21 @@ public sealed partial class ChirpArticleService
         await RequirePolicyCurrentAsync(policy, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
         return approved;
+    }
+
+    private Pending TakeReviewedPending(ChirpApprovalConfirmation confirmation)
+    {
+        ArgumentNullException.ThrowIfNull(confirmation);
+        if (!confirmation.ConfirmedByUser || !confirmation.AcknowledgedHistoricalHolds)
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("A fresh exact article review and explicit retained-hold acknowledgement are required."), LocalRequestReason.ConfirmationMismatch);
+        if (!_pending.TryRemove(confirmation.PreviewId, out var pending))
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("A fresh exact article review and explicit retained-hold acknowledgement are required."), LocalRequestReason.ReviewMissing);
+        if (clock.GetUtcNow() - pending.CreatedAt > TimeSpan.FromMinutes(10))
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("A fresh exact article review and explicit retained-hold acknowledgement are required."), LocalRequestReason.ReviewExpired, pending.CreatedAt, pending.Review.ExpiresAtUtc);
+        if (!string.Equals(confirmation.DisplayedReviewSha256, pending.Review.ReviewSha256, StringComparison.Ordinal)
+            || confirmation.MaximumMinorUnits != pending.Review.MaximumMinorUnits)
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("A fresh exact article review and explicit retained-hold acknowledgement are required."), LocalRequestReason.ConfirmationMismatch, pending.CreatedAt, pending.Review.ExpiresAtUtc);
+        return pending;
     }
 
     private static void RequireCapacity(ChirpArticleAdmissionPolicy policy, CurrentFinancial financial, long maximum)

@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Infrastructure.Generation;
+using CloudScribe.Application.Logging;
 
 namespace CloudScribe.App.Composition;
 
@@ -71,9 +72,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     lifetime.Token.ThrowIfCancellationRequested();
                     view.Text = string.Join("\n\n", records.Select(x => $"PRIVATE {x.CreatedUtc:O} - request {x.PayloadSha256[..12]} - {(x.Truncated ? "truncated" : "bounded")}:\n{x.Message}"));
                 }
-                catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+                catch (OperationCanceledException error) when (lifetime.IsCancellationRequested)
+                { _ = ReportLocalFailure(LocalRequestStage.CaptureRead, error); }
                 catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-                { status.Text = "Private records could not be read. No generation state was changed."; }
+                { status.Text = ReportLocalFailure(LocalRequestStage.CaptureRead, error); }
                 finally { if (!lifetime.IsCancellationRequested) refresh.IsEnabled = true; }
             }
             consent.IsCheckedChanged += (_, _) =>
@@ -94,7 +96,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             if (activeRead is not null) await activeRead.ConfigureAwait(true);
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { model.StatusMessage = "Private diagnostic view is unavailable. No generation or financial state was changed."; }
+        { model.StatusMessage = ReportLocalFailure(LocalRequestStage.CaptureOpen, error); }
         finally { _privateDialogOpen = false; }
     }
 
@@ -105,12 +107,19 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             var binding = await new GooglePrivateDiagnosticOptIn(privateDiagnostics, (IGoogleRecoveryCurrentCompilation?)chirpPreparation ?? privateDiagnosticCompilation)
                 .PrepareAsync(model, confirmed, token).ConfigureAwait(true);
-            if (binding is null) return;
+            if (binding is null)
+            {
+                _privateCaptureUiBinding = null; privateDiagnostics.Disarm();
+                status.Text = ReportLocalFailure(LocalRequestStage.CaptureArm,
+                    LocalRequestDiagnostics.Mark(new InvalidOperationException("Capture consent changed."), LocalRequestReason.CaptureConsentWithdrawn));
+                return;
+            }
             _privateCaptureUiBinding = binding;
             status.Text = "Enabled for ONE exact saved request, for 10 minutes. Close this view and use normal request review only if separately authorized. This action sent nothing.";
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (OperationCanceledException error) when (token.IsCancellationRequested)
+        { _privateCaptureUiBinding = null; privateDiagnostics.Disarm(); _ = ReportLocalFailure(LocalRequestStage.CaptureArm, error); }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { status.Text = "Private capture could not be enabled. Save the selected document and verify its current account/voice metadata. No request was sent."; }
+        { _privateCaptureUiBinding = null; privateDiagnostics.Disarm(); status.Text = ReportLocalFailure(LocalRequestStage.CaptureArm, error); }
     }
 }

@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Infrastructure.Generation;
+using CloudScribe.Application.Logging;
 
 namespace CloudScribe.App.Composition;
 
@@ -54,13 +55,21 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 status.Text = $"{progress.SavedCoverageParts}/{progress.TotalCoverageParts} exact coverage parts saved/reused. The original text and earlier audio/holds remain unchanged. Each new request needs current independent admission and exact review. Final export is one continuous MP3.";
                 export.IsEnabled = progress.Complete;
             }
-            async Task RunAsync(Func<Task> operation)
+            async Task RunAsync(LocalRequestStage stage, Func<Task> operation)
             {
                 choice.IsEnabled = prepare.IsEnabled = reserve.IsEnabled = refresh.IsEnabled = repair.IsEnabled = export.IsEnabled = false;
                 try { await operation().ConfigureAwait(true); }
-                catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+                catch (OperationCanceledException error) when (lifetime.IsCancellationRequested)
+                { _ = ReportLocalFailure(stage, error, displayed); }
                 catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-                { status.Text = "Stopped safely. Verify the saved original, exact voice/account, current independent admission, retained budget and local output status. No automatic provider request or retry was made."; }
+                {
+                    status.Text = ReportLocalFailure(stage, error, displayed);
+                    if (stage is LocalRequestStage.Review or LocalRequestStage.Reservation)
+                    {
+                        if (displayed is { } old) chirpPreparation.Discard(old.PreviewId);
+                        displayed = null; consent.IsChecked = false;
+                    }
+                }
                 finally
                 {
                     if (!lifetime.IsCancellationRequested)
@@ -71,16 +80,16 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     }
                 }
             }
-            void Start(Func<Task> operation) { if (active is not { IsCompleted: false }) active = RunAsync(operation); }
+            void Start(LocalRequestStage stage, Func<Task> operation) { if (active is not { IsCompleted: false }) active = RunAsync(stage, operation); }
             choice.SelectionChanged += (_, _) =>
             {
                 if (displayed is not null) chirpPreparation.Discard(displayed.PreviewId);
                 displayed = null; consent.IsChecked = false; reserve.IsEnabled = false; reviewText.Text = string.Empty;
             };
             consent.IsCheckedChanged += (_, _) => reserve.IsEnabled = displayed is not null && consent.IsChecked == true && active is not { IsCompleted: false };
-            refresh.Click += (_, _) => Start(RefreshAsync);
-            repair.Click += (_, _) => Start(async () => { int recovered = await chirpArticles.RecoverLocalOutputsAsync(lifetime.Token).ConfigureAwait(true); await RefreshAsync().ConfigureAwait(true); status.Text += $" Recovered {recovered} local receipts; no audio was regenerated."; });
-            prepare.Click += (_, _) => Start(async () =>
+            refresh.Click += (_, _) => Start(LocalRequestStage.CoverageRead, RefreshAsync);
+            repair.Click += (_, _) => Start(LocalRequestStage.OutputRepair, async () => { int recovered = await chirpArticles.RecoverLocalOutputsAsync(lifetime.Token).ConfigureAwait(true); await RefreshAsync().ConfigureAwait(true); status.Text += $" Recovered {recovered} local receipts; no audio was regenerated."; });
+            prepare.Click += (_, _) => Start(LocalRequestStage.Review, async () =>
             {
                 if (progress is null || choice.SelectedIndex < 0) return;
                 var part = progress.Parts[choice.SelectedIndex];
@@ -88,21 +97,21 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 displayed = await model.PrepareChirpArticleAsync(part.CoverageOrdinal, lifetime.Token).ConfigureAwait(true);
                 reviewText.Text = FormatChirpReview(displayed); consent.IsChecked = false;
             });
-            reserve.Click += (_, _) => Start(async () =>
+            reserve.Click += (_, _) => Start(LocalRequestStage.Reservation, async () =>
             {
                 if (displayed is null || consent.IsChecked != true) return;
                 await model.ApproveChirpArticleAsync(new(displayed.PreviewId, displayed.ReviewSha256, displayed.MaximumMinorUnits, true, true), lifetime.Token).ConfigureAwait(true);
                 dialog.Close(); // Only reserves. Existing Generate remains a separate explicit action.
             });
-            export.Click += (_, _) => Start(() => ExecuteArticleExportAsync(dialog, model, document, status, lifetime.Token));
+            export.Click += (_, _) => Start(LocalRequestStage.Export, () => ExecuteArticleExportAsync(dialog, model, document, status, lifetime.Token));
             var close = CreateHistoricalCloseButton(dialog);
             foreach (Control control in new Control[] { status, choice, refresh, prepare, reviewText, consent, reserve, repair, export, close }) body.Children.Add(control);
             dialog.Closed += (_, _) => { lifetime.Cancel(); if (displayed is not null) chirpPreparation.Discard(displayed.PreviewId); };
-            dialog.Content = new ScrollViewer { Content = body }; Start(RefreshAsync);
+            dialog.Content = new ScrollViewer { Content = body }; Start(LocalRequestStage.CoverageRead, RefreshAsync);
             await dialog.ShowDialog(owner).ConfigureAwait(true); if (active is not null) await active.ConfigureAwait(true);
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { model.StatusMessage = "Internal article view is unavailable. Documents, accepted audio and all financial holds were preserved."; }
+        { model.StatusMessage = ReportLocalFailure(LocalRequestStage.ArticleOpen, error); }
         finally { _chirpArticleDialogOpen = false; }
     }
 
