@@ -19,6 +19,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.UiBootstrap;
         try
         {
+            using var completion = _bootstrapService.BeginUiRefresh(refreshId);
             GoogleCatalogRefreshDiagnostics.Phase(catalogLogger, refreshId, phase);
             var observed = await _bootstrapService.RefreshConfiguredAsync(refreshId, token).ConfigureAwait(true);
             phase = GoogleCatalogRefreshPhase.UiQuery;
@@ -39,6 +40,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             model.ConnectedVoiceCatalogStatus = model.VoiceLabCatalogResults.Count == 0
                 ? "No verified voices match the selected language and search. Choose a language from the list or clear the voice search, then refresh."
                 : $"{model.VoiceLabCatalogResults.Count} verified voices loaded. Choose a voice below. No speech was generated.";
+            completion.Succeed();
             return true;
         }
         catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)

@@ -19,7 +19,7 @@ public sealed partial class Stage3MigrationTests
             await db.GetService<IMigrator>().MigrateAsync(GoogleCredentialRepairs.MigrationId, TestContext.Current.CancellationToken);
             await SeedOriginalArticleOwnersAsync(db);
             var before = await ChirpBusinessRowsAsync(db);
-            await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            await db.GetService<IMigrator>().MigrateAsync(ChirpArticleSuccessors.MigrationId, TestContext.Current.CancellationToken);
             var after = await ChirpBusinessRowsAsync(db);
             Assert.Equal(before.Count + 2, after.Count);
             foreach (var (table, rows) in before) Assert.Equal(rows, after[table]);

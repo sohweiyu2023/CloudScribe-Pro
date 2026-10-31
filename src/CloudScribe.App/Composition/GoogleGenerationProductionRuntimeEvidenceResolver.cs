@@ -19,6 +19,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
     private readonly GoogleGenerationProductionTransportFactory _transportFactory;
     private readonly TimeProvider _timeProvider;
     private readonly IGoogleGenerationProjectAuthorizationStore? _projectAuthorizations;
+    private readonly ChirpArticleService? _articles;
 
     public GoogleGenerationProductionRuntimeEvidenceResolver(
         GoogleGenerationProductionEvidenceResolver productionEvidenceResolver,
@@ -26,7 +27,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
         GoogleGenerationCurrentSpendAuthorizationResolver spendAuthorizationResolver,
         IPricingCatalogHistoryStore pricingCatalogHistoryStore,
         GoogleGenerationProductionTransportFactory transportFactory,
-        TimeProvider timeProvider, IGoogleGenerationProjectAuthorizationStore? projectAuthorizations = null)
+        TimeProvider timeProvider, IGoogleGenerationProjectAuthorizationStore? projectAuthorizations = null, ChirpArticleService? articles = null)
     {
         _productionEvidenceResolver = productionEvidenceResolver ?? throw new ArgumentNullException(nameof(productionEvidenceResolver));
         _accountFactory = accountFactory ?? throw new ArgumentNullException(nameof(accountFactory));
@@ -35,6 +36,7 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
         _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _projectAuthorizations = projectAuthorizations;
+        _articles = articles;
     }
 
     public async Task<GoogleGenerationAuthorizedRuntimeEvidence> ResolveAsync(
@@ -105,6 +107,9 @@ public sealed class GoogleGenerationProductionRuntimeEvidenceResolver
     private async Task ValidateCurrentRuntimeAuthoritiesAsync(GoogleGenerationProductionRuntimeRequest request,
         DateTimeOffset nowUtc, CancellationToken cancellationToken)
     {
+        if (_articles is not null) await _articles.ValidateReservedRuntimeBindingAsync(request.SubmissionEnvelope,
+            ChirpResumeRuntimeBinding.Hash(request.Snapshot, request.Currency, request.Scale, request.CurrentEstimateMinorUnits),
+            request.Currency, request.Scale, request.CurrentEstimateMinorUnits, cancellationToken).ConfigureAwait(false);
         await ValidatePricingCurrentAsync(request.PricingProvenanceId, cancellationToken).ConfigureAwait(false);
         if (request.SubmissionEnvelope.RecoveryAuthorizationId is not null || request.SubmissionEnvelope.ChirpAuthorizationId is not null)
             await ValidateRecoveryProjectCurrentAsync(request, nowUtc, cancellationToken).ConfigureAwait(false);

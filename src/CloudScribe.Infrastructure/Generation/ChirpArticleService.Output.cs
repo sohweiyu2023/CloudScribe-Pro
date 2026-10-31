@@ -78,7 +78,8 @@ public sealed partial class ChirpArticleService
         var audio = new ArticleAcceptedAudio(stored.Article.Proposal.DocumentId, stored.Article.Proposal.RevisionId,
             part.Range.TextSha256, request.AccountId, request.OperationStableId, request.IdempotencyKey, attempt,
             part.PayloadSha256!, destination, media.Length, ChirpPolicyFiles.Hash(media.Span), stored.Article.Proposal.VoiceName, stored.Article.Proposal.LanguageCode);
-        var receipt = new ChirpSegmentAcceptedAudio(plan, ordinal, part.Range, audio);
+        string? mappingSha = await RequireReservedDispatchAuditAsync(connection, transaction, Guid.ParseExact(id, "N"), envelope, attempt, token).ConfigureAwait(false);
+        var receipt = new ChirpSegmentAcceptedAudio(plan, ordinal, part.Range, audio, mappingSha);
         ChirpArticleEvidenceResolver.RequireAcceptedQueue(audio, await RecoveryFinancialSnapshot.ReadAsync(connection, transaction, token).ConfigureAwait(false));
         string json = JsonSerializer.Serialize(receipt), hash = ChirpPolicyValidation.Hash(receipt);
         if (json.Length > 32768) throw new InvalidDataException("Accepted internal provenance exceeds its size bound.");

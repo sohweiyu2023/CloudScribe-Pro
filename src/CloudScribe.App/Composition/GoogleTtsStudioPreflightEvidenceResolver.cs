@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Logging;
 using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Security;
 using CloudScribe.Domain.Pricing;
@@ -67,8 +68,9 @@ internal sealed class GoogleTtsStudioPreflightEvidenceResolver(
             || selectedCapabilityId == Guid.Empty
             || production.Capability.Id != selectedCapabilityId)
         {
-            throw new InvalidOperationException(
-                "The selected Google voice is not bound to the current persisted capability snapshot. Refresh the authenticated voice catalog before preparing generation.");
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException(
+                "The selected Google voice is not bound to the current persisted capability snapshot. Refresh the authenticated voice catalog before preparing generation."),
+                LocalRequestReason.CaptureCapabilityBindingChanged);
         }
 
         if (!string.Equals(
@@ -76,8 +78,8 @@ internal sealed class GoogleTtsStudioPreflightEvidenceResolver(
                 selection.AccountStableId,
                 StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(
-                "The selected Google voice and current persisted capability evidence do not belong to the same account.");
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException(
+                "The selected Google voice and current persisted capability evidence do not belong to the same account."), LocalRequestReason.CaptureIdentityChanged);
         }
     }
 

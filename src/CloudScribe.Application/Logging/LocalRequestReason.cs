@@ -7,4 +7,9 @@ public enum LocalRequestReason
     CaptureConsentWithdrawn, Cancelled, Storage, AccessDenied, MalformedState, ValidationRejected, Unexpected,
     CapabilityStale,
     DocumentConflict,
+    ReservedRequestIneligible, ReservedIdentityMalformed, ReservedSourceChanged,
+    ReservedEnvelopeChanged, ReservedPayloadChanged,
+    ReservedRevisionChanged, CaptureCapabilityBindingChanged,
+    ResumePinMismatch, ResumeExpired, ResumeBuildMismatch, ResumeProfileMismatch, ResumePolicyMalformed,
+    ResumeHistoryChanged, ResumeProviderChanged, ResumeMappingChanged,
 }

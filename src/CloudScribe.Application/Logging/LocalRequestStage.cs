@@ -7,4 +7,5 @@ public enum LocalRequestStage
     DocumentCreate, DocumentOpen, LibraryLoad, LibrarySearch, DocumentSave, DocumentAutosave, ObsoleteAutosave,
     DocumentRestore, DocumentImport, DocumentPostSavePresentation,
     ConnectionRead, PreferenceWrite, PricingActivation, GenerationDispatch,
+    ResumeAdmission,
 }

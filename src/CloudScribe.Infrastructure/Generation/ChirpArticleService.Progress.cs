@@ -47,7 +47,13 @@ public sealed partial class ChirpArticleService
         var rows = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_owned_attempts", cancellationToken).ConfigureAwait(false);
         var policyNow = await admission.LoadVerifiedAsync(cancellationToken).ConfigureAwait(false);
         var active = policyNow?.Articles.SingleOrDefault(x => string.Equals(x.Proposal.PlanSha256, plan, StringComparison.Ordinal));
-        return DescribeProgress(stored.Article with { AllowedSegments = active?.AllowedSegments ?? [] }, receipts, rows, snapshot.QueueStates);
+        IReadOnlyList<ChirpSegmentAllowance> allowed = active?.AllowedSegments ?? [];
+        if (await ResumePolicyAsync(null, cancellationToken).ConfigureAwait(false) is { } resume)
+        {
+            var target = rows.SingleOrDefault(x => Equals(x[0], resume.AuthorizationId.ToString("N")) && Equals(x[1], plan) && Equals(x[16], 0L));
+            if (target is not null) allowed = [new((int)(long)target[2]!, (long)target[13]!)];
+        }
+        return DescribeProgress(stored.Article with { AllowedSegments = allowed }, receipts, rows, snapshot.QueueStates);
     }
 
     private static ChirpArticleProgress DescribeProgress(AdmittedChirpArticle article, IReadOnlyList<ChirpSegmentAcceptedAudio> receipts,

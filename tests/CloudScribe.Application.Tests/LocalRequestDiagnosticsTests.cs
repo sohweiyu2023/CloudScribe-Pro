@@ -8,6 +8,29 @@ public sealed class LocalRequestDiagnosticsTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-01-02T03:04:05Z", System.Globalization.CultureInfo.InvariantCulture);
 
+    [Theory]
+    [InlineData(LocalRequestReason.ReservedRequestIneligible)]
+    [InlineData(LocalRequestReason.ReservedIdentityMalformed)]
+    [InlineData(LocalRequestReason.ReservedSourceChanged)]
+    [InlineData(LocalRequestReason.ReservedEnvelopeChanged)]
+    [InlineData(LocalRequestReason.ReservedPayloadChanged)]
+    [InlineData(LocalRequestReason.ReservedRevisionChanged)]
+    [InlineData(LocalRequestReason.CaptureCapabilityBindingChanged)]
+    public void ReservedCaptureFailuresRetainExactInvariantWithoutExceptionContent(LocalRequestReason reason)
+    {
+        const string privateText = "Bearer synthetic-secret private article fragment";
+        var logger = new CaptureLogger();
+        var error = LocalRequestDiagnostics.Mark(new InvalidOperationException(privateText), reason,
+            admissionExpiresUtc: Now.AddMinutes(5), capabilityExpiresUtc: Now.AddSeconds(-1));
+        var report = LocalRequestDiagnostics.Failure(logger, Guid.NewGuid(), LocalRequestStage.CaptureArm, error, Now);
+        Assert.Equal(reason, report.Reason); Assert.True(report.EvidenceComplete);
+        Assert.Equal(Now.AddSeconds(-1), report.CapabilityExpiresUtc);
+        Assert.Equal(Now.AddMinutes(5), report.AdmissionExpiresUtc);
+        Assert.DoesNotContain(privateText, logger.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(privateText, LocalRequestDiagnostics.UserMessage(report), StringComparison.Ordinal);
+        Assert.Null(logger.Exception);
+    }
+
     [Fact]
     public void ExpiredReviewRetainsSafeReasonAndSeparateExpiryWithoutChangingExceptionType()
     {

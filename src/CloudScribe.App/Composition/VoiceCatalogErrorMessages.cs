@@ -23,9 +23,22 @@ public static class VoiceCatalogErrorMessages
             (int)HttpStatusCode.Forbidden => "Google refused voice access. Check Text-to-Speech API enablement, billing and service-account access in your Google project, then refresh. Your saved key was not changed.",
             _ => exception switch
             {
+                CompletionGateException gate => $"The supervised narration run is paused because {CompletionReason(gate.Reason)}. Existing audio and reservations are retained. The run needs review before continuing; no automatic retry was made.",
                 OperationCanceledException => "Voice loading stopped or timed out. Check your internet connection, then choose Refresh real Google voices to retry.",
                 HttpRequestException => "Could not reach Google to load voices. Check your internet connection and try Refresh real Google voices. No speech was requested.",
                 _ => "The voice list could not be verified. Inspect the saved connection in Setups, check the language/search filters, then refresh. No speech was requested and no key was changed.",
             },
         };
+
+    private static string CompletionReason(CompletionGateFailure reason) => reason switch
+    {
+        CompletionGateFailure.Expired => "its approved time window ended",
+        CompletionGateFailure.ClockRollback or CompletionGateFailure.ClockDiscontinuity => "the computer's timing could not be verified",
+        CompletionGateFailure.PendingOutcome => "an earlier step still needs verification",
+        CompletionGateFailure.Limit => "its approved refresh or review limit was reached",
+        CompletionGateFailure.PinMismatch => "its saved approval no longer matches the current app or connection",
+        CompletionGateFailure.Storage => "its local completion record could not be read or saved",
+        CompletionGateFailure.Stopped => "an earlier step failed or stopped",
+        _ => "its local verification did not complete",
+    };
 }

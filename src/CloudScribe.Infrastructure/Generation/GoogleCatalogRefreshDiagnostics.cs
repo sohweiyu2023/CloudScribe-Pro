@@ -54,6 +54,7 @@ public static partial class GoogleCatalogRefreshDiagnostics
 
     public static string Category(Exception exception) => exception switch
     {
+        CompletionGateException gate => "completion-" + gate.Reason.ToString().ToLowerInvariant(),
         _ when Context(exception, MissingCredentialKey) is true => "saved-credential-unavailable",
         OperationCanceledException => "cancelled-or-timeout",
         HttpRequestException { StatusCode: not null } => "http-rejected",

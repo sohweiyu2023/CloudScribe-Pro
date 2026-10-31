@@ -68,16 +68,33 @@ public sealed partial class GoogleCatalogBootstrapTests
         public int Calls { get; private set; }
         public bool RejectProbe { get; set; }
         public bool MalformedCatalog { get; set; }
+        public bool DifferentCatalog { get; set; }
+        public bool DifferentCatalogMetadata { get; set; }
+        public bool DifferentProbeBody { get; set; }
+        public bool UnexpectedProbeAudio { get; set; }
+        public int PauseAtCall { get; set; }
+        public TaskCompletionSource<bool>? CatalogGate { get; set; }
+        public TaskCompletionSource<bool>? CatalogPaused { get; set; }
+        public Action? BeforeProbeResponse { get; set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Calls++;
+            if (Calls == PauseAtCall && CatalogGate is not null)
+            {
+                CatalogPaused?.TrySetResult(true);
+                await CatalogGate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
             if (request.Method == HttpMethod.Get && MalformedCatalog)
                 return new(HttpStatusCode.OK) { Content = new StringContent("{private-response-body") };
             if (request.Method == HttpMethod.Get)
-                return new(HttpStatusCode.OK) { Content = new StringContent("{\"voices\":[{\"name\":\"en-US-Standard-C\",\"languageCodes\":[\"en-US\"],\"ssmlGender\":\"FEMALE\",\"naturalSampleRateHertz\":24000}]}") };
+                return new(HttpStatusCode.OK) { Content = new StringContent("{\"voices\":[{\"name\":\"en-US-Standard-" + (DifferentCatalog ? "D" : "C") + "\",\"languageCodes\":[\"en-US\"],\"ssmlGender\":\"FEMALE\",\"naturalSampleRateHertz\":" + (DifferentCatalogMetadata ? "48000" : "24000") + "}]}") };
             Assert.Equal("{}", await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+            BeforeProbeResponse?.Invoke();
             return new(RejectProbe ? HttpStatusCode.Forbidden : HttpStatusCode.BadRequest)
-            { Content = new StringContent("{\"error\":{\"status\":\"INVALID_ARGUMENT\"}}") };
+            {
+                Content = new StringContent(UnexpectedProbeAudio ? "{\"error\":{\"status\":\"INVALID_ARGUMENT\"},\"audioContent\":\"ZmFrZQ==\"}"
+                : DifferentProbeBody ? "{\"error\":{\"status\":\"INVALID_ARGUMENT\",\"message\":\"changed synthetic detail\"}}" : "{\"error\":{\"status\":\"INVALID_ARGUMENT\"}}")
+            };
         }
     }
 

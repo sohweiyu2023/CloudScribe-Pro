@@ -5,10 +5,12 @@ namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Default-off observer. One exact UI-bound request object can consume one in-memory ticket.
 /// No method dispatches, approves, retries, reads a vault or mutates queue/financial state.</summary>
-public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorPersistence persistence, TimeProvider clock) : IDisposable
+public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorPersistence persistence, TimeProvider clock,
+    CompletionWorkflowGate? completionGate = null) : IDisposable
 {
     private readonly System.Threading.Lock _gate = new();
-    public GooglePrivateErrorDiagnostics(string directory, TimeProvider clock) : this(new FilePrivateProviderErrorStore(directory, clock), clock) { }
+    public GooglePrivateErrorDiagnostics(string directory, TimeProvider clock, CompletionWorkflowGate? completionGate = null)
+        : this(new FilePrivateProviderErrorStore(directory, clock), clock, completionGate) { }
     private ArmState? _arm;
     private Ticket? _ticket;
     private Guid? _active;
@@ -36,6 +38,7 @@ public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorP
 
     public void Arm(PrivateErrorCaptureBinding binding, bool explicitlyConfirmed)
     {
+        completionGate?.RequireReady();
         ArgumentNullException.ThrowIfNull(binding);
         if (!explicitlyConfirmed || binding.DocumentId == Guid.Empty || binding.RevisionId == Guid.Empty
             || binding.RequestVersion < 0 || string.IsNullOrWhiteSpace(binding.AccountId)

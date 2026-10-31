@@ -43,6 +43,7 @@ public sealed class GoogleGenerationProductionTransportFactoryTests
         Assert.Contains("stale", error.Message, StringComparison.OrdinalIgnoreCase);
         var details = LocalRequestDiagnostics.Describe(error, Now);
         Assert.Equal(LocalRequestReason.CapabilityStale, details.Reason);
+        Assert.Equal(Now, details.CapabilityExpiresUtc);
         Assert.True(details.EvidenceComplete);
         Assert.Contains("Refresh the voice catalog", LocalRequestDiagnostics.UserMessage(details), StringComparison.Ordinal);
     }

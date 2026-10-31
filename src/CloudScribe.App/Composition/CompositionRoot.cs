@@ -100,7 +100,8 @@ public static class CompositionRoot
             AllowAutoRedirect = false,
             UseCookies = false,
         })
-        { Timeout = TimeSpan.FromSeconds(20) }, provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILoggerFactory>()));
+        { Timeout = TimeSpan.FromSeconds(20) }, provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILoggerFactory>(),
+            provider.GetRequiredService<CompletionWorkflowGate>()));
         services.AddSingleton<GoogleCredentialRepairJournalStore>();
         services.AddSingleton<GoogleCredentialRepairService>();
     }
@@ -110,6 +111,8 @@ public static class CompositionRoot
         services.AddSingleton<IChirpArticleAdmissionStore>(serviceProvider => new InstalledChirpArticleAdmissionStore(AppContext.BaseDirectory,
             serviceProvider.GetRequiredService<AppPaths>(), serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<ChirpArticleService>();
+        services.AddSingleton<IChirpReservationResumeAdmissionStore>(provider => new InstalledChirpReservationResumeAdmissionStore(AppContext.BaseDirectory,
+            provider.GetRequiredService<AppPaths>(), provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILogger<InstalledChirpReservationResumeAdmissionStore>>()));
         services.AddSingleton<ChirpArticlePreparationService>();
         services.AddSingleton<ArticleAudioExportService>();
     }
@@ -122,7 +125,8 @@ public static class CompositionRoot
             // A sibling of the exact configured profile, never a real-user fallback for isolated QA profiles.
             string root = Path.Combine(Path.GetDirectoryName(paths.RootDirectory)!, ".cloudscribe-private-diagnostics",
                 InstalledRecoveryAdmissionStore.ProfileHash(paths.RootDirectory));
-            return new GooglePrivateErrorDiagnostics(root, serviceProvider.GetRequiredService<TimeProvider>());
+            return new GooglePrivateErrorDiagnostics(root, serviceProvider.GetRequiredService<TimeProvider>(),
+                serviceProvider.GetRequiredService<CompletionWorkflowGate>());
         });
     }
 

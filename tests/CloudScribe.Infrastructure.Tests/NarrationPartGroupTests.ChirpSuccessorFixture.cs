@@ -6,10 +6,11 @@ namespace CloudScribe.Infrastructure.Tests;
 
 public sealed partial class NarrationPartGroupTests
 {
-    private static async Task<ChirpSuccessorFixture> CreateSuccessorFixtureAsync(Fixture fixture, string outcome = "failed")
+    private static async Task<ChirpSuccessorFixture> CreateSuccessorFixtureAsync(Fixture fixture, string outcome = "failed", string? pricingSha256 = null)
     {
         var evidence = await ChirpEvidenceAsync(fixture, 1).ConfigureAwait(false);
         var intent = ChirpIntent(evidence);
+        if (pricingSha256 is not null) intent = intent with { Envelope = intent.Envelope with { PricingProvenanceId = pricingSha256 } };
         var preview = await evidence.Service.PrepareAsync(intent, TestContext.Current.CancellationToken).ConfigureAwait(false);
         var parent = await evidence.Service.ApproveAsync(ChirpConfirmation(preview), TestContext.Current.CancellationToken).ConfigureAwait(false);
         var claim = ChirpClaim(intent, parent);

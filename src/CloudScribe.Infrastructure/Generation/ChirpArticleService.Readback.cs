@@ -92,6 +92,9 @@ public sealed partial class ChirpArticleService
                 || !string.Equals(Path.GetFullPath(receipt.Audio.AudioPath), Path.Combine(MediaRoot, reader.GetString(6) + ".mp3"), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Accepted segment provenance differs from its consumed reservation.");
             ChirpArticleEvidenceResolver.RequireAcceptedQueue(receipt.Audio, financial);
+            string? mapping = await RequireReservedDispatchAuditAsync(connection, transaction, Guid.ParseExact(reader.GetString(6), "N"),
+                envelope, receipt.Audio.LocalAttemptId, token).ConfigureAwait(false);
+            if (!string.Equals(receipt.ExecutionMappingSha256, mapping, StringComparison.Ordinal)) throw ResumeRejected();
             receipts.Add(receipt);
         }
         return receipts.AsReadOnly();

@@ -67,5 +67,15 @@ jobs:
           ./scripts/Test-InstallCloudScribe-SelfTests.ps1
           ./scripts/Test-RecoveryAdmissionPolicy-SelfTests.ps1
           ./scripts/Test-ChirpArticlePolicy-SelfTests.ps1
+          ./scripts/Test-ChirpReservationResumePolicy-SelfTests.ps1
+          ./scripts/Test-CompletionWorkflowGate-SelfTests.ps1 -PythonPath (Get-Command python).Source
+      - name: Offline durable completion gate and isolated bridge
+        shell: pwsh
+        run: |
+          Push-Location tools/completion_workflow
+          try {
+            python -m unittest -v test_completion_register test_gate_cli test_plan_binding
+            if ($LASTEXITCODE -ne 0) { throw 'Completion gate offline tests failed.' }
+          } finally { Pop-Location }
       - name: Mocked and local tests only
         run: dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore --output Detailed

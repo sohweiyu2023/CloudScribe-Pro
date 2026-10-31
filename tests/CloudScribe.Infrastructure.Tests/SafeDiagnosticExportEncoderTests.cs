@@ -137,5 +137,6 @@ public sealed class SafeDiagnosticExportEncoderTests
         ["ReviewExpiresUtc"] = null,
         ["AdmissionExpiresUtc"] = null,
         ["EvidenceComplete"] = "true",
+        ["CapabilityExpiresUtc"] = null,
     };
 }

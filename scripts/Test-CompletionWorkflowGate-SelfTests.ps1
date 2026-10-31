@@ -1,0 +1,81 @@
+[CmdletBinding()]
+param([Parameter(Mandatory)][string]$PythonPath)
+$ErrorActionPreference='Stop'
+$installerPath=Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'
+$tokens=$null;$parseErrors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile($installerPath,[ref]$tokens,[ref]$parseErrors)
+if($parseErrors.Count){throw 'Installer parse failure.'}
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Invoke-CompletionGate','Get-ReviewedCompletionGate','Assert-CompletionInstallEffect')){
+    $found=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
+    if($found.Count -ne 1){throw 'Expected one production installer function.'}
+    Invoke-Expression $found[0].Extent.Text
+}
+$fixtureScript=Join-Path $PSScriptRoot '../tools/completion_workflow/make_synthetic_gate_fixture.py'
+$fixtureParent=Join-Path ([IO.Path]::GetTempPath()) ('cloudscribe-completion-gate-tests-'+[Guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($fixtureParent)|Out-Null
+$passed=0
+function New-GateFixture {
+    $root=Join-Path $fixtureParent ([Guid]::NewGuid().ToString('N'))
+    if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($root)) -cne [IO.Path]::GetFullPath($fixtureParent)){throw 'Fixture escaped its root.'}
+    $metadata=& $PythonPath -I -S $fixtureScript $root
+    if($LASTEXITCODE -ne 0){throw 'Synthetic setup failed.'}
+    return ($metadata|ConvertFrom-Json)
+}
+function Bind-GateFixture($fixture){
+    $script:package=$fixture.package;$script:target=$fixture.target;$script:profile=$fixture.profile
+    $script:ReviewedCompletionGatePath=$fixture.gatePath;$script:ReviewedCompletionGateSha256=$fixture.gateSha256
+    $script:ReviewedChirpResumePolicyPath=$null;$script:ReviewedChirpArticlePolicyPath=$null;$script:MigrateProfileFrom=$null;$script:identity=[pscustomobject]@{CompletionGateProtocolVersion=1}
+}
+function Expect-Rejected([scriptblock]$action){
+    $rejected=$false;try{& $action|Out-Null}catch{$rejected=$true}
+    if(-not $rejected){throw 'Expected production guard rejection.'}
+    $script:passed++
+}
+
+$fixture=New-GateFixture;Bind-GateFixture $fixture
+$gate=Get-ReviewedCompletionGate $profile
+if(-not $gate){throw 'Reviewed synthetic gate was not read.'};$passed++
+$operation=[Guid]::NewGuid();$operationIdentity=$fixture.resumeSha256
+$null=Invoke-CompletionGate $gate 'claim-resume' $operation $operationIdentity $null (Join-Path $package 'app') $fixture.resumePath;$passed++
+Assert-CompletionInstallEffect $gate $operation $operationIdentity $null;$passed++
+# Simulated interruption after durable claim, before installer mutation. A NEW
+# bridge process sees the same pending slot; neither inspection nor claim retries.
+Expect-Rejected {Get-ReviewedCompletionGate $profile}
+Expect-Rejected {Invoke-CompletionGate $gate 'claim-resume' ([Guid]::NewGuid()) $operationIdentity $null (Join-Path $package 'app') $fixture.resumePath}
+$status=Invoke-CompletionGate $gate 'status' ([Guid]::Empty) '' $null (Join-Path $package 'app')
+if($status.resumeAdmissions -ne 1 -or $status.pendingId -cne $operation.ToString('D')){throw 'Interrupted admission was forgotten.'};$passed++
+
+$fixture=New-GateFixture;Bind-GateFixture $fixture
+$ReviewedCompletionGateSha256='b'*64;Expect-Rejected {Get-ReviewedCompletionGate $profile}
+Bind-GateFixture $fixture
+[IO.File]::WriteAllText((Join-Path $package 'app/CloudScribe.dll'),'tampered inert fixture')
+Expect-Rejected {Get-ReviewedCompletionGate $profile}
+
+$fixture=New-GateFixture;Bind-GateFixture $fixture
+$requiredPath=Join-Path $profile '.completion-workflow-required.json'
+@{GateSha256=('c'*64);ScopeSha256=$fixture.scopeSha256}|ConvertTo-Json|Set-Content -LiteralPath $requiredPath
+Expect-Rejected {Get-ReviewedCompletionGate $profile}
+Bind-GateFixture $fixture;$ReviewedCompletionGatePath=$null;$ReviewedCompletionGateSha256=$null
+Expect-Rejected {Get-ReviewedCompletionGate $profile}
+
+$fixture=New-GateFixture;Bind-GateFixture $fixture
+$identity=[pscustomobject]@{CompletionWorkflowGateSha256=$fixture.gateSha256;CompletionGateProtocolVersion=1}
+$ReviewedCompletionGatePath=$null;$ReviewedCompletionGateSha256=$null
+Expect-Rejected {Get-ReviewedCompletionGate $profile} # ordinary update cannot drop it
+
+$fixture=New-GateFixture;Bind-GateFixture $fixture
+$gate=Get-ReviewedCompletionGate $profile
+$operation=[Guid]::NewGuid();$operationIdentity=$fixture.resumeSha256
+$null=Invoke-CompletionGate $gate 'claim-resume' $operation $operationIdentity $null (Join-Path $package 'app') $fixture.resumePath
+$expired=@{Bytes=[Text.Encoding]::UTF8.GetBytes((@{ExpiresAtUtc=[DateTimeOffset]::UtcNow.AddSeconds(-1);CatalogExpiresAtUtc=[DateTimeOffset]::UtcNow.AddMinutes(10)}|ConvertTo-Json))}
+Expect-Rejected {Assert-CompletionInstallEffect $gate $operation $operationIdentity $expired}
+
+$fixture=New-GateFixture;Bind-GateFixture $fixture
+$identity=[pscustomobject]@{Product='CloudScribe Pro'}
+Expect-Rejected {Get-ReviewedCompletionGate $profile} # legacy binary cannot activate
+
+$fixture=New-GateFixture;Bind-GateFixture $fixture
+[IO.File]::WriteAllText((Join-Path $target 'app/CloudScribe.dll'),'old inert app')
+Expect-Rejected {Get-ReviewedCompletionGate $profile} # must already be exact hook build
+
+[pscustomobject]@{Passed=$passed;ProviderCalls=0;CredentialOperations=0;RealInstalls=0;FixtureParent=$fixtureParent}

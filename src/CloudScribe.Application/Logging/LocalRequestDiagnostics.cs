@@ -8,13 +8,13 @@ namespace CloudScribe.Application.Logging;
 public static partial class LocalRequestDiagnostics
 {
     private static readonly object ContextKey = new();
-    private sealed record Context(LocalRequestReason Reason, DateTimeOffset? Created, DateTimeOffset? AdmissionExpiry);
+    private sealed record Context(LocalRequestReason Reason, DateTimeOffset? Created, DateTimeOffset? AdmissionExpiry, DateTimeOffset? CapabilityExpiry);
 
     // Advisory metadata preserves the original exception type and the existing guard/transaction behavior.
     public static T Mark<T>(T error, LocalRequestReason reason, DateTimeOffset? reviewCreatedUtc = null,
-        DateTimeOffset? admissionExpiresUtc = null) where T : Exception
+        DateTimeOffset? admissionExpiresUtc = null, DateTimeOffset? capabilityExpiresUtc = null) where T : Exception
     {
-        try { error.Data[ContextKey] = new Context(Valid(reason), reviewCreatedUtc, admissionExpiresUtc); }
+        try { error.Data[ContextKey] = new Context(Valid(reason), reviewCreatedUtc, admissionExpiresUtc, capabilityExpiresUtc); }
         catch (Exception failure) when (NonFatal(failure)) { /* Preserve original failure if metadata is unavailable. */ }
         return error;
     }
@@ -35,7 +35,7 @@ public static partial class LocalRequestDiagnostics
         DateTimeOffset? expiry = context?.Created is { } start && start <= DateTimeOffset.MaxValue.AddMinutes(-10) ? start.AddMinutes(10) : null;
         return new(reason, age, expiry, context?.AdmissionExpiry ?? admissionExpiry,
             reason is not (LocalRequestReason.Unexpected or LocalRequestReason.ValidationRejected or LocalRequestReason.Unknown)
-            && (reason != LocalRequestReason.ReviewExpired || expiry is not null));
+            && (reason != LocalRequestReason.ReviewExpired || expiry is not null), context?.CapabilityExpiry);
     }
 
     public static LocalRequestFailure Failure(ILogger? logger, Guid operation, LocalRequestStage stage, Exception error,
@@ -44,13 +44,22 @@ public static partial class LocalRequestDiagnostics
         var details = Describe(error, now, admissionExpiry);
         if (logger is not null) CloudScribeLog.Observe(() => FailureMessage(logger, 1, operation,
             Enum.IsDefined(stage) ? stage : LocalRequestStage.Unknown, details.Reason, details.ReviewAgeMilliseconds,
-            details.ReviewExpiresUtc, details.AdmissionExpiresUtc, details.EvidenceComplete));
+            details.ReviewExpiresUtc, details.AdmissionExpiresUtc, details.EvidenceComplete, details.CapabilityExpiresUtc));
         return details;
     }
 
     public static string UserMessage(LocalRequestFailure failure) => failure.Reason switch
     {
-        LocalRequestReason.CapabilityStale => "Google capability verification expired. Refresh the voice catalog for the existing account, preserve your selected voice, then review the request again. This action did not contact the audio synthesis service or renew spending permission.",
+        LocalRequestReason.CapabilityStale => "Google capability verification expired. Refresh the voice catalog for the existing account and preserve your selected voice. An existing reservation may require independently authorized revalidation before it can resume. Do not reserve again. This action did not renew spending permission.",
+        LocalRequestReason.ReservedRequestIneligible => "The existing reservation is not eligible for private observation. Inspect its saved outcome and admission expiry; do not reserve or send again automatically.",
+        LocalRequestReason.ReservedIdentityMalformed or LocalRequestReason.ReservedSourceChanged => "The selected article does not match the immutable reserved request. Preserve the reservation and inspect its identity before continuing.",
+        LocalRequestReason.ReservedEnvelopeChanged => "Current verification differs from the reserved request identity. A catalog refresh does not renew the reservation or spending authority. Preserve the hold; independently authorized revalidation is required before resuming.",
+        LocalRequestReason.ReservedRevisionChanged => "The compiled request revision differs from the immutable reservation although its payload and other envelope fields match. Preserve the hold; a fresh catalog does not authorize replacing this revision or reserving again.",
+        LocalRequestReason.CaptureCapabilityBindingChanged => "The selected voice is not bound to the current verified catalog snapshot. Refresh the selection while preserving your intended voice. An existing reservation still requires exact revalidation; this action grants no spending authority.",
+        LocalRequestReason.ReservedPayloadChanged => "Current compiled bytes differ from the reserved request. Private capture was not enabled. Preserve the reservation and inspect the saved source and request settings.",
+        LocalRequestReason.ResumeExpired => "The independently admitted resume scope or its catalog evidence expired. The existing reservation and all holds remain retained; no automatic renewal or request is allowed.",
+        LocalRequestReason.ResumePinMismatch or LocalRequestReason.ResumeBuildMismatch or LocalRequestReason.ResumeProfileMismatch or LocalRequestReason.ResumePolicyMalformed => "The exact independently reviewed resume pin, build or profile could not be verified. Inspect the safe admission diagnostic; preserve the held request. No authority was renewed.",
+        LocalRequestReason.ResumeHistoryChanged or LocalRequestReason.ResumeProviderChanged or LocalRequestReason.ResumeMappingChanged => "Retained history, current provider evidence or the admitted mapping changed. Inspect its safe diagnostic and saved status; no automatic retry, extra reservation or hold release is allowed.",
         LocalRequestReason.ReviewExpired => "The local request review expired after 10 minutes. Review the selected request again and acknowledge it. Admission expiry and earlier holds are unchanged; no audio request was sent.",
         LocalRequestReason.ReviewMissing => "This request review is no longer available. Prepare a fresh review; inspect any saved reservation before reserving again.",
         LocalRequestReason.ConfirmationMismatch => "The displayed request or acknowledgement changed. Review the exact request again; earlier holds remain retained.",
@@ -77,8 +86,8 @@ public static partial class LocalRequestDiagnostics
     };
     private static bool NonFatal(Exception error) => error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException;
 
-    [LoggerMessage(6300, LogLevel.Warning, "Local request failure schema {SchemaVersion}; operation {Operation}; stage {Stage}; reason {Reason}; review age ms {ReviewAgeMilliseconds} (-1 unknown); local review expires {ReviewExpiresUtc}; admission expires {AdmissionExpiresUtc}; evidence complete {EvidenceComplete}. No exception text/content retained; this event grants no retry or spending authority.")]
+    [LoggerMessage(6300, LogLevel.Warning, "Local request failure schema {SchemaVersion}; operation {Operation}; stage {Stage}; reason {Reason}; review age ms {ReviewAgeMilliseconds} (-1 unknown); local review expires {ReviewExpiresUtc}; admission expires {AdmissionExpiresUtc}; evidence complete {EvidenceComplete}; capability expires {CapabilityExpiresUtc}. No exception text/content retained; this event grants no retry or spending authority.")]
     private static partial void FailureMessage(ILogger logger, int schemaVersion, Guid operation, LocalRequestStage stage,
         LocalRequestReason reason, long reviewAgeMilliseconds, DateTimeOffset? reviewExpiresUtc,
-        DateTimeOffset? admissionExpiresUtc, bool evidenceComplete);
+        DateTimeOffset? admissionExpiresUtc, bool evidenceComplete, DateTimeOffset? capabilityExpiresUtc);
 }

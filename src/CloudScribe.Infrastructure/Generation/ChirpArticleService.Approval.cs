@@ -109,6 +109,7 @@ public sealed partial class ChirpArticleService
     private static async Task RequireExistingAsync(SqliteConnection connection, SqliteTransaction transaction, ChirpArticleAdmissionPolicy policy,
         ChirpRequestIntent intent, Guid id, CurrentFinancial financial, CancellationToken token)
     {
+        await RequireNoResumeMappingAsync(connection, transaction, id, token).ConfigureAwait(false);
         using var command = ChirpArticleSql.Command(connection, transaction,
             "SELECT PolicySha256,EnvelopeJson,Consumed,ApprovedFinancialSha256 FROM chirp_article_owned_attempts WHERE AuthorizationId=$id;", ("$id", id.ToString("N")));
         using var row = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
