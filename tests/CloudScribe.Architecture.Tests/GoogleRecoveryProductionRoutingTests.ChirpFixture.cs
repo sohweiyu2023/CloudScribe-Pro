@@ -45,6 +45,10 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
     private sealed class ChirpCompilation : IGoogleRecoveryCurrentCompilation
     {
         public string Capability { get; set; } = "synthetic-capability";
+        public int Revision { get; set; } = 42;
+        public string PayloadSuffix { get; set; } = string.Empty;
+        public string Pricing { get; set; } = "synthetic-pricing";
+        public bool FullRequestIdentity { get; set; }
         public TaskCompletionSource<bool>? Block { get; set; }
         public TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async Task<GoogleGenerationProductionPendingApprovalStateOwner.PendingState> CompileReadonlyAsync(
@@ -52,16 +56,17 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         {
             Entered.TrySetResult(true);
             if (Block is { } block) await block.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            var compiled = GoogleSpeechPlanCompiler.Compile(new SpeechPlan(s.LanguageCode, [new SpeechText(s.ExactText)], "synthetic-current"),
+            var compiled = GoogleSpeechPlanCompiler.Compile(new SpeechPlan(s.LanguageCode, [new SpeechText(s.ExactText + PayloadSuffix)], "synthetic-current"),
                 new(s.LanguageCode, s.VoiceStableId, "MP3", 5000));
-            var envelope = new GoogleGenerationSubmissionEnvelope(s.AccountStableId, "synthetic-credential", Capability, "synthetic-pricing", 42,
+            var envelope = new GoogleGenerationSubmissionEnvelope(s.AccountStableId, "synthetic-credential", Capability, Pricing, Revision,
                 s.VoiceStableId, "MP3", compiled.PayloadSha256, compiled.Payload.Length);
             var request = new CloudScribe.Providers.Abstractions.GenerationProviderRequest(GoogleGenerationProvider.StableProviderId,
-                GoogleGenerationProvider.SynthesizeOperationStableId, s.AccountStableId, "synthetic-preview-only", compiled.Payload, "MP3");
+                GoogleGenerationProvider.SynthesizeOperationStableId, s.AccountStableId,
+                FullRequestIdentity ? "studio-google-tts:" + ChirpResumeSelectionBinding.Hash(s) : "synthetic-preview-only", compiled.Payload, "MP3");
             var queue = new GoogleGenerationPersistedQueueState(request.AccountId, request.OperationStableId, request.IdempotencyKey, false, null);
             var trust = new GenerationCacheTrustContext(request.ProviderStableId, s.AccountStableId, s.ProjectStableId, "synthetic-endpoint", "global",
                 request.OperationStableId, "synthetic-model", s.VoiceStableId, s.VoiceFingerprint, "synthetic-plan", s.LanguageCode, "synthetic-controls", "MP3",
-                "synthetic-sample", "synthetic-adapter", "synthetic-compiler", "synthetic-ast", "synthetic-normalization", "synthetic-pricing", Capability,
+                "synthetic-sample", "synthetic-adapter", "synthetic-compiler", "synthetic-ast", "synthetic-normalization", Pricing, Capability,
                 "synthetic-governance", "synthetic-feature", "synthetic-account-capability");
             var snapshot = new GoogleGenerationUiExecutionSnapshot(new(s.AccountStableId, s.ProjectStableId, s.VoiceStableId, "synthetic-model", Capability, "MP3"),
                 true, true, true, true, request, trust, queue, queue, GoogleGenerationReconciliationResolutionEvidence.None, true, true, false, true);

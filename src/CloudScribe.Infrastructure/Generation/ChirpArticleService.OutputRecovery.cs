@@ -42,6 +42,8 @@ public sealed partial class ChirpArticleService
             || !string.Equals(Path.GetFullPath(audio.AudioPath), Path.Combine(MediaRoot, id + ".mp3"), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Output journal differs from the exact consumed segment and private output path.");
         ChirpArticleEvidenceResolver.RequireAcceptedQueue(audio, await RecoveryFinancialSnapshot.ReadAsync(connection, transaction, token).ConfigureAwait(false));
+        string? mapping = await RequireReservedDispatchAuditAsync(connection, transaction, authorization, envelope, attempt, token).ConfigureAwait(false);
+        if (!string.Equals(receipt.ExecutionMappingSha256, mapping, StringComparison.Ordinal)) throw ResumeRejected();
         return new(authorization, receipt);
     }
 

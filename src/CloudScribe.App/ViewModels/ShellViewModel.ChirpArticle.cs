@@ -52,7 +52,9 @@ public sealed partial class ShellViewModel
             PreparedGoogleGenerationSpendReview = new(review.Currency, review.Scale, review.EstimateMinorUnits,
                 review.PricingProvenanceId, review.VoiceName, review.PayloadSha256);
             PreparedGoogleGenerationSpendApproved = true; _currentChirpReview = null;
-            StatusMessage = "One internal article request reserved; all historical holds retained. Generate once only when separately authorized. No batch or retry was started.";
+            StatusMessage = review.IsCatalogRevalidation
+                ? "The SAME held request was revalidated against independently admitted current evidence; zero additional reservation. Capture and Generate remain separate explicit actions; no request was sent."
+                : "One internal article request reserved; all historical holds retained. Generate once only when separately authorized. No batch or retry was started.";
         }
         finally { ExitGoogleGenerationOperation(); }
     }

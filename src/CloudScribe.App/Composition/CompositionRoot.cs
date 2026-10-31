@@ -110,6 +110,8 @@ public static class CompositionRoot
         services.AddSingleton<IChirpArticleAdmissionStore>(serviceProvider => new InstalledChirpArticleAdmissionStore(AppContext.BaseDirectory,
             serviceProvider.GetRequiredService<AppPaths>(), serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<ChirpArticleService>();
+        services.AddSingleton<IChirpReservationResumeAdmissionStore>(provider => new InstalledChirpReservationResumeAdmissionStore(AppContext.BaseDirectory,
+            provider.GetRequiredService<AppPaths>(), provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILogger<InstalledChirpReservationResumeAdmissionStore>>()));
         services.AddSingleton<ChirpArticlePreparationService>();
         services.AddSingleton<ArticleAudioExportService>();
     }

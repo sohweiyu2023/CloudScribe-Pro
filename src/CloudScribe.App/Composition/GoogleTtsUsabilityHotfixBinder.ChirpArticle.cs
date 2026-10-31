@@ -44,6 +44,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             var refresh = NewButton("Refresh local coverage"); var prepare = NewButton("Review one selected internal request");
             var reserve = NewButton("Reserve displayed request only"); reserve.IsEnabled = false;
             var repair = NewButton("Recover saved local outputs (no provider call)");
+            var privateReview = NewButton("Prepare private catalog-resume review (no reservation)");
+            AutomationProperties.SetName(privateReview, "Prepare private review of the same held request; no authority, reservation or generation");
             var export = NewButton("Export complete article MP3"); export.IsEnabled = false;
             ChirpArticleProgress? progress = null;
             async Task RefreshAsync()
@@ -57,7 +59,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             }
             async Task RunAsync(LocalRequestStage stage, Func<Task> operation)
             {
-                choice.IsEnabled = prepare.IsEnabled = reserve.IsEnabled = refresh.IsEnabled = repair.IsEnabled = export.IsEnabled = false;
+                choice.IsEnabled = prepare.IsEnabled = reserve.IsEnabled = refresh.IsEnabled = repair.IsEnabled = privateReview.IsEnabled = export.IsEnabled = false;
                 try { await operation().ConfigureAwait(true); }
                 catch (OperationCanceledException error) when (lifetime.IsCancellationRequested)
                 { _ = ReportLocalFailure(stage, error, displayed); }
@@ -74,7 +76,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 {
                     if (!lifetime.IsCancellationRequested)
                     {
-                        choice.IsEnabled = prepare.IsEnabled = refresh.IsEnabled = repair.IsEnabled = true;
+                        choice.IsEnabled = prepare.IsEnabled = refresh.IsEnabled = repair.IsEnabled = privateReview.IsEnabled = true;
                         reserve.IsEnabled = displayed is not null && consent.IsChecked == true;
                         export.IsEnabled = progress?.Complete == true;
                     }
@@ -89,12 +91,18 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             consent.IsCheckedChanged += (_, _) => reserve.IsEnabled = displayed is not null && consent.IsChecked == true && active is not { IsCompleted: false };
             refresh.Click += (_, _) => Start(LocalRequestStage.CoverageRead, RefreshAsync);
             repair.Click += (_, _) => Start(LocalRequestStage.OutputRepair, async () => { int recovered = await chirpArticles.RecoverLocalOutputsAsync(lifetime.Token).ConfigureAwait(true); await RefreshAsync().ConfigureAwait(true); status.Text += $" Recovered {recovered} local receipts; no audio was regenerated."; });
+            privateReview.Click += (_, _) => Start(LocalRequestStage.RecoveryReview, () => progress is null || choice.SelectedIndex < 0
+                ? Task.CompletedTask : ExportReservedResumeDraftAsync(dialog, model, progress.Parts[choice.SelectedIndex].CoverageOrdinal, status, lifetime.Token));
             prepare.Click += (_, _) => Start(LocalRequestStage.Review, async () =>
             {
                 if (progress is null || choice.SelectedIndex < 0) return;
                 var part = progress.Parts[choice.SelectedIndex];
                 if (part.Reused || !part.CurrentlyAdmitted) { status.Text = "This coverage is already retained or has no current paid admission. No new request was prepared."; return; }
                 displayed = await model.PrepareChirpArticleAsync(part.CoverageOrdinal, lifetime.Token).ConfigureAwait(true);
+                reserve.Content = displayed.IsCatalogRevalidation ? "Revalidate SAME held request (no new reservation)" : "Reserve displayed request only";
+                ((TextBlock)consent.Content!).Text = displayed.IsCatalogRevalidation
+                    ? "Revalidate only the SAME existing reservation under the independently admitted scope, preserving every hold. Zero new reservation. This does not enable capture or start generation."
+                    : "Reserve only the displayed internal request and retain every historical hold. This does not start generation or authorize automatic retries.";
                 reviewText.Text = FormatChirpReview(displayed); consent.IsChecked = false;
             });
             reserve.Click += (_, _) => Start(LocalRequestStage.Reservation, async () =>
@@ -105,7 +113,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             });
             export.Click += (_, _) => Start(LocalRequestStage.Export, () => ExecuteArticleExportAsync(dialog, model, document, status, lifetime.Token));
             var close = CreateHistoricalCloseButton(dialog);
-            foreach (Control control in new Control[] { status, choice, refresh, prepare, reviewText, consent, reserve, repair, export, close }) body.Children.Add(control);
+            foreach (Control control in new Control[] { status, choice, refresh, prepare, reviewText, consent, reserve, privateReview, repair, export, close }) body.Children.Add(control);
             dialog.Closed += (_, _) => { lifetime.Cancel(); if (displayed is not null) chirpPreparation.Discard(displayed.PreviewId); };
             dialog.Content = new ScrollViewer { Content = body }; Start(LocalRequestStage.CoverageRead, RefreshAsync);
             await dialog.ShowDialog(owner).ConfigureAwait(true); if (active is not null) await active.ConfigureAwait(true);
@@ -119,6 +127,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         $"Internal request {review.CoverageOrdinal:D3}; {review.VoiceName}; {review.Currency} estimate {review.EstimateMinorUnits / 100m:F2}, maximum {review.MaximumMinorUnits / 100m:F2} before tax. "
         + $"Project already committed {review.ProjectCommittedMinorUnits / 100m:F2}; allocation remaining {review.AllocationRemainingMinorUnits / 100m:F2}. "
         + $"Payload {review.PayloadSha256}, {review.PayloadBytes} bytes. Admission expires {review.ExpiresAtUtc:O}. "
-        + (review.ExistingAuthorizationId is null ? "This reserves one new request only." : "This resumes the SAME reserved identity without another reservation.")
+        + (review.IsCatalogRevalidation ? "Catalog revalidation of the SAME existing authorization; ZERO additional reservation. Independently admitted expiry and exact mapping apply. "
+            : review.ExistingAuthorizationId is null ? "This reserves one new request only." : "This resumes the SAME reserved identity without another reservation.")
         + (review.FailedParentAuthorizationId is { } parent ? $" Diagnostic successor of failed attempt {parent:N}; its historical hold is retained. One new request maximum; no automatic retry." : string.Empty);
 }

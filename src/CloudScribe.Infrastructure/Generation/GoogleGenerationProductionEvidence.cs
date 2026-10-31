@@ -36,7 +36,8 @@ public sealed record GoogleGenerationProductionEvidence(
         if (account.EndpointOrigin is null)
             throw new InvalidOperationException("Current Google provider account has no admitted endpoint origin.");
         if (Capability.IsStale(nowUtc))
-            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Current Google capability evidence is stale."), LocalRequestReason.CapabilityStale);
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Current Google capability evidence is stale."), LocalRequestReason.CapabilityStale,
+                capabilityExpiresUtc: Capability.ExpiresAtUtc);
         if (Account.UpdatedAtUtc > capability.CapturedAtUtc)
         {
             throw new InvalidOperationException(

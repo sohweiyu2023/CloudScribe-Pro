@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
+using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -10,14 +11,14 @@ namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Explicit one-segment-at-a-time durable approval. No provider or credential dependency and no automatic retry/batch loop.</summary>
 public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbContext> factory,
-    IChirpArticleAdmissionStore admission, AppPaths paths, TimeProvider clock)
+    IChirpArticleAdmissionStore admission, AppPaths paths, TimeProvider clock, IChirpReservationResumeAdmissionStore? resumeAdmission = null)
 {
     public const string KeyPrefix = "chirp-article:";
     private readonly ConcurrentDictionary<Guid, Pending> _pending = new();
     private readonly ChirpArticleEvidenceResolver _evidence = new(paths);
     internal static string Key(string plan, int ordinal) => KeyPrefix + plan + ":" + ordinal.ToString(CultureInfo.InvariantCulture);
 
-    public void Discard(Guid previewId) => _pending.TryRemove(previewId, out _);
+    public void Discard(Guid previewId) { _pending.TryRemove(previewId, out _); _resumePending.TryRemove(previewId, out _); }
 
     public async Task<ChirpRequestReview> PrepareAsync(ChirpRequestIntent intent, CancellationToken cancellationToken = default)
     {
@@ -61,9 +62,11 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
     private async Task<ChirpArticleAdmissionPolicy> PolicyAsync(CancellationToken token)
     {
         var value = await admission.LoadVerifiedAsync(token).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("No current independently reviewed article-plan policy is admitted.");
+            ?? throw LocalRequestDiagnostics.Mark(new InvalidOperationException("No current independently reviewed article-plan policy is admitted."), LocalRequestReason.AdmissionChanged);
         var owned = ChirpPolicyFiles.Parse<ChirpArticleAdmissionPolicy>(JsonSerializer.SerializeToUtf8Bytes(value));
-        ChirpPolicyValidation.RequireValid(owned, clock.GetUtcNow());
+        try { ChirpPolicyValidation.RequireValid(owned, clock.GetUtcNow()); }
+        catch (InvalidDataException error)
+        { throw LocalRequestDiagnostics.Mark(error, LocalRequestReason.AdmissionChanged, admissionExpiresUtc: owned.ExpiresAtUtc); }
         return owned;
     }
 

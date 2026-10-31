@@ -6,6 +6,8 @@ param(
     [string]$ReviewedRecoveryPolicySha256,
     [string]$ReviewedChirpArticlePolicyPath,
     [string]$ReviewedChirpArticlePolicySha256,
+    [string]$ReviewedChirpResumePolicyPath,
+    [string]$ReviewedChirpResumePolicySha256,
     [switch]$ValidateOnly,
     [switch]$ValidatePackageOnly
 )
@@ -16,6 +18,10 @@ if([bool]$ReviewedRecoveryPolicyPath -ne [bool]$ReviewedRecoveryPolicySha256){th
 if($ValidatePackageOnly -and ($ReviewedChirpArticlePolicyPath -or $ReviewedChirpArticlePolicySha256)){throw 'A private article policy is not part of a clean package.'}
 if([bool]$ReviewedChirpArticlePolicyPath -ne [bool]$ReviewedChirpArticlePolicySha256){throw 'Article policy admission requires its separate reviewed file and independently approved SHA256.'}
 if($ReviewedRecoveryPolicyPath -and $ReviewedChirpArticlePolicyPath){throw 'Admit one paid recovery/article authority at a time; historical output import is a separate local operation.'}
+if($ValidatePackageOnly -and ($ReviewedChirpResumePolicyPath -or $ReviewedChirpResumePolicySha256)){throw 'A private reservation resume policy is not part of a clean package.'}
+if([bool]$ReviewedChirpResumePolicyPath -ne [bool]$ReviewedChirpResumePolicySha256){throw 'Resume admission requires its separately reviewed file and independently approved SHA256.'}
+if($ReviewedChirpResumePolicyPath -and ($ReviewedRecoveryPolicyPath -or $ReviewedChirpArticlePolicyPath)){throw 'Resume authority cannot be combined with a new-reservation authority.'}
+if($ReviewedChirpResumePolicyPath -and $MigrateProfileFrom){throw 'A retained reservation must stay in its reviewed existing profile; migration needs a separate reviewed transition.'}
 $package=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $PackageRoot).Path)
 if($package.Length -gt [IO.Path]::GetPathRoot($package).Length){$package=$package.TrimEnd([char[]]@('\','/'))}
 $packagePrefix=$package.TrimEnd([char[]]@('\','/'))+[IO.Path]::DirectorySeparatorChar
@@ -206,7 +212,7 @@ function Assert-ChirpSuccessorGrant($Root){
         throw 'Diagnostic successor cannot widen or change the selected article coverage.'
     }
 }
-function Assert-ChirpPolicy($Root){
+function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffset]::UtcNow){
     $fields=@{SchemaVersion='Int32';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';AccountId='String';ProjectId='String';Currency='String';Scale='Int32';ExpiresAtUtc='Date';SourceApprovalSha256='String';Budget='Object';ScopeRows='Array';PriorArticleAttemptRows='Array';Articles='Array';MaximumNewAttempts='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
     $legacy=@($Root.EnumerateObject().Name) -ccontains 'LegacyAssociations'
     if($legacy){$fields.LegacyAssociations='Array';$fields.LegacyAssociationRows='Array'}
@@ -218,7 +224,7 @@ function Assert-ChirpPolicy($Root){
     Assert-RecoveryRecord $Root $fields
     if($legacy){Assert-ChirpLegacyAssociations $Root}
     if($schema -notin @(1,2) -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
-        $Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le [DateTimeOffset]::UtcNow -or ($Root.GetProperty('MaximumNewAttempts').GetInt32() -lt 1 -or $Root.GetProperty('MaximumNewAttempts').GetInt32() -gt 10000) -or
+        $Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le $ValidationTime -or ($Root.GetProperty('MaximumNewAttempts').GetInt32() -lt 1 -or $Root.GetProperty('MaximumNewAttempts').GetInt32() -gt 10000) -or
         $Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -lt 1){throw 'Article grant identity, expiry or limits are invalid.'}
     if([string]::IsNullOrWhiteSpace($Root.GetProperty('AccountId').GetString()) -or [string]::IsNullOrWhiteSpace($Root.GetProperty('ProjectId').GetString())){throw 'Article account/project is missing.'}
     Assert-ChirpPolicyHashes $Root
@@ -339,6 +345,63 @@ function Get-ReviewedChirpPolicy([string]$Profile){
     }finally{$json.Dispose()}
     return [pscustomobject]@{Bytes=$bytes;Sha256=$sha}
 }
+function Assert-ChirpResumePolicy($Root){
+    $fields=@{SchemaVersion='Int32';MappingId='NonemptyGuid';AppSha256='String';InfrastructureSha256='String';ProfileRootSha256='String';SourceApprovalSha256='String';ExpiresAtUtc='Date';HistoricalPolicy='Object';AuthorizationId='NonemptyGuid';OriginalAttemptRowSha256='String';CleanQueueRowSha256='String';FinancialSha256='String';OriginalApprovedAtUtc='Date';OriginalEnvelope='Object';ExecutionEnvelope='Object';CatalogSnapshotId='NonemptyGuid';CatalogExpiresAtUtc='Date';ProviderEvidenceSha256='String';SelectionSha256='String';RuntimeEvidenceSha256='String';RequestIdentitySha256='String';MaximumExistingDispatches='Int32';MaximumNewReservations='Int32';MaximumAdditionalReservationMinorUnits='Int64'}
+    if(@($Root.EnumerateObject().Name) -ccontains 'PriorMappingSha256'){$fields.PriorMappingSha256='String'}
+    Assert-RecoveryRecord $Root $fields
+    $now=[DateTimeOffset]::UtcNow;$expiry=$Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset();$catalogExpiry=$Root.GetProperty('CatalogExpiresAtUtc').GetDateTimeOffset();$approved=$Root.GetProperty('OriginalApprovedAtUtc').GetDateTimeOffset()
+    if($Root.GetProperty('SchemaVersion').GetInt32() -ne 1 -or $expiry -le $now -or $catalogExpiry -le $now -or $expiry -gt $catalogExpiry -or $approved -gt $now -or
+        $expiry.Offset -ne [TimeSpan]::Zero -or $catalogExpiry.Offset -ne [TimeSpan]::Zero -or $approved.Offset -ne [TimeSpan]::Zero -or
+        $Root.GetProperty('MaximumExistingDispatches').GetInt32() -ne 1 -or $Root.GetProperty('MaximumNewReservations').GetInt32() -ne 0 -or $Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -ne 0){throw 'Resume authority must allow one existing dispatch, zero new reservations, and a fresh bounded expiry.'}
+    Assert-ChirpPolicyHashes $Root
+    foreach($property in $Root.EnumerateObject()){
+        if($property.Name.EndsWith('Sha256',[StringComparison]::Ordinal) -and $property.Value.GetString() -cnotmatch '^[a-f0-9]{64}$'){throw 'Resume hashes must use canonical lowercase SHA256.'}
+    }
+    $history=$Root.GetProperty('HistoricalPolicy')
+    # Historical shape is checked at the explicitly pinned original reservation time, never admitted as current paid authority.
+    Assert-ChirpPolicy $history $approved
+    if($history.GetProperty('ProfileRootSha256').GetString() -cne $Root.GetProperty('ProfileRootSha256').GetString() -or $history.GetProperty('SourceApprovalSha256').GetString() -ceq $Root.GetProperty('SourceApprovalSha256').GetString()){throw 'Resume requires the same profile and distinct fresh source approval.'}
+    $fields=@{AccountId='String';CredentialReferenceId='String';CapabilityProvenanceId='String';PricingProvenanceId='String';RequestRevision='Int32';VoiceName='String';AudioEncoding='String';CompiledPayloadSha256='String';CompiledPayloadBytes='Int32';RecoveryAuthorizationId='Any';ChirpAuthorizationId='NonemptyGuid'}
+    $original=$Root.GetProperty('OriginalEnvelope');$execution=$Root.GetProperty('ExecutionEnvelope')
+    foreach($envelope in @($original,$execution)){
+        Assert-RecoveryRecord $envelope $fields
+        if($envelope.GetProperty('RecoveryAuthorizationId').ValueKind -ne [Text.Json.JsonValueKind]::Null -or $envelope.GetProperty('ChirpAuthorizationId').GetGuid() -ne $Root.GetProperty('AuthorizationId').GetGuid() -or
+            $envelope.GetProperty('RequestRevision').GetInt32() -lt 0 -or $envelope.GetProperty('AudioEncoding').GetString() -cne 'MP3' -or $envelope.GetProperty('CompiledPayloadSha256').GetString() -cnotmatch '^[a-f0-9]{64}$' -or
+            $envelope.GetProperty('CompiledPayloadBytes').GetInt32() -lt 1 -or $envelope.GetProperty('CompiledPayloadBytes').GetInt32() -gt 5000){throw 'Resume envelope identity or payload is invalid.'}
+    }
+    foreach($name in $fields.Keys | Where-Object {$_ -ne 'RequestRevision'}){
+        if($original.GetProperty($name).GetRawText() -cne $execution.GetProperty($name).GetRawText()){throw 'Resume may only change the explicitly reviewed catalog-derived request revision.'}
+    }
+    if($original.GetProperty('AccountId').GetString() -cne $history.GetProperty('AccountId').GetString()){throw 'Resume account differs from retained article history.'}
+    $matches=@($history.GetProperty('Articles').EnumerateArray() | Where-Object {
+        $article=$_;$plan=$article.GetProperty('Proposal')
+        $plan.GetProperty('VoiceName').GetString() -ceq $original.GetProperty('VoiceName').GetString() -and @($plan.GetProperty('Parts').EnumerateArray() | Where-Object {
+            $part=$_;$ordinal=$part.GetProperty('CoverageOrdinal').GetInt32()
+            $part.GetProperty('PayloadSha256').GetString() -ceq $original.GetProperty('CompiledPayloadSha256').GetString() -and
+                $part.GetProperty('PayloadBytes').GetInt32() -eq $original.GetProperty('CompiledPayloadBytes').GetInt32() -and
+                @($article.GetProperty('AllowedSegments').EnumerateArray() | Where-Object {$_.GetProperty('CoverageOrdinal').GetInt32() -eq $ordinal}).Count -eq 1
+        }).Count -gt 0
+    })
+    if($matches.Count -eq 0){throw 'Retained voice/payload is outside the original exact article allowance.'}
+}
+function Get-ReviewedChirpResumePolicy([string]$Profile){
+    if(-not $ReviewedChirpResumePolicyPath){return $null}
+    if(-not $Profile -or $ReviewedChirpResumePolicySha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'Resume policy requires an inspected profile and independently approved hash.'}
+    $path=(Resolve-Path -LiteralPath $ReviewedChirpResumePolicyPath).Path;Assert-NoLinks $path
+    if((Get-Item -LiteralPath $path).Length -gt 8MB){throw 'Resume policy exceeds its review bound.'}
+    $bytes=[IO.File]::ReadAllBytes($path);$sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    if($sha -ne $ReviewedChirpResumePolicySha256){throw 'Resume policy differs from the independently approved bytes.'}
+    $options=[Text.Json.JsonDocumentOptions]::new();$options.MaxDepth=24;$json=[Text.Json.JsonDocument]::Parse([ReadOnlyMemory[byte]]::new($bytes),$options)
+    try{
+        Assert-UniqueRecoveryJson $json.RootElement;Assert-ChirpResumePolicy $json.RootElement;$root=$json.RootElement
+        if($root.GetProperty('AppSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash -or
+            $root.GetProperty('InfrastructureSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash){throw 'Resume policy belongs to another exact build.'}
+        $canonical=[IO.Path]::GetFullPath($Profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()
+        $profileSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical)))
+        if($root.GetProperty('ProfileRootSha256').GetString() -ne $profileSha){throw 'Resume policy belongs to another profile.'}
+    }finally{$json.Dispose()}
+    return [pscustomobject]@{Bytes=$bytes;Sha256=$sha}
+}
 function Get-AllowedNoticeFiles {
     $inventoryPath=Join-Path $package 'licenses/third-party/components.json'
     # Refresh this pin only alongside the reviewed source inventory and its fixture tests.
@@ -428,7 +491,8 @@ if($MigrateProfileFrom){
 }
 $reviewedRecovery=Get-ReviewedRecoveryPolicy $profile
 $reviewedChirp=Get-ReviewedChirpPolicy $profile
-if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery;ReviewedChirpArticlePolicy=[bool]$reviewedChirp};return}
+$reviewedResume=Get-ReviewedChirpResumePolicy $profile
+if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery;ReviewedChirpArticlePolicy=[bool]$reviewedChirp;ReviewedChirpResumePolicy=[bool]$reviewedResume};return}
 if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close every CloudScribe window normally before installing/updating. No process will be killed.'}
 [IO.Directory]::CreateDirectory($programs) | Out-Null
 $suffix=[Guid]::NewGuid().ToString('N')
@@ -459,6 +523,10 @@ if($reviewedRecovery){
 if($reviewedChirp){
     [IO.File]::WriteAllBytes((Join-Path $stage 'chirp-article-admission-policy.json'),$reviewedChirp.Bytes)
     $installMarker.ChirpArticlePolicySha256=$reviewedChirp.Sha256
+}
+if($reviewedResume){
+    [IO.File]::WriteAllBytes((Join-Path $stage 'chirp-reservation-resume-admission.json'),$reviewedResume.Bytes)
+    $installMarker.ChirpReservationResumePolicySha256=$reviewedResume.Sha256
 }
 # An ordinary update does not copy or silently re-admit any previous private recovery authority.
 $installMarker | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'cloudscribe-install.json') -Encoding utf8
