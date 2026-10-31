@@ -99,7 +99,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 var part = progress.Parts[choice.SelectedIndex];
                 if (part.Reused || !part.CurrentlyAdmitted) { status.Text = "This coverage is already retained or has no current paid admission. No new request was prepared."; return; }
                 displayed = await model.PrepareChirpArticleAsync(part.CoverageOrdinal, lifetime.Token).ConfigureAwait(true);
-                reserve.Content = displayed.IsCatalogRevalidation ? "Revalidate SAME held request (no new reservation)" : "Reserve displayed request only";
+                string approvalActionLabel = displayed.IsCatalogRevalidation ? "Revalidate SAME held request (no new reservation)" : "Reserve displayed request only";
+                reserve.Content = approvalActionLabel;
+                AutomationProperties.SetName(reserve, approvalActionLabel);
                 ((TextBlock)consent.Content!).Text = displayed.IsCatalogRevalidation
                     ? "Revalidate only the SAME existing reservation under the independently admitted scope, preserving every hold. Zero new reservation. This does not enable capture or start generation."
                     : "Reserve only the displayed internal request and retain every historical hold. This does not start generation or authorize automatic retries.";
