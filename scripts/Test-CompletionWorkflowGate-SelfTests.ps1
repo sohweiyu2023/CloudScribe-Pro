@@ -112,4 +112,28 @@ $status=Invoke-CompletionGate $installedGate 'status' ([Guid]::Empty) '' $null (
 if($status.refreshes -ne 1 -or $status.resumeAdmissions -ne 0 -or $status.completionAdmissions -ne 0 -or $status.pendingId -or $status.scopeSha256 -cne $build.scopeSha256 -or [DateTimeOffset]$status.deadlineUtc -ne $gate.DeadlineUtc){throw 'Build succession reset counts, identity or deadline.'};$passed++
 Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')} # completed handoff cannot replay
 
+# A separately reviewed helper repair preserves the completed build and every
+# original counter. It changes source pins only, never the scope or binaries.
+$helperRoot=Join-Path $fixtureParent ([Guid]::NewGuid().ToString('N'))
+$helperMetadata=& $PythonPath -I -S $buildScript $helperRoot --helper-source
+if($LASTEXITCODE -ne 0){throw 'Synthetic helper handoff setup failed.'}
+$helper=$helperMetadata|ConvertFrom-Json
+Bind-GateFixture $helper
+$identity=Get-Content -LiteralPath (Join-Path $target 'cloudscribe-install.json') -Raw|ConvertFrom-Json
+$ReviewedCompletionBuildTransitionPath=$helper.transitionPath
+$ReviewedCompletionBuildTransitionSha256=$helper.transitionSha256
+$gate=Get-ReviewedCompletionGate $profile;$passed++
+$operation=[Guid]$helper.transitionId;$operationIdentity=$helper.transitionSha256
+$null=Invoke-CompletionGate $gate 'claim-build' $operation $operationIdentity $null (Join-Path $package 'app');$passed++
+$null=Invoke-CompletionGate $gate 'check-build' $operation $operationIdentity $null (Join-Path $package 'app');$passed++
+Expect-Rejected {Get-ReviewedCompletionGate $profile}
+Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')} # old helper pin is not completion evidence
+[IO.File]::WriteAllBytes((Join-Path $target 'completion-workflow-gate.json'),$gate.Bytes)
+@{Product='CloudScribe Pro';Version=1;Profile=$profile;AppSha256=$gate.Config.AppSha256.ToUpperInvariant();CompletionGateProtocolVersion=1;CompletionWorkflowGateSha256=$gate.Sha256}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $target 'cloudscribe-install.json')
+Complete-CompletionBuildInstall $gate (Join-Path $target 'app');$passed++
+$installedGate=[pscustomobject]@{Path=(Join-Path $target 'completion-workflow-gate.json');Sha256=$gate.Sha256;Config=$gate.Config}
+$status=Invoke-CompletionGate $installedGate 'status' ([Guid]::Empty) '' $null (Join-Path $target 'app')
+if($status.refreshes -ne 1 -or $status.resumeAdmissions -ne 0 -or $status.completionAdmissions -ne 0 -or $status.buildTransitions -ne 1 -or $status.helperSourceRepairs -ne 1 -or $status.pendingId -or $status.scopeSha256 -cne $helper.scopeSha256 -or [DateTimeOffset]$status.deadlineUtc -ne $gate.DeadlineUtc){throw 'Helper succession changed the build count, scope, funds or deadline.'};$passed++
+Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
+
 [pscustomobject]@{Passed=$passed;ProviderCalls=0;CredentialOperations=0;RealInstalls=0;FixtureParent=$fixtureParent}
