@@ -1,5 +1,5 @@
-using Microsoft.Data.Sqlite;
 using CloudScribe.Application.Generation;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace CloudScribe.Infrastructure.Generation;

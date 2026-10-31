@@ -1,6 +1,6 @@
-using CloudScribe.Application.Logging;
 using System.Text;
 using System.Text.Json;
+using CloudScribe.Application.Logging;
 using Microsoft.Data.Sqlite;
 
 namespace CloudScribe.Infrastructure.Generation;

@@ -1,6 +1,6 @@
 using System.Text.Json;
-using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Application.Logging;
+using CloudScribe.Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;

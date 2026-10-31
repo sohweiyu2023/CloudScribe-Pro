@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using CloudScribe.App.ViewModels;
-using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Logging;
+using CloudScribe.Application.Pricing;
 using CloudScribe.Application.Security;
 using CloudScribe.Domain.Pricing;
 using CloudScribe.Infrastructure.Generation;
