@@ -536,7 +536,7 @@ function Get-ReviewedChirpResumePolicy([string]$Profile){
     if(-not $Profile -or $ReviewedChirpResumePolicySha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'Resume policy requires an inspected profile and independently approved hash.'}
     $path=(Resolve-Path -LiteralPath $ReviewedChirpResumePolicyPath).Path;Assert-NoLinks $path
     if((Get-Item -LiteralPath $path).Length -gt 8MB){throw 'Resume policy exceeds its review bound.'}
-    $bytes=[IO.File]::ReadAllBytes($path);$sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    $bytes=[IO.File]::ReadAllBytes($path);$sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
     if($sha -ne $ReviewedChirpResumePolicySha256){throw 'Resume policy differs from the independently approved bytes.'}
     $options=[Text.Json.JsonDocumentOptions]::new();$options.MaxDepth=24;$json=[Text.Json.JsonDocument]::Parse([ReadOnlyMemory[byte]]::new($bytes),$options)
     try{
