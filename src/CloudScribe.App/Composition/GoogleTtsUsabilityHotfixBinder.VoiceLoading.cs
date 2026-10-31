@@ -11,6 +11,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     {
         if (model.IsConnectedVoiceCatalogLoading) return false;
         model.IsConnectedVoiceCatalogLoading = true;
+        model.InvalidateVoiceLanguageCatalog();
         model.ConnectedVoiceCatalogStatus = "Loading voices from your saved Google connection. This does not generate speech. You can close this window to stop waiting.";
         model.SelectedVoiceLabVoice = null;
         model.VoiceLabCatalogResults.Clear();
@@ -19,7 +20,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         try
         {
             GoogleCatalogRefreshDiagnostics.Phase(catalogLogger, refreshId, phase);
-            await _bootstrapService.RefreshConfiguredAsync(refreshId, token).ConfigureAwait(true);
+            var observed = await _bootstrapService.RefreshConfiguredAsync(refreshId, token).ConfigureAwait(true);
             phase = GoogleCatalogRefreshPhase.UiQuery;
             GoogleCatalogRefreshDiagnostics.Phase(catalogLogger, refreshId, phase);
             await model.RefreshVoiceCatalogForUiAsync(refreshId, token).ConfigureAwait(true);
@@ -29,8 +30,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 model.ConnectedVoiceCatalogStatus = model.StatusMessage;
                 return false;
             }
+            model.SetVoiceLanguageCatalog(observed.Voices.SelectMany(voice => voice.LanguageCodes), observed.ExpiresAtUtc, observed.CatalogProvenanceId);
+            if (!model.HasCurrentVoiceLanguageCatalog)
+            {
+                model.StatusMessage = model.ConnectedVoiceCatalogStatus;
+                return false;
+            }
             model.ConnectedVoiceCatalogStatus = model.VoiceLabCatalogResults.Count == 0
-                ? "No voices match these filters. Check the language code (for example en-US), or use Clear voice search and reload."
+                ? "No verified voices match the selected language and search. Choose a language from the list or clear the voice search, then refresh."
                 : $"{model.VoiceLabCatalogResults.Count} verified voices loaded. Choose a voice below. No speech was generated.";
             return true;
         }

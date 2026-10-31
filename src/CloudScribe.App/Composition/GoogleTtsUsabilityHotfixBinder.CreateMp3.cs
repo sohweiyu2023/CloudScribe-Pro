@@ -65,6 +65,16 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         AutomationProperties.SetName(connection, "Google connection status");
         body.Children.Add(connection);
         await LoadConnectionStatusAsync(connection).ConfigureAwait(true);
+        Observe(body, model, (_, args) =>
+        {
+            if (args.PropertyName is nameof(ShellViewModel.ConnectedVoiceCatalogStatus) or nameof(ShellViewModel.IsConnectedVoiceCatalogLoading)
+                or nameof(ShellViewModel.HasCurrentVoiceLanguageCatalog))
+                connection.Text = model.IsConnectedVoiceCatalogLoading
+                    ? "Checking the saved Google connection. No speech is generated."
+                    : (model.HasCurrentVoiceLanguageCatalog && model.VoiceLabCatalogLastRefreshSucceeded
+                        ? "Google connection verified for the current catalog. "
+                        : "Saved connection metadata is not proof of current access. ") + model.ConnectedVoiceCatalogStatus;
+        }, dialog);
         TextBlock document = Text(string.Empty);
         body.Children.Add(document);
         void UpdateDocument() => document.Text = string.IsNullOrWhiteSpace(model.DocumentText)
@@ -111,8 +121,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.PreferredVoiceName), StringComparison.Ordinal))
                 remembered.Text = "Remembered voice: " + (model.PreferredVoiceName ?? "none chosen") + ". Loading checks that this voice is still available.";
         }
-        StackPanel filters = AddSection(body, "Language and voice filters", expanded: false);
-        AddField(filters, "Language", locale);
+        AddLanguagePicker(body, model, locale, dialog);
+        StackPanel filters = AddSection(body, "Voice search (optional)", expanded: false);
+
         AddField(filters, "Search voices", search);
         reloadVoices = AddRefreshControl(body, model, locale, search, dialog, autoLoad: true);
         AddVoiceSelector(body, model, dialog);
@@ -214,16 +225,16 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
         Button close = NewButton("Close Create MP3");
         close.Click += (_, _) => dialog.Close();
+        body.Children.Add(nextStep);
+        body.Children.Add(estimate);
+        body.Children.Add(consent);
+        body.Children.Add(create);
+        AddStopWaitingControl(body, model, dialog);
+        body.Children.Add(status);
         Grid layout = new() { RowDefinitions = new RowDefinitions("*,Auto") };
         ScrollViewer bodyScroll = new() { Content = body };
         layout.Children.Add(bodyScroll);
         StackPanel footer = new() { Spacing = 10, Margin = new Thickness(20, 8, 20, 16) };
-        footer.Children.Add(nextStep);
-        footer.Children.Add(estimate);
-        footer.Children.Add(consent);
-        footer.Children.Add(create);
-        AddStopWaitingControl(footer, model, dialog);
-        footer.Children.Add(status);
         footer.Children.Add(close);
         Grid.SetRow(footer, 1);
         layout.Children.Add(footer);

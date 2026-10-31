@@ -108,6 +108,7 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Voice Lab catalog UI state capture is not configured.");
 
             cancellationToken.ThrowIfCancellationRequested();
+            int filterVersion = Volatile.Read(ref _voiceCatalogFilterVersion);
             var state = await capture(cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Voice Lab catalog UI state is unavailable.");
             var results = await catalog.QueryAsync(
@@ -118,12 +119,9 @@ public sealed partial class ShellViewModel
                 cancellationToken).ConfigureAwait(true);
 
             cancellationToken.ThrowIfCancellationRequested();
-            VoiceLabCatalogResults.Clear();
-            foreach (var selection in results)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                VoiceLabCatalogResults.Add(selection);
-            }
+            if (RejectChangedVoiceCatalogFilter(filterVersion)) return;
+            PublishVoiceCatalogResults(results, cancellationToken);
+            if (RejectChangedVoiceCatalogFilter(filterVersion)) return;
 
             cancellationToken.ThrowIfCancellationRequested();
             SelectedVoiceLabVoice = previousSelection is null ? null :
@@ -147,6 +145,25 @@ public sealed partial class ShellViewModel
             OnPropertyChanged(nameof(CanRefreshVoiceLabCatalog));
             RefreshVoiceLabCatalogCommand.NotifyCanExecuteChanged();
             RefreshVoiceLabRouteAction();
+        }
+    }
+
+    private bool RejectChangedVoiceCatalogFilter(int version)
+    {
+        if (version == Volatile.Read(ref _voiceCatalogFilterVersion)) return false;
+        SelectedVoiceLabVoice = null;
+        VoiceLabCatalogResults.Clear();
+        StatusMessage = "Language or voice search changed while loading. Refresh voices for the current selection.";
+        return true;
+    }
+
+    private void PublishVoiceCatalogResults(IReadOnlyList<VoiceLabCatalogSelection> results, CancellationToken token)
+    {
+        VoiceLabCatalogResults.Clear();
+        foreach (var selection in results)
+        {
+            token.ThrowIfCancellationRequested();
+            VoiceLabCatalogResults.Add(selection);
         }
     }
 

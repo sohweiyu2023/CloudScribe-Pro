@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.IO.Compression;
 using System.Text.Json;
 using CloudScribe.Application.Diagnostics;
@@ -10,13 +9,13 @@ using Microsoft.Extensions.Options;
 
 namespace CloudScribe.Infrastructure.Diagnostics;
 
-public sealed class SupportBundleService(
+public sealed partial class SupportBundleService(
     AppPaths paths,
     IOptions<CloudScribeOptions> options,
     TimeProvider timeProvider,
     ILogger<SupportBundleService> logger) : ISupportBundleService
 {
-    private const string Disclosure = "Only bounded redacted diagnostic JSONL files, bounded redacted bootstrap text logs and a generated environment manifest are included. Documents, audio, databases, credentials and provider payloads are excluded.";
+    private const string Disclosure = "Only regenerated allowlisted diagnostic metadata and a generated environment manifest are included. Legacy, malformed and unknown free-form messages and exception text are omitted; original local records are unchanged and may remain private. Source sizes are capture bounds; sanitized output can differ. Documents, audio, databases, credentials, private provider captures and payloads are excluded.";
     private const string ManifestRelativePath = "support-bundle-manifest.json";
     private static readonly string[] ExcludedCategories =
     [
@@ -56,7 +55,7 @@ public sealed class SupportBundleService(
             await WriteBundleAsync(stagingPath, sourceFiles, manifestBytes, cap, cancellationToken).ConfigureAwait(false);
             EnsureCompressedBundleFitsCap(stagingPath, cap);
             File.Move(stagingPath, finalPath, overwrite: false);
-            CloudScribeLog.SupportBundleCreated(logger);
+            CloudScribeLog.Observe(() => CloudScribeLog.SupportBundleCreated(logger));
             return finalPath;
         }
         catch
@@ -85,10 +84,11 @@ public sealed class SupportBundleService(
             using (CappedWriteStream boundedOutput = new(output, cap))
             using (ZipArchive archive = new(boundedOutput, ZipArchiveMode.Create, leaveOpen: true))
             {
-                foreach (SupportBundleFile file in sourceFiles)
+                var metadataBudget = new SafeExportBudget(cap - manifestBytes.LongLength);
+                for (int index = 0; index < sourceFiles.Length; index++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await AddCapturedFileAsync(archive, file, cancellationToken).ConfigureAwait(false);
+                    await AddCapturedFileAsync(archive, sourceFiles[index], ExportPath(index), metadataBudget, cancellationToken).ConfigureAwait(false);
                 }
 
                 ZipArchiveEntry manifest = archive.CreateEntry(ManifestRelativePath, CompressionLevel.Optimal);
@@ -149,6 +149,8 @@ public sealed class SupportBundleService(
     private async Task AddCapturedFileAsync(
         ZipArchive archive,
         SupportBundleFile file,
+        string exportPath,
+        SafeExportBudget budget,
         CancellationToken cancellationToken)
     {
         EnsureDiagnosticsDirectoryIsPhysical();
@@ -184,7 +186,7 @@ public sealed class SupportBundleService(
             throw new InvalidOperationException("Support bundles do not follow symbolic links or reparse points.");
         }
 
-        ZipArchiveEntry entry = archive.CreateEntry(file.RelativePath, CompressionLevel.Optimal);
+        ZipArchiveEntry entry = archive.CreateEntry(exportPath, CompressionLevel.Optimal);
         using Stream destination = entry.Open();
         using FileStream source = new(
             fullSourcePath,
@@ -193,36 +195,7 @@ public sealed class SupportBundleService(
             FileShare.ReadWrite | FileShare.Delete,
             bufferSize: 81920,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        await CopyExactlyAsync(source, destination, file.SizeBytes, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static async Task CopyExactlyAsync(
-        Stream source,
-        Stream destination,
-        long byteCount,
-        CancellationToken cancellationToken)
-    {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(81920);
-        try
-        {
-            long remaining = byteCount;
-            while (remaining > 0)
-            {
-                int requested = (int)Math.Min(buffer.Length, remaining);
-                int read = await source.ReadAsync(buffer.AsMemory(0, requested), cancellationToken).ConfigureAwait(false);
-                if (read == 0)
-                {
-                    throw new EndOfStreamException("A diagnostic file changed before its captured bytes could be copied.");
-                }
-
-                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                remaining -= read;
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
-        }
+        await SanitizeCapturedAsync(source, destination, file.SizeBytes, budget, cancellationToken).ConfigureAwait(false);
     }
 
     private static SupportBundlePreview BuildPreview(SupportBundleFile[] sourceFiles, long manifestSizeBytes)
@@ -231,7 +204,7 @@ public sealed class SupportBundleService(
             ManifestRelativePath,
             manifestSizeBytes,
             "generated-redacted-environment-manifest");
-        SupportBundleFile[] previewFiles = [.. sourceFiles, manifestFile];
+        SupportBundleFile[] previewFiles = [.. ExportFiles(sourceFiles), manifestFile];
         long total = previewFiles.Sum(static file => file.SizeBytes);
         return new SupportBundlePreview(
             previewFiles,
@@ -248,9 +221,15 @@ public sealed class SupportBundleService(
             product = "CloudScribe Pro",
             createdAtUtc,
             disclosure = Disclosure,
-            files = sourceFiles,
+            files = ExportFiles(sourceFiles),
             exclusions = ExcludedCategories,
         });
+
+    private static string ExportPath(int index) => FormattableString.Invariant($"logs/diagnostic-{index + 1:D4}.jsonl");
+
+    private static SupportBundleFile[] ExportFiles(SupportBundleFile[] sourceFiles) => sourceFiles
+        .Select((file, index) => new SupportBundleFile(ExportPath(index), file.SizeBytes, "sanitized-diagnostic-metadata"))
+        .ToArray();
 
 
     private void EnsureDiagnosticsDirectoryIsPhysical()

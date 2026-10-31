@@ -19,7 +19,8 @@ public sealed class NativeUiDiagnosticLogTests
         string result = Format(operation, phase, error);
         Assert.Contains($"operation={operation}", result, StringComparison.Ordinal);
         Assert.Contains($"phase={phase}", result, StringComparison.Ordinal);
-        Assert.Contains("exceptionType=System.InvalidOperationException", result, StringComparison.Ordinal);
+        Assert.Contains("exceptionCategory=Validation", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("InvalidOperationException", result, StringComparison.Ordinal);
         Assert.DoesNotContain(secret, result, StringComparison.Ordinal);
         Assert.DoesNotContain("Users", result, StringComparison.Ordinal);
         Assert.DoesNotContain("document.txt", result, StringComparison.Ordinal);
@@ -31,7 +32,7 @@ public sealed class NativeUiDiagnosticLogTests
         string result = Format("999", "999", null);
         Assert.Contains("operation=Unknown; phase=Unknown", result, StringComparison.Ordinal);
         Assert.DoesNotContain("999", result, StringComparison.Ordinal);
-        Assert.Contains("exceptionType=none; hresult=0", result, StringComparison.Ordinal);
+        Assert.Contains("exceptionCategory=none; hresult=0", result, StringComparison.Ordinal);
     }
 
     private static string Format(string operation, string phase, Exception? error)

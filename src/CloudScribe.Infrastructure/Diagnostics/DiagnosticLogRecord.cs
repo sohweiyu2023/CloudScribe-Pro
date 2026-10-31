@@ -15,4 +15,12 @@ internal sealed record DiagnosticLogRecord(
     string? ExceptionType,
     string? ExceptionDetail,
     string? TraceId,
-    string? SpanId);
+    string? SpanId)
+{
+    public int SchemaVersion { get; init; } = 2;
+    public string ExceptionDetailFormat { get; init; } = "safe-exception-summary-v1";
+    public IReadOnlyDictionary<string, string?> SafeFields { get; init; } = new Dictionary<string, string?>(StringComparer.Ordinal);
+    public bool FieldsComplete { get; init; }
+    public string RuntimeVersion { get; init; } = Environment.Version.ToString();
+    public Guid ModuleId { get; init; } = typeof(DiagnosticLogRecord).Module.ModuleVersionId;
+}

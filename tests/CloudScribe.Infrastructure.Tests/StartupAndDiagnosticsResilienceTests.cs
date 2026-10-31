@@ -252,8 +252,12 @@ public sealed class StartupAndDiagnosticsResilienceTests
             Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("SessionId").GetString()));
             Assert.Equal(Environment.ProcessId, root.GetProperty("ProcessId").GetInt32());
             Assert.True(root.GetProperty("ManagedThreadId").GetInt32() > 0);
-            Assert.Equal("System.InvalidOperationException", root.GetProperty("ExceptionType").GetString());
-            Assert.Contains("api_key=[REDACTED]", root.GetProperty("ExceptionDetail").GetString(), StringComparison.Ordinal);
+            Assert.Equal("Validation", root.GetProperty("ExceptionType").GetString());
+            Assert.Equal(2, root.GetProperty("SchemaVersion").GetInt32());
+            Assert.DoesNotContain("super-secret", line, StringComparison.Ordinal);
+            Assert.DoesNotContain("api_key", root.GetProperty("ExceptionDetail").GetString(), StringComparison.Ordinal);
+            using JsonDocument summary = JsonDocument.Parse(root.GetProperty("ExceptionDetail").GetString()!);
+            Assert.Equal(1, summary.RootElement.GetProperty("SchemaVersion").GetInt32());
             Assert.True(File.Exists(Path.Combine(logDirectory, "LATEST-LOG.txt")));
         }
         finally

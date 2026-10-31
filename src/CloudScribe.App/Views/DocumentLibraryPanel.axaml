@@ -28,12 +28,17 @@
           AutomationProperties.Name="Search local document library" />
 
       <Border Grid.Row="2" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}" Padding="10">
-        <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
           <Grid ColumnDefinitions="*,Auto" Margin="8,4">
-            <TextBlock Text="{Binding CurrentPage.StateTitle}" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding CurrentPage.StateTitle}" Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" />
             <TextBlock Grid.Column="1" Text="{Binding CurrentPage.StateKind}" Foreground="{DynamicResource Brush.CyanBright}" FontSize="{DynamicResource Typography.Caption}" FontWeight="Bold" />
           </Grid>
-          <ItemsControl Grid.Row="1" MinHeight="360" ItemsSource="{Binding LibraryArticles}" AutomationProperties.Name="Local articles and narration parts">
+          <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="8,4">
+            <Button Content="Previous page" Command="{Binding PreviousLibraryPageCommand}" Classes="secondary" AutomationProperties.Name="Previous library page" />
+            <Button Content="Next page" Command="{Binding NextLibraryPageCommand}" Classes="secondary" AutomationProperties.Name="Next library page" />
+            <TextBlock Text="200 articles per page; all articles stay stored locally." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          </WrapPanel>
+          <ItemsControl Grid.Row="2" MinHeight="360" ItemsSource="{Binding LibraryArticles}" AutomationProperties.Name="Local articles and narration parts">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:LibraryArticleViewModel">
                 <Border Margin="3" Padding="14" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}">

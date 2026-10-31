@@ -141,6 +141,7 @@ public sealed partial class ShellViewModel
 
     partial void OnLibrarySearchQueryChanged(string value)
     {
+        LibraryPageOffset = 0;
         if (Volatile.Read(ref _documentWorkspaceStarted) != 0)
         {
             _ = RefreshDocumentLibraryObservedAsync();
@@ -203,36 +204,74 @@ public sealed partial class ShellViewModel
     {
         EnsureDocumentWorkflowConfigured();
         int refreshVersion = Interlocked.Increment(ref _libraryRefreshVersion);
-        string query = LibrarySearchQuery;
-        IReadOnlyList<DocumentSummary> documents = string.IsNullOrWhiteSpace(LibrarySearchQuery)
-            ? await _documentLibrary!.ListAsync(limit: 200).ConfigureAwait(true)
-            : await _documentLibrary!.SearchAsync(LibrarySearchQuery.Trim(), limit: 200).ConfigureAwait(true);
-
-        IReadOnlyList<NarrationLibraryArticle> articles = _narrationPartGroups is null
-            ? documents.Select(document => new NarrationLibraryArticle(document, [], false)).ToArray()
-            : await _narrationPartGroups.QueryLibraryAsync(query).ConfigureAwait(true);
-        if (refreshVersion != Volatile.Read(ref _libraryRefreshVersion)) return;
-        LocalDocuments.Clear();
-        foreach (DocumentSummary document in documents)
+        string query = LibrarySearchQuery.Trim();
+        int offset = LibraryPageOffset;
+        IsLibraryPageLoading = true;
+        try
         {
-            LocalDocuments.Add(document);
+            IReadOnlyList<DocumentSummary> documents;
+            IReadOnlyList<NarrationLibraryArticle> articles;
+            int total;
+            bool paged;
+            if (_narrationPartGroups is ILibraryPageSource<NarrationLibraryArticle> groupedPaging)
+            {
+                // Keep existing document-picker behavior separate from the bounded root-article page.
+                documents = query.Length == 0
+                    ? await _documentLibrary!.ListAsync(limit: LibraryPageSize).ConfigureAwait(true)
+                    : await _documentLibrary!.SearchAsync(query, limit: LibraryPageSize).ConfigureAwait(true);
+                var result = await groupedPaging.QueryPageAsync(query, offset, LibraryPageSize).ConfigureAwait(true);
+                articles = result.Items; total = result.TotalCount; offset = result.Offset; paged = true;
+            }
+            else if (_narrationPartGroups is null && _documentLibrary is ILibraryPageSource<DocumentSummary> documentPaging)
+            {
+                var result = await documentPaging.QueryPageAsync(query, offset, LibraryPageSize).ConfigureAwait(true);
+                documents = result.Items;
+                articles = documents.Select(document => new NarrationLibraryArticle(document, [], false)).ToArray();
+                total = result.TotalCount; offset = result.Offset; paged = true;
+            }
+            else
+            {
+                documents = query.Length == 0
+                    ? await _documentLibrary!.ListAsync(limit: LibraryPageSize).ConfigureAwait(true)
+                    : await _documentLibrary!.SearchAsync(query, limit: LibraryPageSize).ConfigureAwait(true);
+                articles = _narrationPartGroups is null
+                    ? documents.Select(document => new NarrationLibraryArticle(document, [], false)).ToArray()
+                    : await _narrationPartGroups.QueryLibraryAsync(query).ConfigureAwait(true);
+                total = articles.Count; offset = 0; paged = false;
+            }
+            if (refreshVersion != Volatile.Read(ref _libraryRefreshVersion)) return;
+            ApplyLibraryPage(documents, articles, total, offset, paged, query);
         }
-
-        LibraryArticles.Clear();
-        foreach (var article in articles)
-            LibraryArticles.Add(new LibraryArticleViewModel(article, OpenDocumentCommand, !string.IsNullOrWhiteSpace(query)));
-        RoutePageViewModel page = _pages[AppRoute.Library];
-        page.StateKind = documents.Count == 0 ? "EMPTY" : "LOCAL";
-        page.StateTitle = documents.Count == 0
-            ? "No local documents"
-            : $"{documents.Count:N0} local document{(documents.Count == 1 ? string.Empty : "s")}";
-        if (_narrationPartGroups is not null)
-            page.StateTitle = $"{articles.Count:N0} articles · {articles.Sum(article => article.Parts.Count):N0} technical parts (up to 200 articles)";
-        page.Detail = documents.Count == 0
-            ? "Create a document to begin. Network access is not required."
-            : string.Join(" · ", documents.Take(4).Select(document => document.Title));
+        finally
+        {
+            if (refreshVersion == Volatile.Read(ref _libraryRefreshVersion)) IsLibraryPageLoading = false;
+        }
     }
 
+    private void ApplyLibraryPage(IReadOnlyList<DocumentSummary> documents, IReadOnlyList<NarrationLibraryArticle> articles,
+        int total, int offset, bool paged, string query)
+    {
+        LocalDocuments.Clear();
+        foreach (var document in documents) LocalDocuments.Add(document);
+        LibraryArticles.Clear();
+        foreach (var article in articles)
+            LibraryArticles.Add(new LibraryArticleViewModel(article, OpenDocumentCommand, query.Length != 0));
+        LibraryPageOffset = offset;
+        LibraryTotalArticles = total;
+        LibraryPagingAvailable = paged;
+        string noun = total == 1 ? "article" : "articles";
+        LibraryPageStatus = total == 0
+            ? query.Length == 0 ? "No local articles" : "No matching articles"
+            : paged
+                ? $"Showing {offset + 1:N0}-{offset + articles.Count:N0} of {total:N0} {noun}; {articles.Sum(article => article.Parts.Count):N0} technical parts on this page"
+                : $"{total:N0} local {noun}";
+        RoutePageViewModel page = _pages[AppRoute.Library];
+        page.StateKind = total == 0 ? "EMPTY" : "LOCAL";
+        page.StateTitle = LibraryPageStatus;
+        page.Detail = total == 0
+            ? query.Length == 0 ? "Create or import a local document. Network access is not required." : "No stored articles match this search. Clear or change the search to see the library."
+            : string.Join(" / ", articles.Take(4).Select(article => article.Document.Title));
+    }
     private async Task OpenDocumentCoreAsync(Guid documentId)
     {
         EnsureDocumentWorkflowConfigured();

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using CloudScribe.Infrastructure.Diagnostics;
 using CloudScribe.Infrastructure.Files;
 
@@ -57,10 +58,10 @@ internal static class BootstrapDiagnosticLog
     private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs eventArgs)
     {
         Exception? exception = eventArgs.ExceptionObject as Exception;
-        string exceptionType = eventArgs.ExceptionObject?.GetType().FullName ?? "unknown";
+        string exceptionType = exception is null ? "NonException" : SafeExceptionSummarizer.Classify(exception).ToString();
         TryWriteDuringUnhandledFailure(
             "process.unhandled-exception",
-            $"terminating={eventArgs.IsTerminating}; exceptionType={exceptionType}",
+            $"terminating={eventArgs.IsTerminating}; exceptionCategory={exceptionType}",
             exception);
     }
 
@@ -105,14 +106,24 @@ internal static class BootstrapDiagnosticLog
         DateTimeOffset now = DateTimeOffset.UtcNow;
         string path = Path.Combine(directory, $"cloudscribe-bootstrap-{now:yyyyMMdd}.log");
         EnsureRegularOrMissing(path, "Bootstrap logging does not write through a symbolic-link or reparse-point file.");
-        string safeEvent = DiagnosticRedactor.Sanitize(eventName);
-        string safeMessage = DiagnosticRedactor.Sanitize(message);
-        string safeException = exception is null
-            ? string.Empty
-            : DiagnosticRedactor.Sanitize(exception.ToString());
-        string line = string.IsNullOrEmpty(safeException)
-            ? $"{now:O}\t{safeEvent}\tpid={Environment.ProcessId}\t{safeMessage}{Environment.NewLine}"
-            : $"{now:O}\t{safeEvent}\tpid={Environment.ProcessId}\t{safeMessage}\texception={safeException}{Environment.NewLine}";
+        var metadata = SafeBootstrapMetadata.Capture(eventName, message);
+        string? safeException = exception is null
+            ? null
+            : SafeExceptionSummarizer.Describe(exception) ?? "summary-unavailable";
+        string line = JsonSerializer.Serialize(new
+        {
+            SchemaVersion = 2,
+            Kind = "Bootstrap",
+            TimestampUnixMilliseconds = now.ToUnixTimeMilliseconds(),
+            ProcessId = Environment.ProcessId,
+            metadata.EventName,
+            SafeFields = metadata.Fields,
+            metadata.FieldsComplete,
+            metadata.StartupPhases,
+            ExceptionType = exception is null ? null : SafeExceptionSummarizer.Classify(exception).ToString(),
+            ExceptionDetailFormat = "safe-exception-summary-v1",
+            ExceptionDetail = safeException,
+        }) + Environment.NewLine;
         RotateIfRequired(path, now, Utf8WithoutBom.GetByteCount(line));
         File.AppendAllText(path, line, Utf8WithoutBom);
         EnforceDirectoryBounds(directory);

@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
+using CloudScribe.Infrastructure.Diagnostics;
 
 namespace CloudScribe.App.Diagnostics;
 
@@ -17,7 +18,7 @@ internal static class NativeUiDiagnosticLog
 
     // Accept enums and exception identity only. Never accept a filename, status message, document or exception message.
     internal static string FormatAction(NativeUiOperation operation, NativeUiPhase phase, Exception? error) =>
-        $"operation={(Enum.IsDefined(operation) ? operation.ToString() : "Unknown")}; phase={(Enum.IsDefined(phase) ? phase.ToString() : "Unknown")}; exceptionType={error?.GetType().FullName ?? "none"}; hresult={error?.HResult ?? 0}";
+        $"operation={(Enum.IsDefined(operation) ? operation.ToString() : "Unknown")}; phase={(Enum.IsDefined(phase) ? phase.ToString() : "Unknown")}; exceptionCategory={(error is null ? "none" : SafeExceptionSummarizer.Classify(error).ToString())}; hresult={error?.HResult ?? 0}";
 
     internal static void ApplicationInitialized() => RecordResources("application.initialized", null);
 
@@ -54,7 +55,7 @@ internal static class NativeUiDiagnosticLog
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
-            BootstrapDiagnosticLog.Write("native.metadata-unavailable", $"{Identity}; exceptionType={error.GetType().FullName}; hresult={error.HResult}");
+            BootstrapDiagnosticLog.Write("native.metadata-unavailable", $"{Identity}; exceptionCategory={SafeExceptionSummarizer.Classify(error)}; hresult={error.HResult}");
         }
     }
 }

@@ -28,6 +28,14 @@ This matrix distinguishes implemented observations from open work. Passing a com
 
 New event 6300 omits exception objects and arbitrary messages. Legacy bootstrap and sink paths still accept redacted exception detail; regex redaction is not a guarantee against arbitrary document fragments. A reviewed, bounded exception summary (fixed category, numeric error code, safe code-location identity and explicit missingness) should replace uncontrolled detail only with tests proving useful failure context survives. Existing private records and historical logs must not be silently republished or treated as anonymized.
 
+### Local safe-envelope follow-up (not installed)
+
+The local follow-up replaces arbitrary exception strings/type names with bounded fixed categories, numeric error codes and module/method-token/IL-offset locations, without reading exception messages, Data, Source or ToString. Known product event schemas preserve validated primitive fields and regenerate static messages; unknown/free-form fields are omitted with an incomplete-evidence flag. Bootstrap phase history remains bounded to 64 ordered observations, and runtime/build/module identities survive validation.
+
+Support export regenerates allowlisted metadata for each captured record instead of copying raw log bytes. Legacy/malformed/oversized/unsupported records receive explicit omission markers. Source filenames are replaced with neutral ordinal archive names in the preview, manifest and ZIP. Original local records are unchanged. Capture bounds, physical-directory checks, record/file/output caps and staging cleanup remain enforced. This does not make legacy records public or anonymous, and private provider capture remains separate and excluded.
+
+Synthetic tests cover hostile exception properties, private messages/filenames, unknown formatter state, legacy records, malformed/duplicate JSON, size bounds, useful known fields, startup phase history, archive exclusion and observer failure after archive commit. Native presentation, external OS failures and all unmapped workflow boundaries remain qualified; the follow-up is not a claim of complete observability or a historical crash fix.
+
 ## Release qualification
 
 Document observations are additive and advisory. They do not alter save order, autosave sequence checks, close guards, original exceptions, approval expiry, dispatch, credentials or financial history. The tests use synthetic local fixtures. Native presentation, real installed behavior and external provider outcomes are separate acceptance evidence and must be reported separately. No statement of zero possible logging gaps is justified.
