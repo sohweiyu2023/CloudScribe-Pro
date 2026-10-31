@@ -50,6 +50,9 @@ public static partial class LocalRequestDiagnostics
 
     public static string UserMessage(LocalRequestFailure failure) => failure.Reason switch
     {
+        LocalRequestReason.RefinementEvidenceChanged => "The failed-range subdivision no longer matches its original plan, failed attempt or accepted audio. Preserve all files and holds; review the exact evidence before continuing. No automatic request was made.",
+        LocalRequestReason.RefinementOutputRecoveryRequired => "Google already accepted predecessor audio whose local receipt is incomplete. Use Recover saved local outputs and verify the existing file before subdivision. Do not generate that accepted range again.",
+        LocalRequestReason.RefinementPlanAmbiguous => "The saved article has ambiguous or missing plan lineage. Keep every plan and receipt; resolve the exact predecessor and refined plan before exporting or generating.",
         LocalRequestReason.CapabilityStale => "Google capability verification expired. Refresh the voice catalog for the existing account and preserve your selected voice. An existing reservation may require independently authorized revalidation before it can resume. Do not reserve again. This action did not renew spending permission.",
         LocalRequestReason.ReservedRequestIneligible => "The existing reservation is not eligible for private observation. Inspect its saved outcome and admission expiry; do not reserve or send again automatically.",
         LocalRequestReason.ReservedIdentityMalformed or LocalRequestReason.ReservedSourceChanged => "The selected article does not match the immutable reserved request. Preserve the reservation and inspect its identity before continuing.",

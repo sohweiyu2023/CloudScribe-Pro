@@ -5,7 +5,7 @@ $installerPath=Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'
 $tokens=$null;$parseErrors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($installerPath,[ref]$tokens,[ref]$parseErrors)
 if($parseErrors.Count){throw 'Installer parse failure.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Invoke-CompletionGate','Get-ReviewedCompletionGate','Assert-CompletionInstallEffect','Complete-CompletionBuildInstall')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Get-ReviewedCompletionSuccessorRun','Invoke-CompletionGate','Get-ReviewedCompletionGate','Assert-CompletionInstallEffect','Complete-CompletionBuildInstall')){
     $found=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($found.Count -ne 1){throw 'Expected one production installer function.'}
     Invoke-Expression $found[0].Extent.Text
@@ -26,6 +26,7 @@ function Bind-GateFixture($fixture){
     $script:ReviewedCompletionGatePath=$fixture.gatePath;$script:ReviewedCompletionGateSha256=$fixture.gateSha256
     $script:ReviewedChirpResumePolicyPath=$null;$script:ReviewedChirpArticlePolicyPath=$null;$script:MigrateProfileFrom=$null;$script:identity=[pscustomobject]@{CompletionGateProtocolVersion=1}
     $script:ReviewedCompletionBuildTransitionPath=$null;$script:ReviewedCompletionBuildTransitionSha256=$null
+    $script:ReviewedCompletionSuccessorRunPath=$null;$script:ReviewedCompletionSuccessorRunSha256=$null;$script:CompletePendingCompletionSuccessor=$false
 }
 function Expect-Rejected([scriptblock]$action){
     $rejected=$false;try{& $action|Out-Null}catch{$rejected=$true}
@@ -134,6 +135,64 @@ Complete-CompletionBuildInstall $gate (Join-Path $target 'app');$passed++
 $installedGate=[pscustomobject]@{Path=(Join-Path $target 'completion-workflow-gate.json');Sha256=$gate.Sha256;Config=$gate.Config}
 $status=Invoke-CompletionGate $installedGate 'status' ([Guid]::Empty) '' $null (Join-Path $target 'app')
 if($status.refreshes -ne 1 -or $status.resumeAdmissions -ne 0 -or $status.completionAdmissions -ne 0 -or $status.buildTransitions -ne 1 -or $status.helperSourceRepairs -ne 1 -or $status.pendingId -or $status.scopeSha256 -cne $helper.scopeSha256 -or [DateTimeOffset]$status.deadlineUtc -ne $gate.DeadlineUtc){throw 'Helper succession changed the build count, scope, funds or deadline.'};$passed++
+Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
+
+
+# Actual production PowerShell -> isolated bridge -> paired durable journals.
+# The fixture contains inert DLL bytes, a synthetic profile and no credentials.
+function New-SuccessorFixture {
+    $root=Join-Path $fixtureParent ([Guid]::NewGuid().ToString('N'))
+    $metadata=& $PythonPath -I -S (Join-Path $PSScriptRoot '../tools/completion_workflow/make_synthetic_successor_fixture.py') $root
+    if($LASTEXITCODE -ne 0){throw 'Synthetic successor setup failed.'}
+    $fixture=$metadata|ConvertFrom-Json
+    Bind-GateFixture $fixture
+    $script:ReviewedCompletionSuccessorRunPath=$fixture.handoffPath
+    $script:ReviewedCompletionSuccessorRunSha256=$fixture.handoffSha256
+    $script:identity=[pscustomobject]@{CompletionGateProtocolVersion=1;CompletionWorkflowGateSha256=$fixture.previousGateSha256}
+    return $fixture
+}
+function Set-SyntheticSuccessorInstalled($Gate){
+    foreach($name in @('CloudScribe.dll','CloudScribe.Infrastructure.dll')){
+        [IO.File]::WriteAllBytes((Join-Path $target ('app/'+$name)),[IO.File]::ReadAllBytes((Join-Path $package ('app/'+$name))))
+    }
+    [IO.File]::WriteAllBytes((Join-Path $target 'completion-workflow-gate.json'),$Gate.Bytes)
+    @{Product='CloudScribe Pro';Version=1;Profile=$profile;AppSha256=$Gate.Config.AppSha256.ToUpperInvariant();CompletionGateProtocolVersion=1;CompletionWorkflowGateSha256=$Gate.Sha256}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $target 'cloudscribe-install.json')
+}
+$fixture=New-SuccessorFixture
+$gate=Get-ReviewedCompletionGate $profile;$passed++
+if(Test-Path -LiteralPath $gate.Config.RegisterPath){throw 'Read-only successor inspection initialized a register.'};$passed++
+$ReviewedCompletionSuccessorRunSha256='a'*64;Expect-Rejected {Get-ReviewedCompletionGate $profile}
+$ReviewedCompletionSuccessorRunSha256=$fixture.handoffSha256
+$handoff=$gate.SuccessorTransition
+$null=Invoke-CompletionGate $gate 'claim-successor' $handoff.Id $handoff.Sha256 $null (Join-Path $package 'app');$passed++
+$null=Invoke-CompletionGate $gate 'check-successor' $handoff.Id $handoff.Sha256 $null (Join-Path $package 'app');$passed++
+Expect-Rejected {Get-ReviewedCompletionGate $profile}
+Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
+Set-SyntheticSuccessorInstalled $gate
+Complete-CompletionBuildInstall $gate (Join-Path $target 'app');$passed++
+$installedGate=[pscustomobject]@{Path=(Join-Path $target 'completion-workflow-gate.json');Sha256=$gate.Sha256;Config=$gate.Config}
+$status=Invoke-CompletionGate $installedGate 'status' ([Guid]::Empty) '' $null (Join-Path $target 'app')
+if($status.refreshes -ne 0 -or $status.totalAdmissions -ne 0 -or $status.pendingId -or $status.scopeSha256 -cne $fixture.scopeSha256){throw 'Successor changed counters, identity or pending state.'};$passed++
+Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
+# Interruption after payload/marker swap and before required-marker switch:
+# only the SAME handoff's readback path may finish; no second claim/install.
+$fixture=New-SuccessorFixture;$gate=Get-ReviewedCompletionGate $profile;$handoff=$gate.SuccessorTransition
+$null=Invoke-CompletionGate $gate 'claim-successor' $handoff.Id $handoff.Sha256 $null (Join-Path $package 'app')
+Set-SyntheticSuccessorInstalled $gate
+$identity=Get-Content -LiteralPath (Join-Path $target 'cloudscribe-install.json') -Raw|ConvertFrom-Json
+$CompletePendingCompletionSuccessor=$true
+$gate=Get-ReviewedCompletionGate $profile;$passed++
+$next=$gate.RequiredPath+'.successor-'+$handoff.Id.ToString('N')+'.tmp'
+[IO.File]::WriteAllText($next,'different pending bytes')
+Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
+# Preserve the conflicting bytes; a new independent fixture tests exact restart.
+$fixture=New-SuccessorFixture;$gate=Get-ReviewedCompletionGate $profile;$handoff=$gate.SuccessorTransition
+$null=Invoke-CompletionGate $gate 'claim-successor' $handoff.Id $handoff.Sha256 $null (Join-Path $package 'app')
+Set-SyntheticSuccessorInstalled $gate
+$identity=Get-Content -LiteralPath (Join-Path $target 'cloudscribe-install.json') -Raw|ConvertFrom-Json
+$CompletePendingCompletionSuccessor=$true
+$gate=Get-ReviewedCompletionGate $profile
+Complete-CompletionBuildInstall $gate (Join-Path $target 'app');$passed++
 Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
 
 [pscustomobject]@{Passed=$passed;ProviderCalls=0;CredentialOperations=0;RealInstalls=0;FixtureParent=$fixtureParent}

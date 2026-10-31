@@ -9,6 +9,15 @@ public sealed partial class ChirpArticleService
         ChirpArticleAdmissionPolicy policy, AdmittedChirpArticle article, CancellationToken token)
     {
         string proposal = JsonSerializer.Serialize(article.Proposal), lineage = JsonSerializer.Serialize(article.Lineage), reused = JsonSerializer.Serialize(article.ReusedAudio);
+        using (var existing = ChirpArticleSql.Command(connection, transaction,
+            "SELECT ProposalJson FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 3;", ("$document", article.Proposal.DocumentId.ToString("D"))))
+        {
+            List<ChirpArticlePlanProposal> plans = [];
+            using (var reader = await existing.ExecuteReaderAsync(token).ConfigureAwait(false))
+                while (await reader.ReadAsync(token).ConfigureAwait(false)) plans.Add(ParseStored<ChirpArticlePlanProposal>(reader.GetString(0)));
+            if (!plans.Any(x => string.Equals(x.PlanSha256, article.Proposal.PlanSha256, StringComparison.Ordinal))) plans.Add(article.Proposal);
+            _ = ChirpRefinedPlanSelection.RequireUniqueLeaf(plans);
+        }
         using (var insert = ChirpArticleSql.Command(connection, transaction, """
             INSERT INTO chirp_article_plans VALUES($plan,$document,$revision,$account,$project,$proposal,$lineage,$reused)
             ON CONFLICT(PlanSha256) DO NOTHING;

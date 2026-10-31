@@ -21,6 +21,31 @@ function Test-ArticleJson([string]$Text){
 }
 $passed=0
 Test-ArticleJson ((New-ArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+function New-RefinedArticlePolicy {
+    $p=New-ArticlePolicy;$p.SchemaVersion=2;$p.PriorSuccessorAttemptRows=@()
+    $p.PriorArticleAttemptRows=@(@{Identity=$sha;Sha256=$sha})
+    $plan=$p.Articles[0].Proposal;$parent=$plan.Clone()
+    $plan.PlannerVersion='chirp3-one-failed-range-existing-clauses-v1'
+    $plan.Refinement=@{Parent=$parent;FailedCoverageOrdinal=1;FailedAuthorizationId=$id;FailedAttemptRowSha256=$sha;FailedQueueRowSha256=$sha;FailedLocalAttemptId=('a'*32)}
+    $plan.Parts=@(@{CoverageOrdinal=1;Range=@{StartScalar=0;EndScalarExclusive=1;TextSha256=$sha;ReusedReceiptSha256=$null};PayloadSha256=$sha;PayloadBytes=100},@{CoverageOrdinal=2;Range=@{StartScalar=1;EndScalarExclusive=3;TextSha256=$sha;ReusedReceiptSha256=$sha};PayloadSha256=$null;PayloadBytes=0})
+    $p.Articles[0].ReusedAudio=@(@{ParentDocumentId=$id;ParentRevisionId=$id;ReceiptSha256=$sha;Range=$plan.Parts[1].Range;SourcePlanSha256=$sha;SourceAuthorizationId=$id;Audio=@{DocumentId=$id;RevisionId=$id;TextSha256=$sha;AccountId='synthetic-account';OperationId='synthesize-speech';IdempotencyKey='synthetic-retained';LocalAttemptId=('b'*32);PayloadSha256=$sha;AudioPath='C:\synthetic.mp3';AudioBytes=128L;AudioSha256=$sha;VoiceName='cmn-CN-Chirp3-HD-Alnilam';LanguageCode='cmn-CN';HistoricalEvidenceSha256=$null;HistoricalAnchorSha256=$null}})
+    return $p
+}
+Test-ArticleJson ((New-RefinedArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+foreach($case in @('missing-failure-pin','missing-reuse-id','nested-parent','changed-source','changed-voice','wrong-version','unknown-refinement-field')){
+    $p=New-RefinedArticlePolicy
+    switch($case){
+        'missing-failure-pin' {$p.PriorArticleAttemptRows=@()}
+        'missing-reuse-id' {$p.Articles[0].ReusedAudio[0].Remove('SourceAuthorizationId')}
+        'nested-parent' {$p.Articles[0].Proposal.Refinement.Parent.Refinement=@{}}
+        'changed-source' {$p.Articles[0].Proposal.SourceSha256='b'*64}
+        'changed-voice' {$p.Articles[0].Proposal.VoiceName='cmn-CN-Chirp3-HD-Achernar'}
+        'wrong-version' {$p.Articles[0].Proposal.PlannerVersion='caller-defined'}
+        'unknown-refinement-field' {$p.Articles[0].Proposal.Refinement.RetryApproved=$true}
+    }
+    $rejected=$false;try{Test-ArticleJson ($p|ConvertTo-Json -Depth 24 -Compress)}catch{$rejected=$true}
+    if(-not $rejected){throw "Invalid refined-plan fixture accepted: $case"};$passed++
+}
 function New-SuccessorArticlePolicy {
     $p=New-ArticlePolicy;$p.SchemaVersion=2;$p.PriorSuccessorAttemptRows=@()
     $p.SuccessorGrant=@{GrantId=[Guid]::NewGuid().ToString('D');RootAuthorizationId=$id;ParentAuthorizationId=$id;PlanSha256=$sha;CoverageOrdinal=1;ParentKey=('chirp-article:'+$sha+':1');ParentAttemptRowSha256=$sha;ParentQueueRowSha256=$sha;ParentLocalAttemptId=[Guid]::NewGuid().ToString('N');CredentialReferenceId='synthetic-reference';ReviewedFailureEvidenceSha256=$sha;MaximumNewAttempts=1;MaximumAdditionalReservationMinorUnits=1}

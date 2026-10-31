@@ -9,7 +9,7 @@ using CloudScribe.Domain.Generation;
 namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Pure offline compilation. Production admission must independently verify source, receipts and every overlapping historical attempt.</summary>
-public static class ChirpArticlePlanCompiler
+public static partial class ChirpArticlePlanCompiler
 {
     public static ChirpArticlePlanProposal Compile(DocumentSnapshot document, string language, string voice,
         IReadOnlyList<ChirpNarrationReuse>? reuse = null)
@@ -41,7 +41,9 @@ public static class ChirpArticlePlanCompiler
         IReadOnlyList<ChirpNarrationReuse>? verifiedReuse = null)
     {
         ArgumentNullException.ThrowIfNull(proposal);
-        var compiled = Compile(current, proposal.LanguageCode, proposal.VoiceName, verifiedReuse);
+        var compiled = proposal.Refinement is { } refinement
+            ? CompileRefined(current, refinement, verifiedReuse ?? [])
+            : Compile(current, proposal.LanguageCode, proposal.VoiceName, verifiedReuse);
         if (!string.Equals(compiled.PlanSha256, proposal.PlanSha256, StringComparison.Ordinal)
             || !JsonSerializer.SerializeToUtf8Bytes(compiled).AsSpan().SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(proposal)))
             throw new InvalidOperationException("The article source, accepted coverage or exact internal request proposal changed.");

@@ -1,6 +1,7 @@
 using System.Text;
 using CloudScribe.Application.Documents;
 using CloudScribe.Application.Generation;
+using CloudScribe.Application.Logging;
 using CloudScribe.Domain.Documents;
 using CloudScribe.Infrastructure.Configuration;
 using Microsoft.Data.Sqlite;
@@ -16,6 +17,10 @@ internal sealed partial class ChirpArticleEvidenceResolver(AppPaths paths)
     {
         var matches = policy.Articles.Where(x => x.Proposal.DocumentId == documentId).ToArray();
         if (matches.Length != 1) throw new InvalidOperationException("The saved article has no unique independently admitted internal plan.");
+        if (matches[0].Proposal.Refinement is { } refinement && (policy.SchemaVersion != 2 || policy.SuccessorGrant is not null
+            || !policy.PriorArticleAttemptRows.Any(x => string.Equals(x.Sha256, refinement.FailedAttemptRowSha256, StringComparison.Ordinal))
+            || !policy.Budget.QueueRows.Any(x => string.Equals(x.Sha256, refinement.FailedQueueRowSha256, StringComparison.Ordinal))))
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Refinement must preserve its failed original attempt and queue in the independent financial baseline."), LocalRequestReason.RefinementEvidenceChanged);
         var result = await ResolveSnapshotAsync(connection, transaction, matches[0], policy.AccountId, policy.ProjectId, financial, token).ConfigureAwait(false);
         await RequireMissingLegacyAsync(connection, transaction, matches[0], policy, financial, token).ConfigureAwait(false);
         await RequireLegacyAsync(connection, transaction, matches[0], policy.AccountId, policy.ProjectId, financial,
@@ -28,6 +33,7 @@ internal sealed partial class ChirpArticleEvidenceResolver(AppPaths paths)
         SqliteTransaction transaction, AdmittedChirpArticle admitted, string accountId, string projectId, RecoveryFinancialSnapshot financial, CancellationToken token)
     {
         Guid documentId = admitted.Proposal.DocumentId;
+        await RequireRefinementAsync(connection, transaction, admitted, accountId, projectId, financial, token).ConfigureAwait(false);
         var document = await ReadDocumentAsync(connection, transaction, documentId, token).ConfigureAwait(false);
         var actualHistory = await ReadHistoryAsync(connection, transaction, document, admitted, accountId, projectId, financial, token).ConfigureAwait(false);
         var reuse = admitted.ReusedAudio.Select(x => new ChirpNarrationReuse(x.Range.StartScalar, x.Range.EndScalarExclusive,

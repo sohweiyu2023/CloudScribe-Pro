@@ -31,6 +31,16 @@ public sealed partial class ChirpArticleService
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: true);
+        var admittedNow = await admission.LoadVerifiedAsync(cancellationToken).ConfigureAwait(false);
+        var refining = admittedNow?.Articles.SingleOrDefault(x => x.Proposal.DocumentId == documentId && x.Proposal.Refinement is not null);
+        if (refining is not null)
+        {
+            var financial = await ReadFinancialAsync(connection, transaction, admittedNow!, cancellationToken).ConfigureAwait(false);
+            var current = await _evidence.ResolveAsync(connection, transaction, admittedNow!, documentId, financial.Old, cancellationToken).ConfigureAwait(false);
+            using var count = ChirpArticleSql.Command(connection, transaction, "SELECT COUNT(*) FROM chirp_article_plans WHERE PlanSha256=$plan;", ("$plan", refining.Proposal.PlanSha256));
+            if (Convert.ToInt64(await count.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), System.Globalization.CultureInfo.InvariantCulture) == 0)
+                return DescribeProgress(current.Article, [], [], []);
+        }
         if (!await HasStoredPlanAsync(documentId, cancellationToken).ConfigureAwait(false))
         {
             var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
