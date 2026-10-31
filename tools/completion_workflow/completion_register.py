@@ -454,7 +454,7 @@ class Register:
                       "build-complete": {"type", "utc", "mono", "id", "identity", "receiptSha256"}}
             shapes["source-claim"] = shapes["build-claim"]
             shapes["source-complete"] = shapes["build-complete"]
-            shapes["retire-claim"] = {"type", "utc", "mono", "id", "identity", "handoff"}
+            shapes["retire-claim"] = {"type", "utc", "mono", "id", "identity", "handoff", "clockCondition", "clockDriftMicros"}
             shapes["retire-complete"] = {"type", "utc", "mono", "id", "identity", "receiptSha256"}
             shapes["activate"] = {"type", "utc", "mono", "id", "identity", "previousRetirementHead", "receiptSha256", "gateSha256"}
             if event.get("type") == "claim" and scope["schema"] == 2 and event.get("kind") == "completion-admission":
@@ -544,10 +544,14 @@ class Register:
             elif event["type"] == "retire-claim":
                 h = event["handoff"]
                 validate_handoff(h)
+                condition, drift = self._retirement_observation(state, event["utc"], event["mono"])
                 if (scope["schema"] != 1 or state["pending"] or state["retirement"] or event["id"] in state["ids"]
                         or h["TransitionId"] != event["id"] or h["ExpectedPreviousHeadSha256"] != previous
                         or h["PreviousScopeSha256"] != self.scope_sha
-                        or h["PreviousGateSha256"] != state["currentGate"]):
+                        or h["PreviousGateSha256"] != state["currentGate"]
+                        or type(event["clockDriftMicros"]) is not int or event["clockDriftMicros"] != drift
+                        or event["clockCondition"] != condition
+                        or (state["stopped"] and state["stopReason"] != "WindowExpired")):
                     raise Rejected("InvalidRetirementHistory")
                 state["retirement"] = event
                 state["pending"] = dict(event, kind="retirement")
@@ -595,6 +599,17 @@ class Register:
                 or mono - state["startMono"] >= utc(state["scope"]["endUtc"]) - state["startUtc"]):
             return "WindowExpired"
         return None
+
+    @staticmethod
+    def _retirement_observation(state, now, mono):
+        # Retirement creates no old-run permission. A separately approved new
+        # scope supplies its own dual deadline; never repair old clock anchors.
+        if type(now) is not int or type(mono) is not int:
+            raise Rejected("ClockRollback")
+        drift = now - state["startUtc"] - (mono - state["startMono"])
+        if now < state["lastUtc"] or mono < state["lastMono"] or drift < -250000:
+            raise Rejected("ClockRollback")
+        return ("ForwardDiscontinuity" if drift > 250000 else "Continuous", drift)
 
     def _guard(self, db, state, allow_inactive=False):
         if state["retirement"]:
@@ -788,10 +803,12 @@ class Register:
                 or new_scope["approvalSha256"] == old_state["scope"]["approvalSha256"]
                 or any(new_scope[k] != old_state["scope"][k] for k in ("profileSha256", "accountSha256", "projectSha256"))):
             raise Rejected("SuccessorScopeBinding")
-        # Explicit new approval may replace an expired old window, never a clock discontinuity.
-        if ((old_state["stopped"] and old_state["stopReason"] != "WindowExpired")
-                or check_clock and self._time_rejection(old_state) not in (None, "WindowExpired")):
+        # A distinct approved window may retire forward-discontinuous old time;
+        # normal old permissions, backward time and committed failure stops stay blocked.
+        if old_state["stopped"] and old_state["stopReason"] != "WindowExpired":
             raise Rejected("RetirementClockOrStop")
+        if check_clock:
+            self._retirement_observation(old_state, self.clock(), self.monotonic())
         if pending:
             item = old_state["retirement"]
             if not item or item["identity"] != identity or item["handoff"] != h:
@@ -808,8 +825,10 @@ class Register:
             raise Rejected("OutsideWindow")
 
     def _retirement_clock(self, db, state):
-        reason = self._time_rejection(state)
-        if reason in ("ClockRollback", "ClockDiscontinuity"):
+        try:
+            return self._retirement_observation(state, self.clock(), self.monotonic())
+        except Rejected:
+            reason = "ClockRollback"
             self._append(db, self._stamp({"type": "stop", "utc": max(self.clock(), state["lastUtc"]), "reason": reason}, state["lastMono"]), state["head"])
             db.commit(); self._seal(db)
             raise Rejected(reason)
@@ -831,8 +850,11 @@ class Register:
                 raise Rejected("OutsideWindow")
             if successor.path.exists() or successor.anchor.exists():
                 raise Rejected("SuccessorAlreadyExists")
-            self._append(db, self._stamp({"type": "retire-claim", "utc": max(self.clock(), state["lastUtc"]),
-                                         "id": h["TransitionId"], "identity": identity, "handoff": h}, state["lastMono"]), state["head"])
+            event = {"type": "retire-claim", "utc": self.clock(), "mono": self.monotonic(),
+                     "id": h["TransitionId"], "identity": identity, "handoff": h}
+            condition, drift = self._retirement_observation(state, event["utc"], event["mono"])
+            event.update(clockCondition=condition, clockDriftMicros=drift)
+            self._append(db, event, state["head"])
             db.commit(); self._seal(db)  # Old authority stops durably before any new state/install effect.
             successor._create_locked(new_scope, successor.scope_sha, successor.clock())
             return {"id": h["TransitionId"], "identitySha256": identity, "scopeSha256": successor.scope_sha,

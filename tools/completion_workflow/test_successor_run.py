@@ -12,7 +12,7 @@ import uuid
 from unittest.mock import patch
 
 import test_build_transition as bt
-from completion_register import Register, Rejected, digest, path_digest, verify_plan_policy
+from completion_register import Register, Rejected, canonical, digest, path_digest, verify_plan_policy
 
 
 H = bt.H
@@ -148,6 +148,82 @@ class SuccessorCoreTests(unittest.TestCase):
         self.assertEqual(24, self.new.status()["totalAdmissions"])
         with self.assertRaisesRegex(Rejected, "OperationLimit"): self.new.claim("resume-admission", H, str(uuid.uuid4()))
 
+    def forward_clock(self, drift=4_773_917):
+        self.b.f.now += 17_300_000_000
+        self.mono = self.b.f.now - drift
+        self.old.monotonic = lambda: self.mono
+        start = datetime.fromtimestamp(self.b.f.now / 1_000_000, timezone.utc)
+        self.scope.update(startUtc=start.isoformat().replace("+00:00", "Z"),
+                          endUtc=(start + timedelta(hours=6)).isoformat().replace("+00:00", "Z"))
+        self.new = Register(self.new_path, digest(self.scope), lambda: self.b.f.now)
+        self.h = self.handoff()
+
+    def test_forward_retirement_audited_preserves_old_anchors_and_fresh_new_window(self):
+        self.forward_clock(); before = self.read(self.old)
+        self.assertEqual("ClockDiscontinuity", self.old._time_rejection(before))
+        self.old.inspect_successor(self.new, self.scope, self.h, H)
+        self.claim(); event = self.read(self.old)["retirement"]
+        self.assertEqual(("ForwardDiscontinuity", 4_773_917), (event["clockCondition"], event["clockDriftMicros"]))
+        self.old.check_successor(self.new, self.scope, self.h, H); self.complete()
+        after = self.read(self.old)
+        for key in ("scope", "startUtc", "startMono", "refresh", "admissions", "buildTransitions", "helperSourceRepairs"):
+            self.assertEqual(before[key], after[key])
+        self.new.require_predecessor_retired(H)
+        self.assertEqual(0, self.new.status()["totalAdmissions"])
+        self.b.f.now += 6 * 60 * 60 * 1_000_000
+        with self.assertRaisesRegex(Rejected, "WindowExpired"):
+            self.new.claim("pilot-admission", H, str(uuid.uuid4()))
+
+    def test_forward_discontinuity_never_reopens_normal_old_operations(self):
+        self.forward_clock()
+        with self.assertRaisesRegex(Rejected, "ClockDiscontinuity"):
+            self.old.claim("refresh", H, str(uuid.uuid4()))
+        self.h["ExpectedPreviousHeadSha256"] = self.read(self.old)["head"]
+        with self.assertRaisesRegex(Rejected, "RetirementClockOrStop"): self.claim()
+        self.assertFalse(self.new.path.exists())
+
+    def test_negative_discrepancy_or_monotonic_rollback_stays_durably_blocked(self):
+        self.forward_clock(-4_773_917)
+        with self.assertRaisesRegex(Rejected, "ClockRollback"): self.claim()
+        self.assertEqual("ClockRollback", self.read(self.old)["stopReason"])
+        self.assertFalse(self.new.path.exists())
+
+    def test_forward_retirement_pending_and_changed_head_still_block(self):
+        self.old.claim("refresh", H, str(uuid.uuid4()))
+        self.forward_clock()
+        with self.assertRaisesRegex(Rejected, "SuccessorPending"): self.claim()
+        self.assertFalse(self.new.path.exists())
+
+    def test_forward_clock_audit_replay_rejects_rehashed_tampering(self):
+        self.forward_clock(); self.claim()
+        with self.old._open() as db:
+            db.execute("DROP TRIGGER immutable_events_update")  # Synthetic tamper fixture only.
+            seq, body = db.execute("SELECT seq,body FROM events ORDER BY seq DESC LIMIT 1").fetchone()
+            event = json.loads(body); event["clockDriftMicros"] = -4_773_917
+            previous = db.execute("SELECT sha FROM events WHERE seq=?", (seq - 1,)).fetchone()[0]
+            db.execute("UPDATE events SET body=?,sha=? WHERE seq=?", (canonical(event), digest({"previous": previous, "event": event}), seq))
+            db.execute("CREATE TRIGGER immutable_events_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT,'immutable'); END")
+            db.commit()
+            self.old.anchor.write_bytes(b"".join(f"{s}:{pin}\n".encode() for s, pin in db.execute("SELECT seq,sha FROM events ORDER BY seq")))
+        with self.assertRaisesRegex(Rejected, "InvalidRetirementHistory"): self.read(self.old)
+
+    def test_forward_handoff_interruption_and_concurrent_claims_remain_single_use(self):
+        self.forward_clock()
+        def claim_once():
+            try: self.claim(); return True
+            except (Rejected, OSError): return False
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(1, sum(pool.map(lambda _: claim_once(), range(2))))
+        original = self.new._append
+        def fail(db, event, previous):
+            if event["type"] == "activate": raise OSError("synthetic interruption")
+            return original(db, event, previous)
+        with patch.object(self.new, "_append", side_effect=fail):
+            with self.assertRaises(OSError): self.complete()
+        self.assertTrue(self.read(self.old)["retired"])
+        self.complete(); self.new.require_predecessor_retired(H)
+        with self.assertRaises(Rejected): self.complete()
+
 
 class SuccessorCliTests(unittest.TestCase):
     def setUp(self):
@@ -227,7 +303,8 @@ class SuccessorCliTests(unittest.TestCase):
         self.assertEqual("", p.stderr); return p.returncode, json.loads(p.stdout)
 
     def activate(self):
-        self.assertEqual(0, self.command("inspect-successor")[0]); self.assertEqual(0, self.command("claim-successor")[0])
+        inspected = self.command("inspect-successor"); self.assertEqual(0, inspected[0], inspected)
+        claimed = self.command("claim-successor"); self.assertEqual(0, claimed[0], claimed)
         self.assertEqual(0, self.command("check-successor")[0])
         for name in ("CloudScribe.dll", "CloudScribe.Infrastructure.dll"): (self.b.f.app / name).write_bytes((self.new_app / name).read_bytes())
         self.b.write_installed(self.config, self.pin, self.config_path)
@@ -295,6 +372,35 @@ class SuccessorCliTests(unittest.TestCase):
         self.assertEqual("HandoffConfigPin", result[1]["code"])
         self.config_path.write_bytes(original)
         self.assertEqual(0, self.command("complete-successor")[0])
+
+    def test_real_cli_forward_old_clock_handoff_and_installed_readback(self):
+        # Synthetic history only: valid, fully hashed timestamps produce the
+        # actual CLI clock discrepancy. No runtime override or real register.
+        old = Register(self.old["RegisterPath"], self.old["ScopeSha256"])
+        with old._open() as db:
+            db.execute("DROP TRIGGER immutable_events_update")  # Construct synthetic clock history, never a live DB.
+            rows = db.execute("SELECT seq,body FROM events ORDER BY seq").fetchall()
+            previous = old.scope_sha
+            for seq, body in rows:
+                event = json.loads(body); event["utc"] -= 4_773_917
+                if event["type"] in ("build-claim", "source-claim"):
+                    event["transition"]["ExpectedHeadSha256"] = previous
+                current = digest({"previous": previous, "event": event})
+                db.execute("UPDATE events SET body=?,sha=? WHERE seq=?", (canonical(event), current, seq))
+                previous = current
+            db.execute("CREATE TRIGGER immutable_events_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT,'immutable'); END")
+            db.commit()
+            old.anchor.write_bytes(b"".join(f"{s}:{pin}\n".encode() for s, pin in db.execute("SELECT seq,sha FROM events ORDER BY seq")))
+        self.h["ExpectedPreviousHeadSha256"] = previous
+        self.h_path.write_text(json.dumps(self.h)); self.h_pin = sha(self.h_path.read_bytes())
+        self.activate()
+        with old._open() as db:
+            state = old._read(db)
+        self.assertTrue(state["retired"])
+        self.assertEqual("ForwardDiscontinuity", state["retirement"]["clockCondition"])
+        self.assertGreater(state["retirement"]["clockDriftMicros"], 250_000)
+        self.assertEqual((0, 1, 0), (state["refresh"], state["buildTransitions"], state["admissions"]))
+        self.assertEqual(0, self.command("status")[0])
 
     def test_pilot_admission_alone_or_caller_success_does_not_unlock_completion(self):
         self.activate(); self.admit_pilot()
