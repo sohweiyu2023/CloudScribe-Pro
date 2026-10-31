@@ -74,7 +74,7 @@ jobs:
         run: |
           Push-Location tools/completion_workflow
           try {
-            python -m unittest -v test_completion_register test_gate_cli test_plan_binding test_build_transition
+            python -m unittest -v test_completion_register test_gate_cli test_plan_binding test_build_transition test_guid_repair
             if ($LASTEXITCODE -ne 0) { throw 'Completion gate offline tests failed.' }
           } finally { Pop-Location }
       - name: Mocked and local tests only

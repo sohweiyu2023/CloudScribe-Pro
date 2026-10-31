@@ -22,6 +22,10 @@ The installer durably claims the transition before changing files, rechecks clos
 
 Resume evidence compares validated HTTPS root origins canonically, so an authority with and without its trailing slash represents the same origin. Different hosts, nondefault ports, credentials, paths, queries and fragments remain rejected; endpoint, account and request identities retain their exact checks.
 
+Before financial admission, one separately reviewed `TransitionKind: helper-source` repair can follow the completed build transition. It keeps both binary hashes and every identity, plan, interpreter, non-helper path, scope, deadline and counter binding, changing only the pinned helper source and gate configuration. Separate append-only source-claim/source-complete history records this operation; it does not reset or increase the one-build limit. Pending, repeated, expired, mismatched or financially active transitions fail closed. Both predecessor and successor source remain preserved.
+
+Held authorization GUIDs are compared as strictly parsed, nonzero identities, accepting the standard hyphenated JSON form and its 32-hex manifest form. Different, malformed, empty or decorated values are rejected. No serialized payload or financial row is rewritten to accommodate formatting.
+
 ## Enforced operations and evidence
 
 Production bootstrap owns a durable operation before credential/token/network access. The Create MP3 auto-loader owns the entire cycle, including the second authenticated catalog GET used for UI population. The cycle permits at most two catalog GET stages and one exact input-free `{}` synthesis capability probe. Direct catalog/probe calls outside a live owned cycle and credential repair/fresh configuration during the run are rejected. No alternative synthesis engine exists.
@@ -44,4 +48,4 @@ Private capture remains default-off, exact-request, explicit opt-in, one respons
 
 ## Offline checks
 
-Run `python -m unittest -v test_completion_register test_gate_cli test_plan_binding test_build_transition` from `tools/completion_workflow`, and `scripts/Test-CompletionWorkflowGate-SelfTests.ps1 -PythonPath <reviewed Python>` plus the ordinary installer suites. Production catalog/bootstrap tests use fake HttpMessageHandlers and synthetic in-memory credentials. They exercise the real entrypoints and restart/in-flight behavior with zero external provider calls. These tests do not certify live Google success, invoice tax or audible article quality; those remain explicit delivery checks.
+Run `python -m unittest -v test_completion_register test_gate_cli test_plan_binding test_build_transition test_guid_repair` from `tools/completion_workflow`, and `scripts/Test-CompletionWorkflowGate-SelfTests.ps1 -PythonPath <reviewed Python>` plus the ordinary installer suites. Production catalog/bootstrap tests use fake HttpMessageHandlers and synthetic in-memory credentials. They exercise the real entrypoints and restart/in-flight behavior with zero external provider calls. These tests do not certify live Google success, invoice tax or audible article quality; those remain explicit delivery checks.

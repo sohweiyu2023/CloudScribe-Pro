@@ -77,11 +77,16 @@ def transition_command(request, config, config_keys, register, module, scope, ap
     if sha(old_bytes) != transition["PreviousGateSha256"]:
         raise ValueError("PreviousGatePin")
     old = json.loads(old_bytes, object_pairs_hook=unique)
-    changes = {"AppSha256", "InfrastructureSha256", "CandidateApplicationDirectory", "ScriptPath", "ScriptSha256", "ModuleSha256"}
+    source_repair = module.transition_kind(transition) == "helper-source"
+    changes = {"ScriptPath", "ScriptSha256", "ModuleSha256"}
+    if not source_repair:
+        changes |= {"AppSha256", "InfrastructureSha256", "CandidateApplicationDirectory"}
     if (set(old) != config_keys or type(old["SchemaVersion"]) is not int or old["SchemaVersion"] != 1
             or any(old[key] != config[key] for key in config_keys - changes)
             or build_digest(old) != transition["PreviousBuildSha256"]):
         raise ValueError("TransitionConfigBinding")
+    if source_repair and all(old[key] == config[key] for key in ("ScriptSha256", "ModuleSha256")):
+        raise ValueError("SourceRepairMustChangeSource")
     # The predecessor source remains preserved; it is verified, never executed.
     if (sha(bounded(old["ScriptPath"], 131072)) != old["ScriptSha256"]
             or sha(bounded(Path(old["ScriptPath"]).with_name("completion_register.py"), 131072)) != old["ModuleSha256"]):
