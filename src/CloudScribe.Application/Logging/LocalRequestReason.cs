@@ -12,4 +12,5 @@ public enum LocalRequestReason
     ReservedRevisionChanged, CaptureCapabilityBindingChanged,
     ResumePinMismatch, ResumeExpired, ResumeBuildMismatch, ResumeProfileMismatch, ResumePolicyMalformed,
     ResumeHistoryChanged, ResumeProviderChanged, ResumeMappingChanged,
+    RefinementEvidenceChanged, RefinementOutputRecoveryRequired, RefinementPlanAmbiguous,
 }

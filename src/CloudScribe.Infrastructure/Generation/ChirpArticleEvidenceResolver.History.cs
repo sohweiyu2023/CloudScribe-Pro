@@ -66,6 +66,11 @@ internal sealed partial class ChirpArticleEvidenceResolver
         if (!Guid.TryParseExact(audio.LocalAttemptId, "N", out _) || retained.ParentDocumentId != document.Id
             || retained.ParentRevisionId != document.CurrentRevisionId || audio.AudioBytes is < 12 or > 256L * 1024 * 1024)
             throw new InvalidOperationException("Retained audio has invalid native coverage or identity.");
+        if (retained.SourcePlanSha256 is not null || retained.SourceAuthorizationId is not null)
+        {
+            await RequireInternalReusedAsync(connection, transaction, admitted, retained, financial, token).ConfigureAwait(false);
+            return;
+        }
         var native = admitted.Lineage.History.Where(x => x.DocumentId == audio.DocumentId && x.RevisionId == audio.RevisionId
             && x.StartScalar == retained.Range.StartScalar && x.EndScalarExclusive == retained.Range.EndScalarExclusive
             && string.Equals(x.TextSha256, audio.TextSha256, StringComparison.Ordinal)).ToArray();

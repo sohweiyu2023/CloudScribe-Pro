@@ -6,7 +6,7 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed partial class ChirpArticleService
 {
     // Historical output validation grants no new execution authority and remains available after expiry.
-    private static async Task<string?> RequireReservedDispatchAuditAsync(SqliteConnection connection, SqliteTransaction transaction,
+    internal static async Task<string?> RequireReservedDispatchAuditAsync(SqliteConnection connection, SqliteTransaction transaction,
         Guid authorization, GoogleGenerationSubmissionEnvelope original, string localAttempt, CancellationToken token)
     {
         var chain = await ReadResumeChainAsync(connection, transaction, authorization, token).ConfigureAwait(false);

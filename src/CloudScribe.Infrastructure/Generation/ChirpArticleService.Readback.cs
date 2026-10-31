@@ -38,12 +38,16 @@ public sealed partial class ChirpArticleService
     private static async Task<string> UniqueStoredPlanAsync(SqliteConnection connection, SqliteTransaction transaction, Guid documentId, CancellationToken token)
     {
         using var command = ChirpArticleSql.Command(connection, transaction,
-            "SELECT PlanSha256 FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 2;", ("$document", documentId.ToString("D")));
+            "SELECT PlanSha256,ProposalJson FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 3;", ("$document", documentId.ToString("D")));
         using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
-        if (!await reader.ReadAsync(token).ConfigureAwait(false)) throw new InvalidOperationException("No saved internal plan exists for this article.");
-        string plan = reader.GetString(0);
-        if (await reader.ReadAsync(token).ConfigureAwait(false)) throw new InvalidOperationException("Multiple stored plans require explicit plan selection; no automatic export was started.");
-        return plan;
+        List<ChirpArticlePlanProposal> plans = [];
+        while (await reader.ReadAsync(token).ConfigureAwait(false))
+        {
+            var proposal = ParseStored<ChirpArticlePlanProposal>(reader.GetString(1));
+            if (!string.Equals(proposal.PlanSha256, reader.GetString(0), StringComparison.Ordinal) || proposal.DocumentId != documentId) throw new InvalidOperationException("Stored plan identity differs.");
+            ChirpArticlePlanCompiler.RequireIntegrity(proposal); plans.Add(proposal);
+        }
+        return ChirpRefinedPlanSelection.RequireUniqueLeaf(plans).PlanSha256;
     }
 
     internal async Task<(ChirpArticlePlanProposal Plan, IReadOnlyList<ArticleAcceptedAudio> Ordered)> InspectCompleteAsync(
