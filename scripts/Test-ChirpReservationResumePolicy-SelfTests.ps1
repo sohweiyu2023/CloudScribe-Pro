@@ -54,7 +54,15 @@ $package=Join-Path $fixtureRoot 'package';$profile=Join-Path $fixtureRoot 'profi
 $p=New-ResumePolicy;$p.AppSha256=(Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash.ToLowerInvariant();$p.InfrastructureSha256=(Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash.ToLowerInvariant()
 $canonical=[IO.Path]::GetFullPath($profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant();$p.ProfileRootSha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant();$p.HistoricalPolicy.ProfileRootSha256=$p.ProfileRootSha256
 $ReviewedChirpResumePolicyPath=Join-Path $fixtureRoot 'resume.private.json';[IO.File]::WriteAllText($ReviewedChirpResumePolicyPath,($p|ConvertTo-Json -Depth 24 -Compress));$ReviewedChirpResumePolicySha256=(Get-FileHash -LiteralPath $ReviewedChirpResumePolicyPath).Hash
-if(-not (Get-ReviewedChirpResumePolicy $profile)){throw 'Reviewed fixture was not loaded.'};$passed++
+$loaded=Get-ReviewedChirpResumePolicy $profile
+if(-not $loaded){throw 'Reviewed fixture was not loaded.'};$passed++
+# Runtime ChirpPolicyFiles.Hash uses lower-case hex and the installed reader uses
+# ordinal equality. The producer must emit that exact format for either approved
+# input spelling; identical digest bytes do not excuse an unreadable marker.
+$runtimePin=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([IO.File]::ReadAllBytes($ReviewedChirpResumePolicyPath))).ToLowerInvariant()
+if($loaded.Sha256 -cne $runtimePin){throw 'Upper-case approved input produced a noncanonical runtime pin.'};$passed++
+$ReviewedChirpResumePolicySha256=$runtimePin
+if((Get-ReviewedChirpResumePolicy $profile).Sha256 -cne $runtimePin){throw 'Lower-case approved input changed the canonical runtime pin.'};$passed++
 $ReviewedChirpResumePolicySha256='0'*64;$rejected=$false;try{Get-ReviewedChirpResumePolicy $profile|Out-Null}catch{$rejected=$true};if(-not $rejected){throw 'Unapproved pin accepted.'};$passed++
 $ReviewedChirpResumePolicySha256=(Get-FileHash -LiteralPath $ReviewedChirpResumePolicyPath).Hash
 $rejected=$false;try{Get-ReviewedChirpResumePolicy (Join-Path $fixtureRoot 'other-profile')|Out-Null}catch{$rejected=$true};if(-not $rejected){throw 'Another profile accepted.'};$passed++
