@@ -1,3 +1,4 @@
+using CloudScribe.Application.Logging;
 using CloudScribe.Application.Providers;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
@@ -40,6 +41,22 @@ public sealed class GoogleGenerationProductionTransportFactoryTests
             () => factory.Create(evidence, CreateSubmissionAccount(EndpointOrigin)));
 
         Assert.Contains("stale", error.Message, StringComparison.OrdinalIgnoreCase);
+        var details = LocalRequestDiagnostics.Describe(error, Now);
+        Assert.Equal(LocalRequestReason.CapabilityStale, details.Reason);
+        Assert.True(details.EvidenceComplete);
+        Assert.Contains("Refresh the voice catalog", LocalRequestDiagnostics.UserMessage(details), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CapabilityExpiryBoundaryRemainsFailClosedWithoutReadingCredentials()
+    {
+        var evidence = CreateEvidence(EndpointOrigin, Now);
+        Assert.Same(evidence, evidence.Validate(Now.AddTicks(-1)));
+        foreach (var at in new[] { Now, Now.AddMinutes(29) })
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => evidence.Validate(at));
+            Assert.Equal(LocalRequestReason.CapabilityStale, LocalRequestDiagnostics.Describe(error, at).Reason);
+        }
     }
 
     [Fact]

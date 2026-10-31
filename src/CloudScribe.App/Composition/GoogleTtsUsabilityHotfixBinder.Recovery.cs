@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using CloudScribe.App.ViewModels;
+using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.App.Composition;
@@ -35,7 +36,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             if (state.Preview is { } preview) recoveryPreparation.Discard(preview.PreviewId);
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { model.StatusMessage = "Recovery review is unavailable. Earlier attempts, audio and financial holds were preserved."; }
+        { model.StatusMessage = ReportLocalFailure(LocalRequestStage.RecoveryOpen, error); }
         finally { _recoveryDialogOpen = false; }
     }
 
@@ -70,7 +71,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         c.Choice.SelectionChanged += (_, _) => Invalidate();
         c.Maximum.ValueChanged += (_, _) => Invalidate();
         c.Acknowledge.IsCheckedChanged += (_, _) => c.Approve.IsEnabled = state.Preview is not null && c.Acknowledge.IsChecked == true && state.Active is not { IsCompleted: false };
-        c.Prepare.Click += (_, _) => state.Active = RunRecoveryDialogActionAsync(c, state, async () =>
+        c.Prepare.Click += (_, _) => state.Active = RunRecoveryDialogActionAsync(LocalRequestStage.RecoveryReview, c, state, async () =>
         {
             Invalidate();
             if (c.Choice.SelectedIndex < 0 || c.Maximum.Value is not { } maximum || decimal.Truncate(maximum) != maximum)
@@ -81,7 +82,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             c.Approve.Content = p.ExistingApproval is null ? "Reserve one additional attempt; do not generate" : "Activate the same reserved attempt; do not generate";
             c.Status.Text = RecoveryReviewText(p);
         }, cancellationToken);
-        c.Approve.Click += (_, _) => state.Active = RunRecoveryDialogActionAsync(c, state, async () =>
+        c.Approve.Click += (_, _) => state.Active = RunRecoveryDialogActionAsync(LocalRequestStage.RecoveryReservation, c, state, async () =>
         {
             var p = state.Preview ?? throw new InvalidOperationException("Prepare a current review.");
             if (c.Acknowledge.IsChecked != true) throw new InvalidOperationException("Acknowledge retained historical holds.");
@@ -104,13 +105,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         return $"{successor}{allocation}{p.Intent.Currency}, scale {p.Intent.Scale}: current estimate {p.Intent.EstimateMinorUnits}. {reservation} This admission permits at most {p.AssociationProof.MaximumNewAttempts} new attempt(s), with cumulative additional reservations at most {p.AssociationProof.MaximumAdditionalReservationMinorUnits}. Retained commitments {p.Budget.RetainedCommittedMinorUnits}; project ceiling {p.Budget.ProjectCeilingMinorUnits}; remaining allocation {p.Budget.RemainingAllocationMinorUnits}. Voice {p.Intent.Envelope.VoiceName}. Earlier holds stay reserved. Confirmation does not generate audio.";
     }
 
-    private static async Task RunRecoveryDialogActionAsync(RecoveryControls c, RecoveryDialogState state, Func<Task> action, CancellationToken cancellationToken)
+    private async Task RunRecoveryDialogActionAsync(LocalRequestStage stage, RecoveryControls c, RecoveryDialogState state, Func<Task> action, CancellationToken cancellationToken)
     {
         if (state.Active is { IsCompleted: false } || state.Approved) return;
         c.Choice.IsEnabled = false; c.Maximum.IsEnabled = false; c.Prepare.IsEnabled = false; c.Approve.IsEnabled = false;
         try { await action().ConfigureAwait(true); }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { c.Status.Text = "Recovery stopped safely. Evidence, selection, price or financial state needs a fresh review. Do not retry synthesis or clear earlier holds."; }
+        { c.Status.Text = ReportLocalFailure(stage, error); }
         finally
         {
             if (!cancellationToken.IsCancellationRequested && !state.Approved)

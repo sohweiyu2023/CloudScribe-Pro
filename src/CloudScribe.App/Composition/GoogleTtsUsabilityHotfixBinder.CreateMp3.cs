@@ -32,6 +32,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
         catch (Exception e) when (e is IOException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
         {
+            _ = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.ConnectionRead, e);
             label.Text = "Could not read connection status. Open Advanced tools to inspect it; no credentials changed.";
             setup.IsVisible = true;
         }
@@ -64,6 +65,16 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         AutomationProperties.SetName(connection, "Google connection status");
         body.Children.Add(connection);
         await LoadConnectionStatusAsync(connection).ConfigureAwait(true);
+        Observe(body, model, (_, args) =>
+        {
+            if (args.PropertyName is nameof(ShellViewModel.ConnectedVoiceCatalogStatus) or nameof(ShellViewModel.IsConnectedVoiceCatalogLoading)
+                or nameof(ShellViewModel.HasCurrentVoiceLanguageCatalog))
+                connection.Text = model.IsConnectedVoiceCatalogLoading
+                    ? "Checking the saved Google connection. No speech is generated."
+                    : (model.HasCurrentVoiceLanguageCatalog && model.VoiceLabCatalogLastRefreshSucceeded
+                        ? "Google connection verified for the current catalog. "
+                        : "Saved connection metadata is not proof of current access. ") + model.ConnectedVoiceCatalogStatus;
+        }, dialog);
         TextBlock document = Text(string.Empty);
         body.Children.Add(document);
         void UpdateDocument() => document.Text = string.IsNullOrWhiteSpace(model.DocumentText)
@@ -93,7 +104,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             model.ApplySavedVoiceSetup(setup);
             try { preferences.Remember(setup); }
             catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
-            { model.StatusMessage = "Voice loaded for this session, but its preference could not be saved."; return; }
+            { _ = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.PreferenceWrite, e); model.StatusMessage = "Voice loaded for this session, but its preference could not be saved."; return; }
             model.StatusMessage = "Saved voice chosen. Loading verified voices before cost review.";
             if (reloadVoices is not null) await reloadVoices().ConfigureAwait(true);
         };
@@ -110,8 +121,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.PreferredVoiceName), StringComparison.Ordinal))
                 remembered.Text = "Remembered voice: " + (model.PreferredVoiceName ?? "none chosen") + ". Loading checks that this voice is still available.";
         }
-        StackPanel filters = AddSection(body, "Language and voice filters", expanded: false);
-        AddField(filters, "Language", locale);
+        AddLanguagePicker(body, model, locale, dialog);
+        StackPanel filters = AddSection(body, "Voice search (optional)", expanded: false);
+
         AddField(filters, "Search voices", search);
         reloadVoices = AddRefreshControl(body, model, locale, search, dialog, autoLoad: true);
         AddVoiceSelector(body, model, dialog);
@@ -164,7 +176,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             Refresh();
             try { await model.PrepareGoogleGenerationSpendReviewAsync().ConfigureAwait(true); }
             catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-            { model.StatusMessage = "Cost review could not finish. Refresh voices, check the pricing source and current text. For a long document, use Advanced tools to create local parts. No generation was started."; }
+            { model.StatusMessage = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.Review, e); }
             finally { reviewing = false; Refresh(); }
         };
         consent.IsCheckedChanged += (_, _) => Refresh();
@@ -194,7 +206,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 await model.CreateReviewedGoogleMp3Async(displayed, consent.IsChecked == true).ConfigureAwait(true);
             }
             catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-            { model.StatusMessage = "MP3 creation stopped. Review local request status in Setups before retrying; a dispatched request may still be charged."; }
+            { model.StatusMessage = "MP3 creation stopped; a dispatched request may still be charged. " + ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.GenerationDispatch, e); }
             finally { busy = false; consent.IsChecked = false; Refresh(); }
         };
         body.Children.Add(review);
@@ -213,16 +225,16 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
         Button close = NewButton("Close Create MP3");
         close.Click += (_, _) => dialog.Close();
+        body.Children.Add(nextStep);
+        body.Children.Add(estimate);
+        body.Children.Add(consent);
+        body.Children.Add(create);
+        AddStopWaitingControl(body, model, dialog);
+        body.Children.Add(status);
         Grid layout = new() { RowDefinitions = new RowDefinitions("*,Auto") };
         ScrollViewer bodyScroll = new() { Content = body };
         layout.Children.Add(bodyScroll);
         StackPanel footer = new() { Spacing = 10, Margin = new Thickness(20, 8, 20, 16) };
-        footer.Children.Add(nextStep);
-        footer.Children.Add(estimate);
-        footer.Children.Add(consent);
-        footer.Children.Add(create);
-        AddStopWaitingControl(footer, model, dialog);
-        footer.Children.Add(status);
         footer.Children.Add(close);
         Grid.SetRow(footer, 1);
         layout.Children.Add(footer);

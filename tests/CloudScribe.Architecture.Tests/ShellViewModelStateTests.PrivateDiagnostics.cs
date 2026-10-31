@@ -8,6 +8,42 @@ namespace CloudScribe.Architecture.Tests;
 public sealed partial class ShellViewModelStateTests
 {
     [Theory]
+    [InlineData("throw")]
+    [InlineData("cancel")]
+    [InlineData("consent")]
+    public async Task ActualPrivateOptInFailureCannotRetainEarlierArmedCapture(string failure)
+    {
+        await using var fixture = await AutosaveDiskFixture.CreateAsync();
+        await using var autosave = new DocumentAutosaveCoordinator(fixture.NewLibrary(), TimeProvider.System);
+        using var model = CreateViewModel(); model.ConfigureStage3DocumentWorkflow(fixture.NewLibrary(), autosave);
+        await model.NewDocumentCommand.ExecuteAsync(null); model.DocumentText = "Synthetic saved capture request";
+        Assert.True(await model.PrepareDocumentCloseAsync());
+        model.SelectedVoiceLabVoice = VoiceSelection() with { LanguageCodes = ["en-US"] };
+        var store = new GooglePrivateErrorDiagnostics(Path.Combine(fixture.Paths.RootDirectory, "private-failure-tests"), TimeProvider.System);
+        var selection = model.CaptureGoogleTtsStudioRequestSelection();
+        var old = new PrivateErrorCaptureBinding(selection.DocumentId, selection.RevisionId!.Value, model.PrivateDiagnosticRequestVersion,
+            selection.AccountStableId, selection.ProjectStableId, selection.VoiceStableId, "synthetic-credential", new string('a', 64));
+        Assert.True(store.CompleteOptInReview(store.BeginOptInReview(), old, true));
+        Assert.True(store.IsArmed);
+        var compiler = new DelayedPrivateCompilation();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var pending = new GooglePrivateDiagnosticOptIn(store, compiler).PrepareAsync(model,
+            () => !string.Equals(failure, "consent", StringComparison.Ordinal), cancellation.Token);
+        if (string.Equals(failure, "throw", StringComparison.Ordinal))
+        {
+            compiler.Fail(new IOException("synthetic private path/token echo"));
+            await Assert.ThrowsAsync<IOException>(() => pending);
+        }
+        else if (string.Equals(failure, "cancel", StringComparison.Ordinal))
+        {
+            cancellation.Cancel(); compiler.Complete();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        }
+        else Assert.Null(await pending);
+        Assert.False(store.IsArmed); Assert.False(model.PreparedGoogleGenerationSpendApproved);
+    }
+
+    [Theory]
     [InlineData("disable")]
     [InlineData("uncheck")]
     [InlineData("close")]
@@ -41,6 +77,7 @@ public sealed partial class ShellViewModelStateTests
         private readonly TaskCompletionSource<GoogleGenerationProductionPendingApprovalStateOwner.PendingState> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private ShellViewModel.GoogleTtsStudioRequestSelection? _selection;
         public int Calls { get; private set; }
+        public void Fail(Exception error) => _completion.SetException(error);
         public Task<GoogleGenerationProductionPendingApprovalStateOwner.PendingState> CompileReadonlyAsync(ShellViewModel.GoogleTtsStudioRequestSelection selection, CancellationToken cancellationToken)
         { Calls++; _selection = selection; return _completion.Task; }
         public void Complete()

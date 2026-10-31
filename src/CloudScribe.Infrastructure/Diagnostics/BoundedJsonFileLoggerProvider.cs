@@ -65,7 +65,7 @@ public sealed class BoundedJsonFileLoggerProvider : ILoggerProvider, ISupportExt
     public event EventHandler? StatusChanged;
 
     public ILogger CreateLogger(string categoryName) =>
-        _loggers.GetOrAdd(categoryName, category => new BoundedJsonLogger(category, this));
+        _loggers.GetOrAdd(categoryName, _ => new BoundedJsonLogger(this));
 
     public void SetScopeProvider(IExternalScopeProvider scopeProvider) =>
         _scopeProvider = scopeProvider ?? throw new ArgumentNullException(nameof(scopeProvider));
@@ -80,12 +80,11 @@ public sealed class BoundedJsonFileLoggerProvider : ILoggerProvider, ISupportExt
 
     public long DroppedRecordCount => Interlocked.Read(ref _droppedRecordCount);
 
-    internal void Enqueue(
+    private void Enqueue(
         LogLevel logLevel,
         EventId eventId,
-        string category,
-        string message,
-        Exception? exception)
+        Exception? exception,
+        SafeDiagnosticMetadataSnapshot metadata)
     {
         if (Volatile.Read(ref _disposed) != 0)
         {
@@ -108,13 +107,14 @@ public sealed class BoundedJsonFileLoggerProvider : ILoggerProvider, ISupportExt
             Environment.CurrentManagedThreadId,
             logLevel.ToString(),
             eventId.Id,
-            DiagnosticRedactor.Sanitize(eventId.Name),
-            DiagnosticRedactor.Sanitize(category),
-            DiagnosticRedactor.Sanitize(message),
-            exception?.GetType().FullName,
+            metadata.EventName,
+            metadata.Component,
+            metadata.Message,
+            exception is null ? null : SafeExceptionSummarizer.Classify(exception).ToString(),
             GetExceptionDetail(exception),
             activity?.TraceId.ToString(),
-            activity?.SpanId.ToString()));
+            activity?.SpanId.ToString())
+        { SafeFields = metadata.Fields, FieldsComplete = metadata.FieldsComplete });
         if (!accepted)
         {
             Interlocked.Increment(ref _droppedRecordCount);
@@ -212,11 +212,11 @@ public sealed class BoundedJsonFileLoggerProvider : ILoggerProvider, ISupportExt
 
         try
         {
-            return DiagnosticRedactor.Sanitize(exception.ToString());
+            return SafeExceptionSummarizer.Describe(exception);
         }
         catch (Exception detailException) when (!IsFatalDiagnosticException(detailException))
         {
-            return DiagnosticRedactor.Sanitize(exception.GetType().FullName);
+            return "{\"SchemaVersion\":1,\"SummaryUnavailable\":true}";
         }
     }
 
@@ -545,9 +545,7 @@ public sealed class BoundedJsonFileLoggerProvider : ILoggerProvider, ISupportExt
         }
     }
 
-    private sealed class BoundedJsonLogger(
-        string category,
-        BoundedJsonFileLoggerProvider provider) : ILogger
+    private sealed class BoundedJsonLogger(BoundedJsonFileLoggerProvider provider) : ILogger
     {
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull => provider.ScopeProvider.Push(state);
@@ -561,11 +559,14 @@ public sealed class BoundedJsonFileLoggerProvider : ILoggerProvider, ISupportExt
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            ArgumentNullException.ThrowIfNull(formatter);
-            if (IsEnabled(logLevel))
+            if (!IsEnabled(logLevel)) return;
+            try
             {
-                provider.Enqueue(logLevel, eventId, category, formatter(state, exception), exception);
+                var metadata = SafeDiagnosticMetadata.Capture(eventId, state);
+                provider.Enqueue(logLevel, eventId, exception, metadata);
             }
+            catch (Exception error) when (!IsFatalDiagnosticException(error))
+            { Interlocked.Increment(ref provider._droppedRecordCount); }
         }
     }
 }

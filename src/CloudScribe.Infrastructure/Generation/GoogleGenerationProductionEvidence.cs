@@ -1,3 +1,4 @@
+using CloudScribe.Application.Logging;
 using CloudScribe.Application.Providers;
 using CloudScribe.Providers.Abstractions;
 
@@ -35,7 +36,7 @@ public sealed record GoogleGenerationProductionEvidence(
         if (account.EndpointOrigin is null)
             throw new InvalidOperationException("Current Google provider account has no admitted endpoint origin.");
         if (Capability.IsStale(nowUtc))
-            throw new InvalidOperationException("Current Google capability evidence is stale.");
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Current Google capability evidence is stale."), LocalRequestReason.CapabilityStale);
         if (Account.UpdatedAtUtc > capability.CapturedAtUtc)
         {
             throw new InvalidOperationException(

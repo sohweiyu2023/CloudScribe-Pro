@@ -36,7 +36,7 @@ public sealed class DatabaseInitializer(
             throw;
         }
 
-        CloudScribeLog.DatabaseInitialized(logger);
+        CloudScribeLog.Observe(() => CloudScribeLog.DatabaseInitialized(logger));
     }
 
     private async Task ApplyMigrationsAndVerifyAsync(CancellationToken cancellationToken)

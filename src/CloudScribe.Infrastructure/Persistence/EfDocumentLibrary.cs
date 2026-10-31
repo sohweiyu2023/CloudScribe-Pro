@@ -11,9 +11,26 @@ namespace CloudScribe.Infrastructure.Persistence;
 public sealed class EfDocumentLibrary(
     IDbContextFactory<CloudScribeDbContext> dbContextFactory,
     DocumentContentStore contentStore,
-    TimeProvider timeProvider) : IDocumentLibrary
+    TimeProvider timeProvider) : IDocumentLibrary, ILibraryPageSource<DocumentSummary>
 {
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    public async Task<LibraryPage<DocumentSummary>> QueryPageAsync(string query, int offset = 0, int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+        int pageSize = ValidateLimit(limit);
+        string term = query.Trim();
+        using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var matches = context.Documents.AsNoTracking().Where(item => item.Status == (int)DocumentStatus.Active
+            && (term.Length == 0 || item.Title.Contains(term) || item.DraftText.Contains(term)));
+        int total = await matches.CountAsync(cancellationToken).ConfigureAwait(false);
+        int currentOffset = total == 0 ? 0 : Math.Min(offset, (total - 1) / pageSize * pageSize);
+        var items = await matches.OrderByDescending(item => item.UpdatedAtUnixMilliseconds).ThenBy(item => item.Title).ThenBy(item => item.Id)
+            .Skip(currentOffset).Take(pageSize).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        return new(items.Select(ToSummary).ToArray(), total, currentOffset, pageSize);
+    }
 
     public async Task<DocumentSnapshot> CreateAsync(
         string title,

@@ -248,7 +248,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 search.Text = viewModel.VoiceLabSearchText;
         });
         host.Children.Add(NewDescription("Apply language and search filters with Refresh voices."));
-        AddField(host, "Language or locale", locale);
+        AddLanguagePicker(host, viewModel, locale, lifetime);
         AddField(host, "Search voices", search);
         AddRefreshControl(host, viewModel, locale, search, lifetime);
         AddVoiceSelector(host, viewModel, lifetime);
@@ -373,7 +373,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         string.Equals(left.CapabilityEvidenceId, right.CapabilityEvidenceId, StringComparison.Ordinal) &&
         string.Equals(left.VoiceFingerprint, right.VoiceFingerprint, StringComparison.Ordinal);
 
-    private static void AddOutputAndSpendControls(StackPanel host, ShellViewModel viewModel)
+    private void AddOutputAndSpendControls(StackPanel host, ShellViewModel viewModel)
     {
         host.Children.Add(new TextBlock { Text = "Output" });
         host.Children.Add(new ComboBox
@@ -447,7 +447,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             }
             catch (Exception ex)
             {
-                viewModel.StatusMessage = $"Google spend preparation failed safely · {ex.Message}";
+                viewModel.StatusMessage = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.Review, ex);
             }
             finally
             {
@@ -547,8 +547,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             }
             catch (Exception ex)
             {
-                evidence.Text = $"Current pricing evidence not activated · {ex.Message}";
-                viewModel.StatusMessage = $"Pricing activation failed safely · {ex.Message}";
+                evidence.Text = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.PricingActivation, ex);
+                viewModel.StatusMessage = evidence.Text;
             }
             finally
             {
@@ -561,7 +561,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         host.Children.Add(activate);
     }
 
-    private static async Task ApproveSpendAsync(
+    private async Task ApproveSpendAsync(
         ShellViewModel viewModel,
         string? maximumText,
         bool confirmed)
@@ -577,7 +577,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         }
         catch (Exception ex)
         {
-            viewModel.StatusMessage = $"Google spend approval failed safely · {ex.Message}";
+            viewModel.StatusMessage = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.Reservation, ex);
         }
     }
 
@@ -673,7 +673,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         catch (Exception ex)
         {
             NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Failed, ex);
-            viewModel.StatusMessage = $"Google MP3 export failed safely · {ex.Message}";
+            viewModel.StatusMessage = "MP3 export did not complete. Original accepted audio is retained. " + ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.Export, ex);
         }
     }
 

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace CloudScribe.Infrastructure.Tests;
 
-public sealed class SupportBundleServiceTests
+public sealed partial class SupportBundleServiceTests
 {
     [Fact]
     public async Task PreviewAndCreateIncludeOnlyRedactedDiagnosticsAndManifest()

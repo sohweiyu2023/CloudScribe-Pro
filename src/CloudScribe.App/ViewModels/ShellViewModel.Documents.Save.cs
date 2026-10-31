@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using CloudScribe.Application.Documents;
+using CloudScribe.Application.Logging;
 using CloudScribe.Domain.Documents;
 using CommunityToolkit.Mvvm.Input;
 
@@ -38,11 +39,13 @@ public sealed partial class ShellViewModel
             documentId,
             DocumentRevisionKind.Checkpoint,
             revisionName);
+        bool checkpointPersisted = false;
         try
         {
             DocumentSnapshot snapshot = await _documentAutosave!
                 .SaveCheckpointAsync(request)
                 .ConfigureAwait(true);
+            checkpointPersisted = true;
             ApplySaveMetadata(snapshot);
             bool stillMatches = string.Equals(EffectiveDocumentTitle(), request.Title, StringComparison.Ordinal)
                 && string.Equals(DocumentText, request.Text, StringComparison.Ordinal);
@@ -54,8 +57,9 @@ public sealed partial class ShellViewModel
             await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
             return stillMatches;
         }
-        catch (DocumentConcurrencyException)
+        catch (DocumentConcurrencyException exception)
         {
+            ObserveLocalDocumentFailure(checkpointPersisted ? LocalRequestStage.DocumentPostSavePresentation : LocalRequestStage.DocumentSave, exception);
             IsDocumentSaving = false;
             IsDocumentDirty = true;
             HasDocumentConflict = true;
@@ -65,6 +69,7 @@ public sealed partial class ShellViewModel
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
+            ObserveLocalDocumentFailure(checkpointPersisted ? LocalRequestStage.DocumentPostSavePresentation : LocalRequestStage.DocumentSave, exception);
             IsDocumentSaving = false;
             IsDocumentDirty = true;
             DocumentSaveState = "Save failed — retry required";
@@ -133,8 +138,9 @@ public sealed partial class ShellViewModel
                 QueueDocumentAutosave();
             }
         }
-        catch (DocumentConcurrencyException)
+        catch (DocumentConcurrencyException exception)
         {
+            ObserveLocalDocumentFailure(sequence == Volatile.Read(ref _autosaveSequence) ? LocalRequestStage.DocumentAutosave : LocalRequestStage.ObsoleteAutosave, exception);
             if (sequence != Volatile.Read(ref _autosaveSequence))
             {
                 return;
@@ -149,6 +155,7 @@ public sealed partial class ShellViewModel
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
+            ObserveLocalDocumentFailure(sequence == Volatile.Read(ref _autosaveSequence) ? LocalRequestStage.DocumentAutosave : LocalRequestStage.ObsoleteAutosave, exception);
             if (sequence != Volatile.Read(ref _autosaveSequence))
             {
                 return;

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Generation;
+using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
 
@@ -31,18 +32,21 @@ public sealed partial class ChirpArticlePreparationService(ChirpArticleService a
     public async Task ApproveAsync(ShellViewModel.GoogleTtsStudioRequestSelection selection,
         ChirpApprovalConfirmation confirmation, CancellationToken cancellationToken)
     {
-        if (!_pending.TryGetValue(confirmation.PreviewId, out var prepared) || clock.GetUtcNow() - prepared.CreatedAt > TimeSpan.FromMinutes(10)
-            || prepared.DocumentId != selection.DocumentId || prepared.RevisionId != selection.RevisionId
+        if (!_pending.TryGetValue(confirmation.PreviewId, out var prepared))
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The displayed native article and internal request review changed."), LocalRequestReason.ReviewMissing);
+        if (clock.GetUtcNow() - prepared.CreatedAt > TimeSpan.FromMinutes(10))
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The displayed native article and internal request review changed."), LocalRequestReason.ReviewExpired, prepared.CreatedAt, prepared.Review.ExpiresAtUtc);
+        if (prepared.DocumentId != selection.DocumentId || prepared.RevisionId != selection.RevisionId
             || !string.Equals(prepared.Review.ReviewSha256, confirmation.DisplayedReviewSha256, StringComparison.Ordinal))
-            throw new InvalidOperationException("The displayed native article and internal request review changed.");
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The displayed native article and internal request review changed."), LocalRequestReason.SelectionChanged, prepared.CreatedAt, prepared.Review.ExpiresAtUtc);
         var source = await ResolveSelectionAsync(selection, prepared.Ordinal, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(source.Proposal.SourceSha256, prepared.SourceSha256, StringComparison.Ordinal))
-            throw new InvalidOperationException("The saved original article changed after request review.");
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The saved original article changed after request review."), LocalRequestReason.SourceChanged, prepared.CreatedAt, prepared.Review.ExpiresAtUtc);
         var current = await compilation.CompileReadonlyAsync(selection with { ExactText = source.ExactText }, cancellationToken).ConfigureAwait(false);
         if (current.Envelope != prepared.Pending.Envelope || current.CurrentEstimateMinorUnits != prepared.Pending.CurrentEstimateMinorUnits
             || !Equals(current.Snapshot.UiSelection, prepared.Pending.Snapshot.UiSelection)
             || !current.Snapshot.ProviderRequest.CompiledPayload.Span.SequenceEqual(prepared.Pending.Snapshot.ProviderRequest.CompiledPayload.Span))
-            throw new InvalidOperationException("Current account, voice, price, capability or exact compiled request changed.");
+            throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Current account, voice, price, capability or exact compiled request changed."), LocalRequestReason.CompilationChanged, prepared.CreatedAt, prepared.Review.ExpiresAtUtc);
         var approval = await articles.ApproveAsync(confirmation, cancellationToken).ConfigureAwait(false);
         var envelope = current.Envelope with { ChirpAuthorizationId = approval.AuthorizationId };
         var request = current.Snapshot.ProviderRequest;

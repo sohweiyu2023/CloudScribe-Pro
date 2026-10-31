@@ -125,7 +125,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             label.Text = configured.Length switch
             {
                 0 => "No enabled Google connection saved. Configure Google once in Studio.",
-                1 => "Google connection saved. Create MP3 loads verified voices automatically; Refresh real Google voices retries if needed. Credentials remain in Windows Credential Manager; refreshed access evidence lasts about 30 minutes.",
+                1 => "Google connection metadata is saved. This does not verify credentials or current Google access. Open Create MP3 to check the connection; use Repair existing Google connection if saved credentials are unavailable.",
                 _ => "Multiple enabled Google connections exist. Refresh currently requires exactly one; do not add another account to fix this. Account selection/management needs a separate workflow.",
             };
         }
