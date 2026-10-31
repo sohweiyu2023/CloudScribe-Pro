@@ -10,18 +10,21 @@ public sealed class GoogleGenerationProductionTransportFactory
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<GoogleGenerationHttpTransport>? _logger;
     private readonly GooglePrivateErrorDiagnostics? _privateDiagnostics;
+    private readonly CompletionWorkflowGate? _completionGate;
 
     public GoogleGenerationProductionTransportFactory(
         HttpClient httpClient,
         ITransientCredentialResolver credentialResolver,
         TimeProvider? timeProvider = null,
-        ILogger<GoogleGenerationHttpTransport>? logger = null, GooglePrivateErrorDiagnostics? privateDiagnostics = null)
+        ILogger<GoogleGenerationHttpTransport>? logger = null, GooglePrivateErrorDiagnostics? privateDiagnostics = null,
+        CompletionWorkflowGate? completionGate = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _credentialResolver = credentialResolver ?? throw new ArgumentNullException(nameof(credentialResolver));
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
         _privateDiagnostics = privateDiagnostics;
+        _completionGate = completionGate;
     }
 
     public GoogleGenerationProductionTransport Create(
@@ -35,6 +38,7 @@ public sealed class GoogleGenerationProductionTransportFactory
 
         ProviderAccountSnapshot snapshot = evidence.Account;
         var reference = snapshot.Reference;
+        _completionGate?.RequireAccount(reference);
         if (reference.CredentialReference is null)
             throw new InvalidOperationException("Current Google provider account has no credential reference.");
         if (reference.EndpointOrigin is null)
@@ -60,7 +64,7 @@ public sealed class GoogleGenerationProductionTransportFactory
         var transport = new GoogleGenerationHttpTransport(
             _httpClient,
             _credentialResolver,
-            submissionAccount.Endpoint, _logger, _privateDiagnostics);
+            submissionAccount.Endpoint, _logger, _privateDiagnostics, _completionGate);
 
         return new GoogleGenerationProductionTransport(submissionAccount, transport);
     }

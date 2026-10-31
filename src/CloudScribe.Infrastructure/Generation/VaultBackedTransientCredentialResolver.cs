@@ -26,6 +26,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
     private readonly HttpClient _httpClient;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<VaultBackedTransientCredentialResolver>? _logger;
+    private readonly CompletionWorkflowGate? _completionGate;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly ConcurrentDictionary<string, CachedAccessToken> _cache = new(StringComparer.Ordinal);
     private bool _disposed;
@@ -34,12 +35,13 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         ICredentialVault credentialVault,
         HttpClient? httpClient = null,
         TimeProvider? timeProvider = null,
-        ILogger<VaultBackedTransientCredentialResolver>? logger = null)
+        ILogger<VaultBackedTransientCredentialResolver>? logger = null, CompletionWorkflowGate? completionGate = null)
     {
         _credentialVault = credentialVault ?? throw new ArgumentNullException(nameof(credentialVault));
         _httpClient = httpClient ?? new HttpClient();
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
+        _completionGate = completionGate;
     }
 
     public async ValueTask<string> ResolveAccessTokenAsync(
@@ -47,6 +49,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        _completionGate?.BeforeCredential(credentialReferenceId);
         if (string.IsNullOrWhiteSpace(credentialReferenceId))
             throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
 
@@ -65,13 +68,14 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
         return await ResolveServiceAccountAccessTokenAsync(credentialReferenceId, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<OAuthTokenResponse> ReadTokenResponseAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    private async Task<OAuthTokenResponse> ReadTokenResponseAsync(HttpRequestMessage request, string credentialReferenceId, CancellationToken cancellationToken)
     {
         Guid refreshId = Guid.NewGuid();
         var phase = GoogleCatalogRefreshPhase.OAuthTokenRequest;
         try
         {
             GoogleCatalogRefreshDiagnostics.Phase(_logger, refreshId, phase);
+            _completionGate?.BeforeCredential(credentialReferenceId);
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             GoogleCatalogRefreshDiagnostics.Http(_logger, refreshId, phase, response.StatusCode);
             if (!response.IsSuccessStatusCode)
@@ -129,7 +133,7 @@ public sealed class VaultBackedTransientCredentialResolver : ITransientCredentia
                 ["assertion"] = assertion,
             });
             using HttpRequestMessage request = new(HttpMethod.Post, metadata.TokenUri) { Content = form };
-            OAuthTokenResponse tokenResponse = await ReadTokenResponseAsync(request, cancellationToken).ConfigureAwait(false);
+            OAuthTokenResponse tokenResponse = await ReadTokenResponseAsync(request, credentialReferenceId, cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(tokenResponse.access_token))
                 throw new InvalidDataException("Google OAuth token exchange returned no access token.");
             if (!string.Equals(tokenResponse.token_type, "Bearer", StringComparison.OrdinalIgnoreCase))

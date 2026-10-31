@@ -20,7 +20,7 @@ public sealed class GoogleSynthesisCapabilityProbe(
     HttpClient httpClient,
     ITransientCredentialResolver credentialResolver,
     TimeProvider timeProvider,
-    ILogger<GoogleSynthesisCapabilityProbe>? logger = null)
+    ILogger<GoogleSynthesisCapabilityProbe>? logger = null, CompletionWorkflowGate? completionGate = null)
 {
     private const int MaximumEvidenceBodyBytes = 64 * 1024;
 
@@ -32,7 +32,7 @@ public sealed class GoogleSynthesisCapabilityProbe(
         ProviderAccountReference account, string projectId, Uri synthesisEndpoint,
         Guid diagnosticRefreshId, CancellationToken cancellationToken)
     {
-        Guid refreshId = diagnosticRefreshId;
+        Guid refreshId = completionGate?.CurrentRefreshId(diagnosticRefreshId) ?? diagnosticRefreshId;
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.ProbeToken;
         void At(GoogleCatalogRefreshPhase next)
         {
@@ -46,6 +46,8 @@ public sealed class GoogleSynthesisCapabilityProbe(
             ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
             ArgumentNullException.ThrowIfNull(synthesisEndpoint);
             ValidateEndpointBinding(account, synthesisEndpoint);
+            completionGate?.RequireProject(projectId);
+            completionGate?.BeforeNetwork(account, synthesisEndpoint, true, refreshId);
 
             CredentialReference credential = account.CredentialReference
                 ?? throw new InvalidOperationException("Google synthesis capability verification requires an admitted credential reference.");
@@ -57,13 +59,9 @@ public sealed class GoogleSynthesisCapabilityProbe(
 
             // Deliberately invalid and input-free: Google cannot synthesize audio from this payload.
             At(GoogleCatalogRefreshPhase.ProbeRequest);
-            using HttpRequestMessage request = new(HttpMethod.Post, synthesisEndpoint)
-            {
-                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
-            };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Headers.TryAddWithoutValidation("x-goog-user-project", projectId.Trim());
+            using HttpRequestMessage request = EmptyProbeRequest(synthesisEndpoint, accessToken, projectId);
+            completionGate?.BeforeNetwork(account, synthesisEndpoint, true, refreshId);
+            completionGate?.BeforeRequest(true);
 
             using HttpResponseMessage response = await httpClient
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
@@ -79,15 +77,27 @@ public sealed class GoogleSynthesisCapabilityProbe(
             if (capturedAtUtc.Offset != TimeSpan.Zero)
                 throw new InvalidOperationException("Google synthesis capability verification requires a UTC time provider.");
             string evidenceHash = Convert.ToHexString(SHA256.HashData(body)).ToLowerInvariant();
-            return new GoogleSynthesisCapabilityEvidence(
+            var evidence = new GoogleSynthesisCapabilityEvidence(
                 capturedAtUtc,
                 $"google-synthesis-probe:invalid-argument:sha256:{evidenceHash}");
+            completionGate?.ProbeObserved(projectId, evidence);
+            return evidence;
         }
         catch (Exception exception) when (GoogleCatalogRefreshDiagnostics.IsNonFatal(exception))
         {
             GoogleCatalogRefreshDiagnostics.Failure(logger, refreshId, phase, exception);
             throw;
         }
+    }
+
+    private static HttpRequestMessage EmptyProbeRequest(Uri endpoint, string token, string project)
+    {
+        HttpRequestMessage request = new(HttpMethod.Post, endpoint)
+        { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.TryAddWithoutValidation("x-goog-user-project", project.Trim());
+        return request;
     }
 
     private static void RequireValidationRejection(HttpStatusCode status, byte[] body, GoogleCatalogRefreshPhase phase)
@@ -104,7 +114,9 @@ public sealed class GoogleSynthesisCapabilityProbe(
             throw GoogleCatalogRefreshDiagnostics.WithHttpContext(new InvalidOperationException(
                 "Google synthesis capability probe returned HTTP 400 without provider INVALID_ARGUMENT evidence."), status, phase);
         }
-
+        using var inspected = JsonDocument.Parse(body);
+        if (inspected.RootElement.TryGetProperty("audioContent", out _))
+            throw new InvalidDataException("Input-free capability probe unexpectedly contained audio.");
     }
 
     private static async Task<byte[]> ReadBoundedBodyAsync(

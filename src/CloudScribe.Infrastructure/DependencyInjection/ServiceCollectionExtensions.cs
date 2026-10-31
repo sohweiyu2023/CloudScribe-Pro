@@ -99,6 +99,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<VoiceLabCatalogCurrentEvidenceResolver>();
         services.AddSingleton<VoiceLabAuditionCurrentEvidenceResolver>();
         services.AddSingleton<GoogleVoiceCatalogClient>();
+        services.AddSingleton<CompletionWorkflowGate>();
         services.AddSingleton<GoogleTextToSpeechCatalogBootstrapService>();
         services.AddSingleton<GoogleSynthesisCapabilityProbe>();
         services.AddSingleton(serviceProvider =>

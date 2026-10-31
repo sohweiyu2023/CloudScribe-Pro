@@ -8,10 +8,14 @@ param(
     [string]$ReviewedChirpArticlePolicySha256,
     [string]$ReviewedChirpResumePolicyPath,
     [string]$ReviewedChirpResumePolicySha256,
+    [string]$ReviewedCompletionGatePath,
+    [string]$ReviewedCompletionGateSha256,
     [switch]$ValidateOnly,
     [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
+if([bool]$ReviewedCompletionGatePath -ne [bool]$ReviewedCompletionGateSha256){throw 'Completion gate admission requires separately reviewed bytes and hash.'}
+if($ValidatePackageOnly -and ($ReviewedCompletionGatePath -or $ReviewedCompletionGateSha256)){throw 'Private completion gate is excluded from clean packages.'}
 if($ValidatePackageOnly -and ($ValidateOnly -or $MigrateProfileFrom)){throw 'ValidatePackageOnly cannot be combined with installation or migration preflight.'}
 if($ValidatePackageOnly -and ($ReviewedRecoveryPolicyPath -or $ReviewedRecoveryPolicySha256)){throw 'A private recovery policy is not part of a clean package.'}
 if([bool]$ReviewedRecoveryPolicyPath -ne [bool]$ReviewedRecoveryPolicySha256){throw 'Recovery policy admission requires both the separately reviewed file and its independently approved SHA256.'}
@@ -31,6 +35,95 @@ function Assert-NoLinks([string]$Path){
         if((Test-Path -LiteralPath $current) -and ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw "Linked install/profile path is not allowed: $current"}
         $current=Split-Path -Parent $current
     }
+}
+
+function Invoke-CompletionGate($Gate,[string]$Command,[Guid]$OperationId,[string]$Identity,$Receipt,[string]$ApplicationDirectory,[string]$PolicyPath){
+    foreach($entry in @(@($Gate.Config.PythonPath,$Gate.Config.PythonSha256),@($Gate.Config.ScriptPath,$Gate.Config.ScriptSha256),@((Join-Path (Split-Path -Parent $Gate.Config.ScriptPath) 'completion_register.py'),$Gate.Config.ModuleSha256))){
+        Assert-NoLinks $entry[0]
+        if((Get-FileHash -LiteralPath $entry[0] -Algorithm SHA256).Hash -ine $entry[1]){throw 'Completion bridge material differs from its reviewed hash.'}
+    }
+    $start=[Diagnostics.ProcessStartInfo]::new($Gate.Config.PythonPath)
+    $start.UseShellExecute=$false;$start.CreateNoWindow=$true
+    $start.RedirectStandardInput=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+    $start.ArgumentList.Add('-I');$start.ArgumentList.Add('-S');$start.ArgumentList.Add($Gate.Config.ScriptPath)
+    $process=[Diagnostics.Process]::Start($start)
+    if(-not $process){throw 'Completion bridge did not start.'}
+    try{
+        $inputRecord=@{command=$Command;configPath=$Gate.Path;configSha256=$Gate.Sha256;appDirectory=$ApplicationDirectory;id=$OperationId.ToString('D');identitySha256=$Identity;receipt=$Receipt;policyPath=$PolicyPath}
+        $process.StandardInput.Write(($inputRecord|ConvertTo-Json -Depth 8 -Compress));$process.StandardInput.Close()
+        $outputTask=$process.StandardOutput.ReadToEndAsync();$errorTask=$process.StandardError.ReadToEndAsync()
+        if(-not $process.WaitForExit(15000)){throw 'Completion bridge timeout: outcome requires reconciliation; do not retry.'}
+        $output=$outputTask.GetAwaiter().GetResult();$errorText=$errorTask.GetAwaiter().GetResult()
+        if($output.Length -gt 8192 -or $errorText.Length -gt 8192){throw 'Completion bridge protocol bound failed; reconcile the private register.'}
+        $result=$output|ConvertFrom-Json
+        $safeReason=if($result.PSObject.Properties.Name -contains 'reason' -and $result.reason -cin @('Unknown','Expired','ClockRollback','ClockDiscontinuity','PendingOutcome','Limit','PinMismatch','Storage','Protocol','Stopped')){$result.reason}else{'Unknown'}
+        if($process.ExitCode -ne 0 -or $result.PSObject.Properties.Name -contains 'rejected' -or ($Command -eq 'complete' -and $result.outcome -cne 'Succeeded')){throw "Completion operation stopped: $safeReason. Reconcile its private register; do not retry automatically."}
+        return $result
+    }finally{$process.Dispose()}
+}
+
+function Get-ReviewedCompletionGate([string]$Profile){
+    $path=$ReviewedCompletionGatePath;$pin=$ReviewedCompletionGateSha256
+    $requiredPath=if($Profile){Join-Path $Profile '.completion-workflow-required.json'}else{$null}
+    $oldGatePin=if($identity -and $identity.PSObject.Properties.Name -contains 'CompletionWorkflowGateSha256'){$identity.CompletionWorkflowGateSha256}else{$null}
+    if(-not $path -and $oldGatePin){
+        if(-not $ReviewedChirpResumePolicyPath -and -not $ReviewedChirpArticlePolicyPath){throw 'An active completion gate cannot be silently dropped by an ordinary update.'}
+        $path=Join-Path $target 'completion-workflow-gate.json';$pin=$oldGatePin
+    }
+    if(-not $path){
+        if($requiredPath -and (Test-Path -LiteralPath $requiredPath)){throw 'Partial completion gate activation requires explicit reconciliation.'}
+        return $null
+    }
+    if(-not $Profile -or $MigrateProfileFrom -or $pin -cnotmatch '^[a-f0-9]{64}$'){throw 'Completion gate requires its exact existing profile and reviewed hash.'}
+    if(-not $identity -or $identity.PSObject.Properties.Name -notcontains 'CompletionGateProtocolVersion' -or $identity.CompletionGateProtocolVersion -ne 1){throw 'Install and verify the gate-capable build first, without activating a live scope.'}
+    $path=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $path).Path);Assert-NoLinks $path
+    if((Get-Item -LiteralPath $path).Length -gt 32768){throw 'Completion gate exceeds its bound.'}
+    $bytes=[IO.File]::ReadAllBytes($path)
+    if([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant() -cne $pin){throw 'Completion gate pin differs.'}
+    $json=[Text.Json.JsonDocument]::Parse([Text.Encoding]::UTF8.GetString($bytes))
+    try{Assert-UniqueRecoveryJson $json.RootElement}finally{$json.Dispose()}
+    $config=[Text.Encoding]::UTF8.GetString($bytes)|ConvertFrom-Json
+    $profileSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes([IO.Path]::GetFullPath($Profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()))).ToLowerInvariant()
+    if($config.SchemaVersion -ne 1 -or $config.ProfileRootSha256 -cne $profileSha -or
+        [IO.Path]::GetFullPath($config.ApplicationDirectory).TrimEnd([char[]]@('\','/')) -ine (Join-Path $target 'app') -or
+        [IO.Path]::GetFullPath($config.CandidateApplicationDirectory).TrimEnd([char[]]@('\','/')) -ine (Join-Path $package 'app') -or
+        (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash -ine $config.AppSha256 -or
+        (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash -ine $config.InfrastructureSha256){throw 'Completion gate build/profile/package binding differs.'}
+    if((Get-FileHash -LiteralPath (Join-Path $target 'app/CloudScribe.dll')).Hash -ine $config.AppSha256 -or
+        (Get-FileHash -LiteralPath (Join-Path $target 'app/CloudScribe.Infrastructure.dll')).Hash -ine $config.InfrastructureSha256){throw 'Activate completion only on the already verified exact installed hook build.'}
+    if($oldGatePin -and $oldGatePin -cne $pin){throw 'A completion run cannot be reset or replaced implicitly.'}
+    if($requiredPath -and (Test-Path -LiteralPath $requiredPath)){
+        Assert-NoLinks $requiredPath
+        $required=Get-Content -LiteralPath $requiredPath -Raw|ConvertFrom-Json
+        if($required.GateSha256 -cne $pin -or $required.ScopeSha256 -cne $config.ScopeSha256){throw 'Completion requirement differs; no reset permitted.'}
+    }
+    $gate=[pscustomobject]@{Path=$path;Sha256=$pin;Bytes=$bytes;Config=$config;RequiredPath=$requiredPath}
+    $inspection=Invoke-CompletionGate $gate 'inspect' ([Guid]::Empty) '' $null (Join-Path $package 'app')
+    $gate|Add-Member -NotePropertyName DeadlineUtc -NotePropertyValue ([DateTimeOffset]$inspection.deadlineUtc)
+    return $gate
+}
+
+function Assert-CompletionInstallEffect($Gate,$OperationId,$OperationIdentity,$Resume){
+    if(-not $Gate){return}
+    $null=Invoke-CompletionGate $Gate 'check' $OperationId $OperationIdentity $null (Join-Path $package 'app')
+    if($Resume){
+        $policy=[Text.Encoding]::UTF8.GetString($Resume.Bytes)|ConvertFrom-Json
+        if([DateTimeOffset]$policy.ExpiresAtUtc -le [DateTimeOffset]::UtcNow -or [DateTimeOffset]$policy.CatalogExpiresAtUtc -le [DateTimeOffset]::UtcNow){throw 'Resume admission expired before installer effect; retain its pending register state.'}
+    }
+}
+
+function Get-RetainedCompletionAuthority($Gate){
+    if(-not $Gate -or -not $reviewedResume -or -not $identity -or $identity.PSObject.Properties.Name -notcontains 'ChirpArticlePolicySha256'){return $null}
+    $path=Join-Path $target 'chirp-article-admission-policy.json';Assert-NoLinks $path
+    if((Get-Item -LiteralPath $path).Length -gt 8*1024*1024){throw 'Existing article scope exceeds its private bound.'}
+    $bytes=[IO.File]::ReadAllBytes($path);$sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+    if($sha -cne $identity.ChirpArticlePolicySha256.ToLowerInvariant()){throw 'The installed article scope changed; no implicit replacement allowed.'}
+    $document=[Text.Json.JsonDocument]::Parse([Text.Encoding]::UTF8.GetString($bytes))
+    try{Assert-UniqueRecoveryJson $document.RootElement;Assert-ChirpPolicy $document.RootElement}finally{$document.Dispose()}
+    # This is retention, not a fresh admission: require the SAME policy hash to
+    # have a successful prior completion-admission event under this exact run.
+    $null=Invoke-CompletionGate $Gate 'verify-completion' ([Guid]::Empty) $sha $null (Join-Path $package 'app') $path
+    return [pscustomobject]@{Bytes=$bytes;Sha256=$sha}
 }
 function Assert-UniqueRecoveryJson($Element){
     if($Element.ValueKind -eq [Text.Json.JsonValueKind]::Object){
@@ -492,8 +585,39 @@ if($MigrateProfileFrom){
 $reviewedRecovery=Get-ReviewedRecoveryPolicy $profile
 $reviewedChirp=Get-ReviewedChirpPolicy $profile
 $reviewedResume=Get-ReviewedChirpResumePolicy $profile
-if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery;ReviewedChirpArticlePolicy=[bool]$reviewedChirp;ReviewedChirpResumePolicy=[bool]$reviewedResume};return}
+$completionGate=Get-ReviewedCompletionGate $profile
+$retainedCompletion=Get-RetainedCompletionAuthority $completionGate
+if($completionGate -and $reviewedRecovery){throw 'An active completion gate does not authorize unrelated recovery-policy installation.'}
+if($completionGate){
+    foreach($authority in @($reviewedResume,$reviewedChirp)|Where-Object {$_}){
+        $authorityRoot=[Text.Encoding]::UTF8.GetString($authority.Bytes)|ConvertFrom-Json
+        $authorityBinding=if($authority -eq $reviewedResume){$authorityRoot.HistoricalPolicy}else{$authorityRoot}
+        if([DateTimeOffset]$authorityRoot.ExpiresAtUtc -gt $completionGate.DeadlineUtc -or
+            $authorityBinding.AccountId -cne $completionGate.Config.AccountId -or
+            $authorityBinding.ProjectId -cne $completionGate.Config.ProjectId){throw 'Paid authority exceeds completion scope bindings/deadline.'}
+    }
+}
+if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery;ReviewedChirpArticlePolicy=[bool]$reviewedChirp;ReviewedChirpResumePolicy=[bool]$reviewedResume;ReviewedCompletionGate=[bool]$completionGate};return}
 if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close every CloudScribe window normally before installing/updating. No process will be killed.'}
+$completionOperation=[Guid]::Empty;$completionIdentity=''
+if($completionGate){
+    if($reviewedResume -or $reviewedChirp){
+        $completionOperation=[Guid]::NewGuid()
+        $completionIdentity=if($reviewedResume){$reviewedResume.Sha256.ToLowerInvariant()}else{$reviewedChirp.Sha256.ToLowerInvariant()}
+        $command=if($reviewedResume){'claim-resume'}else{'claim-completion'}
+        $policyPath=if($reviewedResume){$ReviewedChirpResumePolicyPath}else{$ReviewedChirpArticlePolicyPath}
+        $null=Invoke-CompletionGate $completionGate $command $completionOperation $completionIdentity $null (Join-Path $package 'app') $policyPath
+        Assert-CompletionInstallEffect $completionGate $completionOperation $completionIdentity $reviewedResume
+    }
+    # Durable required state comes BEFORE activation/install effects. Interruption
+    # leaves a fail-closed required marker; never silently remove or reset it.
+    if(-not (Test-Path -LiteralPath $completionGate.RequiredPath)){
+        Assert-NoLinks $completionGate.RequiredPath
+        $requirement=@{GateSha256=$completionGate.Sha256;ScopeSha256=$completionGate.Config.ScopeSha256}|ConvertTo-Json -Compress
+        $stream=[IO.FileStream]::new($completionGate.RequiredPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try{$bytes=[Text.Encoding]::UTF8.GetBytes($requirement);$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+    }
+}
 [IO.Directory]::CreateDirectory($programs) | Out-Null
 $suffix=[Guid]::NewGuid().ToString('N')
 $stage=Join-Path $programs ('CloudScribe Pro.stage-'+$suffix)
@@ -515,7 +639,7 @@ if($profile){
     $settings.CloudScribe.AppDataDirectoryOverride=$profile
     $settings | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $stage 'app/appsettings.json') -Encoding utf8
 }
-$installMarker=@{Product='CloudScribe Pro';Version=1;Profile=$profile;AppSha256=(Get-FileHash -LiteralPath (Join-Path $stage 'app/CloudScribe.dll')).Hash}
+$installMarker=@{Product='CloudScribe Pro';Version=1;Profile=$profile;AppSha256=(Get-FileHash -LiteralPath (Join-Path $stage 'app/CloudScribe.dll')).Hash;CompletionGateProtocolVersion=1}
 if($reviewedRecovery){
     [IO.File]::WriteAllBytes((Join-Path $stage 'recovery-admission-policy.json'),$reviewedRecovery.Bytes)
     $installMarker.RecoveryPolicySha256=$reviewedRecovery.Sha256
@@ -524,13 +648,24 @@ if($reviewedChirp){
     [IO.File]::WriteAllBytes((Join-Path $stage 'chirp-article-admission-policy.json'),$reviewedChirp.Bytes)
     $installMarker.ChirpArticlePolicySha256=$reviewedChirp.Sha256
 }
+elseif($retainedCompletion){
+    [IO.File]::WriteAllBytes((Join-Path $stage 'chirp-article-admission-policy.json'),$retainedCompletion.Bytes)
+    $installMarker.ChirpArticlePolicySha256=$retainedCompletion.Sha256
+}
 if($reviewedResume){
     [IO.File]::WriteAllBytes((Join-Path $stage 'chirp-reservation-resume-admission.json'),$reviewedResume.Bytes)
     $installMarker.ChirpReservationResumePolicySha256=$reviewedResume.Sha256
 }
-# An ordinary update does not copy or silently re-admit any previous private recovery authority.
+if($completionGate){
+    [IO.File]::WriteAllBytes((Join-Path $stage 'completion-workflow-gate.json'),$completionGate.Bytes)
+    $installMarker.CompletionWorkflowGateSha256=$completionGate.Sha256
+}
+# Ordinary updates never copy private recovery authority. The explicit active-run
+# zero-funds resume above retains ONLY its already-admitted exact article policy,
+# with register proof; it cannot renew expiry, budget or attempts.
 $installMarker | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'cloudscribe-install.json') -Encoding utf8
 $hadPrevious=Test-Path -LiteralPath $target
+if($completionGate -and $completionOperation -ne [Guid]::Empty){Assert-CompletionInstallEffect $completionGate $completionOperation $completionIdentity $reviewedResume}
 if($hadPrevious){Move-Item -LiteralPath $target -Destination $backup}
 try{Move-Item -LiteralPath $stage -Destination $target}catch{if($hadPrevious -and -not (Test-Path -LiteralPath $target)){Move-Item -LiteralPath $backup -Destination $target};throw}
 $link=$shell.CreateShortcut($shortcut)
@@ -540,4 +675,19 @@ $link.Arguments=''
 $link.IconLocation=$link.TargetPath+',0'
 $link.Description='CloudScribe Pro - text to MP3'
 $link.Save()
+if($completionGate -and $completionOperation -ne [Guid]::Empty){
+    $actualMarker=Get-Content -LiteralPath (Join-Path $target 'cloudscribe-install.json') -Raw|ConvertFrom-Json
+    if($actualMarker.CompletionWorkflowGateSha256 -cne $completionGate.Sha256){throw 'Installed completion gate pin differs; keep pending state.'}
+    $actualPolicy=if($reviewedResume){Join-Path $target 'chirp-reservation-resume-admission.json'}else{Join-Path $target 'chirp-article-admission-policy.json'}
+    if((Get-FileHash -LiteralPath $actualPolicy -Algorithm SHA256).Hash.ToLowerInvariant() -cne $completionIdentity){throw 'Installed authority differs; keep pending state.'}
+    $receipt=@{id=$completionOperation.ToString('D');identitySha256=$completionIdentity;outcome='Succeeded';evidenceSha256=(Get-FileHash -LiteralPath (Join-Path $target 'cloudscribe-install.json')).Hash.ToLowerInvariant();policyVerified=$true}
+    if($reviewedResume){$receipt.zeroNewFunds=$true}
+    else{
+        $installedArticle=Get-Content -LiteralPath $actualPolicy -Raw|ConvertFrom-Json
+        $receipt.maximumNewAttempts=[int]$installedArticle.MaximumNewAttempts
+        $receipt.additionalReservationCents=[long]$installedArticle.MaximumAdditionalReservationMinorUnits
+    }
+    $installedGate=[pscustomobject]@{Path=(Join-Path $target 'completion-workflow-gate.json');Sha256=$completionGate.Sha256;Config=$completionGate.Config}
+    $null=Invoke-CompletionGate $installedGate 'complete' $completionOperation $completionIdentity $receipt (Join-Path $target 'app')
+}
 [pscustomobject]@{Executable=$link.TargetPath;Shortcut=$shortcut;Profile=$profile;PreviousInstall=$(if($hadPrevious){$backup}else{$null});Taskbar='Right-click the running CloudScribe gold-star icon and choose Pin to taskbar. Windows controls pinning.'}

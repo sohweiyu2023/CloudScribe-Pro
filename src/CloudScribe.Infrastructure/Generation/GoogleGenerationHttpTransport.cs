@@ -15,14 +15,17 @@ public sealed partial class GoogleGenerationHttpTransport
     private readonly Uri _allowedOrigin;
     private readonly ILogger<GoogleGenerationHttpTransport> _logger;
     private readonly GooglePrivateErrorDiagnostics? _privateDiagnostics;
+    private readonly CompletionWorkflowGate? _completionGate;
 
-    public GoogleGenerationHttpTransport(HttpClient httpClient, ITransientCredentialResolver credentialResolver, Uri allowedOrigin, ILogger<GoogleGenerationHttpTransport>? logger = null, GooglePrivateErrorDiagnostics? privateDiagnostics = null)
+    public GoogleGenerationHttpTransport(HttpClient httpClient, ITransientCredentialResolver credentialResolver, Uri allowedOrigin, ILogger<GoogleGenerationHttpTransport>? logger = null, GooglePrivateErrorDiagnostics? privateDiagnostics = null,
+        CompletionWorkflowGate? completionGate = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _credentialResolver = credentialResolver ?? throw new ArgumentNullException(nameof(credentialResolver));
         _allowedOrigin = ValidateOrigin(allowedOrigin);
         _logger = logger ?? NullLogger<GoogleGenerationHttpTransport>.Instance;
         _privateDiagnostics = privateDiagnostics;
+        _completionGate = completionGate;
     }
 
     public async Task<GoogleHttpTransportResponse> SendAsync(GoogleHttpTransportRequest request, CancellationToken cancellationToken = default)
@@ -42,19 +45,17 @@ public sealed partial class GoogleGenerationHttpTransport
         Log(GoogleSynthesisStage.ResolvingCredential);
         try
         {
+            _completionGate?.BeforeSynthesis(request.CredentialReferenceId, request.Endpoint);
             var token = await _credentialResolver.ResolveAccessTokenAsync(request.CredentialReferenceId, cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("Credential resolver returned an empty access token.");
 
-            using var message = new HttpRequestMessage(HttpMethod.Post, request.Endpoint);
-            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            message.Content = new ByteArrayContent(wirePayload);
-            message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            using var message = CreateMessage(request.Endpoint, token, wirePayload);
 
             Log(GoogleSynthesisStage.Dispatching);
             ObserveWireContent(correlation, payloadHash, wirePayload.Length, request.Endpoint);
             if (request.RequirePrivateDiagnosticCapture && _privateDiagnostics?.IsActiveFor(request.PrivateDiagnosticTicket, wirePayload) != true)
                 throw new PrivateDiagnosticNotReadyException();
+            _completionGate?.BeforeSynthesis(request.CredentialReferenceId, request.Endpoint);
             using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             status = (int)response.StatusCode;
             Log(GoogleSynthesisStage.ResponseHeaders);
@@ -79,6 +80,16 @@ public sealed partial class GoogleGenerationHttpTransport
             throw;
         }
         finally { _privateDiagnostics?.End(request.PrivateDiagnosticTicket); }
+    }
+
+    private static HttpRequestMessage CreateMessage(Uri endpoint, string token, byte[] payload)
+    {
+        var message = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        message.Content = new ByteArrayContent(payload);
+        message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        return message;
     }
 
     internal Guid? BeginPrivateCapture(CloudScribe.Providers.Abstractions.GenerationProviderRequest request, string credentialReference)

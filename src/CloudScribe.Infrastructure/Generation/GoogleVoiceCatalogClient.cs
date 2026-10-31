@@ -14,7 +14,7 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed class GoogleVoiceCatalogClient(
     HttpClient httpClient,
     ITransientCredentialResolver credentialResolver,
-    ILogger<GoogleVoiceCatalogClient>? logger = null)
+    ILogger<GoogleVoiceCatalogClient>? logger = null, CompletionWorkflowGate? completionGate = null)
 {
     public Task<GoogleVoiceCatalogSnapshot> LoadAsync(ProviderAccountReference account, Uri catalogEndpoint,
         CancellationToken cancellationToken = default) => LoadObservedAsync(account, catalogEndpoint, Guid.NewGuid(), cancellationToken);
@@ -24,7 +24,7 @@ public sealed class GoogleVoiceCatalogClient(
         Uri catalogEndpoint,
         Guid diagnosticRefreshId, CancellationToken cancellationToken)
     {
-        Guid refreshId = diagnosticRefreshId;
+        Guid refreshId = completionGate?.CurrentRefreshId(diagnosticRefreshId) ?? diagnosticRefreshId;
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.CatalogToken;
         void At(GoogleCatalogRefreshPhase next)
         {
@@ -38,6 +38,7 @@ public sealed class GoogleVoiceCatalogClient(
             ArgumentNullException.ThrowIfNull(catalogEndpoint);
 
             ValidateCatalogEndpoint(account, catalogEndpoint);
+            completionGate?.BeforeNetwork(account, catalogEndpoint, false, refreshId);
             CredentialReference credentialReference = account.CredentialReference
                 ?? throw new InvalidOperationException("Google voice discovery requires an admitted credential reference.");
 
@@ -50,9 +51,9 @@ public sealed class GoogleVoiceCatalogClient(
             }
 
             At(GoogleCatalogRefreshPhase.CatalogRequest);
-            using HttpRequestMessage request = new(HttpMethod.Get, catalogEndpoint);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using HttpRequestMessage request = CatalogRequest(catalogEndpoint, accessToken);
+            completionGate?.BeforeNetwork(account, catalogEndpoint, false, refreshId);
+            completionGate?.BeforeRequest(false);
 
             using HttpResponseMessage response = await httpClient
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
@@ -61,13 +62,7 @@ public sealed class GoogleVoiceCatalogClient(
             At(GoogleCatalogRefreshPhase.CatalogRead);
             byte[] body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new HttpRequestException(
-                    $"Google voice catalog request failed with HTTP {(int)response.StatusCode} ({response.ReasonPhrase}).",
-                    inner: null,
-                    response.StatusCode);
-            }
+            RequireCatalogSuccess(response);
 
             At(GoogleCatalogRefreshPhase.CatalogParse);
             GoogleVoiceCatalogEntry[] voices = ParseVoices(body);
@@ -76,13 +71,30 @@ public sealed class GoogleVoiceCatalogClient(
                 throw new InvalidOperationException("Google returned a successful voice catalog response without any usable voices.");
             }
 
-            return CreateSnapshot(account, catalogEndpoint, body, voices);
+            var snapshot = CreateSnapshot(account, catalogEndpoint, body, voices);
+            completionGate?.CatalogObserved(snapshot);
+            return snapshot;
         }
         catch (Exception exception) when (GoogleCatalogRefreshDiagnostics.IsNonFatal(exception))
         {
             GoogleCatalogRefreshDiagnostics.Failure(logger, refreshId, phase, exception);
             throw;
         }
+    }
+
+    private static void RequireCatalogSuccess(HttpResponseMessage response)
+    {
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Google voice catalog request failed with HTTP {(int)response.StatusCode}.",
+                inner: null, response.StatusCode);
+    }
+
+    private static HttpRequestMessage CatalogRequest(Uri endpoint, string token)
+    {
+        HttpRequestMessage request = new(HttpMethod.Get, endpoint);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return request;
     }
 
     private static GoogleVoiceCatalogSnapshot CreateSnapshot(ProviderAccountReference account, Uri catalogEndpoint,

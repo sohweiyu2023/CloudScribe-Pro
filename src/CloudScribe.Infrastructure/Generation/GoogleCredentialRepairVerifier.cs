@@ -7,7 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Explicit candidate verification using memory-only material, OAuth/catalog and an input-free capability probe.</summary>
-public sealed class GoogleCredentialRepairVerifier(HttpClient httpClient, TimeProvider clock, ILoggerFactory? loggerFactory = null) : IDisposable
+public sealed class GoogleCredentialRepairVerifier(HttpClient httpClient, TimeProvider clock, ILoggerFactory? loggerFactory = null,
+    CompletionWorkflowGate? completionGate = null) : IDisposable
 {
     internal static readonly Uri Catalog = new("https://texttospeech.googleapis.com/v1/voices");
     internal static readonly Uri Synthesis = new("https://texttospeech.googleapis.com/v1/text:synthesize");
@@ -15,6 +16,7 @@ public sealed class GoogleCredentialRepairVerifier(HttpClient httpClient, TimePr
     public async Task<GoogleVerifiedRepairCandidate> VerifyAsync(ReadOnlyMemory<char> json, ProviderAccountSnapshot account,
         string expectedProject, string expectedEmail, string reference, CancellationToken token = default)
     {
+        completionGate?.RequireOutsideRun();
         RequireBinding(account);
         if (json.IsEmpty || json.Length > 16 * 1024) throw new InvalidDataException("Candidate file exceeds its reviewed limit.");
         var memory = new GoogleRepairMemoryVault();

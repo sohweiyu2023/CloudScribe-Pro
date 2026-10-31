@@ -61,6 +61,7 @@ public sealed partial class ChirpArticleService
 
     public async Task<ChirpApprovedAttempt> ApproveReservedResumeAsync(ChirpApprovalConfirmation confirmation, CancellationToken token = default)
     {
+        completionGate?.RequireReady();
         if (!confirmation.ConfirmedByUser || !confirmation.AcknowledgedHistoricalHolds
             || !_resumePending.TryRemove(confirmation.PreviewId, out var pending)) throw ResumeRejected();
         if (clock.GetUtcNow() - pending.CreatedAt > TimeSpan.FromMinutes(10))

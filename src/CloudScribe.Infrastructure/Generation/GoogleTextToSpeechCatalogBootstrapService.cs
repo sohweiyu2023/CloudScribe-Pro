@@ -12,7 +12,7 @@ namespace CloudScribe.Infrastructure.Generation;
 /// capability probe succeed. The resulting capability provenance is derived from those observed
 /// provider responses; no capability or project/model authorization is fabricated locally.
 /// </summary>
-public sealed class GoogleTextToSpeechCatalogBootstrapService(
+public sealed partial class GoogleTextToSpeechCatalogBootstrapService(
     GoogleServiceAccountCredentialOnboardingService credentialOnboarding,
     GoogleVoiceCatalogClient catalogClient,
     GoogleSynthesisCapabilityProbe synthesisProbe,
@@ -21,7 +21,8 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
     IVoiceLabProjectAuthorizationStore projectAuthorizations,
     IGoogleGenerationProjectAuthorizationStore generationProjectAuthorizations,
     TimeProvider timeProvider,
-    ILogger<GoogleTextToSpeechCatalogBootstrapService>? logger = null)
+    ILogger<GoogleTextToSpeechCatalogBootstrapService>? logger = null, CompletionWorkflowGate? completionGate = null,
+    IChirpReservationResumeAdmissionStore? resumeAdmission = null)
 {
     public const string VoiceCatalogCapabilityId = "voice-catalog";
     private static readonly TimeSpan EvidenceLifetime = TimeSpan.FromMinutes(30);
@@ -35,6 +36,8 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
     private readonly IGoogleGenerationProjectAuthorizationStore _generationProjectAuthorizations = generationProjectAuthorizations ?? throw new ArgumentNullException(nameof(generationProjectAuthorizations));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
+    public CompletionRefreshScope BeginUiRefresh(Guid id) => completionGate?.BeginRefresh(id) ?? new(null, false, null);
+
     public async Task<GoogleTextToSpeechCatalogBootstrapResult> ConfigureFreshAsync(
         string accountId,
         string displayName,
@@ -45,6 +48,7 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         string regionId,
         CancellationToken cancellationToken = default)
     {
+        completionGate?.RequireOutsideRun();
         ValidateInputs(accountId, displayName, credentialReferenceId, catalogEndpoint, synthesisEndpoint, regionId);
         cancellationToken.ThrowIfCancellationRequested();
         await RequireFreshAccountAsync(accountId, cancellationToken).ConfigureAwait(false);
@@ -84,6 +88,7 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
 
     public async Task<GoogleTextToSpeechCatalogBootstrapResult> RefreshConfiguredAsync(Guid refreshId, CancellationToken cancellationToken = default)
     {
+        using var completion = BeginUiRefresh(refreshId);
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.AccountLookup;
         void At(GoogleCatalogRefreshPhase next)
         {
@@ -99,10 +104,12 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
             if (candidates.Length != 1)
                 throw new InvalidOperationException("Refreshing the saved Google connection requires exactly one enabled Google account.");
             ProviderAccountSnapshot account = candidates[0];
+            completionGate?.RequireAccount(account.Reference);
             string credential = account.Reference.CredentialReference?.TargetName
                 ?? throw new InvalidOperationException("The saved Google account has no credential binding.");
             At(GoogleCatalogRefreshPhase.CredentialIdentity);
             GoogleServiceAccountCredentialIdentity identity = await _credentialOnboarding.ResolveIdentityAsync(credential, cancellationToken).ConfigureAwait(false);
+            completionGate?.RequireProject(identity.ProjectId);
             At(GoogleCatalogRefreshPhase.CatalogEndpoint);
             Uri catalogEndpoint = await _credentialOnboarding.ResolveVoiceCatalogEndpointAsync(credential, cancellationToken).ConfigureAwait(false);
             At(GoogleCatalogRefreshPhase.SynthesisEndpoint);
@@ -119,7 +126,10 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
             if (!Equals(current, account))
                 throw new InvalidOperationException("The Google account changed during connection refresh; no refreshed evidence was admitted.");
             At(GoogleCatalogRefreshPhase.EvidencePersistence);
-            return await PersistObservedEvidenceAsync(account, identity, catalog, probe, refreshId, cancellationToken).ConfigureAwait(false);
+            var result = await PersistObservedEvidenceAsync(account, identity, catalog, probe, refreshId, cancellationToken).ConfigureAwait(false);
+            completionGate?.PersistenceObserved(result);
+            completion.Succeed();
+            return result;
         }
         catch (Exception exception) when (GoogleCatalogRefreshDiagnostics.IsNonFatal(exception))
         {
@@ -183,6 +193,8 @@ public sealed class GoogleTextToSpeechCatalogBootstrapService(
         try
         {
             At(phase);
+            var retained = await RetainCurrentResumeEvidenceAsync(storedAccount, identity, observedCatalog, synthesisEvidence, cancellationToken).ConfigureAwait(false);
+            if (retained is not null) return retained;
             EvidenceWindow window = CreateEvidenceWindow(observedCatalog, synthesisEvidence);
             string capabilityProvenance = BuildCombinedCapabilityProvenance(observedCatalog.ProvenanceId, synthesisEvidence.ProvenanceId);
             At(GoogleCatalogRefreshPhase.CapabilitySave);

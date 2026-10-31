@@ -11,7 +11,8 @@ namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Explicit one-segment-at-a-time durable approval. No provider or credential dependency and no automatic retry/batch loop.</summary>
 public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbContext> factory,
-    IChirpArticleAdmissionStore admission, AppPaths paths, TimeProvider clock, IChirpReservationResumeAdmissionStore? resumeAdmission = null)
+    IChirpArticleAdmissionStore admission, AppPaths paths, TimeProvider clock, IChirpReservationResumeAdmissionStore? resumeAdmission = null,
+    CompletionWorkflowGate? completionGate = null)
 {
     public const string KeyPrefix = "chirp-article:";
     private readonly ConcurrentDictionary<Guid, Pending> _pending = new();

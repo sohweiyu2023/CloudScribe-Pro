@@ -11,7 +11,7 @@ namespace CloudScribe.Infrastructure.Generation;
 /// Windows Credential Manager blob limit. The exact user-supplied catalog and synthesis endpoints
 /// are persisted with the credential binding so later requests reuse only previously admitted paths.
 /// </summary>
-public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialVault credentialVault)
+public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialVault credentialVault, CompletionWorkflowGate? completionGate = null)
 {
     internal const string ServiceAccountMarker = "google-service-account:v1";
     internal const string MetadataSuffix = ".google-service-account-metadata";
@@ -125,6 +125,7 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         if (string.IsNullOrWhiteSpace(credentialReferenceId))
             throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
 
+        completionGate?.BeforeCredential(credentialReferenceId);
         using CredentialSecret? secret = await _credentialVault.ReadAsync(
             new CredentialReference(credentialReferenceId + MetadataSuffix),
             cancellationToken).ConfigureAwait(false);
@@ -150,6 +151,7 @@ public sealed class GoogleServiceAccountCredentialOnboardingService(ICredentialV
         Uri? synthesisEndpoint,
         CancellationToken cancellationToken)
     {
+        completionGate?.RequireOutsideRun();
         if (string.IsNullOrWhiteSpace(credentialReferenceId))
             throw new ArgumentException("Credential reference is required.", nameof(credentialReferenceId));
         if (serviceAccountJson.IsEmpty)

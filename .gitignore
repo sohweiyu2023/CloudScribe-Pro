@@ -1,3 +1,5 @@
 # Deterministic .NET build and test outputs are never candidate source.
 **/bin/
 **/obj/
+**/__pycache__/
+*.py[cod]
