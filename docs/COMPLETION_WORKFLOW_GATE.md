@@ -14,6 +14,14 @@ The reviewed initializer is `tools/completion_workflow/initialize_reviewed_regis
 
 Activate through `Install-CloudScribe.ps1 -ReviewedCompletionGatePath ... -ReviewedCompletionGateSha256 ...` using the exact same already-installed package. The installer persists an independent profile required marker before activation, pins the private gate in the install marker and retains rollback. Partial activation remains blocked. Existing active gates cannot be dropped through ordinary update/migration or replaced with a fresh counter. Stopped/expired gates and any later retirement/new run require independently reviewed reconciliation; do not delete markers, restore old journals or fall back to an ungated binary to continue a run.
 
+## Repairing a build during the same run
+
+A reviewed diagnostic repair may use `-ReviewedCompletionBuildTransitionPath` and `-ReviewedCompletionBuildTransitionSha256` with the independently reviewed successor gate. This permits one build transition before any resume or completion-policy admission, with no pending operation. The transition binds both builds and gate configurations, the original approval and scope, and the exact clean journal head. Account, credential reference, profile, plans, interpreter, deadline and counters cannot change. It grants no financial or provider authority.
+
+The installer durably claims the transition before changing files, rechecks closure and staged hashes before swapping binaries, atomically advances the profile requirement, then verifies actual installed files and pins before completing the journal event. Interruption leaves normal operations blocked. Do not rerun installation blindly or reset a marker: reconcile actual files first. Only the same pending transition can complete through its verified readback path; expiry still stops it. The previous build, source and configuration remain available for evidence and rollback, but an old client cannot continue the active run after succession.
+
+Resume evidence compares validated HTTPS root origins canonically, so an authority with and without its trailing slash represents the same origin. Different hosts, nondefault ports, credentials, paths, queries and fragments remain rejected; endpoint, account and request identities retain their exact checks.
+
 ## Enforced operations and evidence
 
 Production bootstrap owns a durable operation before credential/token/network access. The Create MP3 auto-loader owns the entire cycle, including the second authenticated catalog GET used for UI population. The cycle permits at most two catalog GET stages and one exact input-free `{}` synthesis capability probe. Direct catalog/probe calls outside a live owned cycle and credential repair/fresh configuration during the run are rejected. No alternative synthesis engine exists.
@@ -36,4 +44,4 @@ Private capture remains default-off, exact-request, explicit opt-in, one respons
 
 ## Offline checks
 
-Run `python -m unittest -v test_completion_register test_gate_cli test_plan_binding` from `tools/completion_workflow`, and `scripts/Test-CompletionWorkflowGate-SelfTests.ps1 -PythonPath <reviewed Python>` plus the ordinary installer suites. Production catalog/bootstrap tests use fake HttpMessageHandlers and synthetic in-memory credentials. They exercise the real entrypoints and restart/in-flight behavior with zero external provider calls. These tests do not certify live Google success, invoice tax or audible article quality; those remain explicit delivery checks.
+Run `python -m unittest -v test_completion_register test_gate_cli test_plan_binding test_build_transition` from `tools/completion_workflow`, and `scripts/Test-CompletionWorkflowGate-SelfTests.ps1 -PythonPath <reviewed Python>` plus the ordinary installer suites. Production catalog/bootstrap tests use fake HttpMessageHandlers and synthetic in-memory credentials. They exercise the real entrypoints and restart/in-flight behavior with zero external provider calls. These tests do not certify live Google success, invoice tax or audible article quality; those remain explicit delivery checks.

@@ -32,6 +32,75 @@ def unique(pairs):
     return result
 
 
+def build_digest(config):
+    return sha((config["AppSha256"] + "|" + config["InfrastructureSha256"]).encode())
+
+
+def installed_readback(config, pin):
+    """Read actual installation, never caller success flags; no credential access."""
+    app = Path(os.path.abspath(config["ApplicationDirectory"]))
+    for name, field in (("CloudScribe.dll", "AppSha256"), ("CloudScribe.Infrastructure.dll", "InfrastructureSha256")):
+        if sha(bounded(app / name, 512 * 1024 * 1024)) != config[field]:
+            raise ValueError("InstalledBuildBinding")
+    marker_bytes = bounded(app.parent / "cloudscribe-install.json", 32768)
+    marker = json.loads(marker_bytes, object_pairs_hook=unique)
+    if any(field in marker for field in ("RecoveryPolicySha256", "ChirpArticlePolicySha256", "ChirpReservationResumePolicySha256")):
+        raise ValueError("TransitionFinancialAdmissionExists")
+    if (marker.get("Product") != "CloudScribe Pro" or type(marker.get("CompletionGateProtocolVersion")) is not int
+            or marker["CompletionGateProtocolVersion"] != 1 or marker.get("CompletionWorkflowGateSha256") != pin
+            or str(marker.get("AppSha256", "")).lower() != config["AppSha256"]):
+        raise ValueError("InstalledGatePin")
+    if sha(bounded(app.parent / "completion-workflow-gate.json", 32768)) != pin:
+        raise ValueError("InstalledGateBytes")
+    profile = Path(os.path.abspath(marker["Profile"]))
+    if sha(str(profile).rstrip("/\\").upper().encode()) != config["ProfileRootSha256"]:
+        raise ValueError("InstalledProfileBinding")
+    required_bytes = bounded(profile / ".completion-workflow-required.json", 4096)
+    required = json.loads(required_bytes, object_pairs_hook=unique)
+    if required != {"GateSha256": pin, "ScopeSha256": config["ScopeSha256"]}:
+        raise ValueError("RequiredGatePin")
+    return sha(marker_bytes + b"\n" + required_bytes + b"\n" + pin.encode())
+
+
+def transition_command(request, config, config_keys, register, module, scope, app):
+    data = bounded(request["transitionPath"], 32768)
+    pin = sha(data)
+    if pin != request["transitionSha256"] or request["identitySha256"] != pin:
+        raise ValueError("TransitionPin")
+    transition = json.loads(data, object_pairs_hook=unique)
+    module.validate_transition(transition)
+    if (transition["NewGateSha256"] != request["configSha256"] or transition["NewBuildSha256"] != build_digest(config)
+            or transition["TransitionId"] != request["id"] or transition["ScopeSha256"] != config["ScopeSha256"]
+            or transition["SourceApprovalSha256"] != scope["approvalSha256"]):
+        raise ValueError("TransitionBinding")
+    old_bytes = bounded(transition["PreviousConfigPath"], 32768)
+    if sha(old_bytes) != transition["PreviousGateSha256"]:
+        raise ValueError("PreviousGatePin")
+    old = json.loads(old_bytes, object_pairs_hook=unique)
+    changes = {"AppSha256", "InfrastructureSha256", "CandidateApplicationDirectory", "ScriptPath", "ScriptSha256", "ModuleSha256"}
+    if (set(old) != config_keys or type(old["SchemaVersion"]) is not int or old["SchemaVersion"] != 1
+            or any(old[key] != config[key] for key in config_keys - changes)
+            or build_digest(old) != transition["PreviousBuildSha256"]):
+        raise ValueError("TransitionConfigBinding")
+    # The predecessor source remains preserved; it is verified, never executed.
+    if (sha(bounded(old["ScriptPath"], 131072)) != old["ScriptSha256"]
+            or sha(bounded(Path(old["ScriptPath"]).with_name("completion_register.py"), 131072)) != old["ModuleSha256"]):
+        raise ValueError("PreviousSourcePin")
+    command = request["command"]
+    expected_app = config["ApplicationDirectory"] if command == "complete-build" else config["CandidateApplicationDirectory"]
+    if os.path.normcase(str(app)) != os.path.normcase(os.path.abspath(expected_app)):
+        raise ValueError("TransitionApplicationLocation")
+    if command == "complete-build":
+        evidence = installed_readback(config, request["configSha256"])
+        return register.complete_build(transition, pin, request["id"], evidence)
+    installed_readback(old, transition["PreviousGateSha256"])
+    if command == "inspect-build":
+        return register.inspect_build(transition, pin, request["id"])
+    if command == "claim-build":
+        return register.claim_build(transition, pin, request["id"])
+    return register.check_build(transition, pin, request["id"])
+
+
 def main():
     if not sys.flags.isolated or not sys.flags.no_site:
         raise ValueError("IsolatedNoSiteInterpreterRequired")
@@ -39,7 +108,7 @@ def main():
     if len(request_bytes) > 8192:
         raise ValueError("InputBound")
     request = json.loads(request_bytes, object_pairs_hook=unique)
-    if set(request) - {"command", "configPath", "configSha256", "appDirectory", "id", "identitySha256", "receipt", "policyPath"}:
+    if set(request) - {"command", "configPath", "configSha256", "appDirectory", "id", "identitySha256", "receipt", "policyPath", "transitionPath", "transitionSha256"}:
         raise ValueError("RequestShape")
     config_bytes = bounded(request["configPath"], 32768)
     if sha(config_bytes) != request["configSha256"]:
@@ -73,15 +142,21 @@ def main():
     for file, pin in (("CloudScribe.dll", "AppSha256"), ("CloudScribe.Infrastructure.dll", "InfrastructureSha256")):
         if sha(bounded(app / file, 512 * 1024 * 1024)) != config[pin]:
             raise ValueError("BuildBinding")
-    register = module.Register(config["RegisterPath"], config["ScopeSha256"])
+    build_command = request["command"] in ("inspect-build", "claim-build", "check-build", "complete-build")
+    register = module.Register(config["RegisterPath"], config["ScopeSha256"],
+                               expected_build=None if build_command else build_digest(config),
+                               expected_gate=None if build_command else request["configSha256"])
     with register._open() as db:
-        scope = register._read(db)["scope"]
+        state = register._read(db)
+        scope = state["scope"]
     expected_bindings = {
-        "buildSha256": sha((config["AppSha256"] + "|" + config["InfrastructureSha256"]).encode()),
         "profileSha256": config["ProfileRootSha256"],
         "accountSha256": sha(config["AccountId"].encode()), "projectSha256": sha(config["ProjectId"].encode())}
     if any(scope[key] != value for key, value in expected_bindings.items()):
         raise ValueError("ScopeBindings")
+    if not build_command and (state["currentBuild"] != build_digest(config)
+                              or (state["currentGate"] is not None and state["currentGate"] != request["configSha256"])):
+        raise ValueError("CurrentBuildBinding")
     manifest_bytes = bounded(config["PlanManifestPath"], 1024 * 1024)
     if sha(manifest_bytes) != config["PlanManifestSha256"]:
         raise ValueError("PlanManifestHash")
@@ -91,7 +166,9 @@ def main():
     if not manifest["parts"] or any(part["voiceName"] != config["VoiceName"] or part["languageCode"] != config["LanguageCode"] for part in manifest["parts"]):
         raise ValueError("VoiceManifestBinding")
     command = request["command"]
-    if command == "inspect":
+    if build_command:
+        result = transition_command(request, config, expected, register, module, scope, app)
+    elif command == "inspect":
         with register._open() as db:
             state = register._read(db)
             now = register.clock()

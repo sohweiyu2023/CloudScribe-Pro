@@ -10,10 +10,15 @@ param(
     [string]$ReviewedChirpResumePolicySha256,
     [string]$ReviewedCompletionGatePath,
     [string]$ReviewedCompletionGateSha256,
+    [string]$ReviewedCompletionBuildTransitionPath,
+    [string]$ReviewedCompletionBuildTransitionSha256,
     [switch]$ValidateOnly,
     [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
+if([bool]$ReviewedCompletionBuildTransitionPath -ne [bool]$ReviewedCompletionBuildTransitionSha256){throw 'A completion build succession requires independently reviewed transition bytes and hash.'}
+if($ReviewedCompletionBuildTransitionPath -and (-not $ReviewedCompletionGatePath -or -not $ReviewedCompletionGateSha256 -or $MigrateProfileFrom -or $ReviewedRecoveryPolicyPath -or $ReviewedChirpArticlePolicyPath -or $ReviewedChirpResumePolicyPath)){throw 'A build succession requires its explicit new gate and existing profile, separately from every financial/policy admission.'}
+if($ValidatePackageOnly -and ($ReviewedCompletionBuildTransitionPath -or $ReviewedCompletionBuildTransitionSha256)){throw 'A private build transition is never a clean package input.'}
 if([bool]$ReviewedCompletionGatePath -ne [bool]$ReviewedCompletionGateSha256){throw 'Completion gate admission requires separately reviewed bytes and hash.'}
 if($ValidatePackageOnly -and ($ReviewedCompletionGatePath -or $ReviewedCompletionGateSha256)){throw 'Private completion gate is excluded from clean packages.'}
 if($ValidatePackageOnly -and ($ValidateOnly -or $MigrateProfileFrom)){throw 'ValidatePackageOnly cannot be combined with installation or migration preflight.'}
@@ -50,14 +55,23 @@ function Invoke-CompletionGate($Gate,[string]$Command,[Guid]$OperationId,[string
     if(-not $process){throw 'Completion bridge did not start.'}
     try{
         $inputRecord=@{command=$Command;configPath=$Gate.Path;configSha256=$Gate.Sha256;appDirectory=$ApplicationDirectory;id=$OperationId.ToString('D');identitySha256=$Identity;receipt=$Receipt;policyPath=$PolicyPath}
+        if($Command -in @('inspect-build','claim-build','check-build','complete-build')){
+            if(-not $Gate.BuildTransition){throw 'An exact independently reviewed build transition is required.'}
+            $inputRecord.transitionPath=$Gate.BuildTransition.Path
+            $inputRecord.transitionSha256=$Gate.BuildTransition.Sha256
+        }
         $process.StandardInput.Write(($inputRecord|ConvertTo-Json -Depth 8 -Compress));$process.StandardInput.Close()
         $outputTask=$process.StandardOutput.ReadToEndAsync();$errorTask=$process.StandardError.ReadToEndAsync()
         if(-not $process.WaitForExit(15000)){throw 'Completion bridge timeout: outcome requires reconciliation; do not retry.'}
         $output=$outputTask.GetAwaiter().GetResult();$errorText=$errorTask.GetAwaiter().GetResult()
         if($output.Length -gt 8192 -or $errorText.Length -gt 8192){throw 'Completion bridge protocol bound failed; reconcile the private register.'}
+        $responseJson=[Text.Json.JsonDocument]::Parse($output)
+        try{Assert-UniqueRecoveryJson $responseJson.RootElement}finally{$responseJson.Dispose()}
         $result=$output|ConvertFrom-Json
         $safeReason=if($result.PSObject.Properties.Name -contains 'reason' -and $result.reason -cin @('Unknown','Expired','ClockRollback','ClockDiscontinuity','PendingOutcome','Limit','PinMismatch','Storage','Protocol','Stopped')){$result.reason}else{'Unknown'}
-        if($process.ExitCode -ne 0 -or $result.PSObject.Properties.Name -contains 'rejected' -or ($Command -eq 'complete' -and $result.outcome -cne 'Succeeded')){throw "Completion operation stopped: $safeReason. Reconcile its private register; do not retry automatically."}
+        if($process.ExitCode -ne 0 -or $result.PSObject.Properties.Name -contains 'rejected' -or ($Command -in @('complete','complete-build') -and $result.outcome -cne 'Succeeded')){throw "Completion operation stopped: $safeReason. Reconcile its private register; do not retry automatically."}
+        if($Command -eq 'claim-build' -and ($result.id -cne $OperationId.ToString('D') -or $result.identitySha256 -cne $Identity -or $result.scopeSha256 -cne $Gate.Config.ScopeSha256)){throw 'The build-transition claim response is not bound to this exact operation.'}
+        if($Command -in @('inspect-build','check-build') -and $result.valid -ne $true){throw 'Build-transition readiness was not positively verified.'}
         return $result
     }finally{$process.Dispose()}
 }
@@ -83,22 +97,37 @@ function Get-ReviewedCompletionGate([string]$Profile){
     $json=[Text.Json.JsonDocument]::Parse([Text.Encoding]::UTF8.GetString($bytes))
     try{Assert-UniqueRecoveryJson $json.RootElement}finally{$json.Dispose()}
     $config=[Text.Encoding]::UTF8.GetString($bytes)|ConvertFrom-Json
+    $transition=$null
+    if($ReviewedCompletionBuildTransitionPath){
+        $transitionPath=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $ReviewedCompletionBuildTransitionPath).Path);Assert-NoLinks $transitionPath
+        if($ReviewedCompletionBuildTransitionSha256 -cnotmatch '^[a-f0-9]{64}$' -or (Get-Item -LiteralPath $transitionPath).Length -gt 32768 -or
+            (Get-FileHash -LiteralPath $transitionPath -Algorithm SHA256).Hash -ine $ReviewedCompletionBuildTransitionSha256){throw 'The private build transition differs from its independently reviewed hash.'}
+        $transitionBytes=[IO.File]::ReadAllBytes($transitionPath)
+        $transitionJson=[Text.Json.JsonDocument]::Parse([Text.Encoding]::UTF8.GetString($transitionBytes))
+        try{Assert-UniqueRecoveryJson $transitionJson.RootElement}finally{$transitionJson.Dispose()}
+        $record=[Text.Encoding]::UTF8.GetString($transitionBytes)|ConvertFrom-Json
+        if($record.SchemaVersion -ne 1 -or $record.NewGateSha256 -cne $pin -or $record.PreviousGateSha256 -cne $oldGatePin -or $record.ScopeSha256 -cne $config.ScopeSha256 -or [Guid]$record.TransitionId -eq [Guid]::Empty){throw 'The build transition does not name the exact predecessor, successor and unchanged scope.'}
+        $transition=[pscustomobject]@{Path=$transitionPath;Sha256=$ReviewedCompletionBuildTransitionSha256;Id=[Guid]$record.TransitionId;PreviousGateSha256=$record.PreviousGateSha256}
+    }
     $profileSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes([IO.Path]::GetFullPath($Profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()))).ToLowerInvariant()
     if($config.SchemaVersion -ne 1 -or $config.ProfileRootSha256 -cne $profileSha -or
         [IO.Path]::GetFullPath($config.ApplicationDirectory).TrimEnd([char[]]@('\','/')) -ine (Join-Path $target 'app') -or
         [IO.Path]::GetFullPath($config.CandidateApplicationDirectory).TrimEnd([char[]]@('\','/')) -ine (Join-Path $package 'app') -or
         (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash -ine $config.AppSha256 -or
         (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash -ine $config.InfrastructureSha256){throw 'Completion gate build/profile/package binding differs.'}
-    if((Get-FileHash -LiteralPath (Join-Path $target 'app/CloudScribe.dll')).Hash -ine $config.AppSha256 -or
-        (Get-FileHash -LiteralPath (Join-Path $target 'app/CloudScribe.Infrastructure.dll')).Hash -ine $config.InfrastructureSha256){throw 'Activate completion only on the already verified exact installed hook build.'}
-    if($oldGatePin -and $oldGatePin -cne $pin){throw 'A completion run cannot be reset or replaced implicitly.'}
+    if(-not $transition -and ((Get-FileHash -LiteralPath (Join-Path $target 'app/CloudScribe.dll')).Hash -ine $config.AppSha256 -or
+        (Get-FileHash -LiteralPath (Join-Path $target 'app/CloudScribe.Infrastructure.dll')).Hash -ine $config.InfrastructureSha256)){throw 'Activate completion only on the already verified exact installed hook build.'}
+    if($oldGatePin -and $oldGatePin -cne $pin -and -not $transition){throw 'A completion run cannot be reset or replaced implicitly.'}
     if($requiredPath -and (Test-Path -LiteralPath $requiredPath)){
         Assert-NoLinks $requiredPath
         $required=Get-Content -LiteralPath $requiredPath -Raw|ConvertFrom-Json
-        if($required.GateSha256 -cne $pin -or $required.ScopeSha256 -cne $config.ScopeSha256){throw 'Completion requirement differs; no reset permitted.'}
+        $expectedRequiredPin=if($transition){$transition.PreviousGateSha256}else{$pin}
+        if($required.GateSha256 -cne $expectedRequiredPin -or $required.ScopeSha256 -cne $config.ScopeSha256){throw 'Completion requirement differs; no reset permitted.'}
+    }elseif($transition){
+        throw 'A build succession requires the existing persistent required marker.'
     }
-    $gate=[pscustomobject]@{Path=$path;Sha256=$pin;Bytes=$bytes;Config=$config;RequiredPath=$requiredPath}
-    $inspection=Invoke-CompletionGate $gate 'inspect' ([Guid]::Empty) '' $null (Join-Path $package 'app')
+    $gate=[pscustomobject]@{Path=$path;Sha256=$pin;Bytes=$bytes;Config=$config;RequiredPath=$requiredPath;BuildTransition=$transition}
+    $inspection=if($transition){Invoke-CompletionGate $gate 'inspect-build' $transition.Id $transition.Sha256 $null (Join-Path $package 'app')}else{Invoke-CompletionGate $gate 'inspect' ([Guid]::Empty) '' $null (Join-Path $package 'app')}
     $gate|Add-Member -NotePropertyName DeadlineUtc -NotePropertyValue ([DateTimeOffset]$inspection.deadlineUtc)
     return $gate
 }
@@ -110,6 +139,31 @@ function Assert-CompletionInstallEffect($Gate,$OperationId,$OperationIdentity,$R
         $policy=[Text.Encoding]::UTF8.GetString($Resume.Bytes)|ConvertFrom-Json
         if([DateTimeOffset]$policy.ExpiresAtUtc -le [DateTimeOffset]::UtcNow -or [DateTimeOffset]$policy.CatalogExpiresAtUtc -le [DateTimeOffset]::UtcNow){throw 'Resume admission expired before installer effect; retain its pending register state.'}
     }
+}
+
+function Complete-CompletionBuildInstall($Gate,[string]$InstalledApp){
+    if(-not $Gate -or -not $Gate.BuildTransition){throw 'A reviewed pending build succession is required.'}
+    if([IO.Path]::GetFullPath($InstalledApp).TrimEnd([char[]]@('\','/')) -ine [IO.Path]::GetFullPath($Gate.Config.ApplicationDirectory).TrimEnd([char[]]@('\','/'))){throw 'The successor readback directory changed.'}
+    Assert-NoLinks $InstalledApp
+    foreach($pair in @(@('CloudScribe.dll',$Gate.Config.AppSha256),@('CloudScribe.Infrastructure.dll',$Gate.Config.InfrastructureSha256))){
+        if((Get-FileHash -LiteralPath (Join-Path $InstalledApp $pair[0]) -Algorithm SHA256).Hash -ine $pair[1]){throw 'Installed successor differs; preserve pending state.'}
+    }
+    $installRoot=Split-Path -Parent $InstalledApp
+    $marker=Get-Content -LiteralPath (Join-Path $installRoot 'cloudscribe-install.json') -Raw|ConvertFrom-Json
+    if($marker.Product -cne 'CloudScribe Pro' -or $marker.CompletionGateProtocolVersion -ne 1 -or $marker.CompletionWorkflowGateSha256 -cne $Gate.Sha256 -or
+        (Get-FileHash -LiteralPath (Join-Path $installRoot 'completion-workflow-gate.json') -Algorithm SHA256).Hash -ine $Gate.Sha256){throw 'The installed successor pin differs; preserve pending state.'}
+    # Pending journal state blocks both clients throughout the cross-file switch.
+    Assert-NoLinks $Gate.RequiredPath
+    $prior=Get-Content -LiteralPath $Gate.RequiredPath -Raw|ConvertFrom-Json
+    if($prior.GateSha256 -cne $Gate.BuildTransition.PreviousGateSha256 -or $prior.ScopeSha256 -cne $Gate.Config.ScopeSha256){throw 'The predecessor requirement changed; leave the transition pending.'}
+    $requirement=@{GateSha256=$Gate.Sha256;ScopeSha256=$Gate.Config.ScopeSha256}|ConvertTo-Json -Compress
+    $nextPath=$Gate.RequiredPath+'.build-'+$Gate.BuildTransition.Id.ToString('N')+'.tmp'
+    Assert-NoLinks $nextPath
+    $stream=[IO.FileStream]::new($nextPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+    try{$bytes=[Text.Encoding]::UTF8.GetBytes($requirement);$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+    [IO.File]::Move($nextPath,$Gate.RequiredPath,$true)
+    $installedGate=[pscustomobject]@{Path=(Join-Path $installRoot 'completion-workflow-gate.json');Sha256=$Gate.Sha256;Config=$Gate.Config;BuildTransition=$Gate.BuildTransition}
+    $null=Invoke-CompletionGate $installedGate 'complete-build' $Gate.BuildTransition.Id $Gate.BuildTransition.Sha256 $null $InstalledApp
 }
 
 function Get-RetainedCompletionAuthority($Gate){
@@ -600,6 +654,11 @@ if($completionGate){
 if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery;ReviewedChirpArticlePolicy=[bool]$reviewedChirp;ReviewedChirpResumePolicy=[bool]$reviewedResume;ReviewedCompletionGate=[bool]$completionGate};return}
 if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close every CloudScribe window normally before installing/updating. No process will be killed.'}
 $completionOperation=[Guid]::Empty;$completionIdentity=''
+$buildTransition=if($completionGate){$completionGate.BuildTransition}else{$null}
+if($buildTransition){
+    $null=Invoke-CompletionGate $completionGate 'claim-build' $buildTransition.Id $buildTransition.Sha256 $null (Join-Path $package 'app')
+    $null=Invoke-CompletionGate $completionGate 'check-build' $buildTransition.Id $buildTransition.Sha256 $null (Join-Path $package 'app')
+}
 if($completionGate){
     if($reviewedResume -or $reviewedChirp){
         $completionOperation=[Guid]::NewGuid()
@@ -666,8 +725,18 @@ if($completionGate){
 $installMarker | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'cloudscribe-install.json') -Encoding utf8
 $hadPrevious=Test-Path -LiteralPath $target
 if($completionGate -and $completionOperation -ne [Guid]::Empty){Assert-CompletionInstallEffect $completionGate $completionOperation $completionIdentity $reviewedResume}
+if($buildTransition){
+    if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'CloudScribe reopened during build succession; preserve pending state and stop.'}
+    foreach($pair in @(@('CloudScribe.dll',$completionGate.Config.AppSha256),@('CloudScribe.Infrastructure.dll',$completionGate.Config.InfrastructureSha256))){
+        if((Get-FileHash -LiteralPath (Join-Path $stage ('app/'+$pair[0])) -Algorithm SHA256).Hash -ine $pair[1]){throw 'Staged successor differs; preserve the pending transition.'}
+    }
+    $null=Invoke-CompletionGate $completionGate 'check-build' $buildTransition.Id $buildTransition.Sha256 $null (Join-Path $package 'app')
+}
 if($hadPrevious){Move-Item -LiteralPath $target -Destination $backup}
 try{Move-Item -LiteralPath $stage -Destination $target}catch{if($hadPrevious -and -not (Test-Path -LiteralPath $target)){Move-Item -LiteralPath $backup -Destination $target};throw}
+if($buildTransition){
+    Complete-CompletionBuildInstall $completionGate (Join-Path $target 'app')
+}
 $link=$shell.CreateShortcut($shortcut)
 $link.TargetPath=Join-Path $target 'app/CloudScribe.exe'
 $link.WorkingDirectory=Join-Path $target 'app'

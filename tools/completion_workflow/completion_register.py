@@ -71,6 +71,24 @@ def validate_scope(scope):
         raise Rejected("FixedSixHourWindow")
 
 
+TRANSITION_KEYS = {"SchemaVersion", "TransitionId", "SourceApprovalSha256", "ScopeSha256", "ExpectedHeadSha256",
+                   "PreviousConfigPath", "PreviousGateSha256", "NewGateSha256", "PreviousBuildSha256", "NewBuildSha256"}
+
+
+def validate_transition(transition):
+    if not isinstance(transition, dict) or set(transition) != TRANSITION_KEYS or type(transition["SchemaVersion"]) is not int or transition["SchemaVersion"] != 1:
+        raise Rejected("TransitionSchema")
+    for name in TRANSITION_KEYS:
+        if name.endswith("Sha256"):
+            hash_value(transition[name])
+    if str(uuid.UUID(transition["TransitionId"])) != transition["TransitionId"] or uuid.UUID(transition["TransitionId"]).int == 0:
+        raise Rejected("TransitionId")
+    if not isinstance(transition["PreviousConfigPath"], str) or not Path(transition["PreviousConfigPath"]).is_absolute():
+        raise Rejected("TransitionConfigPath")
+    if transition["PreviousBuildSha256"] == transition["NewBuildSha256"] or transition["PreviousGateSha256"] == transition["NewGateSha256"]:
+        raise Rejected("TransitionMustChangeBuild")
+
+
 def verify_plan_policy(manifest, scope, policy, kind):
     """Bind actual immutable proposal/coverage projection, not a caller assertion."""
     if digest(manifest) != scope["plansSha256"]:
@@ -149,11 +167,13 @@ def verify_plan_policy(manifest, scope, policy, kind):
 class Register:
     """Clock injection is for offline tests, never exposed by operational CLI."""
 
-    def __init__(self, path, scope_sha, clock=None, monotonic=None):
+    def __init__(self, path, scope_sha, clock=None, monotonic=None, expected_build=None, expected_gate=None):
         self.path = physical(path)
         self.scope_sha = hash_value(scope_sha)
         self.clock = clock or (lambda: time.time_ns() // 1000)
         self.monotonic = monotonic or clock or (lambda: time.monotonic_ns() // 1000)
+        self.expected_build = expected_build
+        self.expected_gate = expected_gate
 
     def _stamp(self, event, minimum_mono=0):
         return dict(event, mono=max(self.monotonic(), minimum_mono))
@@ -282,7 +302,8 @@ class Register:
         previous = self.scope_sha
         state = {"refresh": 0, "resume-admission": 0, "completion-admission": 0, "pending": None, "stopped": False,
                  "lastUtc": 0, "lastMono": 0, "startUtc": 0, "startMono": 0,
-                 "ids": set(), "scope": scope, "head": previous}
+                 "ids": set(), "scope": scope, "head": previous, "buildTransitions": 0,
+                 "currentBuild": scope["buildSha256"], "currentGate": None}
         rows = db.execute("SELECT seq,body,sha FROM events ORDER BY seq").fetchall()
         if not rows or len(rows) > 4096:
             raise Rejected("InvalidEventCount")
@@ -294,16 +315,18 @@ class Register:
             shapes = {"start": {"type", "utc", "scope", "mono"},
                       "claim": {"type", "utc", "id", "kind", "identity", "mono"},
                       "complete": {"type", "utc", "id", "outcome", "receiptSha256", "mono", "reason"},
-                      "stop": {"type", "utc", "reason", "mono"}, "check": {"type", "utc", "mono"}}
+                      "stop": {"type", "utc", "reason", "mono"}, "check": {"type", "utc", "mono"},
+                      "build-claim": {"type", "utc", "mono", "id", "identity", "transition"},
+                      "build-complete": {"type", "utc", "mono", "id", "identity", "receiptSha256"}}
             if event.get("type") not in shapes or set(event) != shapes[event["type"]]:
                 raise Rejected("EventSchema")
-            if event["type"] in ("claim", "complete"):
+            if event["type"] in ("claim", "complete", "build-claim", "build-complete"):
                 try:
                     if str(uuid.UUID(event["id"])) != event["id"]:
                         raise Rejected("EventId")
                 except (ValueError, TypeError, AttributeError) as error:
                     raise Rejected("EventId") from error
-                hash_value(event["identity"] if event["type"] == "claim" else event["receiptSha256"])
+                hash_value(event["identity"] if event["type"] in ("claim", "build-claim") else event["receiptSha256"])
             if event["type"] == "complete" and event["outcome"] not in ("Succeeded", "Stopped"):
                 raise Rejected("EventOutcome")
             if event["type"] == "complete" and event["reason"] not in ("None", "ObservedFailure", "ReceiptValidation", "ClockRollback", "ClockDiscontinuity", "WindowExpired"):
@@ -330,11 +353,34 @@ class Register:
                 state["ids"].add(event["id"])
                 state["pending"] = event
             elif event["type"] == "complete":
-                if not state["pending"] or event["id"] != state["pending"]["id"]:
+                if not state["pending"] or state["pending"]["type"] != "claim" or event["id"] != state["pending"]["id"]:
                     raise Rejected("InvalidCompletionHistory")
                 state["pending"] = None
                 if event["outcome"] != "Succeeded":
                     state["stopped"] = True
+            elif event["type"] == "build-claim":
+                transition = event["transition"]
+                validate_transition(transition)
+                if (state["stopped"] or state["pending"] or state["buildTransitions"] != 0 or event["id"] in state["ids"]
+                        or state["resume-admission"] != 0 or state["completion-admission"] != 0
+                        or transition["TransitionId"] != event["id"] or transition["ExpectedHeadSha256"] != previous
+                        or transition["ScopeSha256"] != self.scope_sha or transition["SourceApprovalSha256"] != scope["approvalSha256"]
+                        or transition["PreviousBuildSha256"] != state["currentBuild"]
+                        or (state["currentGate"] is not None and transition["PreviousGateSha256"] != state["currentGate"])):
+                    raise Rejected("InvalidBuildClaimHistory")
+                state["buildTransitions"] = 1
+                state["ids"].add(event["id"])
+                state["pending"] = dict(event, kind="build-transition")
+                state["currentGate"] = transition["PreviousGateSha256"]
+            elif event["type"] == "build-complete":
+                pending = state["pending"]
+                if (state["stopped"] or not pending or pending["type"] != "build-claim"
+                        or event["id"] != pending["id"] or event["identity"] != pending["identity"]):
+                    raise Rejected("InvalidBuildCompletionHistory")
+                hash_value(event["identity"])
+                state["currentBuild"] = pending["transition"]["NewBuildSha256"]
+                state["currentGate"] = pending["transition"]["NewGateSha256"]
+                state["pending"] = None
             elif event["type"] == "stop":
                 state["stopped"] = True
             elif event["type"] == "check":
@@ -346,6 +392,9 @@ class Register:
             state["lastMono"] = event["mono"]
             previous = sha
         state["head"] = previous
+        if self.expected_build is not None and (state["currentBuild"] != self.expected_build
+                or (state["currentGate"] is not None and state["currentGate"] != self.expected_gate)):
+            raise Rejected("CurrentBuildBinding")
         return state
 
     def _time_rejection(self, state):
@@ -418,7 +467,7 @@ class Register:
         with self._open() as db:
             state = self._read(db)
             pending = state["pending"]
-            if not pending or pending["id"] != operation_id or pending["identity"] != receipt["identitySha256"]:
+            if not pending or pending["type"] != "claim" or pending["id"] != operation_id or pending["identity"] != receipt["identitySha256"]:
                 raise Rejected("ReceiptMismatchOrReplay")
             now = max(self.clock(), state["lastUtc"])
             good = receipt.get("outcome") == "Succeeded"
@@ -449,9 +498,69 @@ class Register:
             state = self._read(db)
             self._guard(db, state)
             pending = state["pending"]
-            if not pending or pending["id"] != operation_id or pending["identity"] != identity_sha:
+            if not pending or pending["type"] != "claim" or pending["id"] != operation_id or pending["identity"] != identity_sha:
                 raise Rejected("PendingEffectIdentityMismatch")
             return True
+
+    def _build_ready(self, state, transition, identity_sha, operation_id, pending=False, check_clock=True):
+        validate_transition(transition)
+        hash_value(identity_sha)
+        if (operation_id != transition["TransitionId"] or transition["ScopeSha256"] != self.scope_sha
+                or transition["SourceApprovalSha256"] != state["scope"]["approvalSha256"]):
+            raise Rejected("TransitionBinding")
+        if state["resume-admission"] != 0 or state["completion-admission"] != 0:
+            raise Rejected("TransitionFinancialAdmissionExists")
+        if state["stopped"] or (check_clock and self._time_rejection(state)):
+            raise Rejected("BuildTransitionNotReady")
+        if pending:
+            item = state["pending"]
+            if (not item or item["type"] != "build-claim" or item["id"] != operation_id
+                    or item["identity"] != identity_sha or item["transition"] != transition):
+                raise Rejected("BuildTransitionPendingMismatch")
+        elif (state["pending"] or state["buildTransitions"] != 0 or operation_id in state["ids"]
+              or state["head"] != transition["ExpectedHeadSha256"] or state["currentBuild"] != transition["PreviousBuildSha256"]
+              or (state["currentGate"] is not None and state["currentGate"] != transition["PreviousGateSha256"])):
+            raise Rejected("BuildTransitionHeadOrState")
+
+    def inspect_build(self, transition, identity_sha, operation_id):
+        with self._open() as db:
+            state = self._read(db)
+            self._build_ready(state, transition, identity_sha, operation_id)
+            return {"valid": True, "headSha256": state["head"], "deadlineUtc": state["scope"]["endUtc"], "authority": False}
+
+    def claim_build(self, transition, identity_sha, operation_id):
+        with self._open() as db:
+            state = self._read(db)
+            # Expected head is checked under the exclusive lease before any append.
+            self._build_ready(state, transition, identity_sha, operation_id, check_clock=False)
+            if self._time_rejection(state):
+                self._guard(db, state)  # Persist terminal stop without altering a valid expected head.
+            self._append(db, self._stamp({"type": "build-claim", "utc": self.clock(), "id": operation_id,
+                                         "identity": identity_sha, "transition": transition}), state["head"])
+            db.commit()
+            self._seal(db)
+            return {"id": operation_id, "identitySha256": identity_sha, "scopeSha256": self.scope_sha,
+                    "deadlineUtc": state["scope"]["endUtc"], "authority": False}
+
+    def check_build(self, transition, identity_sha, operation_id):
+        with self._open() as db:
+            state = self._read(db)
+            self._build_ready(state, transition, identity_sha, operation_id, pending=True, check_clock=False)
+            self._guard(db, state)
+            return {"valid": True}
+
+    def complete_build(self, transition, identity_sha, operation_id, observed_sha):
+        # Only the independently reviewed CLI adapter supplies actual readback.
+        hash_value(observed_sha)
+        with self._open() as db:
+            state = self._read(db)
+            self._build_ready(state, transition, identity_sha, operation_id, pending=True, check_clock=False)
+            self._guard(db, state)
+            self._append(db, self._stamp({"type": "build-complete", "utc": self.clock(), "id": operation_id,
+                                         "identity": identity_sha, "receiptSha256": observed_sha}), state["head"])
+            db.commit()
+            self._seal(db)
+            return {"outcome": "Succeeded", "authority": False}
 
     def status(self):
         with self._open() as db:
@@ -459,6 +568,8 @@ class Register:
             self._guard(db, state)
             return {"refreshes": state["refresh"], "resumeAdmissions": state["resume-admission"],
                     "completionAdmissions": state["completion-admission"],
+                    "buildTransitions": state["buildTransitions"], "currentBuildSha256": state["currentBuild"],
+                    "currentGateSha256": state["currentGate"],
                     "pendingId": state["pending"]["id"] if state["pending"] else None,
                     "requiresReconciliation": state["pending"] is not None,
                     "scopeSha256": self.scope_sha, "deadlineUtc": state["scope"]["endUtc"]}

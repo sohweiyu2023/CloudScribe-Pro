@@ -25,11 +25,11 @@ public sealed partial class ChirpArticleService
         long now = clock.GetUtcNow().ToUnixTimeMilliseconds();
         if (!Equals(a[4], 1L) || !Equals(a[0], envelope.CredentialReferenceId)
             || !Guid.TryParse(c[0] as string, out var id) || id != catalogId
-            || !Equals(c[1], a[0]) || !Equals(c[2], a[1]) || !Equals(c[3], a[2]) || !Equals(c[4], a[3])
+            || !Equals(c[1], a[0]) || !Equals(c[2], a[1]) || !Equals(c[3], a[2]) || !SameResumeOrigin(c[4], a[3])
             || (long)a[6]! > (long)c[5]! || (long)c[5]! > now || (long)c[6]! <= now
             || (long)c[6]! != catalogExpiry.ToUnixTimeMilliseconds()
             || !Equals(c[7], envelope.CapabilityProvenanceId)
-            || !Equals(p[0], a[0]) || !Equals(p[1], c[7]) || !Equals(p[2], a[1]) || !Equals(p[3], a[2]) || !Equals(p[4], a[3])
+            || !Equals(p[0], a[0]) || !Equals(p[1], c[7]) || !Equals(p[2], a[1]) || !Equals(p[3], a[2]) || !SameResumeOrigin(p[4], a[3])
             || !Equals(p[5], 1L) || (long)p[6]! > now || (long)p[7]! <= now
             || entries.Count(x => Equals(x[0], GoogleGenerationProvider.SynthesizeOperationStableId) && Equals(x[1], 1L) && !Equals(x[2], 4L) && x[3] is null) != 1)
             throw ResumeRejected(LocalRequestReason.ResumeProviderChanged);
@@ -42,6 +42,25 @@ public sealed partial class ChirpArticleService
             || activePrices[0][1] is not byte[] priceBytes || !string.Equals(ChirpPolicyFiles.Hash(priceBytes), envelope.PricingProvenanceId, StringComparison.Ordinal)
             || activePrices[0][2] is not (2L or 4L)) throw ResumeRejected(LocalRequestReason.ResumeProviderChanged);
         return ChirpPolicyValidation.Hash(new { accounts, catalogs, entries, projects, prices, activations, overrides });
+    }
+
+    // ProviderAccountReference persists Uri.AbsoluteUri (with root slash), while
+    // production project authorization persists GetLeftPart(Authority) (without it).
+    // Compare only validated HTTPS origins; exact endpoint IDs still bind API paths.
+    private static bool SameResumeOrigin(object? left, object? right)
+    {
+        static bool Parse(object? value, out Uri? origin)
+        {
+            origin = null;
+            return value is string text && Uri.TryCreate(text, UriKind.Absolute, out origin)
+                && string.Equals(origin.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+                && origin.IsDefaultPort && string.IsNullOrEmpty(origin.UserInfo)
+                && string.IsNullOrEmpty(origin.Query) && string.IsNullOrEmpty(origin.Fragment)
+                && string.Equals(origin.AbsolutePath, "/", StringComparison.Ordinal);
+        }
+
+        return Parse(left, out var first) && Parse(right, out var second)
+            && Uri.Compare(first, second, UriComponents.SchemeAndServer, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase) == 0;
     }
 
     private static async Task<IReadOnlyList<object?[]>> ResumeRowsAsync(SqliteConnection connection, SqliteTransaction transaction,
