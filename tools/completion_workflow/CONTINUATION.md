@@ -31,15 +31,16 @@ spending or bypass a platform-required user handoff.
 
 ## All-in budget evidence
 
-The current remainder calculation is 160 cents retained plus at most 119 cents
-new pretax reservations, or 279 cents pretax. A 500-cent overall ceiling leaves
-at most 221 cents for **all** applicable project tax and fees, including the
-earlier commitments. A 200-cent contingency gives a planning total of 479 cents;
-it is not a verified tax rate, invoice amount or retry allowance.
+Let P be retained project commitments, N the maximum new pretax reservations,
+F an independently reviewed upper bound for all applicable project tax/fees,
+and C the approved all-in ceiling. Admission requires P + N + F <= C. The bound
+must account for tax/fees on earlier commitments as well as new work. A planning
+contingency is not a verified tax rate, invoice amount or retry allowance.
 
 The continuation projection requires a nonnegative all-project tax/fee upper
 bound and a separately reviewed evidence digest. Its pretax ceiling plus that
-bound must be at most 500 cents. Missing or excessive bounds are rejected.
+bound must be at most the approved overall ceiling. Missing or excessive bounds
+are rejected.
 The validator checks arithmetic and identity pins; a hash does not authenticate
 billing facts. Before any live admission, an independent reviewer must validate
 the evidence against the actual billing context and pin the exact manifest and
@@ -71,16 +72,14 @@ After any uncertain action, reconcile actual rows before considering another.
 Keep private manifests, billing evidence, transcripts, audio and profiles out
 of public source and support exports.
 
-## Conditional renewal wording for this remainder
+## Conditional renewal template
 
 After release verification and an independently reviewed all-project tax/fee
-bound, authorize a fresh fixed six-hour window for the exact 119 untouched
-requests, using the unchanged approved texts and Alnilam voice. Preserve all
-accepted ranges and the 160 cents of historical commitments. Additional pretax
-reservations must not exceed 119 cents; the Chinese allocation ceiling is 149
-cents and the project pretax ceiling is 279 cents. The all-in ceiling remains
-500 cents; applicable project tax and fees must have a verified upper bound no
-greater than 221 cents. A 200-cent contingency is a planning allowance only.
+bound, authorize a fresh fixed six-hour window for the exact untouched remainder,
+using the unchanged approved text and voice. Preserve all accepted ranges and
+historical commitments. Pin the explicit maximum new reservation count, pretax
+amount, allocation ceiling and overall ceiling to that exact reviewed remainder.
+No live account, financial snapshot or approval record belongs in this document.
 
 Permit at most 24 catalog/bootstrap refresh operations and 24 total reviewed
 admissions, including zero-cost revalidation of the same clean held request.
