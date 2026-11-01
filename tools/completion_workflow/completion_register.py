@@ -587,6 +587,10 @@ class Register:
             shapes["source-claim"] = shapes["build-claim"]
             shapes["source-complete"] = shapes["build-complete"]
             shapes["retire-claim"] = {"type", "utc", "mono", "id", "identity", "handoff", "clockCondition", "clockDriftMicros"}
+            if (event.get("type") == "retire-claim" and "observedMono" in event
+                    and scope["schema"] == 2 and isinstance(event.get("handoff"), dict)
+                    and event["handoff"].get("SchemaVersion") == 2):
+                shapes["retire-claim"] |= {"observedMono"}
             shapes["retire-complete"] = {"type", "utc", "mono", "id", "identity", "receiptSha256"}
             shapes["activate"] = {"type", "utc", "mono", "id", "identity", "previousRetirementHead", "receiptSha256", "gateSha256"}
             if event.get("type") == "claim" and scope["schema"] == 2 and event.get("kind") == "completion-admission":
@@ -681,13 +685,15 @@ class Register:
             elif event["type"] == "retire-claim":
                 h = event["handoff"]
                 validate_handoff(h)
-                condition, drift = self._retirement_observation(state, event["utc"], event["mono"])
+                observed_mono = event.get("observedMono", event["mono"])
+                condition, drift = self._retirement_observation(state, event["utc"], observed_mono)
                 if ((scope["schema"], h["SchemaVersion"]) not in ((1, 1), (2, 2)) or state["pending"] or state["retirement"] or event["id"] in state["ids"]
                         or h["TransitionId"] != event["id"] or h["ExpectedPreviousHeadSha256"] != previous
                         or h["PreviousScopeSha256"] != self.scope_sha
                         or h["PreviousGateSha256"] != state["currentGate"]
                         or type(event["clockDriftMicros"]) is not int or event["clockDriftMicros"] != drift
                         or event["clockCondition"] != condition
+                        or ("observedMono" in event and event["mono"] != max(state["lastMono"], observed_mono))
                         or (state["stopped"] and state["stopReason"] != "WindowExpired")
                         or (h["SchemaVersion"] == 2 and h["OriginalManifestSha256"] != scope["plansSha256"])):
                     raise Rejected("InvalidRetirementHistory")
@@ -742,10 +748,25 @@ class Register:
     def _retirement_observation(state, now, mono):
         # Retirement creates no old-run permission. A separately approved new
         # scope supplies its own dual deadline; never repair old clock anchors.
-        if type(now) is not int or type(mono) is not int:
+        if type(now) is not int or type(mono) is not int or mono < 0:
             raise Rejected("ClockRollback")
         drift = now - state["startUtc"] - (mono - state["startMono"])
-        if now < state["lastUtc"] or mono < state["lastMono"] or drift < -250000:
+        if now < state["lastUtc"]:
+            raise Rejected("ClockRollback")
+        retirement = state["retirement"]
+        if retirement and mono < retirement.get("observedMono", retirement["mono"]):
+            raise Rejected("ClockRollback")
+        if mono < state["lastMono"]:
+            # This retires expired authority, never resumes it or proves a reboot.
+            # The exact typed handoff and fresh approval are checked separately.
+            pending = state["pending"]
+            if (state["scope"]["schema"] == 2 and now >= utc(state["scope"]["endUtc"])
+                    and (not state["stopped"] or state["stopReason"] == "WindowExpired")
+                    and (not pending or (pending["type"] == "retire-claim"
+                                         and pending["handoff"]["SchemaVersion"] == 2))):
+                return "ExpiredMonotonicDiscontinuity", drift
+            raise Rejected("ClockRollback")
+        if drift < -250000:
             raise Rejected("ClockRollback")
         return ("ForwardDiscontinuity" if drift > 250000 else "Continuous", drift)
 
@@ -955,7 +976,7 @@ class Register:
             # ancestor is terminal/immutable; read it without re-entering leases.
             self._require_ancestor_snapshot(old_state, h["PreviousGateSha256"])
         # A distinct approved window may retire forward-discontinuous old time;
-        # normal old permissions, backward time and committed failure stops stay blocked.
+        # normal old permissions, backward UTC and committed failure stops stay blocked.
         if old_state["stopped"] and old_state["stopReason"] != "WindowExpired":
             raise Rejected("RetirementClockOrStop")
         if check_clock:
@@ -1004,6 +1025,9 @@ class Register:
             event = {"type": "retire-claim", "utc": self.clock(), "mono": self.monotonic(),
                      "id": h["TransitionId"], "identity": identity, "handoff": h}
             condition, drift = self._retirement_observation(state, event["utc"], event["mono"])
+            if h["SchemaVersion"] == 2:
+                event["observedMono"] = event["mono"]
+                event["mono"] = max(state["lastMono"], event["mono"])
             event.update(clockCondition=condition, clockDriftMicros=drift)
             self._append(db, event, state["head"])
             db.commit(); self._seal(db)  # Old authority stops durably before any new state/install effect.

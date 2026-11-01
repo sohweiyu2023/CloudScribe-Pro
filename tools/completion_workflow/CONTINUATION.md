@@ -28,6 +28,11 @@ spending or bypass a platform-required user handoff.
 - Limits remain six hours, 24 catalog/bootstrap refreshes and 24 total admissions.
   Expiry, failed or uncertain work, mismatched identities, replay and concurrent
   claims fail closed. There is no automatic paid retry or silent extension.
+- An explicitly reviewed continuation can retire a wall-expired scope2 despite
+  a lower monotonic reading. It records the raw observation separately from
+  nondecreasing journal order and does not assert a reboot. Old anchors and
+  ordinary rollback guards remain unchanged. Backward UTC, pending work, failed
+  stops or a second reset during retirement still reject the transition.
 
 ## All-in budget evidence
 
