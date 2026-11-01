@@ -426,13 +426,14 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
     $legacy=@($Root.EnumerateObject().Name) -ccontains 'LegacyAssociations'
     if($legacy){$fields.LegacyAssociations='Array';$fields.LegacyAssociationRows='Array'}
     $schema=$Root.GetProperty('SchemaVersion').GetInt32()
-    if($schema -eq 2){
+    if($schema -in @(2,3)){
         $fields.PriorSuccessorAttemptRows='Array'
         if(@($Root.EnumerateObject().Name) -ccontains 'SuccessorGrant'){$fields.SuccessorGrant='Object'}
     }
+    if($schema -eq 3){$fields.WholeArticleGeneration='Object'}
     Assert-RecoveryRecord $Root $fields
     if($legacy){Assert-ChirpLegacyAssociations $Root}
-    if($schema -notin @(1,2) -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
+    if($schema -notin @(1,2,3) -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
         $Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le $ValidationTime -or ($Root.GetProperty('MaximumNewAttempts').GetInt32() -lt 1 -or $Root.GetProperty('MaximumNewAttempts').GetInt32() -gt 10000) -or
         $Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -lt 1){throw 'Article grant identity, expiry or limits are invalid.'}
     if([string]::IsNullOrWhiteSpace($Root.GetProperty('AccountId').GetString()) -or [string]::IsNullOrWhiteSpace($Root.GetProperty('ProjectId').GetString())){throw 'Article account/project is missing.'}
@@ -445,7 +446,21 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
         if($committed -lt 0 -or $ceiling -lt $committed -or $maximum -gt $ceiling-$committed){throw 'Article allocation omits retained commitments or exceeds its ceiling.'}
     }
     $pinSets=@($Root.GetProperty('ScopeRows'),$Root.GetProperty('PriorArticleAttemptRows'),$budget.GetProperty('QueueRows'),$budget.GetProperty('SpendRows'),$budget.GetProperty('RecoveryRows'),$budget.GetProperty('TransitionRows'))
-    if($schema -eq 2){$pinSets+=@($Root.GetProperty('PriorSuccessorAttemptRows'));Assert-ChirpSuccessorGrant $Root}
+    if($schema -in @(2,3)){$pinSets+=@($Root.GetProperty('PriorSuccessorAttemptRows'));Assert-ChirpSuccessorGrant $Root}
+    if($schema -eq 3){
+        if(@($Root.EnumerateObject().Name) -ccontains 'SuccessorGrant'){throw 'Whole-article jobs cannot admit diagnostic successors.'}
+        $whole=$Root.GetProperty('WholeArticleGeneration')
+        Assert-RecoveryRecord $whole @{GrantId='NonemptyGuid';PlanSha256s='Array';MaximumCatalogRefreshes='Int32'}
+        if($whole.GetProperty('MaximumCatalogRefreshes').GetInt32() -lt 0 -or $whole.GetProperty('MaximumCatalogRefreshes').GetInt32() -gt 24){throw 'Whole-article refresh limit is invalid.'}
+        $plans=$whole.GetProperty('PlanSha256s');$seenPlans=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        if($plans.GetArrayLength() -lt 1 -or $plans.GetArrayLength() -gt 200){throw 'Whole-article plan count is invalid.'}
+        foreach($item in $plans.EnumerateArray()){
+            if($item.ValueKind -ne [Text.Json.JsonValueKind]::String){throw 'Whole-article plan identity is invalid.'}
+            $identity=$item.GetString()
+            if($identity -cnotmatch '^[a-f0-9]{64}$' -or -not $seenPlans.Add($identity) -or
+                @($Root.GetProperty('Articles').EnumerateArray() | Where-Object {$_.GetProperty('Proposal').GetProperty('PlanSha256').GetString() -ceq $identity}).Count -ne 1){throw 'Whole-article grant must name unique exact admitted plans.'}
+        }
+    }
     foreach($pins in $pinSets){
         if($pins.GetArrayLength() -gt 10000){throw 'Article financial baseline exceeds its bound.'}
         $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -464,7 +479,7 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
         if($refined){$planFields.Refinement='Object'}
         Assert-RecoveryRecord $plan $planFields
         if($refined){
-            if($schema -ne 2 -or $plan.GetProperty('PlannerVersion').GetString() -cne 'chirp3-one-failed-range-existing-clauses-v1'){throw 'Refined article requires explicit schema and compiler version.'}
+            if($schema -notin @(2,3) -or $plan.GetProperty('PlannerVersion').GetString() -cne 'chirp3-one-failed-range-existing-clauses-v1'){throw 'Refined article requires explicit schema and compiler version.'}
             $refinement=$plan.GetProperty('Refinement')
             Assert-RecoveryRecord $refinement @{Parent='Object';FailedCoverageOrdinal='Int32';FailedAuthorizationId='NonemptyGuid';FailedAttemptRowSha256='String';FailedQueueRowSha256='String';FailedLocalAttemptId='String'}
             if($refinement.GetProperty('FailedLocalAttemptId').GetString() -cnotmatch '^[a-f0-9]{32}$' -or

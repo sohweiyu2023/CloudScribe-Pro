@@ -18,6 +18,7 @@
     <AppHostRelativeDotNet>../runtime</AppHostRelativeDotNet>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="CloudScribe.Architecture.Tests" />
     <ProjectReference Include="../CloudScribe.Application/CloudScribe.Application.csproj" />
     <ProjectReference Include="../CloudScribe.Infrastructure/CloudScribe.Infrastructure.csproj" />
     <ProjectReference Include="../CloudScribe.Providers.Abstractions/CloudScribe.Providers.Abstractions.csproj" />
