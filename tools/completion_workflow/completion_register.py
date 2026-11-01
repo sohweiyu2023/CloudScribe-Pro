@@ -53,6 +53,7 @@ def physical(path):
 SCOPE_KEYS = {"schema", "approvalSha256", "buildSha256", "profileSha256", "accountSha256",
               "projectSha256", "plansSha256", "registerPathSha256", "startUtc", "endUtc", "maxRefreshes", "maxResumeAdmissions"}
 SUCCESSOR_SCOPE_KEYS = SCOPE_KEYS | {"maxAdmissions", "predecessorRegisterPath", "predecessorScopeSha256", "transitionId"}
+CONTINUATION_SCOPE_KEYS = SUCCESSOR_SCOPE_KEYS | {"acceptedEvidenceSha256", "maximumNewAttempts"}
 
 
 def path_digest(path):
@@ -60,19 +61,21 @@ def path_digest(path):
 
 
 def validate_scope(scope):
-    if (not isinstance(scope, dict) or type(scope.get("schema")) is not int or scope["schema"] not in (1, 2)
-            or set(scope) != (SUCCESSOR_SCOPE_KEYS if scope["schema"] == 2 else SCOPE_KEYS)):
+    if (not isinstance(scope, dict) or type(scope.get("schema")) is not int or scope["schema"] not in (1, 2, 3)
+            or set(scope) != {1: SCOPE_KEYS, 2: SUCCESSOR_SCOPE_KEYS, 3: CONTINUATION_SCOPE_KEYS}[scope["schema"]]):
         raise Rejected("ScopeSchema")
     for key in scope:
         if key.endswith("Sha256"):
             hash_value(scope[key])
-    if scope["schema"] == 2:
+    if scope["schema"] in (2, 3):
         if type(scope["maxAdmissions"]) is not int or scope["maxAdmissions"] != 24:
             raise Rejected("FixedAdmissionLimit")
         if not isinstance(scope["predecessorRegisterPath"], str) or not Path(scope["predecessorRegisterPath"]).is_absolute():
             raise Rejected("PredecessorPath")
         if str(uuid.UUID(scope["transitionId"])) != scope["transitionId"] or uuid.UUID(scope["transitionId"]).int == 0:
             raise Rejected("SuccessorTransitionId")
+    if scope["schema"] == 3 and (type(scope["maximumNewAttempts"]) is not int or not 1 <= scope["maximumNewAttempts"] <= 125):
+        raise Rejected("ContinuationAttemptLimit")
     if (type(scope["maxRefreshes"]) is not int or scope["maxRefreshes"] != 24 or
             type(scope["maxResumeAdmissions"]) is not int or scope["maxResumeAdmissions"] != 24):
         raise Rejected("FixedLimits")
@@ -120,21 +123,28 @@ HANDOFF_KEYS = {"SchemaVersion", "TransitionId", "SourceApprovalSha256", "Previo
                 "PreviousScopeSha256", "ExpectedPreviousHeadSha256", "NewConfigPath", "NewGateSha256", "NewScopePath",
                 "NewScopeSha256", "DatabaseSha256", "FailedAuthorizationId", "FailedLocalAttemptId", "FailedPlanSha256",
                 "FailedCoverageOrdinal", "FailedPayloadSha256", "FailedPayloadBytes"}
+CONTINUATION_HANDOFF_KEYS = HANDOFF_KEYS - {"FailedAuthorizationId", "FailedLocalAttemptId", "FailedPlanSha256",
+                                          "FailedCoverageOrdinal", "FailedPayloadSha256", "FailedPayloadBytes"} | {
+                                              "TransitionKind", "OriginalManifestSha256", "AcceptedEvidenceSha256"}
 
 
 def validate_handoff(h):
-    if not isinstance(h, dict) or set(h) != HANDOFF_KEYS or type(h["SchemaVersion"]) is not int or h["SchemaVersion"] != 1:
+    if (not isinstance(h, dict) or type(h.get("SchemaVersion")) is not int or h["SchemaVersion"] not in (1, 2)
+            or set(h) != (HANDOFF_KEYS if h["SchemaVersion"] == 1 else CONTINUATION_HANDOFF_KEYS)
+            or (h["SchemaVersion"] == 2 and h["TransitionKind"] != "accepted-continuation")):
         raise Rejected("HandoffSchema")
     for key in h:
         if key.endswith("Sha256"):
             hash_value(h[key])
     if str(uuid.UUID(h["TransitionId"])) != h["TransitionId"] or uuid.UUID(h["TransitionId"]).int == 0:
         raise Rejected("HandoffId")
-    uuid_identity(h["FailedAuthorizationId"])
-    if (not re.fullmatch(r"[a-f0-9]{32}", h["FailedLocalAttemptId"]) or int(h["FailedLocalAttemptId"], 16) == 0
+    if h["SchemaVersion"] == 1:
+        uuid_identity(h["FailedAuthorizationId"])
+        if (not re.fullmatch(r"[a-f0-9]{32}", h["FailedLocalAttemptId"]) or int(h["FailedLocalAttemptId"], 16) == 0
             or type(h["FailedCoverageOrdinal"]) is not int or h["FailedCoverageOrdinal"] < 1
-            or type(h["FailedPayloadBytes"]) is not int or not 1 <= h["FailedPayloadBytes"] <= 5000
-            or h["PreviousScopeSha256"] == h["NewScopeSha256"] or h["PreviousGateSha256"] == h["NewGateSha256"]):
+            or type(h["FailedPayloadBytes"]) is not int or not 1 <= h["FailedPayloadBytes"] <= 5000):
+            raise Rejected("HandoffBinding")
+    if h["PreviousScopeSha256"] == h["NewScopeSha256"] or h["PreviousGateSha256"] == h["NewGateSha256"]:
         raise Rejected("HandoffBinding")
     for name in ("PreviousConfigPath", "NewConfigPath", "NewScopePath"):
         if not isinstance(h[name], str) or not Path(h[name]).is_absolute():
@@ -143,6 +153,8 @@ def validate_handoff(h):
 
 def verify_plan_policy(manifest, scope, policy, kind):
     """Bind actual immutable proposal/coverage projection, not a caller assertion."""
+    if scope.get("schema", 1) == 3:
+        return verify_continuation_policy(manifest, scope, policy, kind)
     if scope.get("schema", 1) == 2:
         return verify_successor_policy(manifest, scope, policy, kind)
     if digest(manifest) != scope["plansSha256"]:
@@ -219,6 +231,8 @@ def verify_plan_policy(manifest, scope, policy, kind):
 
 
 def successor_policy_kind(manifest, policy):
+    if manifest.get("schema") == 3:
+        return "completion-admission"
     allowed = {(a["Proposal"]["PlanSha256"], x["CoverageOrdinal"]) for a in policy["Articles"] for x in a["AllowedSegments"]}
     pilot = (manifest["pilot"]["planSha256"], manifest["pilot"]["coverageOrdinal"])
     return "pilot-admission" if allowed == {pilot} else "completion-admission"
@@ -291,6 +305,124 @@ def verify_successor_policy(manifest, scope, policy, kind):
             raise Rejected("ResumeFinancialBounds")
     elif kind != original_kind:
         raise Rejected("SuccessorAdmissionKind")
+
+
+ACCEPTED_KEYS = {"planSha256", "coverageOrdinal", "authorizationId", "policySha256",
+                 "sourceApprovalSha256", "receiptSha256", "audioSha256", "executionMappingSha256"}
+BUDGET_KEYS = {"projectCommittedMinorUnits", "allocationCommittedMinorUnits", "projectCeilingMinorUnits",
+               "allocationCeilingMinorUnits", "overallCeilingMinorUnits", "taxFeeUpperBoundMinorUnits",
+               "taxFeeEvidenceSha256"}
+
+
+def validate_continuation_manifest(manifest, scope):
+    reject = Rejected
+    original = {k: v for k, v in manifest.items() if k != "continuation"}
+    original["schema"] = 2
+    extension = manifest.get("continuation")
+    if (manifest.get("schema") != 3 or type(manifest.get("schema")) is not int
+            or not isinstance(extension, dict)
+            or set(extension) != {"originalManifestSha256", "accepted", "budget", "financialRowsSha256"}
+            or digest(manifest) != scope["plansSha256"]):
+        raise reject("ContinuationManifest")
+    hash_value(extension["originalManifestSha256"])
+    hash_value(extension["financialRowsSha256"])
+    if digest(original) != extension["originalManifestSha256"]:
+        raise reject("ContinuationOriginalManifest")
+    original_scope = dict(scope, plansSha256=digest(original))
+    parts, plans, pilot = validate_successor_manifest(original, original_scope)
+    accepted = extension["accepted"]
+    if not isinstance(accepted, list) or not 1 <= len(accepted) < len(parts):
+        raise reject("ContinuationAcceptedBounds")
+    keys = set(); identities = set(); receipts = set(); ordered = []
+    for entry in accepted:
+        if not isinstance(entry, dict) or set(entry) != ACCEPTED_KEYS:
+            raise reject("ContinuationAcceptedSchema")
+        for name in ACCEPTED_KEYS - {"coverageOrdinal", "authorizationId", "executionMappingSha256"}:
+            hash_value(entry[name])
+        if entry["executionMappingSha256"] is not None:
+            hash_value(entry["executionMappingSha256"])
+        authorization = uuid_identity(entry["authorizationId"])
+        if entry["authorizationId"] != authorization or type(entry["coverageOrdinal"]) is not int:
+            raise reject("ContinuationAcceptedIdentity")
+        key = (entry["planSha256"], entry["coverageOrdinal"])
+        if key not in parts or key in keys or authorization in identities or entry["receiptSha256"] in receipts:
+            raise reject("ContinuationAcceptedDuplicateOrUnknown")
+        keys.add(key); identities.add(authorization); receipts.add(entry["receiptSha256"]); ordered.append(key)
+    if ordered != sorted(ordered) or pilot not in keys or digest(accepted) != scope["acceptedEvidenceSha256"]:
+        raise reject("ContinuationAcceptedPin")
+    remaining = set(parts) - keys
+    if type(scope["maximumNewAttempts"]) is not int or scope["maximumNewAttempts"] != len(remaining):
+        raise reject("ContinuationRemainingCount")
+    budget = extension["budget"]
+    if not isinstance(budget, dict) or set(budget) != BUDGET_KEYS:
+        raise reject("ContinuationBudgetSchema")
+    hash_value(budget["taxFeeEvidenceSha256"])
+    for name in BUDGET_KEYS - {"taxFeeEvidenceSha256"}:
+        if type(budget[name]) is not int or budget[name] < 0:
+            raise reject("ContinuationBudgetType")
+    # This is a reviewed upper BOUND for all project taxes/fees, not an assumed
+    # tax rate or an authenticated invoice. Missing evidence fails closed.
+    if (budget["overallCeilingMinorUnits"] != 500
+            or budget["projectCeilingMinorUnits"] + budget["taxFeeUpperBoundMinorUnits"] > 500
+            or budget["projectCommittedMinorUnits"] + len(remaining) > budget["projectCeilingMinorUnits"]
+            or budget["allocationCommittedMinorUnits"] + len(remaining) > budget["allocationCeilingMinorUnits"]
+            or budget["allocationCommittedMinorUnits"] > budget["projectCommittedMinorUnits"]
+            or budget["allocationCeilingMinorUnits"] > budget["projectCeilingMinorUnits"]):
+        raise reject("ContinuationAllInBudget")
+    return parts, plans, remaining, accepted, budget
+
+
+def verify_continuation_policy(manifest, scope, policy, kind):
+    parts, plans, remaining, accepted, budget = validate_continuation_manifest(manifest, scope)
+    reject = Rejected
+    if kind not in ("completion-admission", "resume-admission"):
+        raise reject("ContinuationAdmissionKind")
+    expiry = datetime.fromisoformat(policy["ExpiresAtUtc"].replace("Z", "+00:00"))
+    if (expiry.utcoffset() != timedelta(0) or expiry.timestamp() <= time.time()
+            or int(expiry.timestamp() * 1_000_000) > utc(scope["endUtc"])):
+        raise reject("PolicyWindow")
+    original = policy["HistoricalPolicy"] if kind == "resume-admission" else policy
+    if (original["Currency"] != "USD" or type(original["Scale"]) is not int or original["Scale"] != 2
+            or original["AccountId"] != manifest["accountId"] or original["ProjectId"] != manifest["projectId"]
+            or original["SourceApprovalSha256"] != scope["approvalSha256"]):
+        raise reject("ContinuationPolicyBinding")
+    allowed = set(); observed = set()
+    for article in original["Articles"]:
+        proposal = article["Proposal"]; plan = proposal["PlanSha256"]
+        if plan in observed or plans.get(plan) != digest(proposal):
+            raise reject("ExactProposalBinding")
+        observed.add(plan)
+        by_ordinal = {part["CoverageOrdinal"]: part for part in proposal["Parts"]}
+        if len(by_ordinal) != len(proposal["Parts"]):
+            raise reject("DuplicateCoverage")
+        for permission in article["AllowedSegments"]:
+            key = (plan, permission["CoverageOrdinal"]); part = by_ordinal.get(key[1]); expected = parts.get(key)
+            if (key not in remaining or key in allowed or part is None or expected is None
+                    or type(permission["MaximumMinorUnits"]) is not int or permission["MaximumMinorUnits"] != 1
+                    or part["Range"]["ReusedReceiptSha256"] is not None
+                    or part["PayloadSha256"] != expected["payloadSha256"] or part["PayloadBytes"] != expected["payloadBytes"]
+                    or proposal["VoiceName"] != expected["voiceName"] or proposal["LanguageCode"] != expected["languageCode"]):
+                raise reject("ContinuationAcceptedOrChangedCoverage")
+            allowed.add(key)
+    fields = {"ProjectCommittedMinorUnits": "projectCommittedMinorUnits", "AllocationCommittedMinorUnits": "allocationCommittedMinorUnits",
+              "ProjectCeilingMinorUnits": "projectCeilingMinorUnits", "AllocationCeilingMinorUnits": "allocationCeilingMinorUnits"}
+    if (allowed != remaining or observed != set(plans)
+            or type(original["MaximumNewAttempts"]) is not int or original["MaximumNewAttempts"] != len(remaining)
+            or type(original["MaximumAdditionalReservationMinorUnits"]) is not int
+            or original["MaximumAdditionalReservationMinorUnits"] != len(remaining)
+            or any(type(original["Budget"][k]) is not int or original["Budget"][k] != budget[v] for k, v in fields.items())):
+        raise reject("ContinuationExactBudgetOrCoverage")
+    if kind == "resume-admission":
+        envelope = policy["ExecutionEnvelope"]
+        matches = [key for key in remaining if parts[key]["payloadSha256"] == envelope["CompiledPayloadSha256"]
+                   and parts[key]["payloadBytes"] == envelope["CompiledPayloadBytes"]
+                   and parts[key]["voiceName"] == envelope["VoiceName"]]
+        if (len(matches) != 1 or envelope["AudioEncoding"] != "MP3"
+                or type(policy["MaximumExistingDispatches"]) is not int or policy["MaximumExistingDispatches"] != 1
+                or type(policy["MaximumNewReservations"]) is not int or policy["MaximumNewReservations"] != 0
+                or type(policy["MaximumAdditionalReservationMinorUnits"]) is not int
+                or policy["MaximumAdditionalReservationMinorUnits"] != 0):
+            raise reject("ResumeFinancialBounds")
 
 
 class Register:
@@ -459,6 +591,8 @@ class Register:
             shapes["activate"] = {"type", "utc", "mono", "id", "identity", "previousRetirementHead", "receiptSha256", "gateSha256"}
             if event.get("type") == "claim" and scope["schema"] == 2 and event.get("kind") == "completion-admission":
                 shapes["claim"] = shapes["claim"] | {"pilotProofSha256"}
+            if event.get("type") == "claim" and scope["schema"] == 3 and event.get("kind") == "completion-admission":
+                shapes["claim"] = shapes["claim"] | {"acceptedProofSha256"}
             if event.get("type") not in shapes or set(event) != shapes[event["type"]]:
                 raise Rejected("EventSchema")
             if event["type"] in ("claim", "complete", "build-claim", "build-complete", "source-claim", "source-complete", "retire-claim", "retire-complete", "activate"):
@@ -490,12 +624,15 @@ class Register:
                 kinds = ("refresh", "resume-admission", "completion-admission", "pilot-admission") if scope["schema"] == 2 else ("refresh", "resume-admission", "completion-admission")
                 if (state["stopped"] or not state["activated"] or state["retirement"] or state["pending"] or kind not in kinds
                         or event["id"] in state["ids"] or state[kind] >= (1 if kind in ("completion-admission", "pilot-admission") else 24)
-                        or (scope["schema"] == 2 and kind != "refresh" and state["admissions"] >= 24)):
+                        or (scope["schema"] in (2, 3) and kind != "refresh" and state["admissions"] >= 24)):
                     raise Rejected("InvalidClaimHistory")
                 if scope["schema"] == 2 and kind == "completion-admission":
                     hash_value(event["pilotProofSha256"])
                     if state["pilotPolicySha256"] is None:
                         raise Rejected("PilotNotAccepted")
+                if scope["schema"] == 3 and kind == "completion-admission":
+                    if hash_value(event["acceptedProofSha256"]) != scope["acceptedEvidenceSha256"]:
+                        raise Rejected("ContinuationAcceptedProof")
                 state[kind] += 1
                 if kind != "refresh":
                     state["admissions"] += 1
@@ -545,13 +682,14 @@ class Register:
                 h = event["handoff"]
                 validate_handoff(h)
                 condition, drift = self._retirement_observation(state, event["utc"], event["mono"])
-                if (scope["schema"] != 1 or state["pending"] or state["retirement"] or event["id"] in state["ids"]
+                if ((scope["schema"], h["SchemaVersion"]) not in ((1, 1), (2, 2)) or state["pending"] or state["retirement"] or event["id"] in state["ids"]
                         or h["TransitionId"] != event["id"] or h["ExpectedPreviousHeadSha256"] != previous
                         or h["PreviousScopeSha256"] != self.scope_sha
                         or h["PreviousGateSha256"] != state["currentGate"]
                         or type(event["clockDriftMicros"]) is not int or event["clockDriftMicros"] != drift
                         or event["clockCondition"] != condition
-                        or (state["stopped"] and state["stopReason"] != "WindowExpired")):
+                        or (state["stopped"] and state["stopReason"] != "WindowExpired")
+                        or (h["SchemaVersion"] == 2 and h["OriginalManifestSha256"] != scope["plansSha256"])):
                     raise Rejected("InvalidRetirementHistory")
                 state["retirement"] = event
                 state["pending"] = dict(event, kind="retirement")
@@ -563,7 +701,7 @@ class Register:
                 state["retired"] = True
                 state["pending"] = None
             elif event["type"] == "activate":
-                if (scope["schema"] != 2 or state["activated"] or state["pending"] or state["stopped"]
+                if (scope["schema"] not in (2, 3) or state["activated"] or state["pending"] or state["stopped"]
                         or event["id"] != scope["transitionId"]):
                     raise Rejected("InvalidSuccessorActivation")
                 hash_value(event["identity"]); hash_value(event["previousRetirementHead"])
@@ -635,7 +773,7 @@ class Register:
         self._seal(db)
         return now
 
-    def claim(self, kind, identity_sha, operation_id, pilot_proof_sha=None):
+    def claim(self, kind, identity_sha, operation_id, pilot_proof_sha=None, accepted_proof_sha=None):
         if kind not in ("refresh", "resume-admission", "completion-admission", "pilot-admission"):
             raise Rejected("UnsupportedOperation")
         hash_value(identity_sha)
@@ -651,7 +789,7 @@ class Register:
             if kind == "pilot-admission" and state["scope"]["schema"] != 2:
                 raise Rejected("UnsupportedOperation")
             if (state[kind] >= (1 if kind in ("completion-admission", "pilot-admission") else 24)
-                    or (state["scope"]["schema"] == 2 and kind != "refresh" and state["admissions"] >= 24)):
+                    or (state["scope"]["schema"] in (2, 3) and kind != "refresh" and state["admissions"] >= 24)):
                 raise Rejected("OperationLimit")
             event = {"type": "claim", "utc": now, "id": operation_id, "kind": kind, "identity": identity_sha}
             if state["scope"]["schema"] == 2 and kind == "completion-admission":
@@ -659,6 +797,10 @@ class Register:
                 if state["pilotPolicySha256"] is None:
                     raise Rejected("PilotNotAccepted")
                 event["pilotProofSha256"] = pilot_proof_sha
+            if state["scope"]["schema"] == 3 and kind == "completion-admission":
+                if hash_value(accepted_proof_sha) != state["scope"]["acceptedEvidenceSha256"]:
+                    raise Rejected("ContinuationAcceptedProof")
+                event["acceptedProofSha256"] = accepted_proof_sha
             self._append(db, self._stamp(event), state["head"])
             db.commit()  # A durable consumed slot exists BEFORE any external action.
             self._seal(db)  # Failure here returns NO permit and future mismatch stops.
@@ -690,6 +832,8 @@ class Register:
             else:
                 good = good and receipt.get("policyVerified") is True
                 maximum = (1 if pending["kind"] == "pilot-admission" else 125) if state["scope"]["schema"] == 2 else 108
+                if state["scope"]["schema"] == 3:
+                    maximum = state["scope"]["maximumNewAttempts"]
                 good = good and type(receipt.get("maximumNewAttempts")) is int and 0 <= receipt["maximumNewAttempts"] <= maximum
                 good = good and type(receipt.get("additionalReservationCents")) is int and 0 <= receipt["additionalReservationCents"] <= maximum
             # Expiry/rollback cannot be hidden by completing a successful older claim.
@@ -794,7 +938,7 @@ class Register:
 
     def _handoff_ready(self, old_state, successor, new_scope, h, identity, pending=False, check_clock=True):
         validate_handoff(h); hash_value(identity); validate_scope(new_scope)
-        if (old_state["scope"]["schema"] != 1 or new_scope["schema"] != 2
+        if ((old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) not in ((1, 2, 1), (2, 3, 2))
                 or h["PreviousScopeSha256"] != self.scope_sha or h["NewScopeSha256"] != successor.scope_sha
                 or digest(new_scope) != successor.scope_sha or new_scope["predecessorScopeSha256"] != self.scope_sha
                 or physical(new_scope["predecessorRegisterPath"]) != self.path
@@ -803,6 +947,13 @@ class Register:
                 or new_scope["approvalSha256"] == old_state["scope"]["approvalSha256"]
                 or any(new_scope[k] != old_state["scope"][k] for k in ("profileSha256", "accountSha256", "projectSha256"))):
             raise Rejected("SuccessorScopeBinding")
+        if h["SchemaVersion"] == 2:
+            if (h["OriginalManifestSha256"] != old_state["scope"]["plansSha256"]
+                    or h["AcceptedEvidenceSha256"] != new_scope["acceptedEvidenceSha256"]):
+                raise Rejected("ContinuationAcceptedProof")
+            # Current pair leases already own this old2 register. Its root1
+            # ancestor is terminal/immutable; read it without re-entering leases.
+            self._require_ancestor_snapshot(old_state, h["PreviousGateSha256"])
         # A distinct approved window may retire forward-discontinuous old time;
         # normal old permissions, backward time and committed failure stops stay blocked.
         if old_state["stopped"] and old_state["stopReason"] != "WindowExpired":
@@ -895,18 +1046,43 @@ class Register:
         # Called on EVERY operational bridge entry, never a caller success assertion.
         with self._open() as db:
             new_state = self._read(db)
-        if new_state["scope"]["schema"] != 2:
+        if new_state["scope"]["schema"] not in (2, 3):
             return
         scope = new_state["scope"]
         old = Register(scope["predecessorRegisterPath"], scope["predecessorScopeSha256"])
         with old.pair(self), old._transaction() as old_db, self._transaction() as db:
-            state = old._read(old_db); current = self._read(db)
+            old._read(old_db)  # Hold canonical current/predecessor leases throughout validation.
+            self._require_ancestor_snapshot(self._read(db), new_config_pin)
+
+    def _require_ancestor_snapshot(self, current, config_pin, seen=None):
+        """Read only terminal ancestors, never recursively acquire an owned lease."""
+        seen = set() if seen is None else set(seen)
+        identity = os.path.normcase(str(self.path))
+        if identity in seen or len(seen) >= 3:
+            raise Rejected("PredecessorNotRetired")
+        seen.add(identity)
+        schema = current["scope"]["schema"]
+        if schema == 1:
+            return
+        scope = current["scope"]
+        old = Register(scope["predecessorRegisterPath"], scope["predecessorScopeSha256"])
+        if not old.path.is_file() or old.path.stat().st_size > 2_000_000:
+            raise Rejected("RegisterUnavailableOrOversized")
+        with closing(sqlite3.connect(old.path.as_uri() + "?mode=ro", uri=True, timeout=0)) as db:
+            db.execute("PRAGMA query_only=ON"); db.execute("BEGIN")
+            state = old._read(db)
             a = current["activation"]; item = state["retirement"]
-            if (not state["retired"] or state["pending"] or not a or not item
+            if (state["scope"]["schema"] != schema - 1 or not state["retired"] or state["pending"] or not a or not item
                     or item["identity"] != a["identity"] or state["head"] != a["previousRetirementHead"]
                     or item["id"] != scope["transitionId"] or item["handoff"]["NewScopeSha256"] != self.scope_sha
-                    or item["handoff"]["NewGateSha256"] != new_config_pin or current["currentGate"] != new_config_pin):
+                    or item["handoff"]["NewGateSha256"] != config_pin or current["currentGate"] != config_pin
+                    or item["handoff"]["SourceApprovalSha256"] != scope["approvalSha256"]
+                    or item["handoff"]["PreviousGateSha256"] != state["currentGate"]
+                    or (schema == 3 and (item["handoff"]["SchemaVersion"] != 2
+                        or item["handoff"]["OriginalManifestSha256"] != state["scope"]["plansSha256"]
+                        or item["handoff"]["AcceptedEvidenceSha256"] != scope["acceptedEvidenceSha256"]))):
                 raise Rejected("PredecessorNotRetired")
+            old._require_ancestor_snapshot(state, state["currentGate"], seen)
 
     def status(self):
         with self._open() as db:

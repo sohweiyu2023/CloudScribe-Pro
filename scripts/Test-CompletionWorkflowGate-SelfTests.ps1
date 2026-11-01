@@ -195,4 +195,25 @@ $gate=Get-ReviewedCompletionGate $profile
 Complete-CompletionBuildInstall $gate (Join-Path $target 'app');$passed++
 Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
 
+# Explicit continuation is a different typed2->3 transition. Production parser,
+# bridge, old retirement and installed-readback functions are exercised together.
+$continuationRoot=Join-Path $fixtureParent ([Guid]::NewGuid().ToString('N'))
+$metadata=& $PythonPath -I -S (Join-Path $PSScriptRoot '../tools/completion_workflow/make_synthetic_continuation_fixture.py') $continuationRoot
+if($LASTEXITCODE -ne 0){throw 'Synthetic continuation setup failed.'}
+$fixture=$metadata|ConvertFrom-Json;Bind-GateFixture $fixture
+$ReviewedCompletionSuccessorRunPath=$fixture.handoffPath;$ReviewedCompletionSuccessorRunSha256=$fixture.handoffSha256
+$identity=[pscustomobject]@{CompletionGateProtocolVersion=1;CompletionWorkflowGateSha256=$fixture.previousGateSha256}
+$gate=Get-ReviewedCompletionGate $profile;$passed++
+if(Test-Path -LiteralPath $gate.Config.RegisterPath){throw 'Continuation inspection initialized a register.'};$passed++
+$handoff=$gate.SuccessorTransition
+$null=Invoke-CompletionGate $gate 'claim-successor' $handoff.Id $handoff.Sha256 $null (Join-Path $package 'app');$passed++
+$null=Invoke-CompletionGate $gate 'check-successor' $handoff.Id $handoff.Sha256 $null (Join-Path $package 'app');$passed++
+Expect-Rejected {Get-ReviewedCompletionGate $profile}
+Set-SyntheticSuccessorInstalled $gate
+Complete-CompletionBuildInstall $gate (Join-Path $target 'app');$passed++
+$installedGate=[pscustomobject]@{Path=(Join-Path $target 'completion-workflow-gate.json');Sha256=$gate.Sha256;Config=$gate.Config}
+$status=Invoke-CompletionGate $installedGate 'status' ([Guid]::Empty) '' $null (Join-Path $target 'app')
+if($status.totalAdmissions -ne 0 -or $status.pilotAdmissions -ne 0 -or $status.pendingId){throw 'Continuation repeated a pilot or inherited paid authority.'};$passed++
+Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
+
 [pscustomobject]@{Passed=$passed;ProviderCalls=0;CredentialOperations=0;RealInstalls=0;FixtureParent=$fixtureParent}

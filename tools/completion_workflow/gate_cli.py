@@ -218,6 +218,204 @@ def verify_pilot_mapping(connection, attempt, envelope, receipt, config, histori
     return used
 
 
+def _continuation_member(connection, config, module, profile, parts, plans, entry, historical_policy=None):
+    key = (entry["planSha256"], entry["coverageOrdinal"]); part = parts[key]
+    attempts = connection.execute("SELECT * FROM chirp_article_owned_attempts WHERE AuthorizationId=?",
+                                  (entry["authorizationId"],)).fetchall()
+    if len(attempts) != 1:
+        raise ValueError("ContinuationAcceptedAttempt")
+    a = attempts[0]
+    if (a["PlanSha256"] != key[0] or a["CoverageOrdinal"] != key[1] or a["PolicySha256"] != entry["policySha256"]
+            or a["SourceApprovalSha256"] != entry["sourceApprovalSha256"] or a["AccountId"] != config["AccountId"]
+            or a["ProjectId"] != config["ProjectId"] or a["Currency"] != "USD" or a["Scale"] != 2
+            or a["ReservedMinorUnits"] != 1 or a["Consumed"] != 1
+            or not isinstance(a["ClaimedLocalAttemptId"], str)
+            or module.uuid_identity(a["ClaimedLocalAttemptId"]) != a["ClaimedLocalAttemptId"]):
+        raise ValueError("ContinuationAcceptedIdentity")
+    receipts = connection.execute("SELECT * FROM chirp_article_receipts WHERE AuthorizationId=?", (a["AuthorizationId"],)).fetchall()
+    journals = connection.execute("SELECT * FROM chirp_article_output_journals WHERE AuthorizationId=?", (a["AuthorizationId"],)).fetchall()
+    if len(receipts) != 1 or len(journals) != 1:
+        raise ValueError("ContinuationOutputIncomplete")
+    rr, journal = receipts[0], journals[0]; raw = rr["ReceiptJson"]
+    if (len(raw.encode()) > 32768 or sha(raw.encode()) != entry["receiptSha256"]
+            or rr["ReceiptSha256"] != entry["receiptSha256"] or rr["PlanSha256"] != key[0]
+            or rr["CoverageOrdinal"] != key[1] or journal["ReceiptJson"] != raw
+            or journal["ReceiptSha256"] != entry["receiptSha256"]):
+        raise ValueError("ContinuationOutputPin")
+    receipt = json.loads(raw, object_pairs_hook=unique); audio = receipt["Audio"]
+    if len(a["EnvelopeJson"].encode()) > 32768:
+        raise ValueError("ContinuationEnvelopeBound")
+    envelope = json.loads(a["EnvelopeJson"], object_pairs_hook=unique)
+    stored = connection.execute("SELECT ProposalJson,AccountId,ProjectId FROM chirp_article_plans WHERE PlanSha256=?", (key[0],)).fetchone()
+    if stored is None or len(stored[0].encode()) > 8 * 1024 * 1024:
+        raise ValueError("ContinuationStoredPlan")
+    proposal = json.loads(stored[0], object_pairs_hook=unique)
+    original = next(x for x in proposal["Parts"] if x["CoverageOrdinal"] == key[1])
+    source = connection.execute("SELECT d.DraftText,r.ContentText,d.CurrentRevisionId FROM documents d JOIN document_revisions r ON r.Id=d.CurrentRevisionId WHERE lower(d.Id)=?",
+                                (str(uuid.UUID(proposal["DocumentId"])),)).fetchone()
+    q = connection.execute("SELECT * FROM google_generation_queue_states WHERE AccountId=? AND OperationStableId='synthesize-speech' AND IdempotencyKey=?",
+                           (config["AccountId"], a["ChildKey"])).fetchone()
+    if (module.digest(proposal) != plans[key[0]] or stored[1] != config["AccountId"] or stored[2] != config["ProjectId"]
+            or source is None or source[0] != source[1] or sha(source[0].encode()) != proposal["SourceSha256"]
+            or uuid.UUID(source[2]) != uuid.UUID(proposal["RevisionId"])
+            or receipt["PlanSha256"] != key[0] or receipt["CoverageOrdinal"] != key[1] or receipt["Range"] != original["Range"]
+            or uuid.UUID(audio["DocumentId"]) != uuid.UUID(proposal["DocumentId"])
+            or uuid.UUID(audio["RevisionId"]) != uuid.UUID(proposal["RevisionId"])
+            or audio["TextSha256"] != original["Range"]["TextSha256"] or audio["VoiceName"] != config["VoiceName"]
+            or audio["LanguageCode"] != config["LanguageCode"] or audio["PayloadSha256"] != part["payloadSha256"]
+            or audio["AccountId"] != config["AccountId"] or audio["OperationId"] != "synthesize-speech"
+            or audio["IdempotencyKey"] != a["ChildKey"] or audio["LocalAttemptId"] != a["ClaimedLocalAttemptId"]
+            or envelope["AccountId"] != config["AccountId"] or envelope["CredentialReferenceId"] != config["CredentialReferenceId"]
+            or envelope["VoiceName"] != config["VoiceName"] or envelope["AudioEncoding"] != "MP3"
+            or envelope["RecoveryAuthorizationId"] is not None
+            or uuid.UUID(envelope["ChirpAuthorizationId"]).hex != a["AuthorizationId"]
+            or envelope["CompiledPayloadSha256"] != part["payloadSha256"] or envelope["CompiledPayloadBytes"] != part["payloadBytes"]
+            or q is None or q["UnresolvedSubmission"] != 0 or q["SubmissionAttempted"] != 1
+            or q["DiagnosticCode"] != "google-accepted" or q["LocalAttemptId"] != a["ClaimedLocalAttemptId"]
+            or q["PayloadSha256"] != part["payloadSha256"] or q["PayloadBytes"] != part["payloadBytes"]):
+        raise ValueError("ContinuationAcceptedProvenance")
+    mapping = connection.execute("SELECT PolicyJson FROM chirp_reserved_catalog_mappings WHERE AuthorizationId=? ORDER BY CreatedAtUnixMilliseconds,MappingId LIMIT 1",
+                                 (a["AuthorizationId"],)).fetchone()
+    historical = None
+    if mapping:
+        if len(mapping[0].encode()) > 8 * 1024 * 1024:
+            raise ValueError("ContinuationMappingBound")
+        historical = json.loads(mapping[0], object_pairs_hook=unique)["HistoricalPolicy"]
+        if ((historical_policy is not None and module.canonical(historical) != module.canonical(historical_policy))
+                    or (historical_policy is None and module.digest(historical) != a["PolicySha256"])):
+            raise ValueError("ContinuationHistoricalPolicy")
+    mapped = verify_pilot_mapping(connection, a, envelope, receipt, config, historical)
+    if mapped != entry["executionMappingSha256"]:
+        raise ValueError("ContinuationMappingPin")
+    media = profile / "accepted-chirp-article-audio" / (a["AuthorizationId"] + ".mp3")
+    if os.path.normcase(os.path.abspath(audio["AudioPath"])) != os.path.normcase(str(media)):
+        raise ValueError("ContinuationMediaLocation")
+    data = bounded(media, 256 * 1024 * 1024)
+    if len(data) < 12 or len(data) != audio["AudioBytes"] or sha(data) != audio["AudioSha256"] or sha(data) != entry["audioSha256"]:
+        raise ValueError("ContinuationMediaPin")
+
+FINANCIAL_TABLES = ("google_generation_spend_authorizations", "google_recovery_attempts", "google_recovery_scopes",
+                    "google_recovery_grant_transitions", "chirp_article_owned_attempts", "chirp_article_legacy_associations")
+
+
+def continuation_financial_projection(connection, module, excluded=()):
+    result = {}
+    for table in FINANCIAL_TABLES:
+        rows = []
+        for index, row in enumerate(connection.execute("SELECT * FROM " + table), 1):
+            if index > 10000:
+                raise ValueError("ContinuationFinancialBound")
+            if table == "chirp_article_owned_attempts" and row["AuthorizationId"] in excluded:
+                continue
+            rows.append({key: {"blobSha256": sha(value)} if isinstance(value, bytes) else value
+                         for key, value in dict(row).items()})
+        result[table] = sorted(rows, key=module.canonical)
+    return module.digest(result)
+
+
+def retained_continuation_policy(config, manifest, scope, module, register, expected=None):
+    """Derive retained authority only from installed bytes AND a prior successful journal event."""
+    app = Path(config["ApplicationDirectory"])
+    marker = json.loads(bounded(app.parent / "cloudscribe-install.json", 32768), object_pairs_hook=unique)
+    raw = bounded(app.parent / "chirp-article-admission-policy.json", 8 * 1024 * 1024)
+    pin = sha(raw)
+    if (marker.get("Product") != "CloudScribe Pro" or marker.get("ChirpArticlePolicySha256") != pin
+            or (expected is not None and expected != pin)):
+        raise ValueError("ContinuationRetainedPolicyPin")
+    policy = json.loads(raw, object_pairs_hook=unique)
+    module.verify_plan_policy(manifest, scope, policy, "completion-admission")
+    with register._open() as db:
+        state = register._read(db)
+        events = [json.loads(row[0]) for row in db.execute("SELECT body FROM events ORDER BY seq")]
+        claims = {e["id"] for e in events if e["type"] == "claim" and e["kind"] == "completion-admission" and e["identity"] == pin}
+        if (state["stopped"] or not any(e["type"] == "complete" and e["id"] in claims and e["outcome"] == "Succeeded" for e in events)):
+            raise ValueError("ContinuationRetentionNotAdmitted")
+    return policy, pin
+
+
+def _continuation_clean_held(connection, config, module, scope, parts, a, policy_sha):
+    key = (a["PlanSha256"], a["CoverageOrdinal"]); part = parts[key]
+    q = connection.execute("SELECT * FROM google_generation_queue_states WHERE AccountId=? AND OperationStableId='synthesize-speech' AND IdempotencyKey=?",
+                           (config["AccountId"], a["ChildKey"])).fetchone()
+    if len(a["EnvelopeJson"].encode()) > 32768:
+        raise ValueError("ContinuationEnvelopeBound")
+    e = json.loads(a["EnvelopeJson"], object_pairs_hook=unique)
+    if (a["PolicySha256"] != policy_sha or a["SourceApprovalSha256"] != scope["approvalSha256"]
+            or a["AccountId"] != config["AccountId"] or a["ProjectId"] != config["ProjectId"]
+            or a["Currency"] != "USD" or a["Scale"] != 2 or a["EstimateMinorUnits"] != 1 or a["ReservedMinorUnits"] != 1
+            or a["Consumed"] != 0 or a["ClaimedLocalAttemptId"] is not None
+            or q is None or q["SubmissionAttempted"] != 0 or q["UnresolvedSubmission"] != 0
+            or q["LocalAttemptId"] is not None or q["ProviderRequestId"] is not None or q["DiagnosticCode"] is not None
+            or q["PayloadSha256"] not in (None, part["payloadSha256"]) or q["PayloadBytes"] not in (None, part["payloadBytes"])
+            or q["ErrorStatus"] != 0 or e["AccountId"] != config["AccountId"]
+            or e["CredentialReferenceId"] != config["CredentialReferenceId"] or e["VoiceName"] != config["VoiceName"]
+            or e["AudioEncoding"] != "MP3" or e["RecoveryAuthorizationId"] is not None
+            or module.uuid_identity(e["ChirpAuthorizationId"]) != a["AuthorizationId"]
+            or e["CompiledPayloadSha256"] != part["payloadSha256"] or e["CompiledPayloadBytes"] != part["payloadBytes"]
+            or connection.execute("SELECT COUNT(*) FROM chirp_article_receipts WHERE AuthorizationId=?", (a["AuthorizationId"],)).fetchone()[0]
+            or connection.execute("SELECT COUNT(*) FROM chirp_article_output_journals WHERE AuthorizationId=?", (a["AuthorizationId"],)).fetchone()[0]
+            or connection.execute("SELECT COUNT(*) FROM chirp_reserved_dispatch_mappings WHERE AuthorizationId=?", (a["AuthorizationId"],)).fetchone()[0]):
+        raise ValueError("ContinuationHeldNotClean")
+
+
+def continuation_acceptance(config, manifest, scope, module, database_sha=None, retained=None, resume_authorization=None):
+    """Initial mode requires untouched remaining coverage. Retention is derived from journal+installed policy."""
+    parts, plans, remaining, accepted, _ = module.validate_continuation_manifest(manifest, scope)
+    profile, db = profile_database(config); before = sha(bounded(db, 512 * 1024 * 1024))
+    if database_sha is not None and before != database_sha:
+        raise ValueError("ContinuationDatabasePin")
+    with closing(sqlite3.connect(db.as_uri() + "?mode=ro&immutable=1", uri=True)) as connection:
+        connection.row_factory = sqlite3.Row; connection.execute("BEGIN")
+        for entry in accepted:
+            _continuation_member(connection, config, module, profile, parts, plans, entry)
+        if connection.execute("SELECT COUNT(*) FROM google_generation_queue_states WHERE AccountId=? AND UnresolvedSubmission<>0", (config["AccountId"],)).fetchone()[0]:
+            raise ValueError("PendingOrUncertainWork")
+        excluded = set(); held = []; coverage = set()
+        candidates = connection.execute("SELECT * FROM chirp_article_owned_attempts WHERE AccountId=? AND ProjectId=?", (config["AccountId"], config["ProjectId"])).fetchall()
+        for a in candidates:
+            key = (a["PlanSha256"], a["CoverageOrdinal"])
+            if key not in remaining:
+                if a["Consumed"] == 0:
+                    raise ValueError("PendingOrUncertainWork")
+                continue
+            if retained is None:
+                raise ValueError("ContinuationRemainingNotUntouched")
+            policy, policy_sha = retained
+            if (key in coverage or a["PolicySha256"] != policy_sha or a["SourceApprovalSha256"] != scope["approvalSha256"]
+                    or a["Currency"] != "USD" or a["Scale"] != 2 or a["EstimateMinorUnits"] != 1 or a["ReservedMinorUnits"] != 1):
+                raise ValueError("ContinuationProgressIdentity")
+            coverage.add(key); excluded.add(a["AuthorizationId"])
+            if a["Consumed"] == 0:
+                _continuation_clean_held(connection, config, module, scope, parts, a, policy_sha); held.append(a["AuthorizationId"])
+            else:
+                rr = connection.execute("SELECT * FROM chirp_article_receipts WHERE AuthorizationId=?", (a["AuthorizationId"],)).fetchone()
+                if rr is None:
+                    raise ValueError("ContinuationOutputIncomplete")
+                if len(rr["ReceiptJson"].encode()) > 32768:
+                    raise ValueError("ContinuationOutputPin")
+                receipt = json.loads(rr["ReceiptJson"], object_pairs_hook=unique)
+                entry = {"planSha256": key[0], "coverageOrdinal": key[1], "authorizationId": a["AuthorizationId"],
+                         "policySha256": policy_sha, "sourceApprovalSha256": scope["approvalSha256"],
+                         "receiptSha256": rr["ReceiptSha256"], "audioSha256": receipt["Audio"]["AudioSha256"],
+                         "executionMappingSha256": receipt.get("ExecutionMappingSha256")}
+                _continuation_member(connection, config, module, profile, parts, plans, entry, historical_policy=policy)
+        if len(held) > 1 or (resume_authorization is not None and held != [module.uuid_identity(resume_authorization)]):
+            raise ValueError("ContinuationResumeTarget")
+        # Orphan success/journal evidence is never permission to regenerate.
+        for plan, ordinal in remaining:
+            if (plan, ordinal) not in coverage:
+                if (connection.execute("SELECT COUNT(*) FROM chirp_article_receipts WHERE PlanSha256=? AND CoverageOrdinal=?", (plan, ordinal)).fetchone()[0]
+                        or connection.execute("SELECT COUNT(*) FROM chirp_article_output_journals j JOIN chirp_article_owned_attempts a ON a.AuthorizationId=j.AuthorizationId WHERE a.PlanSha256=? AND a.CoverageOrdinal=?", (plan, ordinal)).fetchone()[0]):
+                    raise ValueError("ContinuationAcceptedOmitted")
+        if continuation_financial_projection(connection, module, excluded) != manifest["continuation"]["financialRowsSha256"]:
+            # No automatic exclusion of legacy/recovery changes: their legitimacy
+            # requires a separately reviewed production resolver, or stop safely.
+            raise ValueError("ContinuationFinancialChanged")
+    if sha(bounded(db, 512 * 1024 * 1024)) != before:
+        raise ValueError("ContinuationDatabaseChanged")
+    return module.digest(accepted)
+
+
 def transition_command(request, config, config_keys, register, module, scope, app):
     data = bounded(request["transitionPath"], 32768)
     pin = sha(data)
@@ -295,10 +493,22 @@ def successor_command(request, config, config_keys, module, app):
                 "accountSha256": sha(config["AccountId"].encode()), "projectSha256": sha(config["ProjectId"].encode()),
                 "plansSha256": module.digest(manifest)}
     if (sha(manifest_bytes) != config["PlanManifestSha256"] or module.digest(new_scope) != config["ScopeSha256"]
-            or new_scope["schema"] != 2 or new_scope["approvalSha256"] != h["SourceApprovalSha256"]
+            or new_scope["schema"] != (3 if h["SchemaVersion"] == 2 else 2)
+            or new_scope["approvalSha256"] != h["SourceApprovalSha256"]
             or any(new_scope[k] != value for k, value in bindings.items())):
         raise ValueError("HandoffNewScopeBinding")
-    module.validate_successor_manifest(manifest, new_scope)
+    continuation = h["SchemaVersion"] == 2
+    if continuation:
+        module.validate_continuation_manifest(manifest, new_scope)
+        if (h["OriginalManifestSha256"] != manifest["continuation"]["originalManifestSha256"]
+                or h["AcceptedEvidenceSha256"] != new_scope["acceptedEvidenceSha256"]):
+            raise ValueError("ContinuationHandoffBinding")
+        old_manifest_bytes = bounded(old["PlanManifestPath"], 1024 * 1024)
+        if (sha(old_manifest_bytes) != old["PlanManifestSha256"]
+                or module.digest(json.loads(old_manifest_bytes, object_pairs_hook=unique)) != h["OriginalManifestSha256"]):
+            raise ValueError("ContinuationOriginalManifest")
+    else:
+        module.validate_successor_manifest(manifest, new_scope)
     old_r = module.Register(old["RegisterPath"], old["ScopeSha256"])
     new_r = module.Register(config["RegisterPath"], config["ScopeSha256"])
     command = request["command"]
@@ -307,10 +517,16 @@ def successor_command(request, config, config_keys, module, app):
         raise ValueError("HandoffApplicationLocation")
     if command == "complete-successor":
         evidence = installed_readback(config, request["configSha256"])
-        terminal_failure(config, h)
+        if continuation:
+            continuation_acceptance(config, manifest, new_scope, module, h["DatabaseSha256"])
+        else:
+            terminal_failure(config, h)
         return old_r.complete_successor(new_r, new_scope, h, pin, evidence)
     installed_readback(old, h["PreviousGateSha256"], allow_financial=True)
-    terminal_failure(old, h)
+    if continuation:
+        continuation_acceptance(old, manifest, new_scope, module, h["DatabaseSha256"])
+    else:
+        terminal_failure(old, h)
     if command == "inspect-successor":
         return old_r.inspect_successor(new_r, new_scope, h, pin)
     if command == "claim-successor":
@@ -378,7 +594,7 @@ def main():
     if not build_command and (state["currentBuild"] != build_digest(config)
                               or (state["currentGate"] is not None and state["currentGate"] != request["configSha256"])):
         raise ValueError("CurrentBuildBinding")
-    if scope["schema"] == 2:
+    if scope["schema"] in (2, 3):
         if build_command:
             raise ValueError("SuccessorBuildChangeNotAdmitted")
         register.require_predecessor_retired(request["configSha256"])
@@ -407,8 +623,11 @@ def main():
         if sha(policy_bytes) != request["identitySha256"]:
             raise ValueError("PolicyHash")
         policy = json.loads(policy_bytes, object_pairs_hook=unique)
-        verified_kind = module.successor_policy_kind(manifest, policy) if scope["schema"] == 2 else "completion-admission"
+        verified_kind = module.successor_policy_kind(manifest, policy) if scope["schema"] in (2, 3) else "completion-admission"
         module.verify_plan_policy(manifest, scope, policy, verified_kind)
+        if scope["schema"] == 3:
+            retained = retained_continuation_policy(config, manifest, scope, module, register, request["identitySha256"])
+            continuation_acceptance(config, manifest, scope, module, retained=retained)
         with register._open() as db:
             state = register._read(db)
             events = [json.loads(row[0]) for row in db.execute("SELECT body FROM events ORDER BY seq")]
@@ -424,13 +643,28 @@ def main():
             if sha(policy_bytes) != request["identitySha256"]:
                 raise ValueError("PolicyHash")
             policy = json.loads(policy_bytes, object_pairs_hook=unique)
-            if kind == "completion-admission" and scope["schema"] == 2:
+            if kind == "completion-admission" and scope["schema"] in (2, 3):
                 kind = module.successor_policy_kind(manifest, policy)
             module.verify_plan_policy(manifest, scope, policy, kind)
         pilot_proof = pilot_acceptance(config, manifest, state, module) if scope["schema"] == 2 and kind == "completion-admission" else None
+        accepted_proof = None
+        if scope["schema"] == 3 and kind != "refresh":
+            retained = None; target = None
+            if kind == "resume-admission":
+                retained = retained_continuation_policy(config, manifest, scope, module, register)
+                if module.canonical(policy["HistoricalPolicy"]) != module.canonical(retained[0]):
+                    raise ValueError("ContinuationRetainedPolicyPin")
+                target = policy["AuthorizationId"]
+            accepted_proof = continuation_acceptance(config, manifest, scope, module, retained=retained, resume_authorization=target)
         result = register.claim(kind,
-                                request["identitySha256"], request["id"], pilot_proof_sha=pilot_proof)
+                                request["identitySha256"], request["id"], pilot_proof_sha=pilot_proof, accepted_proof_sha=accepted_proof)
     elif command == "check":
+        if scope["schema"] == 3:
+            with register._open() as db:
+                pending = register._read(db)["pending"]
+            if pending and pending["kind"] != "refresh":
+                retained = retained_continuation_policy(config, manifest, scope, module, register) if pending["kind"] == "resume-admission" else None
+                continuation_acceptance(config, manifest, scope, module, retained=retained)
         result = {"valid": register.require_pending_before_effect(request["id"], request["identitySha256"])}
     elif command == "complete":
         receipt = request["receipt"]
@@ -456,6 +690,14 @@ def main():
                 raise ValueError("InstalledPolicyPin")
             policy = json.loads(policy_bytes, object_pairs_hook=unique)
             module.verify_plan_policy(manifest, scope, policy, pending["kind"])
+            if scope["schema"] == 3:
+                retained = None; target = None
+                if resume:
+                    retained = retained_continuation_policy(config, manifest, scope, module, register)
+                    if module.canonical(policy["HistoricalPolicy"]) != module.canonical(retained[0]):
+                        raise ValueError("ContinuationRetainedPolicyPin")
+                    target = policy["AuthorizationId"]
+                continuation_acceptance(config, manifest, scope, module, retained=retained, resume_authorization=target)
             receipt = {"id": request["id"], "identitySha256": pending["identity"], "outcome": "Succeeded",
                        "evidenceSha256": sha(marker_bytes), "policyVerified": True}
             if resume:
@@ -511,6 +753,27 @@ if __name__ == "__main__":
             reasons[code] = "SuccessorPending"
         reasons.update({"RetirementClockOrStop": "Stopped", "PreviousGatePin": "PinMismatch",
                         "PreviousSourcePin": "PinMismatch", "OverlappingRunPaths": "SuccessorScopeMismatch"})
+        for code in ("ContinuationAcceptedAttempt", "ContinuationAcceptedBounds", "ContinuationAcceptedDuplicateOrUnknown",
+                     "ContinuationAcceptedIdentity", "ContinuationAcceptedOmitted", "ContinuationAcceptedOrChangedCoverage",
+                     "ContinuationAcceptedPin", "ContinuationAcceptedProof", "ContinuationAcceptedProvenance", "ContinuationAcceptedSchema",
+                     "ContinuationAdmissionKind", "ContinuationAllInBudget", "ContinuationAttemptLimit", "ContinuationBudgetSchema",
+                     "ContinuationBudgetType", "ContinuationDatabaseChanged", "ContinuationDatabasePin", "ContinuationEnvelopeBound",
+                     "ContinuationExactBudgetOrCoverage", "ContinuationFinancialChanged", "ContinuationHandoffBinding",
+                     "ContinuationHeldNotClean", "ContinuationHistoricalPolicy", "ContinuationManifest", "ContinuationMappingBound",
+                     "ContinuationMappingPin", "ContinuationMediaLocation", "ContinuationMediaPin", "ContinuationOriginalManifest",
+                     "ContinuationOutputIncomplete", "ContinuationOutputPin", "ContinuationPolicyBinding", "ContinuationProgressIdentity",
+                     "ContinuationRemainingCount", "ContinuationRemainingNotUntouched", "ContinuationResumeTarget",
+                     "ContinuationRetainedPolicyPin", "ContinuationRetentionNotAdmitted", "ContinuationStoredPlan"):
+            reasons[code] = "PilotEvidenceMismatch"
+        for code in ("ContinuationDatabaseChanged", "ContinuationDatabasePin", "ContinuationFinancialChanged", "ContinuationFinancialBound"):
+            reasons[code] = "SuccessorDatabaseMismatch"
+        for code in ("ContinuationHeldNotClean", "ContinuationOutputIncomplete", "ContinuationRemainingNotUntouched", "ContinuationResumeTarget"):
+            reasons[code] = "SuccessorPending"
+        for code in ("ContinuationAdmissionKind", "ContinuationAllInBudget", "ContinuationAttemptLimit", "ContinuationBudgetSchema",
+                     "ContinuationBudgetType", "ContinuationExactBudgetOrCoverage", "ContinuationHandoffBinding", "ContinuationManifest",
+                     "ContinuationOriginalManifest", "ContinuationPolicyBinding", "ContinuationRemainingCount", "ContinuationRetentionNotAdmitted"):
+            reasons[code] = "SuccessorScopeMismatch"
+        reasons["ContinuationRetainedPolicyPin"] = "PinMismatch"
         detail = str(error)
         reason = reasons.get(detail, "Storage" if isinstance(error, (OSError, sqlite3.Error)) else "Unknown")
         print(json.dumps({"rejected": True, "category": type(error).__name__, "reason": reason,
