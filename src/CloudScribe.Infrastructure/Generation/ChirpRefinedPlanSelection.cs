@@ -14,18 +14,30 @@ public static class ChirpRefinedPlanSelection
 
     private static ChirpArticlePlanProposal RequireUniqueLeafCore(IReadOnlyList<ChirpArticlePlanProposal> plans)
     {
-        if (plans.Count is < 1 or > 2) throw new InvalidOperationException("A unique bounded article plan is required.");
+        if (plans.Count is < 1 or > 3) throw new InvalidOperationException("A unique bounded article plan is required.");
         foreach (var plan in plans) ChirpArticlePlanCompiler.RequireIntegrity(plan);
-        if (plans.Count == 1)
+        ChirpArticlePlanProposal? Parent(ChirpArticlePlanProposal p)
         {
-            if (plans[0].Refinement is not null) throw new InvalidOperationException("Refinement predecessor is absent.");
-            return plans[0];
+            if (p.Refinement is not null && p.SentenceSuccessor is not null) throw new InvalidOperationException("Competing article predecessor mechanisms.");
+            return p.SentenceSuccessor?.Parent ?? p.Refinement?.Parent;
         }
-        var roots = plans.Where(x => x.Refinement is null).ToArray(); var children = plans.Where(x => x.Refinement is not null).ToArray();
-        if (roots.Length != 1 || children.Length != 1 || roots[0].DocumentId != children[0].DocumentId
-            || roots[0].RevisionId != children[0].RevisionId || !string.Equals(roots[0].SourceSha256, children[0].SourceSha256
-, StringComparison.Ordinal) || !JsonSerializer.SerializeToUtf8Bytes(roots[0]).AsSpan().SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(children[0].Refinement!.Parent)))
-            throw new InvalidOperationException("Article refinements are ambiguous, orphaned or changed; no export was started.");
-        return children[0];
+        var roots = plans.Where(x => Parent(x) is null).ToArray();
+        var leaves = plans.Where(x => !plans.Any(y => string.Equals(Parent(y)?.PlanSha256, x.PlanSha256, StringComparison.Ordinal))).ToArray();
+        if (roots.Length != 1 || leaves.Length != 1 || plans.Select(x => x.PlanSha256).Distinct(StringComparer.Ordinal).Count() != plans.Count)
+            throw new InvalidOperationException("Article successors are ambiguous, orphaned or duplicated.");
+        HashSet<string> visited = []; var cursor = leaves[0];
+        while (true)
+        {
+            if (!visited.Add(cursor.PlanSha256)) throw new InvalidOperationException("Article successor cycle detected.");
+            var predecessor = Parent(cursor); if (predecessor is null) break;
+            var exact = plans.SingleOrDefault(x => string.Equals(x.PlanSha256, predecessor.PlanSha256, StringComparison.Ordinal));
+            if (exact is null || exact.DocumentId != cursor.DocumentId || exact.RevisionId != cursor.RevisionId
+                || !string.Equals(exact.SourceSha256, cursor.SourceSha256, StringComparison.Ordinal)
+                || !JsonSerializer.SerializeToUtf8Bytes(exact).AsSpan().SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(predecessor)))
+                throw new InvalidOperationException("An immutable article predecessor changed.");
+            cursor = exact;
+        }
+        if (visited.Count != plans.Count) throw new InvalidOperationException("Article predecessor chain is incomplete.");
+        return leaves[0];
     }
 }

@@ -96,7 +96,7 @@ class ContinuationCliTests(unittest.TestCase):
             a = dict(c.execute("SELECT * FROM chirp_article_attempts WHERE AuthorizationId=?", (self.template_auth,)).fetchone())
             part = self.f.proposal["Parts"][ordinal - 1]; auth = uuid.uuid4().hex; local = uuid.uuid4().hex
             envelope = json.loads(a["EnvelopeJson"]); envelope.update(ChirpAuthorizationId=str(uuid.UUID(auth)), CompiledPayloadSha256=part["PayloadSha256"], CompiledPayloadBytes=part["PayloadBytes"])
-            a.update(AuthorizationId=auth, CoverageOrdinal=ordinal, PolicySha256=sha(json.dumps(policy).encode()),
+            a.update(AuthorizationId=auth, PlanSha256=self.f.proposal['PlanSha256'], CoverageOrdinal=ordinal, PolicySha256=sha(json.dumps(policy).encode()),
                      SourceApprovalSha256=policy["SourceApprovalSha256"], ChildKey="synthetic-key-" + auth, Consumed=int(accepted),
                      ClaimedLocalAttemptId=local if accepted else None, EnvelopeJson=json.dumps(envelope))
             c.execute("INSERT INTO chirp_article_attempts(" + ",".join(a) + ") VALUES(" + ",".join("?" for _ in a) + ")", tuple(a.values()))

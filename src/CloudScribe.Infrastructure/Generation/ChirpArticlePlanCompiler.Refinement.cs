@@ -15,7 +15,7 @@ public static partial class ChirpArticlePlanCompiler
     {
         ArgumentNullException.ThrowIfNull(refinement); ArgumentNullException.ThrowIfNull(verifiedReuse);
         var parent = refinement.Parent;
-        if (parent is null || parent.Refinement is not null || refinement.FailedAuthorizationId == Guid.Empty
+        if (parent is null || parent.Refinement is not null || parent.SentenceSuccessor is not null || refinement.FailedAuthorizationId == Guid.Empty
             || !Guid.TryParseExact(refinement.FailedLocalAttemptId, "N", out _)
             || !ChirpPolicyValidation.IsHash(refinement.FailedAttemptRowSha256) || !ChirpPolicyValidation.IsHash(refinement.FailedQueueRowSha256))
             throw new InvalidOperationException("One exact original failed request is required; nested refinement is not authorized.");

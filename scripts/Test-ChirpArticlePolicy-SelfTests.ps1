@@ -4,7 +4,7 @@ if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8)
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer failed parsing.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpLegacyAssociations','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpSentenceParent','Assert-ChirpLegacyAssociations','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
     $functions=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Expected exactly one reviewed validator.'};Invoke-Expression $functions[0].Extent.Text
 }
@@ -38,6 +38,25 @@ function New-WholeArticlePolicy {
     return $p
 }
 Test-ArticleJson ((New-WholeArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+function New-SentenceArticlePolicy {
+    $p=New-WholeArticlePolicy;$plan=$p.Articles[0].Proposal;$parent=$plan.Clone()
+    $plan.Remove('Refinement');$plan.PlannerVersion='chirp3-existing-sentence-groups-v1';$plan.SentenceSuccessor=@{Parent=$parent}
+    return $p
+}
+Test-ArticleJson ((New-SentenceArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+foreach($case in @('competing','unknown-successor-field','nested-sentence','lost-failure-pin','wrong-source','wrong-version')){
+    $p=New-SentenceArticlePolicy;$plan=$p.Articles[0].Proposal
+    switch($case){
+        'competing' {$plan.Refinement=@{}}
+        'unknown-successor-field' {$plan.SentenceSuccessor.RetryApproved=$true}
+        'nested-sentence' {$plan.SentenceSuccessor.Parent.SentenceSuccessor=@{}}
+        'lost-failure-pin' {$p.PriorArticleAttemptRows=@()}
+        'wrong-source' {$plan.SentenceSuccessor.Parent.SourceSha256='b'*64}
+        'wrong-version' {$plan.PlannerVersion='caller-defined'}
+    }
+    $rejected=$false;try{Test-ArticleJson ($p|ConvertTo-Json -Depth 24 -Compress)}catch{$rejected=$true}
+    if(-not $rejected){throw "Invalid sentence successor accepted: $case"};$passed++
+}
 foreach($case in @('old-schema','missing-grant','unknown-grant-field','duplicate-plan','wrong-plan','empty-id','missing-retained-failure','refresh-limit')){
     $p=New-WholeArticlePolicy
     switch($case){

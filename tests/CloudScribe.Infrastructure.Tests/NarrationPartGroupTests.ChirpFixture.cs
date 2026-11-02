@@ -8,9 +8,9 @@ namespace CloudScribe.Infrastructure.Tests;
 
 public sealed partial class NarrationPartGroupTests
 {
-    private static async Task<ChirpEvidence> ChirpEvidenceAsync(Fixture f, int legacyParts = 60)
+    private static async Task<ChirpEvidence> ChirpEvidenceAsync(Fixture f, int legacyParts = 60, bool sentenceSource = false)
     {
-        var batch = await f.CreateBatchAsync("Synthetic internal " + Guid.NewGuid().ToString("N"), legacyParts).ConfigureAwait(false);
+        var batch = await f.CreateBatchAsync("Synthetic internal " + Guid.NewGuid().ToString("N"), legacyParts, sentenceSource).ConfigureAwait(false);
         await f.Groups.RegisterAsync(batch.Preparation.GroupId, batch.Members, TestContext.Current.CancellationToken).ConfigureAwait(false);
         var compiledOld = CompileChirp(batch.Children[0].Text);
         var oldEnvelope = ChirpEnvelope(compiledOld);

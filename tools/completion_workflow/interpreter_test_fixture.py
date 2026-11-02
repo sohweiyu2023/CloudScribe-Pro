@@ -10,7 +10,7 @@ import uuid
 import completion_register as m
 import test_continuation_cli as fixtures
 
-def prepare(owner, whole_end_after=None):
+def prepare(owner, whole_end_after=None, mismatched_interpreter=True):
     f = fixtures.ContinuationCliTests(); f.setUp(); owner.addCleanup(f.doCleanups)
     # All paths belong to the existing synthetic temporary fixture. The scope
     # retains an exact6h interval; naturally wait for its near end, no OS clock change.
@@ -35,6 +35,7 @@ def prepare(owner, whole_end_after=None):
         before_events = c.execute('SELECT seq,body,sha FROM events ORDER BY seq').fetchall()
     accepted = f.accepted_entries(); owner.assertEqual(10,len(accepted))
     grant = {'GrantId':str(uuid.uuid4()),'PlanSha256s':[f.f.proposal['PlanSha256']],'MaximumCatalogRefreshes':24}
+    f.whole_grant = grant
     root = f.new_folder / 'whole4'; root.mkdir()
     f.new_folder = root
     f.manifest = copy.deepcopy(old_manifest)
@@ -62,7 +63,9 @@ def prepare(owner, whole_end_after=None):
     old_sources=root/'old-source';old_sources.mkdir()
     for name in ('gate_cli.py','completion_register.py'):
         (old_sources/name).write_bytes((f.f.source/name).read_bytes()+b'\n# preserved synthetic historical source\n')
-    f.config.update(PythonSha256=m.digest({'unavailable':'synthetic former interpreter'}),ScriptPath=str(old_sources/'gate_cli.py'),ScriptSha256=fixtures.sha((old_sources/'gate_cli.py').read_bytes()),ModuleSha256=fixtures.sha((old_sources/'completion_register.py').read_bytes()))
+    import sys
+    interpreter = m.digest({'unavailable':'synthetic former interpreter'}) if mismatched_interpreter else fixtures.sha(Path(sys.executable).read_bytes())
+    f.config.update(PythonSha256=interpreter,ScriptPath=str(old_sources/'gate_cli.py'),ScriptSha256=fixtures.sha((old_sources/'gate_cli.py').read_bytes()),ModuleSha256=fixtures.sha((old_sources/'completion_register.py').read_bytes()))
     f.config_path = root/'gate.json'; f.config_path.write_text(json.dumps(f.config)); f.pin = fixtures.sha(f.config_path.read_bytes())
     f.h = dict(f.h,SchemaVersion=3,TransitionKind='whole-article-continuation',TransitionId=f.scope['transitionId'],
         SourceApprovalSha256=f.scope['approvalSha256'],PreviousConfigPath=str(old_config_path),PreviousGateSha256=old_pin,
