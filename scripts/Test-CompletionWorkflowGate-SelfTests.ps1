@@ -216,4 +216,23 @@ $status=Invoke-CompletionGate $installedGate 'status' ([Guid]::Empty) '' $null (
 if($status.totalAdmissions -ne 0 -or $status.pilotAdmissions -ne 0 -or $status.pendingId){throw 'Continuation repeated a pilot or inherited paid authority.'};$passed++
 Expect-Rejected {Complete-CompletionBuildInstall $gate (Join-Path $target 'app')}
 
+# Typed3->4 parser checks only; actual expired transition/admission/readback is
+# exercised by test_whole_article_continuation_cli with a naturally expired fixture.
+$wholeRecord=Get-Content -LiteralPath $fixture.handoffPath -Raw|ConvertFrom-Json
+$wholeRecord.SchemaVersion=3;$wholeRecord.TransitionKind='whole-article-continuation'
+$wholePath=Join-Path $fixtureParent 'whole-article-handoff.json'
+$wholeRecord|ConvertTo-Json -Depth 20|Set-Content -LiteralPath $wholePath
+$ReviewedCompletionSuccessorRunPath=$wholePath
+$ReviewedCompletionSuccessorRunSha256=(Get-FileHash -LiteralPath $wholePath).Hash.ToLowerInvariant()
+$config=Get-Content -LiteralPath $fixture.gatePath -Raw|ConvertFrom-Json
+$null=Get-ReviewedCompletionSuccessorRun $fixture.gatePath $fixture.gateSha256 $config $fixture.previousGateSha256;$passed++
+$wholeRecord.TransitionKind='accepted-continuation'
+$wholeRecord|ConvertTo-Json -Depth 20|Set-Content -LiteralPath $wholePath
+$ReviewedCompletionSuccessorRunSha256=(Get-FileHash -LiteralPath $wholePath).Hash.ToLowerInvariant()
+Expect-Rejected {Get-ReviewedCompletionSuccessorRun $fixture.gatePath $fixture.gateSha256 $config $fixture.previousGateSha256}
+$wholeRecord.TransitionKind='whole-article-continuation';$wholeRecord.SchemaVersion=4
+$wholeRecord|ConvertTo-Json -Depth 20|Set-Content -LiteralPath $wholePath
+$ReviewedCompletionSuccessorRunSha256=(Get-FileHash -LiteralPath $wholePath).Hash.ToLowerInvariant()
+Expect-Rejected {Get-ReviewedCompletionSuccessorRun $fixture.gatePath $fixture.gateSha256 $config $fixture.previousGateSha256}
+
 [pscustomobject]@{Passed=$passed;ProviderCalls=0;CredentialOperations=0;RealInstalls=0;FixtureParent=$fixtureParent}

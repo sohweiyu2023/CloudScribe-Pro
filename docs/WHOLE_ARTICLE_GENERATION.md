@@ -10,6 +10,14 @@ The installer still verifies build, profile, account/project, source-approval, i
 
 This is a product workflow, not an alternative route around a platform-denied financial action. Live use requires independent admission of this workflow and any mandatory action-time platform handoff. Existing denied request actions remain denied.
 
+### Existing completion registers
+
+The article-policy schema and completion-register schema are separate protocols. A schema-3 whole-article policy requires a schema-4 completion scope when the private completion gate is installed. Legacy completion scopes 1-3 reject whole-article grants, including grants embedded in resume policies. Schema 4 pins the exact grant, original plan projection, accepted-output evidence, financial projection and a new source approval.
+
+A typed `whole-article-continuation` handoff (handoff version 3) may retire an expired terminal scope 3 into that independently approved scope 4. It cannot renew an active run, skip an ancestor, discard a hard failure, or move pending/uncertain work. The CLI verifies the original plan bytes, all earlier accepted entries and nondecreasing retained commitments against the closed synthetic or production database before any installer effect. It preserves the old journal and counters; interrupted installation can finish only the same claimed handoff after exact installed readback.
+
+The new scope has one fixed six-hour UTC window, at most 24 global catalog refreshes and 24 total admission operations. These global counters apply across both article jobs in addition to each job's grant limits. Expiry stops authority; another successor is not automatically available. Reboot/monotonic discontinuity handling retires only expired authority and never relaxes ordinary active-run clock guards.
+
 ## Durability and limits
 
 - Consent and each state transition are recorded transactionally in the existing profile database, with append-only history and one job per policy/plan. A profile-wide worker lock serializes execution.

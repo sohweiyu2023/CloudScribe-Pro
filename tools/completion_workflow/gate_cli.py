@@ -493,20 +493,32 @@ def successor_command(request, config, config_keys, module, app):
                 "accountSha256": sha(config["AccountId"].encode()), "projectSha256": sha(config["ProjectId"].encode()),
                 "plansSha256": module.digest(manifest)}
     if (sha(manifest_bytes) != config["PlanManifestSha256"] or module.digest(new_scope) != config["ScopeSha256"]
-            or new_scope["schema"] != (3 if h["SchemaVersion"] == 2 else 2)
+            or new_scope["schema"] != (h["SchemaVersion"] + 1)
             or new_scope["approvalSha256"] != h["SourceApprovalSha256"]
             or any(new_scope[k] != value for k, value in bindings.items())):
         raise ValueError("HandoffNewScopeBinding")
-    continuation = h["SchemaVersion"] == 2
+    continuation = h["SchemaVersion"] in (2, 3)
     if continuation:
         module.validate_continuation_manifest(manifest, new_scope)
-        if (h["OriginalManifestSha256"] != manifest["continuation"]["originalManifestSha256"]
+        if ((h["SchemaVersion"] == 2 and h["OriginalManifestSha256"] != manifest["continuation"]["originalManifestSha256"])
                 or h["AcceptedEvidenceSha256"] != new_scope["acceptedEvidenceSha256"]):
             raise ValueError("ContinuationHandoffBinding")
         old_manifest_bytes = bounded(old["PlanManifestPath"], 1024 * 1024)
         if (sha(old_manifest_bytes) != old["PlanManifestSha256"]
                 or module.digest(json.loads(old_manifest_bytes, object_pairs_hook=unique)) != h["OriginalManifestSha256"]):
             raise ValueError("ContinuationOriginalManifest")
+        if h["SchemaVersion"] == 3:
+            previous_manifest = json.loads(old_manifest_bytes, object_pairs_hook=unique)
+            previous_original = {k: v for k, v in previous_manifest.items() if k != "continuation"}
+            current_original = {k: v for k, v in manifest.items() if k != "continuation"}
+            before_accepted = previous_manifest["continuation"]["accepted"]
+            after_accepted = manifest["continuation"]["accepted"]
+            before_budget = previous_manifest["continuation"]["budget"]
+            after_budget = manifest["continuation"]["budget"]
+            if (module.canonical(previous_original) != module.canonical(current_original)
+                    or any(entry not in after_accepted for entry in before_accepted)
+                    or any(after_budget[k] < before_budget[k] for k in ("projectCommittedMinorUnits", "allocationCommittedMinorUnits"))):
+                raise ValueError("WholeArticleHistoryBinding")
     else:
         module.validate_successor_manifest(manifest, new_scope)
     old_r = module.Register(old["RegisterPath"], old["ScopeSha256"])
@@ -594,7 +606,7 @@ def main():
     if not build_command and (state["currentBuild"] != build_digest(config)
                               or (state["currentGate"] is not None and state["currentGate"] != request["configSha256"])):
         raise ValueError("CurrentBuildBinding")
-    if scope["schema"] in (2, 3):
+    if scope["schema"] in (2, 3, 4):
         if build_command:
             raise ValueError("SuccessorBuildChangeNotAdmitted")
         register.require_predecessor_retired(request["configSha256"])
@@ -623,9 +635,9 @@ def main():
         if sha(policy_bytes) != request["identitySha256"]:
             raise ValueError("PolicyHash")
         policy = json.loads(policy_bytes, object_pairs_hook=unique)
-        verified_kind = module.successor_policy_kind(manifest, policy) if scope["schema"] in (2, 3) else "completion-admission"
+        verified_kind = module.successor_policy_kind(manifest, policy) if scope["schema"] in (2, 3, 4) else "completion-admission"
         module.verify_plan_policy(manifest, scope, policy, verified_kind)
-        if scope["schema"] == 3:
+        if scope["schema"] in (3, 4):
             retained = retained_continuation_policy(config, manifest, scope, module, register, request["identitySha256"])
             continuation_acceptance(config, manifest, scope, module, retained=retained)
         with register._open() as db:
@@ -643,12 +655,12 @@ def main():
             if sha(policy_bytes) != request["identitySha256"]:
                 raise ValueError("PolicyHash")
             policy = json.loads(policy_bytes, object_pairs_hook=unique)
-            if kind == "completion-admission" and scope["schema"] in (2, 3):
+            if kind == "completion-admission" and scope["schema"] in (2, 3, 4):
                 kind = module.successor_policy_kind(manifest, policy)
             module.verify_plan_policy(manifest, scope, policy, kind)
         pilot_proof = pilot_acceptance(config, manifest, state, module) if scope["schema"] == 2 and kind == "completion-admission" else None
         accepted_proof = None
-        if scope["schema"] == 3 and kind != "refresh":
+        if scope["schema"] in (3, 4) and kind != "refresh":
             retained = None; target = None
             if kind == "resume-admission":
                 retained = retained_continuation_policy(config, manifest, scope, module, register)
@@ -659,7 +671,7 @@ def main():
         result = register.claim(kind,
                                 request["identitySha256"], request["id"], pilot_proof_sha=pilot_proof, accepted_proof_sha=accepted_proof)
     elif command == "check":
-        if scope["schema"] == 3:
+        if scope["schema"] in (3, 4):
             with register._open() as db:
                 pending = register._read(db)["pending"]
             if pending and pending["kind"] != "refresh":
@@ -690,7 +702,7 @@ def main():
                 raise ValueError("InstalledPolicyPin")
             policy = json.loads(policy_bytes, object_pairs_hook=unique)
             module.verify_plan_policy(manifest, scope, policy, pending["kind"])
-            if scope["schema"] == 3:
+            if scope["schema"] in (3, 4):
                 retained = None; target = None
                 if resume:
                     retained = retained_continuation_policy(config, manifest, scope, module, register)
@@ -774,6 +786,9 @@ if __name__ == "__main__":
                      "ContinuationOriginalManifest", "ContinuationPolicyBinding", "ContinuationRemainingCount", "ContinuationRetentionNotAdmitted"):
             reasons[code] = "SuccessorScopeMismatch"
         reasons["ContinuationRetainedPolicyPin"] = "PinMismatch"
+        reasons.update({"WholeArticleGrantBinding": "SuccessorScopeMismatch",
+                        "WholeArticleHistoryBinding": "SuccessorScopeMismatch",
+                        "WholeArticlePredecessorNotExpired": "SuccessorPending"})
         detail = str(error)
         reason = reasons.get(detail, "Storage" if isinstance(error, (OSError, sqlite3.Error)) else "Unknown")
         print(json.dumps({"rejected": True, "category": type(error).__name__, "reason": reason,
