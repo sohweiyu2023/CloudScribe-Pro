@@ -15,10 +15,14 @@ param(
     [string]$ReviewedCompletionSuccessorRunPath,
     [string]$ReviewedCompletionSuccessorRunSha256,
     [switch]$CompletePendingCompletionSuccessor,
+    [switch]$CompletePendingCompletionInterpreterRepair,
+    [switch]$CompletionFunctionsOnly,
     [switch]$ValidateOnly,
     [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
+if($CompletionFunctionsOnly -and @($PSBoundParameters.Keys|Where-Object {$_ -cne 'CompletionFunctionsOnly'}).Count){throw 'Function loading cannot be combined with an installation operation.'}
+if($CompletePendingCompletionInterpreterRepair -and (-not $ReviewedCompletionBuildTransitionPath -or -not $ReviewedCompletionGatePath -or $CompletePendingCompletionSuccessor -or $ValidateOnly -or $ValidatePackageOnly -or $MigrateProfileFrom -or $ReviewedRecoveryPolicyPath -or $ReviewedChirpArticlePolicyPath -or $ReviewedChirpResumePolicyPath -or $ReviewedCompletionSuccessorRunPath)){throw 'Interpreter repair readback requires only the same reviewed pending transition and gate.'}
 if([bool]$ReviewedCompletionSuccessorRunPath -ne [bool]$ReviewedCompletionSuccessorRunSha256){throw 'A successor run requires independently reviewed handoff bytes and hash.'}
 if($ReviewedCompletionSuccessorRunPath -and (-not $ReviewedCompletionGatePath -or -not $ReviewedCompletionGateSha256 -or $ReviewedCompletionBuildTransitionPath -or $MigrateProfileFrom -or $ReviewedRecoveryPolicyPath -or $ReviewedChirpArticlePolicyPath -or $ReviewedChirpResumePolicyPath)){throw 'A successor run requires its new gate and existing profile, separately from all financial admissions and build transitions.'}
 if($ValidatePackageOnly -and ($ReviewedCompletionSuccessorRunPath -or $ReviewedCompletionSuccessorRunSha256 -or $CompletePendingCompletionSuccessor)){throw 'A private successor run is never a clean package input.'}
@@ -49,7 +53,35 @@ function Assert-NoLinks([string]$Path){
     }
 }
 
+function Assert-CompletionInterpreterIdentity($Gate){
+    if($Gate.BuildTransition -and $Gate.BuildTransition.Kind -cin @('interpreter-binding','whole-article-interpreter-continuation')){$record=$Gate.BuildTransition.Record}
+    elseif($Gate.SuccessorTransition -and $Gate.SuccessorTransition.Kind -ceq 'whole-article-interpreter-continuation'){$record=$Gate.SuccessorTransition.Record}
+    else{return}
+    $path=[IO.Path]::GetFullPath($record.InterpreterEvidencePath);Assert-NoLinks $path
+    if((Get-Item -LiteralPath $path).Length -gt 32768 -or (Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant() -cne $record.InterpreterEvidenceSha256){throw 'Interpreter identity evidence pin differs.'}
+    $json=[Text.Json.JsonDocument]::Parse([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($path)))
+    try{Assert-UniqueRecoveryJson $json.RootElement}finally{$json.Dispose()}
+    $proof=[IO.File]::ReadAllText($path)|ConvertFrom-Json
+    $fields=@('SchemaVersion','RepairApprovalSha256','PreviousPythonSha256','NewPythonSha256','PythonPathSha256','FileBytes','PythonVersion','PublisherName','SignerThumbprint')
+    if(@($proof.PSObject.Properties.Name).Count -ne $fields.Count -or @($proof.PSObject.Properties.Name|Where-Object {$_ -notin $fields}).Count -or
+        $proof.SchemaVersion -ne 1 -or $proof.RepairApprovalSha256 -cne $record.RepairApprovalSha256 -or $record.RepairApprovalSha256 -ceq $record.SourceApprovalSha256 -or
+        $proof.PreviousPythonSha256 -cne $record.PreviousPythonSha256 -or $proof.NewPythonSha256 -cne $record.NewPythonSha256 -or
+        $proof.NewPythonSha256 -cne $Gate.Config.PythonSha256 -or $proof.NewPythonSha256 -ceq $proof.PreviousPythonSha256 -or
+        $proof.PythonVersion -cnotmatch '^3\.13\.[0-9]+$' -or $proof.PublisherName -cne 'Python Software Foundation' -or $proof.SignerThumbprint -cnotmatch '^[A-F0-9]{40}$'){
+        throw 'Interpreter identity evidence binding differs.'
+    }
+    Assert-NoLinks $Gate.Config.PythonPath
+    $python=Get-Item -LiteralPath $Gate.Config.PythonPath
+    $pathSha=[Convert]::ToHexStringLower([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes([IO.Path]::GetFullPath($Gate.Config.PythonPath).ToLowerInvariant())))
+    if($python.Length -lt 1 -or $python.Length -gt 33554432 -or $python.Length -ne $proof.FileBytes -or $pathSha -cne $proof.PythonPathSha256 -or
+        (Get-FileHash -LiteralPath $python.FullName).Hash.ToLowerInvariant() -cne $proof.NewPythonSha256 -or $python.VersionInfo.ProductVersion -cne $proof.PythonVersion){throw 'Interpreter executable identity differs.'}
+    $signature=Get-AuthenticodeSignature -LiteralPath $python.FullName
+    if($signature.Status.ToString() -cne 'Valid' -or $signature.SignerCertificate.Subject -cnotmatch '^CN=Python Software Foundation(?:,|$)' -or
+        $signature.SignerCertificate.Thumbprint.ToUpperInvariant() -cne $proof.SignerThumbprint){throw 'Interpreter publisher verification failed.'}
+}
+
 function Invoke-CompletionGate($Gate,[string]$Command,[Guid]$OperationId,[string]$Identity,$Receipt,[string]$ApplicationDirectory,[string]$PolicyPath){
+    Assert-CompletionInterpreterIdentity $Gate
     foreach($entry in @(@($Gate.Config.PythonPath,$Gate.Config.PythonSha256),@($Gate.Config.ScriptPath,$Gate.Config.ScriptSha256),@((Join-Path (Split-Path -Parent $Gate.Config.ScriptPath) 'completion_register.py'),$Gate.Config.ModuleSha256))){
         Assert-NoLinks $entry[0]
         if((Get-FileHash -LiteralPath $entry[0] -Algorithm SHA256).Hash -ine $entry[1]){throw 'Completion bridge material differs from its reviewed hash.'}
@@ -67,6 +99,11 @@ function Invoke-CompletionGate($Gate,[string]$Command,[Guid]$OperationId,[string
             $inputRecord.transitionPath=$Gate.BuildTransition.Path
             $inputRecord.transitionSha256=$Gate.BuildTransition.Sha256
         }
+        if($Command -in @('inspect-interpreter-withdrawal','claim-interpreter-withdrawal','check-interpreter-withdrawal','complete-interpreter-withdrawal')){
+            if(-not $Gate.BuildTransition -or -not $Gate.Withdrawal){throw 'An independently reviewed interpreter withdrawal is required.'}
+            $inputRecord.transitionPath=$Gate.BuildTransition.Path;$inputRecord.transitionSha256=$Gate.BuildTransition.Sha256
+            $inputRecord.withdrawalPath=$Gate.Withdrawal.Path;$inputRecord.withdrawalSha256=$Gate.Withdrawal.Sha256
+        }
         if($Command -in @('inspect-successor','claim-successor','check-successor','complete-successor')){
             if(-not $Gate.SuccessorTransition){throw 'An exact independently reviewed successor-run handoff is required.'}
             $inputRecord.handoffPath=$Gate.SuccessorTransition.Path
@@ -81,10 +118,10 @@ function Invoke-CompletionGate($Gate,[string]$Command,[Guid]$OperationId,[string
         try{Assert-UniqueRecoveryJson $responseJson.RootElement}finally{$responseJson.Dispose()}
         $result=$output|ConvertFrom-Json
         $safeReason=if($result.PSObject.Properties.Name -contains 'reason' -and $result.reason -cin @('Unknown','Expired','ClockRollback','ClockDiscontinuity','PendingOutcome','Limit','PinMismatch','Storage','Protocol','Stopped','SuccessorHeadMismatch','SuccessorDatabaseMismatch','SuccessorScopeMismatch','SuccessorPending','PilotEvidenceMissing','PilotEvidenceMismatch','SuccessorNotActivated','RunRetired')){$result.reason}else{'Unknown'}
-        $safeCode=if($result.PSObject.Properties.Name -contains 'code' -and $result.code -cin @('SuccessorHeadMismatch','TerminalDatabasePin','TerminalDatabaseChanged','SuccessorNotActivated','PredecessorNotRetired','RunRetired','OutsideWindow','PilotNotAccepted','PilotAttempt','PilotOutputIncomplete','PilotStoredPlan','PilotPolicyPin','PilotAttemptIdentity','PilotOutputPin','PilotAcceptedIdentity','PilotMediaLocation','PilotMediaPin','PilotMappingAbsent','PilotMappingBound','PilotMappingChain','PilotMappingIdentity','PilotMappingDispatch','PilotMappingReceipt','ClosedDatabaseRequired','TerminalAttempt','TerminalQueue','TerminalFailureEvidence','AcceptedWorkCannotRetire','RecoverableOutputCannotRetire','PendingOrUncertainWork','RetirementIdentityMismatch','SuccessorAlreadyExists','SuccessorAlreadyActivated','HandoffPin','HandoffConfigPin','HandoffScopeConfig','HandoffNewScopeBinding','HandoffApplicationLocation','SuccessorScopeBinding','SuccessorActivationReplay','ContinuationAcceptedAttempt','ContinuationAcceptedBounds','ContinuationAcceptedDuplicateOrUnknown','ContinuationAcceptedIdentity','ContinuationAcceptedOmitted','ContinuationAcceptedOrChangedCoverage','ContinuationAcceptedPin','ContinuationAcceptedProof','ContinuationAcceptedProvenance','ContinuationAcceptedSchema','ContinuationAdmissionKind','ContinuationAllInBudget','ContinuationAttemptLimit','ContinuationBudgetSchema','ContinuationBudgetType','ContinuationDatabaseChanged','ContinuationDatabasePin','ContinuationEnvelopeBound','ContinuationExactBudgetOrCoverage','ContinuationFinancialBound','ContinuationFinancialChanged','ContinuationHandoffBinding','ContinuationHeldNotClean','ContinuationHistoricalPolicy','ContinuationManifest','ContinuationMappingBound','ContinuationMappingPin','ContinuationMediaLocation','ContinuationMediaPin','ContinuationOriginalManifest','ContinuationOutputIncomplete','ContinuationOutputPin','ContinuationPolicyBinding','ContinuationProgressIdentity','ContinuationRemainingCount','ContinuationRemainingNotUntouched','ContinuationResumeTarget','ContinuationRetainedPolicyPin','ContinuationRetentionNotAdmitted','ContinuationStoredPlan','WholeArticleGrantBinding','WholeArticleHistoryBinding','WholeArticlePredecessorNotExpired')){$result.code}else{'Unclassified'}
-        if($process.ExitCode -ne 0 -or $result.PSObject.Properties.Name -contains 'rejected' -or ($Command -in @('complete','complete-build','complete-successor') -and $result.outcome -cne 'Succeeded')){throw "Completion operation stopped: $safeReason [$safeCode]. Reconcile its private register; do not retry automatically."}
-        if($Command -in @('claim-build','claim-successor') -and ($result.id -cne $OperationId.ToString('D') -or $result.identitySha256 -cne $Identity -or $result.scopeSha256 -cne $Gate.Config.ScopeSha256)){throw 'The transition claim response is not bound to this exact operation.'}
-        if($Command -in @('inspect-build','check-build','inspect-successor','check-successor') -and $result.valid -ne $true){throw 'Transition readiness was not positively verified.'}
+        $safeCode=if($result.PSObject.Properties.Name -contains 'code' -and $result.code -cin @('SuccessorHeadMismatch','TerminalDatabasePin','TerminalDatabaseChanged','SuccessorNotActivated','PredecessorNotRetired','RunRetired','OutsideWindow','PilotNotAccepted','PilotAttempt','PilotOutputIncomplete','PilotStoredPlan','PilotPolicyPin','PilotAttemptIdentity','PilotOutputPin','PilotAcceptedIdentity','PilotMediaLocation','PilotMediaPin','PilotMappingAbsent','PilotMappingBound','PilotMappingChain','PilotMappingIdentity','PilotMappingDispatch','PilotMappingReceipt','ClosedDatabaseRequired','TerminalAttempt','TerminalQueue','TerminalFailureEvidence','AcceptedWorkCannotRetire','RecoverableOutputCannotRetire','PendingOrUncertainWork','RetirementIdentityMismatch','SuccessorAlreadyExists','SuccessorAlreadyActivated','HandoffPin','HandoffConfigPin','HandoffScopeConfig','HandoffNewScopeBinding','HandoffApplicationLocation','SuccessorScopeBinding','SuccessorActivationReplay','ContinuationAcceptedAttempt','ContinuationAcceptedBounds','ContinuationAcceptedDuplicateOrUnknown','ContinuationAcceptedIdentity','ContinuationAcceptedOmitted','ContinuationAcceptedOrChangedCoverage','ContinuationAcceptedPin','ContinuationAcceptedProof','ContinuationAcceptedProvenance','ContinuationAcceptedSchema','ContinuationAdmissionKind','ContinuationAllInBudget','ContinuationAttemptLimit','ContinuationBudgetSchema','ContinuationBudgetType','ContinuationDatabaseChanged','ContinuationDatabasePin','ContinuationEnvelopeBound','ContinuationExactBudgetOrCoverage','ContinuationFinancialBound','ContinuationFinancialChanged','ContinuationHandoffBinding','ContinuationHeldNotClean','ContinuationHistoricalPolicy','ContinuationManifest','ContinuationMappingBound','ContinuationMappingPin','ContinuationMediaLocation','ContinuationMediaPin','ContinuationOriginalManifest','ContinuationOutputIncomplete','ContinuationOutputPin','ContinuationPolicyBinding','ContinuationProgressIdentity','ContinuationRemainingCount','ContinuationRemainingNotUntouched','ContinuationResumeTarget','ContinuationRetainedPolicyPin','ContinuationRetentionNotAdmitted','ContinuationStoredPlan','WholeArticleGrantBinding','WholeArticleHistoryBinding','WholeArticlePredecessorNotExpired','InterpreterWithdrawalSchema','InterpreterWithdrawalIdentity','InterpreterWithdrawalPin','InterpreterWithdrawalBackup','InterpreterWithdrawalReadback','InterpreterWithdrawalState','InterpreterWithdrawalClock','InterpreterTransitionSchema','InterpreterTransitionBinding','InterpreterEvidencePin','InterpreterEvidenceBinding','InterpreterPendingReadback')){$result.code}else{'Unclassified'}
+        if($process.ExitCode -ne 0 -or $result.PSObject.Properties.Name -contains 'rejected' -or ($Command -in @('complete','complete-build','complete-successor','complete-interpreter-withdrawal') -and $result.outcome -cne 'Succeeded')){throw "Completion operation stopped: $safeReason [$safeCode]. Reconcile its private register; do not retry automatically."}
+        if($Command -in @('claim-build','claim-successor','claim-interpreter-withdrawal') -and ($result.id -cne $OperationId.ToString('D') -or $result.identitySha256 -cne $Identity -or $result.scopeSha256 -cne $Gate.Config.ScopeSha256)){throw 'The transition claim response is not bound to this exact operation.'}
+        if($Command -in @('inspect-build','check-build','inspect-successor','check-successor','inspect-interpreter-withdrawal','check-interpreter-withdrawal') -and $result.valid -ne $true){throw 'Transition readiness was not positively verified.'}
         return $result
     }finally{$process.Dispose()}
 }
@@ -103,19 +140,23 @@ function Get-ReviewedCompletionSuccessorRun([string]$GatePath,[string]$GatePin,$
             $fields.FailedAuthorizationId='NonemptyGuid';$fields.FailedLocalAttemptId='String';$fields.FailedPlanSha256='String';$fields.FailedCoverageOrdinal='Int32';$fields.FailedPayloadSha256='String';$fields.FailedPayloadBytes='Int32'
         }elseif($handoffVersion -in @(2,3)){
             $fields.TransitionKind='String';$fields.OriginalManifestSha256='String';$fields.AcceptedEvidenceSha256='String'
+            if($handoffVersion -eq 3 -and $json.RootElement.GetProperty('TransitionKind').GetString() -ceq 'whole-article-interpreter-continuation'){
+                foreach($field in @('PreviousPythonSha256','NewPythonSha256','InterpreterEvidencePath','InterpreterEvidenceSha256','RepairApprovalSha256')){$fields[$field]='String'}
+            }
         }else{throw 'The successor handoff version is unsupported.'}
         Assert-RecoveryRecord $json.RootElement $fields
     }finally{$json.Dispose()}
     $record=[IO.File]::ReadAllText($handoffPath)|ConvertFrom-Json
-    if(($record.SchemaVersion -eq 2 -and $record.TransitionKind -cne 'accepted-continuation') -or ($record.SchemaVersion -eq 3 -and $record.TransitionKind -cne 'whole-article-continuation') -or $record.NewGateSha256 -cne $GatePin -or $record.NewScopeSha256 -cne $Config.ScopeSha256 -or
+    if(($record.SchemaVersion -eq 2 -and $record.TransitionKind -cne 'accepted-continuation') -or ($record.SchemaVersion -eq 3 -and $record.TransitionKind -cnotin @('whole-article-continuation','whole-article-interpreter-continuation')) -or $record.NewGateSha256 -cne $GatePin -or $record.NewScopeSha256 -cne $Config.ScopeSha256 -or
         [IO.Path]::GetFullPath($record.NewConfigPath) -ine [IO.Path]::GetFullPath($GatePath) -or
         ($record.PreviousGateSha256 -cne $OldGatePin -and (-not $CompletePendingCompletionSuccessor -or $GatePin -cne $OldGatePin))){throw 'The successor handoff does not bind the observed predecessor and reviewed successor.'}
     $hashFields=@('SourceApprovalSha256','PreviousGateSha256','PreviousScopeSha256','ExpectedPreviousHeadSha256','NewGateSha256','NewScopeSha256','DatabaseSha256')
     $hashFields+=if($record.SchemaVersion -eq 1){@('FailedPlanSha256','FailedPayloadSha256')}else{@('OriginalManifestSha256','AcceptedEvidenceSha256')}
+    if($record.TransitionKind -ceq 'whole-article-interpreter-continuation'){$hashFields+=@('PreviousPythonSha256','NewPythonSha256','InterpreterEvidenceSha256','RepairApprovalSha256')}
     foreach($field in $hashFields){
         if($record.$field -cnotmatch '^[a-f0-9]{64}$'){throw 'The successor handoff has malformed identity pins.'}
     }
-    return [pscustomobject]@{Path=$handoffPath;Sha256=$ReviewedCompletionSuccessorRunSha256;Id=[Guid]$record.TransitionId;PreviousGateSha256=$record.PreviousGateSha256;PreviousScopeSha256=$record.PreviousScopeSha256;NewScopePath=$record.NewScopePath}
+    return [pscustomobject]@{Path=$handoffPath;Sha256=$ReviewedCompletionSuccessorRunSha256;Id=[Guid]$record.TransitionId;PreviousGateSha256=$record.PreviousGateSha256;PreviousScopeSha256=$record.PreviousScopeSha256;NewScopePath=$record.NewScopePath;Kind=$record.TransitionKind;Record=$record}
 }
 
 function Get-ReviewedCompletionGate([string]$Profile){
@@ -148,8 +189,12 @@ function Get-ReviewedCompletionGate([string]$Profile){
         $transitionJson=[Text.Json.JsonDocument]::Parse([Text.Encoding]::UTF8.GetString($transitionBytes))
         try{Assert-UniqueRecoveryJson $transitionJson.RootElement}finally{$transitionJson.Dispose()}
         $record=[Text.Encoding]::UTF8.GetString($transitionBytes)|ConvertFrom-Json
-        if($record.SchemaVersion -ne 1 -or $record.NewGateSha256 -cne $pin -or $record.PreviousGateSha256 -cne $oldGatePin -or $record.ScopeSha256 -cne $config.ScopeSha256 -or [Guid]$record.TransitionId -eq [Guid]::Empty){throw 'The build transition does not name the exact predecessor, successor and unchanged scope.'}
-        $transition=[pscustomobject]@{Path=$transitionPath;Sha256=$ReviewedCompletionBuildTransitionSha256;Id=[Guid]$record.TransitionId;PreviousGateSha256=$record.PreviousGateSha256}
+        $kind=if($record.PSObject.Properties.Name -contains 'TransitionKind'){$record.TransitionKind}else{'build'}
+        $pendingInterpreter=$CompletePendingCompletionInterpreterRepair -and $kind -ceq 'interpreter-binding'
+        if($CompletePendingCompletionInterpreterRepair -and -not $pendingInterpreter){throw 'Only an exact pending interpreter repair may use this readback mode.'}
+        $previousMatches=$record.PreviousGateSha256 -ceq $oldGatePin -or ($pendingInterpreter -and $record.NewGateSha256 -ceq $oldGatePin)
+        if($record.SchemaVersion -ne 1 -or $record.NewGateSha256 -cne $pin -or -not $previousMatches -or $record.ScopeSha256 -cne $config.ScopeSha256 -or [Guid]$record.TransitionId -eq [Guid]::Empty){throw 'The build transition does not name the exact predecessor, successor and unchanged scope.'}
+        $transition=[pscustomobject]@{Path=$transitionPath;Sha256=$ReviewedCompletionBuildTransitionSha256;Id=[Guid]$record.TransitionId;PreviousGateSha256=$record.PreviousGateSha256;Kind=$kind;Record=$record}
     }
     $successor=Get-ReviewedCompletionSuccessorRun $path $pin $config $oldGatePin
     $profileSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes([IO.Path]::GetFullPath($Profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()))).ToLowerInvariant()
@@ -166,7 +211,7 @@ function Get-ReviewedCompletionGate([string]$Profile){
         $required=Get-Content -LiteralPath $requiredPath -Raw|ConvertFrom-Json
         $expectedRequiredPin=if($transition){$transition.PreviousGateSha256}elseif($successor){$successor.PreviousGateSha256}else{$pin}
         $expectedRequiredScope=if($successor){$successor.PreviousScopeSha256}else{$config.ScopeSha256}
-        $alreadySwitched=$CompletePendingCompletionSuccessor -and $successor -and $required.GateSha256 -ceq $pin -and $required.ScopeSha256 -ceq $config.ScopeSha256
+        $alreadySwitched=(($CompletePendingCompletionSuccessor -and $successor) -or ($CompletePendingCompletionInterpreterRepair -and $transition -and $transition.Kind -ceq 'interpreter-binding')) -and $required.GateSha256 -ceq $pin -and $required.ScopeSha256 -ceq $config.ScopeSha256
         if(-not $alreadySwitched -and ($required.GateSha256 -cne $expectedRequiredPin -or $required.ScopeSha256 -cne $expectedRequiredScope)){throw 'Completion requirement differs; no reset permitted.'}
     }elseif($transition -or $successor){
         throw 'A reviewed succession requires the existing persistent required marker.'
@@ -177,7 +222,7 @@ function Get-ReviewedCompletionGate([string]$Profile){
         if((Get-Item -LiteralPath $successor.NewScopePath).Length -gt 32768){throw 'The reviewed successor scope exceeds its bound.'}
         $pendingScope=[IO.File]::ReadAllText($successor.NewScopePath)|ConvertFrom-Json
         [pscustomobject]@{deadlineUtc=$pendingScope.endUtc}
-    }elseif($successor){Invoke-CompletionGate $gate 'inspect-successor' $successor.Id $successor.Sha256 $null (Join-Path $package 'app')}elseif($transition){Invoke-CompletionGate $gate 'inspect-build' $transition.Id $transition.Sha256 $null (Join-Path $package 'app')}else{Invoke-CompletionGate $gate 'inspect' ([Guid]::Empty) '' $null (Join-Path $package 'app')}
+    }elseif($CompletePendingCompletionInterpreterRepair){Invoke-CompletionGate $gate 'check-build' $transition.Id $transition.Sha256 $null (Join-Path $package 'app')}elseif($successor){Invoke-CompletionGate $gate 'inspect-successor' $successor.Id $successor.Sha256 $null (Join-Path $package 'app')}elseif($transition){Invoke-CompletionGate $gate 'inspect-build' $transition.Id $transition.Sha256 $null (Join-Path $package 'app')}else{Invoke-CompletionGate $gate 'inspect' ([Guid]::Empty) '' $null (Join-Path $package 'app')}
     $gate|Add-Member -NotePropertyName DeadlineUtc -NotePropertyValue ([DateTimeOffset]$inspection.deadlineUtc)
     return $gate
 }
@@ -188,6 +233,51 @@ function Assert-CompletionInstallEffect($Gate,$OperationId,$OperationIdentity,$R
     if($Resume){
         $policy=[Text.Encoding]::UTF8.GetString($Resume.Bytes)|ConvertFrom-Json
         if([DateTimeOffset]$policy.ExpiresAtUtc -le [DateTimeOffset]::UtcNow -or [DateTimeOffset]$policy.CatalogExpiresAtUtc -le [DateTimeOffset]::UtcNow){throw 'Resume admission expired before installer effect; retain its pending register state.'}
+    }
+}
+
+function Set-CompletionInterpreterPins($Gate,[string]$InstalledApp){
+    if(-not $Gate.BuildTransition -or $Gate.BuildTransition.Kind -cne 'interpreter-binding'){throw 'An exact interpreter repair is required.'}
+    if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close CloudScribe normally before interpreter repair.'}
+    $transition=$Gate.BuildTransition
+    $null=Invoke-CompletionGate $Gate 'check-build' $transition.Id $transition.Sha256 $null (Join-Path $package 'app')
+    $installRoot=Split-Path -Parent $InstalledApp;Assert-NoLinks $installRoot
+    $gatePath=Join-Path $installRoot 'completion-workflow-gate.json'
+    $markerPath=Join-Path $installRoot 'cloudscribe-install.json'
+    # A private audit backup never changes authority or automatically rolls back
+    # to the unavailable old interpreter. Keep all prior bytes after failure.
+    $backupPath=$installRoot+'.interpreter-repair-'+$transition.Id.ToString('N');Assert-NoLinks $backupPath
+    if(-not (Test-Path -LiteralPath $backupPath)){
+        [IO.Directory]::CreateDirectory($backupPath)|Out-Null
+        foreach($entry in @(@($gatePath,'previous-gate.json'),@($markerPath,'previous-install.json'),@($Gate.RequiredPath,'previous-required.json'))){
+            Assert-NoLinks $entry[0]
+            $bytes=[IO.File]::ReadAllBytes($entry[0]);$destination=Join-Path $backupPath $entry[1]
+            $stream=[IO.FileStream]::new($destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+        }
+    }
+    foreach($name in @('previous-gate.json','previous-install.json','previous-required.json')){
+        $saved=Join-Path $backupPath $name;Assert-NoLinks $saved
+        if(-not (Test-Path -LiteralPath $saved -PathType Leaf) -or (Get-Item -LiteralPath $saved).Length -gt 32768){throw 'Incomplete interpreter audit backup; reconcile before any pin switch.'}
+    }
+    if((Get-FileHash -LiteralPath (Join-Path $backupPath 'previous-gate.json')).Hash.ToLowerInvariant() -cne $transition.PreviousGateSha256){throw 'Interpreter predecessor backup pin differs.'}
+    $savedMarker=Get-Content -LiteralPath (Join-Path $backupPath 'previous-install.json') -Raw|ConvertFrom-Json
+    $savedRequired=Get-Content -LiteralPath (Join-Path $backupPath 'previous-required.json') -Raw|ConvertFrom-Json
+    if($savedMarker.CompletionWorkflowGateSha256 -cne $transition.PreviousGateSha256 -or $savedMarker.AppSha256 -ine $Gate.Config.AppSha256 -or $savedRequired.GateSha256 -cne $transition.PreviousGateSha256 -or $savedRequired.ScopeSha256 -cne $Gate.Config.ScopeSha256){throw 'Interpreter predecessor backup identity differs.'}
+    $marker=Get-Content -LiteralPath $markerPath -Raw|ConvertFrom-Json
+    $marker.CompletionWorkflowGateSha256=$Gate.Sha256
+    $markerBytes=[Text.Encoding]::UTF8.GetBytes(($marker|ConvertTo-Json -Depth 8 -Compress))
+    foreach($entry in @(@($gatePath,$Gate.Bytes),@($markerPath,$markerBytes))){
+        $null=Invoke-CompletionGate $Gate 'check-build' $transition.Id $transition.Sha256 $null (Join-Path $package 'app')
+        $path=[string]$entry[0];[byte[]]$bytes=$entry[1];Assert-NoLinks $path
+        $temporary=$path+'.interpreter-'+$transition.Id.ToString('N')+'.tmp';Assert-NoLinks $temporary
+        if(Test-Path -LiteralPath $temporary){
+            if((Get-Item -LiteralPath $temporary).Length -ne $bytes.Length -or [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([IO.File]::ReadAllBytes($temporary))) -cne [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))){throw 'Pending interpreter repair bytes differ; preserve evidence.'}
+        }else{
+            $stream=[IO.FileStream]::new($temporary,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+        }
+        [IO.File]::Move($temporary,$path,$true)
     }
 }
 
@@ -208,14 +298,15 @@ function Complete-CompletionBuildInstall($Gate,[string]$InstalledApp){
     Assert-NoLinks $Gate.RequiredPath
     $prior=Get-Content -LiteralPath $Gate.RequiredPath -Raw|ConvertFrom-Json
     $oldScope=if($successor){$transition.PreviousScopeSha256}else{$Gate.Config.ScopeSha256}
-    $alreadySwitched=$successor -and $CompletePendingCompletionSuccessor -and $prior.GateSha256 -ceq $Gate.Sha256 -and $prior.ScopeSha256 -ceq $Gate.Config.ScopeSha256
+    $interpreter=-not $successor -and $transition.Kind -ceq 'interpreter-binding'
+    $alreadySwitched=(($successor -and $CompletePendingCompletionSuccessor) -or ($interpreter -and $CompletePendingCompletionInterpreterRepair)) -and $prior.GateSha256 -ceq $Gate.Sha256 -and $prior.ScopeSha256 -ceq $Gate.Config.ScopeSha256
     if(-not $alreadySwitched -and ($prior.GateSha256 -cne $transition.PreviousGateSha256 -or $prior.ScopeSha256 -cne $oldScope)){throw 'The predecessor requirement changed; leave the transition pending.'}
     $requirement=@{GateSha256=$Gate.Sha256;ScopeSha256=$Gate.Config.ScopeSha256}|ConvertTo-Json -Compress
     if(-not $alreadySwitched){
         $suffix=if($successor){'.successor-'}else{'.build-'}
         $nextPath=$Gate.RequiredPath+$suffix+$transition.Id.ToString('N')+'.tmp';Assert-NoLinks $nextPath
         $bytes=[Text.Encoding]::UTF8.GetBytes($requirement)
-        if($successor -and (Test-Path -LiteralPath $nextPath)){
+        if(($successor -or $interpreter) -and (Test-Path -LiteralPath $nextPath)){
             if((Get-Item -LiteralPath $nextPath).Length -ne $bytes.Length -or [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([IO.File]::ReadAllBytes($nextPath))) -cne [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))){throw 'Pending successor requirement bytes differ; preserve them for reconciliation.'}
         }else{
             $stream=[IO.FileStream]::new($nextPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
@@ -226,6 +317,52 @@ function Complete-CompletionBuildInstall($Gate,[string]$InstalledApp){
     $installedGate=[pscustomobject]@{Path=(Join-Path $installRoot 'completion-workflow-gate.json');Sha256=$Gate.Sha256;Config=$Gate.Config;BuildTransition=$Gate.BuildTransition;SuccessorTransition=$Gate.SuccessorTransition}
     $command=if($successor){'complete-successor'}else{'complete-build'}
     $null=Invoke-CompletionGate $installedGate $command $transition.Id $transition.Sha256 $null $InstalledApp
+}
+
+function Save-CompletionSuccessorInterpreterPins($Gate){
+    if(-not $Gate.SuccessorTransition -or $Gate.SuccessorTransition.Kind -cne 'whole-article-interpreter-continuation'){throw 'An exact interpreter successor is required.'}
+    if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close CloudScribe normally before saving predecessor controls.'}
+    $handoff=$Gate.SuccessorTransition;$root=Split-Path -Parent $Gate.Config.ApplicationDirectory
+    $backup=$root+'.interpreter-repair-'+$handoff.Id.ToString('N');Assert-NoLinks $backup
+    $files=@(@((Join-Path $root 'completion-workflow-gate.json'),'previous-gate.json'),@((Join-Path $root 'cloudscribe-install.json'),'previous-install.json'),@($Gate.RequiredPath,'previous-required.json'))
+    if(-not (Test-Path -LiteralPath $backup)){
+        [IO.Directory]::CreateDirectory($backup)|Out-Null
+        foreach($entry in $files){
+            $null=Invoke-CompletionGate $Gate 'check-successor' $handoff.Id $handoff.Sha256 $null $Gate.Config.CandidateApplicationDirectory
+            Assert-NoLinks $entry[0];[byte[]]$bytes=[IO.File]::ReadAllBytes($entry[0])
+            if($bytes.Length -gt 32768){throw 'Predecessor controls exceed their bound.'}
+            $stream=[IO.FileStream]::new((Join-Path $backup $entry[1]),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+        }
+    }
+    foreach($entry in $files){$saved=Join-Path $backup $entry[1];Assert-NoLinks $saved;if(-not (Test-Path -LiteralPath $saved -PathType Leaf) -or (Get-Item -LiteralPath $saved).Length -gt 32768 -or (Get-FileHash -LiteralPath $saved).Hash -cne (Get-FileHash -LiteralPath $entry[0]).Hash){throw 'Incomplete or changed predecessor controls; reconcile before installation.'}}
+    if((Get-FileHash -LiteralPath (Join-Path $backup 'previous-gate.json')).Hash.ToLowerInvariant() -cne $handoff.PreviousGateSha256){throw 'Predecessor gate backup pin differs.'}
+}
+
+function Restore-CompletionInterpreterPins($Gate){
+    if(-not $Gate.BuildTransition -or -not $Gate.Withdrawal -or $Gate.BuildTransition.Kind -cnotin @('interpreter-binding','whole-article-interpreter-continuation')){throw 'An exact interpreter withdrawal is required.'}
+    if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close CloudScribe normally before terminal withdrawal.'}
+    $record=$Gate.Withdrawal.Record;$id=[Guid]$record.WithdrawalId;$pin=$Gate.Withdrawal.Sha256
+    $root=Split-Path -Parent $Gate.Config.ApplicationDirectory;Assert-NoLinks $root;Assert-NoLinks $record.BackupPath
+    $files=@(@('previous-gate.json',(Join-Path $root 'completion-workflow-gate.json'),$record.RestoredGateSha256),
+             @('previous-install.json',(Join-Path $root 'cloudscribe-install.json'),$record.PreviousInstallSha256),
+             @('previous-required.json',$Gate.RequiredPath,$record.PreviousRequiredSha256))
+    foreach($entry in $files){
+        $null=Invoke-CompletionGate $Gate 'check-interpreter-withdrawal' $id $pin $null $Gate.Config.ApplicationDirectory
+        $source=Join-Path $record.BackupPath $entry[0];$destination=$entry[1];Assert-NoLinks $source;Assert-NoLinks $destination
+        if((Get-Item -LiteralPath $source).Length -gt 32768 -or (Get-FileHash -LiteralPath $source).Hash.ToLowerInvariant() -cne $entry[2]){throw 'Withdrawal predecessor bytes differ.'}
+        [byte[]]$bytes=[IO.File]::ReadAllBytes($source)
+        $temporary=$destination+'.withdraw-'+$id.ToString('N')+'.tmp';Assert-NoLinks $temporary
+        if(Test-Path -LiteralPath $temporary){
+            if((Get-Item -LiteralPath $temporary).Length -ne $bytes.Length -or (Get-FileHash -LiteralPath $temporary).Hash.ToLowerInvariant() -cne $entry[2]){throw 'Partial withdrawal bytes differ; reconcile without overwriting evidence.'}
+        }else{
+            $stream=[IO.FileStream]::new($temporary,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+        }
+        $null=Invoke-CompletionGate $Gate 'check-interpreter-withdrawal' $id $pin $null $Gate.Config.ApplicationDirectory
+        [IO.File]::Move($temporary,$destination,$true)
+    }
+    $null=Invoke-CompletionGate $Gate 'complete-interpreter-withdrawal' $id $pin $null $Gate.Config.ApplicationDirectory
 }
 
 function Get-RetainedCompletionAuthority($Gate){
@@ -684,6 +821,7 @@ function Get-AllowedNoticeFiles {
     }
     return ,$allowed
 }
+if($CompletionFunctionsOnly){return}
 foreach($required in @('app/CloudScribe.exe','app/CloudScribe.dll','app/appsettings.json','runtime/dotnet.exe','LICENSE','THIRD-PARTY-NOTICES.md','licenses/third-party/components.json')){
     if(-not (Test-Path -LiteralPath (Join-Path $package $required) -PathType Leaf)){throw "Incomplete clean package: $required"}
 }
@@ -743,10 +881,11 @@ $reviewedRecovery=Get-ReviewedRecoveryPolicy $profile
 $reviewedChirp=Get-ReviewedChirpPolicy $profile
 $reviewedResume=Get-ReviewedChirpResumePolicy $profile
 $completionGate=Get-ReviewedCompletionGate $profile
-if($CompletePendingCompletionSuccessor){
+if($CompletePendingCompletionSuccessor -or $CompletePendingCompletionInterpreterRepair){
     if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close CloudScribe normally before completing the exact pending transition.'}
+    if($CompletePendingCompletionInterpreterRepair){Set-CompletionInterpreterPins $completionGate (Join-Path $target 'app')}
     Complete-CompletionBuildInstall $completionGate (Join-Path $target 'app')
-    [pscustomobject]@{CompletedPendingSuccessor=$true;NewReservation=$false;ProviderCalls=0;Executable=(Join-Path $target 'app/CloudScribe.exe')}
+    [pscustomobject]@{CompletedPendingSuccessor=[bool]$CompletePendingCompletionSuccessor;CompletedPendingInterpreterRepair=[bool]$CompletePendingCompletionInterpreterRepair;NewReservation=$false;ProviderCalls=0;Executable=(Join-Path $target 'app/CloudScribe.exe')}
     return
 }
 $retainedCompletion=Get-RetainedCompletionAuthority $completionGate
@@ -762,12 +901,21 @@ if($completionGate){
 }
 if($ValidateOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;InstallRoot=$target;MigrationRequested=[bool]$migration;ReviewedRecoveryPolicy=[bool]$reviewedRecovery;ReviewedChirpArticlePolicy=[bool]$reviewedChirp;ReviewedChirpResumePolicy=[bool]$reviewedResume;ReviewedCompletionGate=[bool]$completionGate};return}
 if(Get-Process CloudScribe -ErrorAction SilentlyContinue){throw 'Close every CloudScribe window normally before installing/updating. No process will be killed.'}
+if($completionGate -and $completionGate.BuildTransition -and $completionGate.BuildTransition.Kind -ceq 'interpreter-binding'){
+    $transition=$completionGate.BuildTransition
+    $null=Invoke-CompletionGate $completionGate 'claim-build' $transition.Id $transition.Sha256 $null (Join-Path $package 'app')
+    Set-CompletionInterpreterPins $completionGate (Join-Path $target 'app')
+    Complete-CompletionBuildInstall $completionGate (Join-Path $target 'app')
+    [pscustomobject]@{InterpreterBindingRepaired=$true;ApplicationBinariesUnchanged=$true;NewReservation=$false;ProviderCalls=0;Executable=(Join-Path $target 'app/CloudScribe.exe')}
+    return
+}
 $completionOperation=[Guid]::Empty;$completionIdentity=''
 $buildTransition=if($completionGate){$completionGate.BuildTransition}else{$null}
 $runSuccessor=if($completionGate){$completionGate.SuccessorTransition}else{$null}
 if($runSuccessor){
     $null=Invoke-CompletionGate $completionGate 'claim-successor' $runSuccessor.Id $runSuccessor.Sha256 $null (Join-Path $package 'app')
     $null=Invoke-CompletionGate $completionGate 'check-successor' $runSuccessor.Id $runSuccessor.Sha256 $null (Join-Path $package 'app')
+    if($runSuccessor.Kind -ceq 'whole-article-interpreter-continuation'){Save-CompletionSuccessorInterpreterPins $completionGate}
 }
 if($buildTransition){
     $null=Invoke-CompletionGate $completionGate 'claim-build' $buildTransition.Id $buildTransition.Sha256 $null (Join-Path $package 'app')
