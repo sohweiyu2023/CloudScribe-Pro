@@ -14,7 +14,10 @@ def prepare(owner, whole_end_after=None):
     f = fixtures.ContinuationCliTests(); f.setUp(); owner.addCleanup(f.doCleanups)
     # All paths belong to the existing synthetic temporary fixture. The scope
     # retains an exact6h interval; naturally wait for its near end, no OS clock change.
-    end = datetime.now(timezone.utc) + timedelta(seconds=8)
+    # Allow hosted-runner process startup before natural expiry, matching the
+    # existing whole-article CLI fixture. The synthetic scope remains six hours;
+    # production deadlines and every runtime expiry check are unchanged.
+    end = datetime.now(timezone.utc) + timedelta(seconds=30)
     f.scope.update(startUtc=(end-timedelta(hours=6)).isoformat().replace('+00:00', 'Z'),
                    endUtc=end.isoformat().replace('+00:00', 'Z'))
     f.scope_path.write_text(json.dumps(f.scope))
