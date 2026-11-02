@@ -229,6 +229,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         body.Children.Add(estimate);
         body.Children.Add(consent);
         body.Children.Add(create);
+        AddWholeArticleControl(dialog, body, model);
         AddStopWaitingControl(body, model, dialog);
         body.Children.Add(status);
         Grid layout = new() { RowDefinitions = new RowDefinitions("*,Auto") };

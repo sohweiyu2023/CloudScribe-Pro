@@ -65,10 +65,14 @@ public sealed partial class NarrationPartGroupTests
     }
 
     private static async Task<(GenerationProviderRequest Request, GoogleGenerationQueueOutcome Outcome)> AcceptChirpAsync(Fixture f,
-        ChirpArticleService service, ChirpRequestIntent intent, int marker)
+        ChirpArticleService service, ChirpRequestIntent intent, int marker, ChirpApprovedAttempt? existingApproval = null)
     {
-        var review = await service.PrepareAsync(intent, TestContext.Current.CancellationToken).ConfigureAwait(false);
-        var approved = await service.ApproveAsync(ChirpConfirmation(review), TestContext.Current.CancellationToken).ConfigureAwait(false);
+        var approved = existingApproval;
+        if (approved is null)
+        {
+            var review = await service.PrepareAsync(intent, TestContext.Current.CancellationToken).ConfigureAwait(false);
+            approved = await service.ApproveAsync(ChirpConfirmation(review), TestContext.Current.CancellationToken).ConfigureAwait(false);
+        }
         byte[] audio = new byte[128]; Encoding.ASCII.GetBytes("ID3").CopyTo(audio, 0); audio[10] = checked((byte)marker);
         var request = new GenerationProviderRequest(GoogleGenerationProvider.StableProviderId, GoogleGenerationProvider.SynthesizeOperationStableId,
             intent.Envelope.AccountId, approved.IdempotencyKey, intent.CompiledPayload, "mp3");

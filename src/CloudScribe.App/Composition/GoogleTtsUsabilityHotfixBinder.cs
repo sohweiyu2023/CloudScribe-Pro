@@ -33,7 +33,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     InstalledRecoveryAdmissionStore recoveryAdmission, GoogleRecoveryPreparationService recoveryPreparation,
     GooglePrivateErrorDiagnostics privateDiagnostics, IGoogleRecoveryCurrentCompilation privateDiagnosticCompilation,
     ChirpArticleService? chirpArticles = null, ChirpArticlePreparationService? chirpPreparation = null,
-    ILogger<GoogleTtsUsabilityHotfixBinder>? catalogLogger = null, GoogleCredentialRepairService? credentialRepair = null)
+    ILogger<GoogleTtsUsabilityHotfixBinder>? catalogLogger = null, GoogleCredentialRepairService? credentialRepair = null,
+    GoogleGenerationProductionRuntimeRequestSource? wholeArticleRequests = null,
+    GoogleGenerationProductionExecutionContextResolver? wholeArticleResolver = null)
 {
     private static readonly string[] ProviderControlHostNames =
     [

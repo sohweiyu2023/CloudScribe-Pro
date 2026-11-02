@@ -38,13 +38,21 @@ public sealed partial class ChirpArticlePreparationService(ChirpArticleService a
 
     public async Task ApproveAsync(ShellViewModel.GoogleTtsStudioRequestSelection selection,
         ChirpApprovalConfirmation confirmation, CancellationToken cancellationToken)
+        => await ApprovePreparedAsync(selection, confirmation.PreviewId, confirmation, null, cancellationToken).ConfigureAwait(false);
+
+    public async Task ApproveWholeArticleRequestAsync(ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        Guid jobId, Guid previewId, CancellationToken cancellationToken)
+        => await ApprovePreparedAsync(selection, previewId, null, jobId, cancellationToken).ConfigureAwait(false);
+
+    private async Task ApprovePreparedAsync(ShellViewModel.GoogleTtsStudioRequestSelection selection,
+        Guid previewId, ChirpApprovalConfirmation? confirmation, Guid? jobId, CancellationToken cancellationToken)
     {
-        if (!_pending.TryGetValue(confirmation.PreviewId, out var prepared))
+        if (!_pending.TryGetValue(previewId, out var prepared))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The displayed native article and internal request review changed."), LocalRequestReason.ReviewMissing);
         if (clock.GetUtcNow() - prepared.CreatedAt > TimeSpan.FromMinutes(10))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The displayed native article and internal request review changed."), LocalRequestReason.ReviewExpired, prepared.CreatedAt, prepared.Review.ExpiresAtUtc);
         if (prepared.DocumentId != selection.DocumentId || prepared.RevisionId != selection.RevisionId
-            || !string.Equals(prepared.Review.ReviewSha256, confirmation.DisplayedReviewSha256, StringComparison.Ordinal))
+            || (confirmation is not null && !string.Equals(prepared.Review.ReviewSha256, confirmation.DisplayedReviewSha256, StringComparison.Ordinal)))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The displayed native article and internal request review changed."), LocalRequestReason.SelectionChanged, prepared.CreatedAt, prepared.Review.ExpiresAtUtc);
         var source = await ResolveSelectionAsync(selection, prepared.Ordinal, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(source.Proposal.SourceSha256, prepared.SourceSha256, StringComparison.Ordinal))
@@ -60,8 +68,12 @@ public sealed partial class ChirpArticlePreparationService(ChirpArticleService a
                 || !string.Equals(ResumeRequestIdentity(current), ResumeRequestIdentity(prepared.Pending), StringComparison.Ordinal)))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The exact revalidation compile context changed."), LocalRequestReason.CompilationChanged);
         if (prepared.ResumeSelectionSha256 is not null) ChirpResumeSelectionBinding.RequireFresh(selection, clock.GetUtcNow());
-        var approval = prepared.ResumeSelectionSha256 is null ? await articles.ApproveAsync(confirmation, cancellationToken).ConfigureAwait(false)
-            : await articles.ApproveReservedResumeAsync(confirmation, cancellationToken).ConfigureAwait(false);
+        if (jobId is not null && prepared.ResumeSelectionSha256 is not null)
+            throw new InvalidOperationException("A held-request catalog mapping needs its separate independently reviewed recovery admission.");
+        var approval = jobId is { } wholeJob
+            ? await articles.ApproveWholeArticleRequestAsync(wholeJob, previewId, cancellationToken).ConfigureAwait(false)
+            : prepared.ResumeSelectionSha256 is null ? await articles.ApproveAsync(confirmation!, cancellationToken).ConfigureAwait(false)
+            : await articles.ApproveReservedResumeAsync(confirmation!, cancellationToken).ConfigureAwait(false);
         var envelope = current.Envelope with { ChirpAuthorizationId = approval.AuthorizationId };
         var request = current.Snapshot.ProviderRequest;
         var child = new GenerationProviderRequest(request.ProviderStableId, request.OperationStableId, request.AccountId,
@@ -69,7 +81,7 @@ public sealed partial class ChirpArticlePreparationService(ChirpArticleService a
         var clean = new GoogleGenerationPersistedQueueState(request.AccountId, request.OperationStableId, approval.IdempotencyKey, false, null);
         var snapshot = current.Snapshot with { ProviderRequest = child, PreviousState = clean, CurrentState = clean, PricingApproved = true };
         await state.ActivateArticleAsync(envelope, snapshot, current.CurrentEstimateMinorUnits, cancellationToken).ConfigureAwait(false);
-        _pending.TryRemove(confirmation.PreviewId, out _);
+        _pending.TryRemove(previewId, out _);
     }
 
     private async Task<ChirpResolvedSegment> ResolveSelectionAsync(ShellViewModel.GoogleTtsStudioRequestSelection selection, int ordinal, CancellationToken token)

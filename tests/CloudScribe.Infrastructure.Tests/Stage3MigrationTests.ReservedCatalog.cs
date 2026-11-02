@@ -23,7 +23,7 @@ public sealed partial class Stage3MigrationTests
                     'synthetic-account','synthetic-project','synthetic-held','old-held-review','{{}}','USD',2,1,1,'held-financial',1,0,NULL);
                 """, TestContext.Current.CancellationToken);
             var before = await ChirpBusinessRowsAsync(db);
-            await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            await migrator.MigrateAsync(ChirpReservationCatalogMappings.MigrationId, TestContext.Current.CancellationToken);
             var after = await ChirpBusinessRowsAsync(db);
             Assert.Equal(before.Count + 2, after.Count);
             foreach (var (table, rows) in before) Assert.Equal(rows, after[table]);

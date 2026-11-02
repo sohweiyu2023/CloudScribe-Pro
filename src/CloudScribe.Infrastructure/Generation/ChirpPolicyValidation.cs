@@ -11,7 +11,7 @@ public static class ChirpPolicyValidation
     public static void RequireValid(ChirpArticleAdmissionPolicy p, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(p);
-        if (p.SchemaVersion is not (1 or 2) || p.ExpiresAtUtc <= now || !IsHash(p.AppSha256) || !IsHash(p.InfrastructureSha256)
+        if (p.SchemaVersion is not (1 or 2 or 3) || p.ExpiresAtUtc <= now || !IsHash(p.AppSha256) || !IsHash(p.InfrastructureSha256)
             || !IsHash(p.ProfileRootSha256) || !IsHash(p.SourceApprovalSha256) || string.IsNullOrWhiteSpace(p.AccountId)
             || string.IsNullOrWhiteSpace(p.ProjectId) || !string.Equals(p.Currency, "USD", StringComparison.Ordinal) || p.Scale != 2
             || p.Articles is not { Count: >= 1 and <= 200 } || p.MaximumNewAttempts is < 1 or > 10_000
@@ -26,6 +26,7 @@ public static class ChirpPolicyValidation
         foreach (var pins in new[] { b.QueueRows, b.SpendRows, b.RecoveryRows, b.TransitionRows, p.ScopeRows, p.PriorArticleAttemptRows }) RequirePins(pins);
         RequireLegacyAssociations(p);
         RequireSuccessorGrant(p);
+        RequireWholeArticleGrant(p);
         if (p.Articles.Select(x => x.Proposal.DocumentId).Distinct().Count() != p.Articles.Count
             || p.Articles.Select(x => x.Proposal.PlanSha256).Distinct(StringComparer.Ordinal).Count() != p.Articles.Count)
             throw new InvalidDataException("Article-plan identities are ambiguous.");
@@ -38,6 +39,22 @@ public static class ChirpPolicyValidation
                     || article.Proposal.Parts.Count(y => y.CoverageOrdinal == x.CoverageOrdinal && y.Range.ReusedReceiptSha256 is null) != 1))
                 throw new InvalidDataException("The allowed internal requests are missing, duplicated or refer to accepted coverage.");
         }
+    }
+
+    private static void RequireWholeArticleGrant(ChirpArticleAdmissionPolicy p)
+    {
+        if (p.SchemaVersion != 3)
+        {
+            if (p.WholeArticleGeneration is not null)
+                throw new InvalidDataException("Whole-article execution requires its independently admitted workflow schema.");
+            return;
+        }
+        if (p.SuccessorGrant is not null || p.WholeArticleGeneration is not { } grant || grant.GrantId == Guid.Empty
+            || grant.MaximumCatalogRefreshes is < 0 or > 24
+            || grant.PlanSha256s is not { Count: >= 1 and <= 200 }
+            || grant.PlanSha256s.Distinct(StringComparer.Ordinal).Count() != grant.PlanSha256s.Count
+            || grant.PlanSha256s.Any(plan => !IsHash(plan) || p.Articles.Count(a => string.Equals(a.Proposal.PlanSha256, plan, StringComparison.Ordinal)) != 1))
+            throw new InvalidDataException("Whole-article authority must name exact independently admitted plans without diagnostic successors.");
     }
 
     private static void RequireSuccessorGrant(ChirpArticleAdmissionPolicy p)

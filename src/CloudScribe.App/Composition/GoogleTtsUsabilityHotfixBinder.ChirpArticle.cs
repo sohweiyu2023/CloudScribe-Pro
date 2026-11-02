@@ -22,6 +22,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         button.Click += async (_, _) => await OpenChirpArticleAsync(owner, model).ConfigureAwait(true);
         host.Children.Add(NewDescription("Chirp 3 can reject sentence content even below the byte limit. Internal requests use existing boundaries without changing the article. The 333-scalar window is a local heuristic, not a provider guarantee. No extra Library documents or automatic requests."));
         host.Children.Add(button); Update();
+        AddWholeArticleControl(owner, host, model);
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One modal owns cancellation, exact review and awaited single-action lifetimes; financial and output behavior is independently transactional and tested.")]

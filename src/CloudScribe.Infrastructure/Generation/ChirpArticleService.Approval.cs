@@ -10,13 +10,23 @@ public sealed partial class ChirpArticleService
     public async Task<ChirpApprovedAttempt> ApproveAsync(ChirpApprovalConfirmation confirmation, CancellationToken cancellationToken = default)
     {
         var pending = TakeReviewedPending(confirmation);
+        return await ApproveCoreAsync(pending, confirmation.MaximumMinorUnits, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ChirpApprovedAttempt> ApproveCoreAsync(Pending pending, long maximum, Guid? wholeArticleJobId,
+        CancellationToken cancellationToken)
+    {
         var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
+        if (policy.WholeArticleGeneration is not null && wholeArticleJobId is null)
+            throw new InvalidOperationException("This admission requires the reviewed complete-article job; individual request consent cannot substitute for it.");
         if (!string.Equals(ChirpPolicyValidation.Hash(policy), pending.PolicySha256, StringComparison.Ordinal))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Independent article admission changed; prepare a fresh review."), LocalRequestReason.AdmissionChanged, pending.CreatedAt, pending.Review.ExpiresAtUtc);
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: false);
+        if (wholeArticleJobId is { } jobId)
+            await RequireWholeArticleJobAsync(connection, transaction, policy, jobId, pending.Review.PlanSha256, pending.Intent.CoverageOrdinal, cancellationToken).ConfigureAwait(false);
         var current = await CurrentAsync(connection, transaction, policy, pending.Intent, cancellationToken).ConfigureAwait(false);
         var financial = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(financial.Sha256, pending.FinancialSha256, StringComparison.Ordinal))
@@ -30,14 +40,14 @@ public sealed partial class ChirpArticleService
         }
         if (pending.Review.ExistingAuthorizationId is not null) throw new InvalidOperationException("The previously reserved segment disappeared.");
         await RequireReadyAsync(connection, transaction, financial, null, cancellationToken).ConfigureAwait(false);
-        RequireCapacity(policy, financial, confirmation.MaximumMinorUnits);
+        RequireCapacity(policy, financial, maximum);
         await RequirePolicyCurrentAsync(policy, cancellationToken).ConfigureAwait(false);
         await AppendPlanAsync(connection, transaction, policy, current.Article, cancellationToken).ConfigureAwait(false);
         await AppendLegacyAssociationsAsync(connection, transaction, policy, current.Article.Proposal.PlanSha256, cancellationToken).ConfigureAwait(false);
         Guid authorization = Guid.NewGuid();
         string key = policy.SuccessorGrant is null ? Key(current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal)
             : SuccessorKey(current.Article.Proposal.PlanSha256, pending.Intent.CoverageOrdinal, authorization);
-        var approved = new ChirpApprovedAttempt(authorization, key, confirmation.MaximumMinorUnits);
+        var approved = new ChirpApprovedAttempt(authorization, key, maximum);
         await AppendAttemptAsync(connection, transaction, policy, pending, approved, cancellationToken).ConfigureAwait(false);
         var after = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
         string table = await AttemptTableAsync(connection, transaction, approved.AuthorizationId.ToString("N"), cancellationToken).ConfigureAwait(false);

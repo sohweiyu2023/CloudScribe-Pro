@@ -32,6 +32,27 @@ function New-RefinedArticlePolicy {
     return $p
 }
 Test-ArticleJson ((New-RefinedArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+function New-WholeArticlePolicy {
+    $p=New-RefinedArticlePolicy;$p.SchemaVersion=3
+    $p.WholeArticleGeneration=@{GrantId=[Guid]::NewGuid().ToString('D');PlanSha256s=@($sha);MaximumCatalogRefreshes=2}
+    return $p
+}
+Test-ArticleJson ((New-WholeArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+foreach($case in @('old-schema','missing-grant','unknown-grant-field','duplicate-plan','wrong-plan','empty-id','missing-retained-failure','refresh-limit')){
+    $p=New-WholeArticlePolicy
+    switch($case){
+        'old-schema' {$p.SchemaVersion=2}
+        'missing-grant' {$p.Remove('WholeArticleGeneration')}
+        'unknown-grant-field' {$p.WholeArticleGeneration.AutoApprove=$true}
+        'duplicate-plan' {$p.WholeArticleGeneration.PlanSha256s=@($sha,$sha)}
+        'wrong-plan' {$p.WholeArticleGeneration.PlanSha256s=@(('b'*64))}
+        'empty-id' {$p.WholeArticleGeneration.GrantId=[Guid]::Empty.ToString('D')}
+        'missing-retained-failure' {$p.PriorArticleAttemptRows=@()}
+        'refresh-limit' {$p.WholeArticleGeneration.MaximumCatalogRefreshes=25}
+    }
+    $rejected=$false;try{Test-ArticleJson ($p|ConvertTo-Json -Depth 24 -Compress)}catch{$rejected=$true}
+    if(-not $rejected){throw "Invalid whole-article fixture accepted: $case"};$passed++
+}
 foreach($case in @('missing-failure-pin','missing-reuse-id','nested-parent','changed-source','changed-voice','wrong-version','unknown-refinement-field')){
     $p=New-RefinedArticlePolicy
     switch($case){
