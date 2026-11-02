@@ -2,7 +2,13 @@
 param([Parameter(Mandatory)][string]$PythonPath,[switch]$AfterReboot,[switch]$ExpiredTerminal)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Install-CloudScribe.ps1') -CompletionFunctionsOnly
-$root=Join-Path ([IO.Path]::GetTempPath()) ('cloudscribe-sentence-tests-'+[Guid]::NewGuid().ToString('N'))
+# Python owns and validates these fixtures; use its selected temp root on every runtime.
+$pythonTemp=& $PythonPath -I -S -c "import tempfile; print(tempfile.gettempdir())"
+if($LASTEXITCODE -ne 0 -or @($pythonTemp).Count -ne 1){throw 'Python synthetic temp-root discovery failed.'}
+$pythonTemp=[string]$pythonTemp
+if(-not [IO.Path]::IsPathFullyQualified($pythonTemp) -or -not (Test-Path -LiteralPath $pythonTemp -PathType Container)){throw 'Python synthetic temp root is invalid.'}
+Assert-NoLinks $pythonTemp
+$root=Join-Path $pythonTemp ('cloudscribe-sentence-tests-'+[Guid]::NewGuid().ToString('N'))
 if($AfterReboot -and $ExpiredTerminal){throw 'Choose exactly one synthetic transition mode.'}
 $fixtureArgs=@($root);if($AfterReboot){$fixtureArgs+='after-reboot'}elseif($ExpiredTerminal){$fixtureArgs+='expired-terminal'}
 $metadata=& $PythonPath -I -S (Join-Path $PSScriptRoot '../tools/completion_workflow/make_synthetic_sentence_fixture.py') @fixtureArgs
