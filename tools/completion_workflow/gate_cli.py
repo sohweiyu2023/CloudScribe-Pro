@@ -3,6 +3,7 @@ import hashlib
 from contextlib import closing
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 import sys
@@ -416,35 +417,103 @@ def continuation_acceptance(config, manifest, scope, module, database_sha=None, 
     return module.digest(accepted)
 
 
-def transition_command(request, config, config_keys, register, module, scope, app):
+def interpreter_identity(transition, old, config, module):
+    data = bounded(transition["InterpreterEvidencePath"], 32768)
+    if sha(data) != transition["InterpreterEvidenceSha256"]:
+        raise ValueError("InterpreterEvidencePin")
+    evidence = json.loads(data, object_pairs_hook=unique)
+    fields = {"SchemaVersion", "RepairApprovalSha256", "PreviousPythonSha256", "NewPythonSha256", "PythonPathSha256",
+              "FileBytes", "PythonVersion", "PublisherName", "SignerThumbprint"}
+    if (not isinstance(evidence, dict) or set(evidence) != fields or type(evidence["SchemaVersion"]) is not int or evidence["SchemaVersion"] != 1
+            or evidence["RepairApprovalSha256"] != transition["RepairApprovalSha256"]
+            or evidence["PreviousPythonSha256"] != transition["PreviousPythonSha256"]
+            or evidence["NewPythonSha256"] != transition["NewPythonSha256"]
+            or old["PythonSha256"] != evidence["PreviousPythonSha256"] or config["PythonSha256"] != evidence["NewPythonSha256"]
+            or old["PythonPath"] != config["PythonPath"] or module.path_digest(config["PythonPath"]) != evidence["PythonPathSha256"]
+            or sys.version_info[:2] != (3, 13) or evidence["PythonVersion"] != sys.version.split()[0]
+            or evidence["PublisherName"] != "Python Software Foundation"
+            or not isinstance(evidence["SignerThumbprint"], str) or re.fullmatch(r"[A-F0-9]{40}", evidence["SignerThumbprint"]) is None
+            or type(evidence["FileBytes"]) is not int or not 1 <= evidence["FileBytes"] <= 32 * 1024 * 1024):
+        raise ValueError("InterpreterEvidenceBinding")
+    current = bounded(config["PythonPath"], 32 * 1024 * 1024)
+    if len(current) != evidence["FileBytes"] or sha(current) != evidence["NewPythonSha256"]:
+        raise ValueError("InterpreterHash")
+
+
+def interpreter_pending_installation(config, old, transition):
+    """Only an already-owned exact pending repair may reconcile these pins."""
+    app = Path(config["ApplicationDirectory"])
+    marker = json.loads(bounded(app.parent / "cloudscribe-install.json", 32768), object_pairs_hook=unique)
+    allowed = {transition["PreviousGateSha256"], transition["NewGateSha256"]}
+    if (marker.get("Product") != "CloudScribe Pro" or marker.get("CompletionGateProtocolVersion") != 1
+            or marker.get("CompletionWorkflowGateSha256") not in allowed
+            or str(marker.get("AppSha256", "")).lower() != config["AppSha256"]
+            or any(key in marker for key in ("RecoveryPolicySha256", "ChirpArticlePolicySha256", "ChirpReservationResumePolicySha256"))
+            or sha(bounded(app.parent / "completion-workflow-gate.json", 32768)) not in allowed):
+        raise ValueError("InterpreterPendingReadback")
+    profile = Path(marker["Profile"])
+    if sha(str(profile).rstrip("/\\").upper().encode()) != config["ProfileRootSha256"]:
+        raise ValueError("InterpreterPendingReadback")
+    required = json.loads(bounded(profile / ".completion-workflow-required.json", 4096), object_pairs_hook=unique)
+    required_scope = (transition["PreviousScopeSha256"] if transition.get("TransitionKind") == "whole-article-interpreter-continuation"
+                      and required.get("GateSha256") == transition["PreviousGateSha256"] else config["ScopeSha256"])
+    if (set(required) != {"GateSha256", "ScopeSha256"} or required["GateSha256"] not in allowed
+            or required["ScopeSha256"] != required_scope):
+        raise ValueError("InterpreterPendingReadback")
+    for name, key in (("CloudScribe.dll", "AppSha256"), ("CloudScribe.Infrastructure.dll", "InfrastructureSha256")):
+        if sha(bounded(app / name, 512 * 1024 * 1024)) != config[key] or config[key] != old[key]:
+            raise ValueError("InterpreterPendingReadback")
+
+
+def transition_materials(request, config, config_keys, register, module, scope, app, withdrawal=False):
     data = bounded(request["transitionPath"], 32768)
     pin = sha(data)
-    if pin != request["transitionSha256"] or request["identitySha256"] != pin:
+    if pin != request["transitionSha256"] or (not withdrawal and request["identitySha256"] != pin):
         raise ValueError("TransitionPin")
     transition = json.loads(data, object_pairs_hook=unique)
     module.validate_transition(transition)
     if (transition["NewGateSha256"] != request["configSha256"] or transition["NewBuildSha256"] != build_digest(config)
-            or transition["TransitionId"] != request["id"] or transition["ScopeSha256"] != config["ScopeSha256"]
+            or (not withdrawal and transition["TransitionId"] != request["id"]) or transition["ScopeSha256"] != config["ScopeSha256"]
             or transition["SourceApprovalSha256"] != scope["approvalSha256"]):
         raise ValueError("TransitionBinding")
     old_bytes = bounded(transition["PreviousConfigPath"], 32768)
     if sha(old_bytes) != transition["PreviousGateSha256"]:
         raise ValueError("PreviousGatePin")
     old = json.loads(old_bytes, object_pairs_hook=unique)
-    source_repair = module.transition_kind(transition) == "helper-source"
+    interpreter = module.transition_kind(transition) == "interpreter-binding"
+    source_repair = module.source_transition(transition)
+    if scope["schema"] != 1 and not (scope["schema"] == 4 and interpreter):
+        raise ValueError("SuccessorBuildChangeNotAdmitted")
     changes = {"ScriptPath", "ScriptSha256", "ModuleSha256"}
     if not source_repair:
         changes |= {"AppSha256", "InfrastructureSha256", "CandidateApplicationDirectory"}
+    if interpreter:
+        changes.add("PythonSha256")
     if (set(old) != config_keys or type(old["SchemaVersion"]) is not int or old["SchemaVersion"] != 1
             or any(old[key] != config[key] for key in config_keys - changes)
             or build_digest(old) != transition["PreviousBuildSha256"]):
         raise ValueError("TransitionConfigBinding")
     if source_repair and all(old[key] == config[key] for key in ("ScriptSha256", "ModuleSha256")):
         raise ValueError("SourceRepairMustChangeSource")
+    if interpreter:
+        interpreter_identity(transition, old, config, module)
+        ancestor_gate = transition["PreviousGateSha256"]
+        if withdrawal:
+            with register._open() as db:
+                ancestor_gate = register._read(db)["currentGate"]
+        register.require_predecessor_retired(ancestor_gate)
+        continuation_acceptance(config, json.loads(bounded(config["PlanManifestPath"], 1024 * 1024), object_pairs_hook=unique), scope, module)
+    elif withdrawal:
+        raise ValueError("InterpreterWithdrawalIdentity")
     # The predecessor source remains preserved; it is verified, never executed.
     if (sha(bounded(old["ScriptPath"], 131072)) != old["ScriptSha256"]
             or sha(bounded(Path(old["ScriptPath"]).with_name("completion_register.py"), 131072)) != old["ModuleSha256"]):
         raise ValueError("PreviousSourcePin")
+    return transition, pin, old, interpreter
+
+
+def transition_command(request, config, config_keys, register, module, scope, app):
+    transition, pin, old, interpreter = transition_materials(request, config, config_keys, register, module, scope, app)
     command = request["command"]
     expected_app = config["ApplicationDirectory"] if command == "complete-build" else config["CandidateApplicationDirectory"]
     if os.path.normcase(str(app)) != os.path.normcase(os.path.abspath(expected_app)):
@@ -452,6 +521,10 @@ def transition_command(request, config, config_keys, register, module, scope, ap
     if command == "complete-build":
         evidence = installed_readback(config, request["configSha256"])
         return register.complete_build(transition, pin, request["id"], evidence)
+    if interpreter and command == "check-build":
+        result = register.check_build(transition, pin, request["id"])
+        interpreter_pending_installation(config, old, transition)
+        return dict(result, deadlineUtc=scope["endUtc"])
     installed_readback(old, transition["PreviousGateSha256"])
     if command == "inspect-build":
         return register.inspect_build(transition, pin, request["id"])
@@ -460,7 +533,69 @@ def transition_command(request, config, config_keys, register, module, scope, ap
     return register.check_build(transition, pin, request["id"])
 
 
-def successor_command(request, config, config_keys, module, app):
+def interpreter_withdrawal_command(request, config, config_keys, register, module, scope, app):
+    transition_raw = bounded(request["transitionPath"], 32768)
+    transition = json.loads(transition_raw, object_pairs_hook=unique)
+    if module.interpreter_handoff(transition):
+        repair_pin = sha(transition_raw)
+        if repair_pin != request["transitionSha256"]:
+            raise ValueError("TransitionPin")
+        binding_request = dict(request, handoffPath=request["transitionPath"], handoffSha256=repair_pin,
+                               identitySha256=repair_pin, id=transition["TransitionId"])
+        transition, _, old, _, _, _, _, _ = successor_materials(binding_request, config, config_keys, module)
+        with register._open() as db:
+            current_gate = register._read(db)["currentGate"]
+        register.require_predecessor_retired(current_gate)
+        continuation_acceptance(config, json.loads(bounded(config["PlanManifestPath"], 1024 * 1024), object_pairs_hook=unique), scope, module)
+    else:
+        transition, repair_pin, old, _ = transition_materials(request, config, config_keys, register, module, scope, app, withdrawal=True)
+    data = bounded(request["withdrawalPath"], 32768)
+    pin = sha(data)
+    if pin != request["withdrawalSha256"] or pin != request["identitySha256"]:
+        raise ValueError("InterpreterWithdrawalPin")
+    record = json.loads(data, object_pairs_hook=unique)
+    module.validate_interpreter_withdrawal(record)
+    if (record["WithdrawalId"] != request["id"] or record["RepairIdentitySha256"] != repair_pin
+            or record["RepairTransitionId"] != transition["TransitionId"]
+            or os.path.normcase(str(app)) != os.path.normcase(os.path.abspath(config["ApplicationDirectory"]))):
+        raise ValueError("InterpreterWithdrawalIdentity")
+    backup = Path(record["BackupPath"])
+    files = (("previous-gate.json", "completion-workflow-gate.json", record["RestoredGateSha256"]),
+             ("previous-install.json", "cloudscribe-install.json", record["PreviousInstallSha256"]),
+             ("previous-required.json", None, record["PreviousRequiredSha256"]))
+    saved = {}
+    for name, target, expected in files:
+        raw = bounded(backup / name, 32768)
+        if sha(raw) != expected:
+            raise ValueError("InterpreterWithdrawalBackup")
+        saved[name] = raw
+    if saved["previous-gate.json"] != bounded(transition["PreviousConfigPath"], 32768):
+        raise ValueError("InterpreterWithdrawalBackup")
+    marker = json.loads(saved["previous-install.json"], object_pairs_hook=unique)
+    required = json.loads(saved["previous-required.json"], object_pairs_hook=unique)
+    if (marker.get("Product") != "CloudScribe Pro" or marker.get("CompletionGateProtocolVersion") != 1
+            or marker.get("CompletionWorkflowGateSha256") != record["RestoredGateSha256"]
+            or marker.get("AppSha256", "").lower() != config["AppSha256"]
+            or sha(str(Path(marker["Profile"])).rstrip("/\\").upper().encode()) != config["ProfileRootSha256"]
+            or any(key in marker for key in ("RecoveryPolicySha256", "ChirpArticlePolicySha256", "ChirpReservationResumePolicySha256"))
+            or required != {"GateSha256": record["RestoredGateSha256"], "ScopeSha256": transition.get("PreviousScopeSha256", config["ScopeSha256"])}):
+        raise ValueError("InterpreterWithdrawalBackup")
+    interpreter_pending_installation(config, old, transition)
+    command = request["command"]
+    if command == "inspect-interpreter-withdrawal":
+        return register.inspect_interpreter_withdrawal(record, pin, request["id"])
+    if command == "claim-interpreter-withdrawal":
+        return register.claim_interpreter_withdrawal(record, pin, request["id"])
+    if command == "check-interpreter-withdrawal":
+        return register.check_interpreter_withdrawal(record, pin, request["id"])
+    for name, target, _ in files:
+        path = Path(marker["Profile"]) / ".completion-workflow-required.json" if target is None else app.parent / target
+        if bounded(path, 32768) != saved[name]:
+            raise ValueError("InterpreterWithdrawalReadback")
+    return register.complete_interpreter_withdrawal(record, pin, request["id"], module.digest({name: sha(raw) for name, raw in saved.items()}))
+
+
+def successor_materials(request, config, config_keys, module):
     raw = bounded(request["handoffPath"], 32768); pin = sha(raw)
     if pin != request["handoffSha256"] or pin != request["identitySha256"]:
         raise ValueError("HandoffPin")
@@ -475,12 +610,19 @@ def successor_command(request, config, config_keys, module, app):
     if sha(old_bytes) != h["PreviousGateSha256"]:
         raise ValueError("PreviousGatePin")
     old = json.loads(old_bytes, object_pairs_hook=unique)
+    typed_interpreter = module.interpreter_handoff(h)
     changes = {"AppSha256", "InfrastructureSha256", "CandidateApplicationDirectory", "ScriptPath", "ScriptSha256", "ModuleSha256",
                "RegisterPath", "ScopeSha256", "PlanManifestPath", "PlanManifestSha256"}
+    if typed_interpreter:
+        changes.add("PythonSha256")
     if (set(old) != config_keys or type(old["SchemaVersion"]) is not int or old["SchemaVersion"] != 1
             or any(old[k] != config[k] for k in config_keys - changes) or old["ScopeSha256"] != h["PreviousScopeSha256"]
             or config["ScopeSha256"] != h["NewScopeSha256"]):
         raise ValueError("HandoffScopeConfig")
+    if typed_interpreter:
+        if any(old[k] != config[k] for k in ("AppSha256", "InfrastructureSha256", "CandidateApplicationDirectory")):
+            raise ValueError("HandoffScopeConfig")
+        interpreter_identity(h, old, config, module)
     for name, field in (("gate_cli.py", "ScriptSha256"), ("completion_register.py", "ModuleSha256")):
         source = Path(old["ScriptPath"]) if name == "gate_cli.py" else Path(old["ScriptPath"]).with_name(name)
         if sha(bounded(source, 131072)) != old[field]:
@@ -523,6 +665,12 @@ def successor_command(request, config, config_keys, module, app):
         module.validate_successor_manifest(manifest, new_scope)
     old_r = module.Register(old["RegisterPath"], old["ScopeSha256"])
     new_r = module.Register(config["RegisterPath"], config["ScopeSha256"])
+    return h, pin, old, new_scope, manifest, continuation, old_r, new_r
+
+
+def successor_command(request, config, config_keys, module, app):
+    h, pin, old, new_scope, manifest, continuation, old_r, new_r = successor_materials(request, config, config_keys, module)
+    typed_interpreter = module.interpreter_handoff(h)
     command = request["command"]
     expected_app = config["ApplicationDirectory"] if command == "complete-successor" else config["CandidateApplicationDirectory"]
     if os.path.normcase(str(app)) != os.path.normcase(os.path.abspath(expected_app)):
@@ -534,7 +682,7 @@ def successor_command(request, config, config_keys, module, app):
         else:
             terminal_failure(config, h)
         return old_r.complete_successor(new_r, new_scope, h, pin, evidence)
-    installed_readback(old, h["PreviousGateSha256"], allow_financial=True)
+    installed_readback(old, h["PreviousGateSha256"], allow_financial=not typed_interpreter)
     if continuation:
         continuation_acceptance(old, manifest, new_scope, module, h["DatabaseSha256"])
     else:
@@ -553,7 +701,7 @@ def main():
     if len(request_bytes) > 8192:
         raise ValueError("InputBound")
     request = json.loads(request_bytes, object_pairs_hook=unique)
-    if set(request) - {"command", "configPath", "configSha256", "appDirectory", "id", "identitySha256", "receipt", "policyPath", "transitionPath", "transitionSha256", "handoffPath", "handoffSha256"}:
+    if set(request) - {"command", "configPath", "configSha256", "appDirectory", "id", "identitySha256", "receipt", "policyPath", "transitionPath", "transitionSha256", "handoffPath", "handoffSha256", "withdrawalPath", "withdrawalSha256"}:
         raise ValueError("RequestShape")
     config_bytes = bounded(request["configPath"], 32768)
     if sha(config_bytes) != request["configSha256"]:
@@ -591,7 +739,8 @@ def main():
         result = successor_command(request, config, expected, module, app)
         print(json.dumps(result, separators=(",", ":")))
         return
-    build_command = request["command"] in ("inspect-build", "claim-build", "check-build", "complete-build")
+    withdrawal_command = request["command"] in ("inspect-interpreter-withdrawal", "claim-interpreter-withdrawal", "check-interpreter-withdrawal", "complete-interpreter-withdrawal")
+    build_command = withdrawal_command or request["command"] in ("inspect-build", "claim-build", "check-build", "complete-build")
     register = module.Register(config["RegisterPath"], config["ScopeSha256"],
                                expected_build=None if build_command else build_digest(config),
                                expected_gate=None if build_command else request["configSha256"])
@@ -607,9 +756,10 @@ def main():
                               or (state["currentGate"] is not None and state["currentGate"] != request["configSha256"])):
         raise ValueError("CurrentBuildBinding")
     if scope["schema"] in (2, 3, 4):
-        if build_command:
+        if build_command and scope["schema"] != 4:
             raise ValueError("SuccessorBuildChangeNotAdmitted")
-        register.require_predecessor_retired(request["configSha256"])
+        if not build_command:
+            register.require_predecessor_retired(request["configSha256"])
     manifest_bytes = bounded(config["PlanManifestPath"], 1024 * 1024)
     if sha(manifest_bytes) != config["PlanManifestSha256"]:
         raise ValueError("PlanManifestHash")
@@ -619,7 +769,9 @@ def main():
     if not manifest["parts"] or any(part["voiceName"] != config["VoiceName"] or part["languageCode"] != config["LanguageCode"] for part in manifest["parts"]):
         raise ValueError("VoiceManifestBinding")
     command = request["command"]
-    if build_command:
+    if withdrawal_command:
+        result = interpreter_withdrawal_command(request, config, expected, register, module, scope, app)
+    elif build_command:
         result = transition_command(request, config, expected, register, module, scope, app)
     elif command == "inspect":
         with register._open() as db:
@@ -789,6 +941,13 @@ if __name__ == "__main__":
         reasons.update({"WholeArticleGrantBinding": "SuccessorScopeMismatch",
                         "WholeArticleHistoryBinding": "SuccessorScopeMismatch",
                         "WholeArticlePredecessorNotExpired": "SuccessorPending"})
+        reasons.update({"InterpreterTransitionSchema": "Protocol", "InterpreterTransitionBinding": "PinMismatch",
+                        "InterpreterEvidencePin": "PinMismatch", "InterpreterEvidenceBinding": "PinMismatch",
+                        "InterpreterPendingReadback": "PinMismatch"})
+        reasons.update({"InterpreterWithdrawalSchema": "Protocol", "InterpreterWithdrawalIdentity": "PinMismatch",
+                        "InterpreterWithdrawalPin": "PinMismatch", "InterpreterWithdrawalBackup": "PinMismatch",
+                        "InterpreterWithdrawalReadback": "PinMismatch", "InterpreterWithdrawalState": "Stopped",
+                        "InterpreterWithdrawalClock": "ClockRollback"})
         detail = str(error)
         reason = reasons.get(detail, "Storage" if isinstance(error, (OSError, sqlite3.Error)) else "Unknown")
         print(json.dumps({"rejected": True, "category": type(error).__name__, "reason": reason,

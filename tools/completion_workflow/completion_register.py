@@ -86,17 +86,26 @@ def validate_scope(scope):
 
 TRANSITION_KEYS = {"SchemaVersion", "TransitionId", "SourceApprovalSha256", "ScopeSha256", "ExpectedHeadSha256",
                    "PreviousConfigPath", "PreviousGateSha256", "NewGateSha256", "PreviousBuildSha256", "NewBuildSha256"}
+INTERPRETER_TRANSITION_KEYS = TRANSITION_KEYS | {"TransitionKind", "PreviousPythonSha256", "NewPythonSha256",
+    "InterpreterEvidencePath", "InterpreterEvidenceSha256", "RepairApprovalSha256"}
 
 
 def transition_kind(transition):
-    return "helper-source" if transition.get("TransitionKind") == "helper-source" else "build"
+    return transition.get("TransitionKind", "build")
+
+
+def source_transition(transition):
+    return transition_kind(transition) in ("helper-source", "interpreter-binding")
 
 
 def validate_transition(transition):
-    if (not isinstance(transition, dict) or set(transition) not in (TRANSITION_KEYS, TRANSITION_KEYS | {"TransitionKind"})
-            or ("TransitionKind" in transition and transition["TransitionKind"] != "helper-source")
+    if (not isinstance(transition, dict) or set(transition) not in (TRANSITION_KEYS, TRANSITION_KEYS | {"TransitionKind"}, INTERPRETER_TRANSITION_KEYS)
+            or ("TransitionKind" in transition and transition["TransitionKind"] not in ("helper-source", "interpreter-binding"))
             or type(transition["SchemaVersion"]) is not int or transition["SchemaVersion"] != 1):
         raise Rejected("TransitionSchema")
+    interpreter = transition_kind(transition) == "interpreter-binding"
+    if interpreter != (set(transition) == INTERPRETER_TRANSITION_KEYS):
+        raise Rejected("InterpreterTransitionSchema")
     for name in TRANSITION_KEYS:
         if name.endswith("Sha256"):
             hash_value(transition[name])
@@ -104,10 +113,59 @@ def validate_transition(transition):
         raise Rejected("TransitionId")
     if not isinstance(transition["PreviousConfigPath"], str) or not Path(transition["PreviousConfigPath"]).is_absolute():
         raise Rejected("TransitionConfigPath")
+    if interpreter:
+        for key in ("PreviousPythonSha256", "NewPythonSha256", "InterpreterEvidenceSha256", "RepairApprovalSha256"):
+            hash_value(transition[key])
+        if (transition["PreviousPythonSha256"] == transition["NewPythonSha256"]
+                or transition["RepairApprovalSha256"] == transition["SourceApprovalSha256"]
+                or not isinstance(transition["InterpreterEvidencePath"], str)
+                or not Path(transition["InterpreterEvidencePath"]).is_absolute()):
+            raise Rejected("InterpreterTransitionBinding")
     same_build = transition["PreviousBuildSha256"] == transition["NewBuildSha256"]
-    if (same_build != (transition_kind(transition) == "helper-source")
+    if (same_build != source_transition(transition)
             or transition["PreviousGateSha256"] == transition["NewGateSha256"]):
         raise Rejected("TransitionMustChangeBuild")
+
+
+def interpreter_pre_effect(state):
+    return (state["scope"]["schema"] == 4 and state["activated"] and not state["retired"]
+            and not state["retirement"] and state["refresh"] == 0 and state["admissions"] == 0
+            and state["buildTransitions"] == 0)
+
+
+def validate_interpreter_withdrawal(record):
+    keys = {"SchemaVersion", "WithdrawalId", "WithdrawalApprovalSha256", "RepairTransitionId", "RepairIdentitySha256",
+            "ScopeSha256", "ExpectedHeadSha256", "PreviousGateSha256", "RestoredGateSha256", "BackupPath",
+            "PreviousInstallSha256", "PreviousRequiredSha256"}
+    if not isinstance(record, dict) or set(record) != keys or type(record["SchemaVersion"]) is not int or record["SchemaVersion"] != 1:
+        raise Rejected("InterpreterWithdrawalSchema")
+    for key in keys:
+        if key.endswith("Sha256"):
+            hash_value(record[key])
+    for key in ("WithdrawalId", "RepairTransitionId"):
+        if str(uuid.UUID(record[key])) != record[key] or uuid.UUID(record[key]).int == 0:
+            raise Rejected("InterpreterWithdrawalIdentity")
+    if not isinstance(record["BackupPath"], str) or not Path(record["BackupPath"]).is_absolute():
+        raise Rejected("InterpreterWithdrawalIdentity")
+
+
+def interpreter_binding_event(state):
+    return state["interpreterRepair"] or state["interpreterActivation"]
+
+
+def interpreter_withdrawal_matches(state, record):
+    validate_interpreter_withdrawal(record)
+    repair = interpreter_binding_event(state)
+    if not interpreter_pre_effect(state) or not repair:
+        raise Rejected("InterpreterWithdrawalState")
+    transition = repair["transition"] if repair["type"] == "source-claim" else repair["interpreterHandoff"]
+    if (record["ScopeSha256"] != digest(state["scope"]) or record["RepairTransitionId"] != repair["id"]
+            or record["RepairIdentitySha256"] != repair["identity"]
+            or record["PreviousGateSha256"] != transition["NewGateSha256"]
+            or record["RestoredGateSha256"] != transition["PreviousGateSha256"]
+            or record["WithdrawalApprovalSha256"] in (transition["RepairApprovalSha256"], state["scope"]["approvalSha256"])
+            or state["currentBuild"] != transition.get("NewBuildSha256", state["scope"]["buildSha256"])):
+        raise Rejected("InterpreterWithdrawalIdentity")
 
 
 def uuid_identity(value):
@@ -127,13 +185,20 @@ HANDOFF_KEYS = {"SchemaVersion", "TransitionId", "SourceApprovalSha256", "Previo
 CONTINUATION_HANDOFF_KEYS = HANDOFF_KEYS - {"FailedAuthorizationId", "FailedLocalAttemptId", "FailedPlanSha256",
                                           "FailedCoverageOrdinal", "FailedPayloadSha256", "FailedPayloadBytes"} | {
                                               "TransitionKind", "OriginalManifestSha256", "AcceptedEvidenceSha256"}
+INTERPRETER_HANDOFF_KEYS = CONTINUATION_HANDOFF_KEYS | {"PreviousPythonSha256", "NewPythonSha256",
+    "InterpreterEvidencePath", "InterpreterEvidenceSha256", "RepairApprovalSha256"}
+
+
+def interpreter_handoff(h):
+    return isinstance(h, dict) and h.get("TransitionKind") == "whole-article-interpreter-continuation"
 
 
 def validate_handoff(h):
     if (not isinstance(h, dict) or type(h.get("SchemaVersion")) is not int or h["SchemaVersion"] not in (1, 2, 3)
-            or set(h) != (HANDOFF_KEYS if h["SchemaVersion"] == 1 else CONTINUATION_HANDOFF_KEYS)
+            or set(h) != (INTERPRETER_HANDOFF_KEYS if interpreter_handoff(h) else HANDOFF_KEYS if h["SchemaVersion"] == 1 else CONTINUATION_HANDOFF_KEYS)
             or (h["SchemaVersion"] == 2 and h["TransitionKind"] != "accepted-continuation")
-            or (h["SchemaVersion"] == 3 and h["TransitionKind"] != "whole-article-continuation")):
+            or (h["SchemaVersion"] == 3 and h["TransitionKind"] not in ("whole-article-continuation", "whole-article-interpreter-continuation"))
+            or (interpreter_handoff(h) and h["SchemaVersion"] != 3)):
         raise Rejected("HandoffSchema")
     for key in h:
         if key.endswith("Sha256"):
@@ -148,6 +213,10 @@ def validate_handoff(h):
             raise Rejected("HandoffBinding")
     if h["PreviousScopeSha256"] == h["NewScopeSha256"] or h["PreviousGateSha256"] == h["NewGateSha256"]:
         raise Rejected("HandoffBinding")
+    if interpreter_handoff(h) and (h["PreviousPythonSha256"] == h["NewPythonSha256"]
+            or h["RepairApprovalSha256"] == h["SourceApprovalSha256"]
+            or not isinstance(h["InterpreterEvidencePath"], str) or not Path(h["InterpreterEvidencePath"]).is_absolute()):
+        raise Rejected("InterpreterTransitionBinding")
     for name in ("PreviousConfigPath", "NewConfigPath", "NewScopePath"):
         if not isinstance(h[name], str) or not Path(h[name]).is_absolute():
             raise Rejected("HandoffPath")
@@ -589,7 +658,8 @@ class Register:
                  "lastUtc": 0, "lastMono": 0, "startUtc": 0, "startMono": 0,
                  "ids": set(), "scope": scope, "head": previous, "buildTransitions": 0, "helperSourceRepairs": 0,
                  "currentBuild": scope["buildSha256"], "currentGate": None, "retirement": None,
-                 "retired": False, "activation": None, "activated": scope["schema"] == 1}
+                 "retired": False, "activation": None, "activated": scope["schema"] == 1,
+                 "interpreterRepair": None, "interpreterActivation": None, "interpreterWithdrawal": None}
         rows = db.execute("SELECT seq,body,sha FROM events ORDER BY seq").fetchall()
         if not rows or len(rows) > 4096:
             raise Rejected("InvalidEventCount")
@@ -606,26 +676,30 @@ class Register:
                       "build-complete": {"type", "utc", "mono", "id", "identity", "receiptSha256"}}
             shapes["source-claim"] = shapes["build-claim"]
             shapes["source-complete"] = shapes["build-complete"]
+            shapes["interpreter-withdraw-claim"] = {"type", "utc", "mono", "id", "identity", "withdrawal"}
+            shapes["interpreter-withdraw-complete"] = shapes["build-complete"]
             shapes["retire-claim"] = {"type", "utc", "mono", "id", "identity", "handoff", "clockCondition", "clockDriftMicros"}
             if (event.get("type") == "retire-claim" and "observedMono" in event
-                    and scope["schema"] in (2, 3) and isinstance(event.get("handoff"), dict)
+                    and scope["schema"] in (2, 3, 4) and isinstance(event.get("handoff"), dict)
                     and event["handoff"].get("SchemaVersion") in (2, 3)):
                 shapes["retire-claim"] |= {"observedMono"}
             shapes["retire-complete"] = {"type", "utc", "mono", "id", "identity", "receiptSha256"}
             shapes["activate"] = {"type", "utc", "mono", "id", "identity", "previousRetirementHead", "receiptSha256", "gateSha256"}
+            if event.get("type") == "activate" and "interpreterHandoff" in event and scope["schema"] == 4:
+                shapes["activate"] |= {"interpreterHandoff"}
             if event.get("type") == "claim" and scope["schema"] == 2 and event.get("kind") == "completion-admission":
                 shapes["claim"] = shapes["claim"] | {"pilotProofSha256"}
             if event.get("type") == "claim" and scope["schema"] in (3, 4) and event.get("kind") == "completion-admission":
                 shapes["claim"] = shapes["claim"] | {"acceptedProofSha256"}
             if event.get("type") not in shapes or set(event) != shapes[event["type"]]:
                 raise Rejected("EventSchema")
-            if event["type"] in ("claim", "complete", "build-claim", "build-complete", "source-claim", "source-complete", "retire-claim", "retire-complete", "activate"):
+            if event["type"] in ("claim", "complete", "build-claim", "build-complete", "source-claim", "source-complete", "retire-claim", "retire-complete", "activate", "interpreter-withdraw-claim", "interpreter-withdraw-complete"):
                 try:
                     if str(uuid.UUID(event["id"])) != event["id"]:
                         raise Rejected("EventId")
                 except (ValueError, TypeError, AttributeError) as error:
                     raise Rejected("EventId") from error
-                hash_value(event["identity"] if event["type"] in ("claim", "build-claim", "source-claim", "retire-claim") else event["receiptSha256"])
+                hash_value(event["identity"] if event["type"] in ("claim", "build-claim", "source-claim", "retire-claim", "interpreter-withdraw-claim") else event["receiptSha256"])
             if event["type"] == "complete" and event["outcome"] not in ("Succeeded", "Stopped"):
                 raise Rejected("EventOutcome")
             if event["type"] == "complete" and event["reason"] not in ("None", "ObservedFailure", "ReceiptValidation", "ClockRollback", "ClockDiscontinuity", "WindowExpired"):
@@ -674,9 +748,12 @@ class Register:
             elif event["type"] in ("build-claim", "source-claim"):
                 transition = event["transition"]
                 validate_transition(transition)
-                source = transition_kind(transition) == "helper-source"
-                if (scope["schema"] != 1 or source != (event["type"] == "source-claim") or state["stopped"] or state["pending"]
-                        or state["buildTransitions"] != (1 if source else 0) or (source and state["helperSourceRepairs"] != 0)
+                source = source_transition(transition)
+                interpreter = transition_kind(transition) == "interpreter-binding"
+                if ((not interpreter_pre_effect(state) if interpreter else scope["schema"] != 1)
+                        or (interpreter and state["interpreterActivation"] is not None)
+                        or source != (event["type"] == "source-claim") or state["stopped"] or state["pending"]
+                        or (not interpreter and state["buildTransitions"] != (1 if source else 0)) or (source and state["helperSourceRepairs"] != 0)
                         or event["id"] in state["ids"]
                         or state["resume-admission"] != 0 or state["completion-admission"] != 0
                         or transition["TransitionId"] != event["id"] or transition["ExpectedHeadSha256"] != previous
@@ -686,8 +763,10 @@ class Register:
                     raise Rejected("InvalidBuildClaimHistory")
                 state["helperSourceRepairs" if source else "buildTransitions"] = 1
                 state["ids"].add(event["id"])
-                state["pending"] = dict(event, kind="helper-source" if source else "build-transition")
+                state["pending"] = dict(event, kind=transition_kind(transition) if source else "build-transition")
                 state["currentGate"] = transition["PreviousGateSha256"]
+                if interpreter:
+                    state["interpreterRepair"] = event
             elif event["type"] in ("build-complete", "source-complete"):
                 pending = state["pending"]
                 if (state["stopped"] or not pending or pending["type"] not in ("build-claim", "source-claim")
@@ -699,6 +778,27 @@ class Register:
                 state["currentBuild"] = pending["transition"]["NewBuildSha256"]
                 state["currentGate"] = pending["transition"]["NewGateSha256"]
                 state["pending"] = None
+            elif event["type"] == "interpreter-withdraw-claim":
+                record = event["withdrawal"]
+                interpreter_withdrawal_matches(state, record)
+                if (state["interpreterWithdrawal"] or event["id"] != record["WithdrawalId"]
+                        or event["id"] in state["ids"] or record["ExpectedHeadSha256"] != previous
+                        or (state["pending"] and state["pending"]["id"] != interpreter_binding_event(state)["id"])
+                        or (state["stopped"] and state["stopReason"] != "WindowExpired")):
+                    raise Rejected("InterpreterWithdrawalState")
+                state["interpreterWithdrawal"] = event
+                state["pending"] = dict(event, kind="interpreter-withdrawal")
+                state["ids"].add(event["id"])
+                state["stopped"] = True
+                state["stopReason"] = "InterpreterBindingWithdrawn"
+            elif event["type"] == "interpreter-withdraw-complete":
+                pending = state["pending"]
+                if (not pending or pending["type"] != "interpreter-withdraw-claim"
+                        or event["id"] != pending["id"] or event["identity"] != pending["identity"]
+                        or not state["stopped"] or state["stopReason"] != "InterpreterBindingWithdrawn"):
+                    raise Rejected("InterpreterWithdrawalState")
+                state["currentGate"] = pending["withdrawal"]["RestoredGateSha256"]
+                state["pending"] = None
             elif event["type"] == "stop":
                 state["stopped"] = True
                 state["stopReason"] = event["reason"]
@@ -706,8 +806,13 @@ class Register:
                 h = event["handoff"]
                 validate_handoff(h)
                 observed_mono = event.get("observedMono", event["mono"])
-                condition, drift = self._retirement_observation(state, event["utc"], observed_mono)
-                if ((scope["schema"], h["SchemaVersion"]) not in ((1, 1), (2, 2), (3, 3)) or state["pending"] or state["retirement"] or event["id"] in state["ids"]
+                condition, drift = self._retirement_observation(state, event["utc"], observed_mono, h)
+                allowed_interpreter = scope["schema"] == 4 and interpreter_handoff(h)
+                if allowed_interpreter and (not interpreter_pre_effect(state) or state["helperSourceRepairs"] != 0
+                        or state["interpreterActivation"] is not None
+                        or h["RepairApprovalSha256"] == scope["approvalSha256"]):
+                    raise Rejected("InvalidRetirementHistory")
+                if (((scope["schema"], h["SchemaVersion"]) not in ((1, 1), (2, 2), (3, 3)) and not allowed_interpreter) or state["pending"] or state["retirement"] or event["id"] in state["ids"]
                         or h["TransitionId"] != event["id"] or h["ExpectedPreviousHeadSha256"] != previous
                         or h["PreviousScopeSha256"] != self.scope_sha
                         or h["PreviousGateSha256"] != state["currentGate"]
@@ -734,6 +839,13 @@ class Register:
                 hash_value(event["identity"]); hash_value(event["previousRetirementHead"])
                 hash_value(event["gateSha256"])
                 state["activation"] = event
+                if "interpreterHandoff" in event:
+                    h = event["interpreterHandoff"]
+                    validate_handoff(h)
+                    if (not interpreter_handoff(h) or h["NewScopeSha256"] != self.scope_sha or h["NewGateSha256"] != event["gateSha256"]
+                            or h["TransitionId"] != event["id"] or h["SourceApprovalSha256"] != scope["approvalSha256"]):
+                        raise Rejected("InvalidSuccessorActivation")
+                    state["interpreterActivation"] = event
                 state["activated"] = True
                 state["currentGate"] = event["gateSha256"]
             elif event["type"] == "check":
@@ -766,7 +878,7 @@ class Register:
         return None
 
     @staticmethod
-    def _retirement_observation(state, now, mono):
+    def _retirement_observation(state, now, mono, handoff=None):
         # Retirement creates no old-run permission. A separately approved new
         # scope supplies its own dual deadline; never repair old clock anchors.
         if type(now) is not int or type(mono) is not int or mono < 0:
@@ -781,7 +893,8 @@ class Register:
             # This retires expired authority, never resumes it or proves a reboot.
             # The exact typed handoff and fresh approval are checked separately.
             pending = state["pending"]
-            if (state["scope"]["schema"] in (2, 3) and now >= utc(state["scope"]["endUtc"])
+            typed = handoff or (retirement["handoff"] if retirement else None)
+            if ((state["scope"]["schema"] in (2, 3) or (state["scope"]["schema"] == 4 and interpreter_handoff(typed))) and now >= utc(state["scope"]["endUtc"])
                     and (not state["stopped"] or state["stopReason"] == "WindowExpired")
                     and (not pending or (pending["type"] == "retire-claim"
                                          and pending["handoff"]["SchemaVersion"] in (2, 3)))):
@@ -903,7 +1016,10 @@ class Register:
     def _build_ready(self, state, transition, identity_sha, operation_id, pending=False, check_clock=True):
         validate_transition(transition)
         hash_value(identity_sha)
-        if state["scope"]["schema"] != 1 or state["retirement"]:
+        interpreter = transition_kind(transition) == "interpreter-binding"
+        source = source_transition(transition)
+        if ((not interpreter_pre_effect(state) if interpreter else state["scope"]["schema"] != 1) or state["retirement"]
+                or (interpreter and state["interpreterActivation"] is not None)):
             raise Rejected("BuildTransitionNotReady")
         if (operation_id != transition["TransitionId"] or transition["ScopeSha256"] != self.scope_sha
                 or transition["SourceApprovalSha256"] != state["scope"]["approvalSha256"]):
@@ -914,12 +1030,12 @@ class Register:
             raise Rejected("BuildTransitionNotReady")
         if pending:
             item = state["pending"]
-            claim_type = "source-claim" if transition_kind(transition) == "helper-source" else "build-claim"
+            claim_type = "source-claim" if source else "build-claim"
             if (not item or item["type"] != claim_type or item["id"] != operation_id
                     or item["identity"] != identity_sha or item["transition"] != transition):
                 raise Rejected("BuildTransitionPendingMismatch")
-        elif (state["pending"] or state["buildTransitions"] != (1 if transition_kind(transition) == "helper-source" else 0)
-              or (transition_kind(transition) == "helper-source" and state["helperSourceRepairs"] != 0)
+        elif (state["pending"] or (not interpreter and state["buildTransitions"] != (1 if source else 0))
+              or (source and state["helperSourceRepairs"] != 0)
               or operation_id in state["ids"]
               or state["head"] != transition["ExpectedHeadSha256"] or state["currentBuild"] != transition["PreviousBuildSha256"]
               or (state["currentGate"] is not None and state["currentGate"] != transition["PreviousGateSha256"])):
@@ -938,7 +1054,7 @@ class Register:
             self._build_ready(state, transition, identity_sha, operation_id, check_clock=False)
             if self._time_rejection(state):
                 self._guard(db, state)  # Persist terminal stop without altering a valid expected head.
-            event_type = "source-claim" if transition_kind(transition) == "helper-source" else "build-claim"
+            event_type = "source-claim" if source_transition(transition) else "build-claim"
             self._append(db, self._stamp({"type": event_type, "utc": self.clock(), "id": operation_id,
                                          "identity": identity_sha, "transition": transition}), state["head"])
             db.commit()
@@ -960,12 +1076,60 @@ class Register:
             state = self._read(db)
             self._build_ready(state, transition, identity_sha, operation_id, pending=True, check_clock=False)
             self._guard(db, state)
-            event_type = "source-complete" if transition_kind(transition) == "helper-source" else "build-complete"
+            event_type = "source-complete" if source_transition(transition) else "build-complete"
             self._append(db, self._stamp({"type": event_type, "utc": self.clock(), "id": operation_id,
                                          "identity": identity_sha, "receiptSha256": observed_sha}), state["head"])
             db.commit()
             self._seal(db)
             return {"outcome": "Succeeded", "authority": False}
+
+    def _interpreter_withdrawal_ready(self, state, record, identity_sha, operation_id, pending=False):
+        interpreter_withdrawal_matches(state, record)
+        hash_value(identity_sha)
+        if operation_id != record["WithdrawalId"]:
+            raise Rejected("InterpreterWithdrawalIdentity")
+        if self._time_rejection(state) not in (None, "WindowExpired"):
+            raise Rejected("InterpreterWithdrawalClock")
+        if pending:
+            item = state["pending"]
+            if (not item or item["type"] != "interpreter-withdraw-claim" or item["id"] != operation_id
+                    or item["identity"] != identity_sha or item["withdrawal"] != record
+                    or not state["stopped"] or state["stopReason"] != "InterpreterBindingWithdrawn"):
+                raise Rejected("InterpreterWithdrawalState")
+        elif (state["interpreterWithdrawal"] or operation_id in state["ids"] or record["ExpectedHeadSha256"] != state["head"]
+              or (state["pending"] and state["pending"]["id"] != interpreter_binding_event(state)["id"])
+              or (state["stopped"] and state["stopReason"] != "WindowExpired")):
+            raise Rejected("InterpreterWithdrawalState")
+
+    def inspect_interpreter_withdrawal(self, record, identity_sha, operation_id):
+        with self._open() as db:
+            self._interpreter_withdrawal_ready(self._read(db), record, identity_sha, operation_id)
+            return {"valid": True, "authority": False}
+
+    def claim_interpreter_withdrawal(self, record, identity_sha, operation_id):
+        """Safety-only terminal withdrawal; never resumes old or new permission."""
+        with self._open() as db:
+            state = self._read(db)
+            self._interpreter_withdrawal_ready(state, record, identity_sha, operation_id)
+            self._append(db, self._stamp({"type": "interpreter-withdraw-claim", "utc": self.clock(), "id": operation_id,
+                                         "identity": identity_sha, "withdrawal": record}), state["head"])
+            db.commit(); self._seal(db)
+            return {"id": operation_id, "identitySha256": identity_sha, "scopeSha256": self.scope_sha, "authority": False}
+
+    def check_interpreter_withdrawal(self, record, identity_sha, operation_id):
+        with self._open() as db:
+            self._interpreter_withdrawal_ready(self._read(db), record, identity_sha, operation_id, pending=True)
+            return {"valid": True, "authority": False}
+
+    def complete_interpreter_withdrawal(self, record, identity_sha, operation_id, observed_sha):
+        hash_value(observed_sha)
+        with self._open() as db:
+            state = self._read(db)
+            self._interpreter_withdrawal_ready(state, record, identity_sha, operation_id, pending=True)
+            self._append(db, self._stamp({"type": "interpreter-withdraw-complete", "utc": self.clock(), "id": operation_id,
+                                         "identity": identity_sha, "receiptSha256": observed_sha}), state["head"])
+            db.commit(); self._seal(db)
+            return {"outcome": "Succeeded", "authority": False, "runStopped": True}
 
     @contextmanager
     def pair(self, successor):
@@ -980,7 +1144,10 @@ class Register:
 
     def _handoff_ready(self, old_state, successor, new_scope, h, identity, pending=False, check_clock=True):
         validate_handoff(h); hash_value(identity); validate_scope(new_scope)
-        if ((old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) not in ((1, 2, 1), (2, 3, 2), (3, 4, 3))
+        typed_interpreter = interpreter_handoff(h)
+        typed_pair = typed_interpreter and (old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) == (4, 4, 3)
+        if (((old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) not in ((1, 2, 1), (2, 3, 2), (3, 4, 3)) and not typed_pair)
+                or (typed_interpreter and not typed_pair)
                 or h["PreviousScopeSha256"] != self.scope_sha or h["NewScopeSha256"] != successor.scope_sha
                 or digest(new_scope) != successor.scope_sha or new_scope["predecessorScopeSha256"] != self.scope_sha
                 or physical(new_scope["predecessorRegisterPath"]) != self.path
@@ -988,6 +1155,14 @@ class Register:
                 or h["TransitionId"] != new_scope["transitionId"] or h["SourceApprovalSha256"] != new_scope["approvalSha256"]
                 or new_scope["approvalSha256"] == old_state["scope"]["approvalSha256"]
                 or any(new_scope[k] != old_state["scope"][k] for k in ("profileSha256", "accountSha256", "projectSha256"))):
+            raise Rejected("SuccessorScopeBinding")
+        typed_zero_effect = (old_state["scope"]["schema"] == 4 and old_state["activated"]
+                             and old_state["refresh"] == 0 and old_state["admissions"] == 0
+                             and old_state["buildTransitions"] == 0 and old_state["helperSourceRepairs"] == 0
+                             and old_state["interpreterActivation"] is None)
+        if typed_interpreter and (not typed_zero_effect or (not pending and not interpreter_pre_effect(old_state))
+                or new_scope["wholeArticleGrantSha256"] == old_state["scope"]["wholeArticleGrantSha256"]
+                or h["RepairApprovalSha256"] == old_state["scope"]["approvalSha256"]):
             raise Rejected("SuccessorScopeBinding")
         if h["SchemaVersion"] == 3 and self.clock() < utc(old_state["scope"]["endUtc"]):
             raise Rejected("WholeArticlePredecessorNotExpired")
@@ -1003,7 +1178,7 @@ class Register:
         if old_state["stopped"] and old_state["stopReason"] != "WindowExpired":
             raise Rejected("RetirementClockOrStop")
         if check_clock:
-            self._retirement_observation(old_state, self.clock(), self.monotonic())
+            self._retirement_observation(old_state, self.clock(), self.monotonic(), h)
         if pending:
             item = old_state["retirement"]
             if not item or item["identity"] != identity or item["handoff"] != h:
@@ -1019,9 +1194,9 @@ class Register:
         if check_clock and not utc(new_scope["startUtc"]) <= now < utc(new_scope["endUtc"]):
             raise Rejected("OutsideWindow")
 
-    def _retirement_clock(self, db, state):
+    def _retirement_clock(self, db, state, handoff=None):
         try:
-            return self._retirement_observation(state, self.clock(), self.monotonic())
+            return self._retirement_observation(state, self.clock(), self.monotonic(), handoff)
         except Rejected:
             reason = "ClockRollback"
             self._append(db, self._stamp({"type": "stop", "utc": max(self.clock(), state["lastUtc"]), "reason": reason}, state["lastMono"]), state["head"])
@@ -1040,14 +1215,14 @@ class Register:
         with self.pair(successor), self._transaction() as db:
             state = self._read(db)
             self._handoff_ready(state, successor, new_scope, h, identity, check_clock=False)
-            self._retirement_clock(db, state)
+            self._retirement_clock(db, state, h)
             if not utc(new_scope["startUtc"]) <= successor.clock() < utc(new_scope["endUtc"]):
                 raise Rejected("OutsideWindow")
             if successor.path.exists() or successor.anchor.exists():
                 raise Rejected("SuccessorAlreadyExists")
             event = {"type": "retire-claim", "utc": self.clock(), "mono": self.monotonic(),
                      "id": h["TransitionId"], "identity": identity, "handoff": h}
-            condition, drift = self._retirement_observation(state, event["utc"], event["mono"])
+            condition, drift = self._retirement_observation(state, event["utc"], event["mono"], h)
             if h["SchemaVersion"] in (2, 3):
                 event["observedMono"] = event["mono"]
                 event["mono"] = max(state["lastMono"], event["mono"])
@@ -1083,9 +1258,12 @@ class Register:
                 db.commit(); self._seal(db)
             # If a crash followed old completion, only exact readback of this SAME handoff can finish.
             previous_head = self._read(db)["head"]
-            successor._append(new_db, successor._stamp({"type": "activate", "utc": successor.clock(), "id": h["TransitionId"],
+            activation = {"type": "activate", "utc": successor.clock(), "id": h["TransitionId"],
                                                        "identity": identity, "previousRetirementHead": previous_head,
-                                                       "receiptSha256": observed_sha, "gateSha256": h["NewGateSha256"]}), new_state["head"])
+                                                       "receiptSha256": observed_sha, "gateSha256": h["NewGateSha256"]}
+            if interpreter_handoff(h):
+                activation["interpreterHandoff"] = h
+            successor._append(new_db, successor._stamp(activation), new_state["head"])
             new_db.commit(); successor._seal(new_db)
             return {"outcome": "Succeeded", "authority": False}
 
@@ -1105,7 +1283,7 @@ class Register:
         """Read only terminal ancestors, never recursively acquire an owned lease."""
         seen = set() if seen is None else set(seen)
         identity = os.path.normcase(str(self.path))
-        if identity in seen or len(seen) >= 4:
+        if identity in seen or len(seen) >= 5:
             raise Rejected("PredecessorNotRetired")
         seen.add(identity)
         schema = current["scope"]["schema"]
@@ -1119,12 +1297,18 @@ class Register:
             db.execute("PRAGMA query_only=ON"); db.execute("BEGIN")
             state = old._read(db)
             a = current["activation"]; item = state["retirement"]
-            if (state["scope"]["schema"] != schema - 1 or not state["retired"] or state["pending"] or not a or not item
+            # A single validated pre-effect interpreter repair may change only
+            # the current gate pin. The immutable retirement still binds the
+            # ORIGINAL activation pin; never rewrite an ancestor to match it.
+            activation_pin = (a["gateSha256"] if a and schema == 4 and current["helperSourceRepairs"] == 1 else config_pin)
+            typed_pair = schema == 4 and state["scope"]["schema"] == 4 and item and interpreter_handoff(item["handoff"])
+            if ((state["scope"]["schema"] != schema - 1 and not typed_pair) or not state["retired"] or state["pending"] or not a or not item
                     or item["identity"] != a["identity"] or state["head"] != a["previousRetirementHead"]
                     or item["id"] != scope["transitionId"] or item["handoff"]["NewScopeSha256"] != self.scope_sha
-                    or item["handoff"]["NewGateSha256"] != config_pin or current["currentGate"] != config_pin
+                    or item["handoff"]["NewGateSha256"] != activation_pin or current["currentGate"] != config_pin
                     or item["handoff"]["SourceApprovalSha256"] != scope["approvalSha256"]
                     or item["handoff"]["PreviousGateSha256"] != state["currentGate"]
+                    or ("interpreterHandoff" in a and a["interpreterHandoff"] != item["handoff"])
                     or (schema in (3, 4) and (item["handoff"]["SchemaVersion"] != schema - 1
                         or item["handoff"]["OriginalManifestSha256"] != state["scope"]["plansSha256"]
                         or item["handoff"]["AcceptedEvidenceSha256"] != scope["acceptedEvidenceSha256"]))):

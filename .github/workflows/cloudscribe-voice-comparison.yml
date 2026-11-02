@@ -18,6 +18,7 @@ on:
       - 'THIRD-PARTY-NOTICES.md'
       - 'licenses/**'
       - 'scripts/**'
+      - 'tools/completion_workflow/**'
       - '.gitattributes'
       - '.github/triggers/**'
       - '.github/workflows/cloudscribe-voice-comparison.yml'
@@ -69,6 +70,8 @@ jobs:
           ./scripts/Test-ChirpArticlePolicy-SelfTests.ps1
           ./scripts/Test-ChirpReservationResumePolicy-SelfTests.ps1
           ./scripts/Test-CompletionWorkflowGate-SelfTests.ps1 -PythonPath (Get-Command python).Source
+          ./scripts/Test-CompletionInterpreterRepair-SelfTests.ps1 -PythonPath (Get-Command python).Source
+          ./scripts/Test-ExpiredInterpreterSuccessor-SelfTests.ps1 -PythonPath (Get-Command python).Source
       - name: Offline durable completion gate and isolated bridge
         shell: pwsh
         run: |
