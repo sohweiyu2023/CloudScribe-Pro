@@ -1,8 +1,8 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using CloudScribe.Application.Generation;
 using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
-using System.Text.Json;
-using System.Security.Cryptography;
 
 namespace CloudScribe.Infrastructure.Tests;
 

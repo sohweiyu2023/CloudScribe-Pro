@@ -2,8 +2,8 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Generation;

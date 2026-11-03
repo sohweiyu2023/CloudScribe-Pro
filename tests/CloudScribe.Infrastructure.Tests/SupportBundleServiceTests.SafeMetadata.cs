@@ -2,10 +2,10 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using CloudScribe.Application.Logging;
+using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.Diagnostics;
 using CloudScribe.Infrastructure.Generation;
-using CloudScribe.Domain.Generation;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
