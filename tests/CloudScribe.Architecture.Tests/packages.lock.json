@@ -580,7 +580,8 @@
           "Microsoft.Extensions.Hosting": "[10.0.13, )",
           "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.13, )",
           "NSec.Cryptography": "[26.4.0, )",
-          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )"
+          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.13, )"
         }
       },
       "cloudscribe.providers.abstractions": {
