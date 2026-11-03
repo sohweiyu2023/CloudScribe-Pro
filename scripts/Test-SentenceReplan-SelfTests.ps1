@@ -8,6 +8,9 @@ if($LASTEXITCODE -ne 0 -or @($pythonTemp).Count -ne 1){throw 'Python synthetic t
 $pythonTemp=[string]$pythonTemp
 if(-not [IO.Path]::IsPathFullyQualified($pythonTemp) -or -not (Test-Path -LiteralPath $pythonTemp -PathType Container)){throw 'Python synthetic temp root is invalid.'}
 Assert-NoLinks $pythonTemp
+# Match the installer's Windows full-path identity (including existing 8.3 aliases).
+$pythonTemp=[IO.Path]::GetFullPath($pythonTemp)
+Assert-NoLinks $pythonTemp
 $root=Join-Path $pythonTemp ('cloudscribe-sentence-tests-'+[Guid]::NewGuid().ToString('N'))
 if($AfterReboot -and $ExpiredTerminal){throw 'Choose exactly one synthetic transition mode.'}
 $fixtureArgs=@($root);if($AfterReboot){$fixtureArgs+='after-reboot'}elseif($ExpiredTerminal){$fixtureArgs+='expired-terminal'}
@@ -42,7 +45,16 @@ foreach($mutation in $mutations){
     Expect-Rejected {Get-ReviewedCompletionGate $profile}
 }
 [IO.File]::WriteAllBytes($ReviewedCompletionSuccessorRunPath,$saved);$ReviewedCompletionSuccessorRunSha256=$f.handoffSha256
-$gate=Get-ReviewedCompletionGate $profile;$passed++
+try{$gate=Get-ReviewedCompletionGate $profile}catch{
+    # Synthetic-only binding evidence: preserve the actual rejection, without changing guards.
+    try{
+    $c=Get-Content -LiteralPath $ReviewedCompletionGatePath -Raw|ConvertFrom-Json
+    $profileFull=[IO.Path]::GetFullPath($profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()
+    $profilePin=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($profileFull))).ToLowerInvariant()
+    [pscustomobject]@{SyntheticBindingFailure=$true;SchemaVersion=$c.SchemaVersion;ProfileMatches=($c.ProfileRootSha256 -ceq $profilePin);ApplicationMatches=([IO.Path]::GetFullPath($c.ApplicationDirectory).TrimEnd([char[]]@('\','/')) -ieq (Join-Path $target 'app'));CandidateMatches=([IO.Path]::GetFullPath($c.CandidateApplicationDirectory).TrimEnd([char[]]@('\','/')) -ieq (Join-Path $package 'app'));AppMatches=((Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash -ieq $c.AppSha256);InfrastructureMatches=((Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash -ieq $c.InfrastructureSha256);Profile=$profile;ApplicationDirectory=$c.ApplicationDirectory;Target=$target;CandidateDirectory=$c.CandidateApplicationDirectory;Package=$package}|Format-List|Out-Host
+    }catch{Write-Host 'Synthetic binding diagnostics unavailable; original rejection preserved.'}
+    throw
+};$passed++
 if(Test-Path -LiteralPath $gate.Config.RegisterPath){throw 'Inspection created successor authority.'};$passed++
 $backup=Join-Path $root 'control-backup';[IO.Directory]::CreateDirectory($backup)|Out-Null
 $entries=@(@((Join-Path $target 'completion-workflow-gate.json'),'gate.json'),@((Join-Path $target 'cloudscribe-install.json'),'install.json'),@((Join-Path $profile '.completion-workflow-required.json'),'required.json'))

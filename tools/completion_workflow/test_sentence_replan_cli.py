@@ -19,7 +19,7 @@ def synthetic_reboot(f,old):
     """Construct ONLY a disposable test clock epoch; never edits a production journal."""
     import tempfile,time
     from datetime import datetime,timezone
-    if not old.path.is_relative_to(Path(tempfile.gettempdir())):raise ValueError('SyntheticRootRequired')
+    if any(p.is_symlink() or p.is_junction() for p in (old.path,*old.path.parents)) or not old.path.resolve().is_relative_to(Path(tempfile.gettempdir()).resolve()):raise ValueError('SyntheticRootRequired')
     with old._open() as db:
         db.execute('DROP TRIGGER immutable_events_update')
         previous=old.scope_sha
@@ -43,7 +43,7 @@ def synthetic_reboot(f,old):
 def synthetic_expired_window(f,old):
     """Disposable old scope expires naturally; no OS clock or live data changes."""
     import tempfile
-    if not old.path.is_relative_to(Path(tempfile.gettempdir())):raise ValueError('SyntheticRootRequired')
+    if any(p.is_symlink() or p.is_junction() for p in (old.path,*old.path.parents)) or not old.path.resolve().is_relative_to(Path(tempfile.gettempdir()).resolve()):raise ValueError('SyntheticRootRequired')
     with old._open() as db:before=old._read(db)
     time.sleep(max(0,m.utc(before['scope']['endUtc'])/1e6-time.time()+0.25))
     start=datetime.now(timezone.utc);observed=m.utc(start.isoformat().replace('+00:00','Z'));mono=time.monotonic_ns()//1000
