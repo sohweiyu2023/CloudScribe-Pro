@@ -83,8 +83,8 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
         GenerationProviderRequest request,
         CancellationToken cancellationToken)
     {
-        Guid? privateTicket = _transport.BeginPrivateCapture(request, _account.CredentialReferenceId);
         bool required = RequiresPrivateCapture(request);
+        Guid? privateTicket = _transport.BeginPrivateCapture(request, _account.CredentialReferenceId, required);
         if (required && privateTicket is null) throw new PrivateDiagnosticNotReadyException();
         try
         {
@@ -92,7 +92,8 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
                 new GoogleHttpTransportRequest(
                     _account.Endpoint,
                     _account.CredentialReferenceId,
-                    request.CompiledPayload, PrivateDiagnosticTicket: privateTicket, RequirePrivateDiagnosticCapture: required),
+                    request.CompiledPayload, PrivateDiagnosticTicket: privateTicket, RequirePrivateDiagnosticCapture: required,
+                    IdempotencyKeySha256: System.Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(request.IdempotencyKey)))),
                 cancellationToken).ConfigureAwait(false);
             return (response, false);
         }

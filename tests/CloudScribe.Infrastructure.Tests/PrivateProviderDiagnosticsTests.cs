@@ -107,9 +107,10 @@ public sealed partial class PrivateProviderDiagnosticsTests
         public PrivateErrorCaptureBinding Binding { get; }
         public GoogleGenerationProvider Provider { get; }
         private readonly HttpClient _http;
-        public Fixture(IPrivateProviderErrorPersistence? persistence = null, ILogger<GoogleGenerationHttpTransport>? logger = null)
+        public Fixture(IPrivateProviderErrorPersistence? persistence = null, ILogger<GoogleGenerationHttpTransport>? logger = null,
+            ILogger<GooglePrivateErrorDiagnostics>? privateLogger = null)
         {
-            Store = persistence is null ? new(Root, Clock) : new(persistence, Clock);
+            Store = persistence is null ? new(Root, Clock, logger: privateLogger) : new(persistence, Clock, logger: privateLogger);
             byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new { input = new { text = "SYNTHETIC PRIVATE INPUT DOCUMENT WITH A LONG SECRET FRAGMENT" } });
             Request = new(GoogleGenerationProvider.StableProviderId, GoogleGenerationProvider.SynthesizeOperationStableId, "synthetic-account", "synthetic-key", payload, "mp3");
             Binding = new(Guid.NewGuid(), Guid.NewGuid(), 7, "synthetic-account", "synthetic-project", "synthetic-voice", "synthetic-reference", Convert.ToHexStringLower(SHA256.HashData(payload)));

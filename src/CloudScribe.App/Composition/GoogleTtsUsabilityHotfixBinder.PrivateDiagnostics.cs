@@ -54,8 +54,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             dialog.Closed += (_, _) => { lifetime.Cancel(); if (active is { IsCompleted: false }) privateDiagnostics.Disarm(); };
             var status = NewDescription(string.Empty);
             var body = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 12 };
-            body.Children.Add(NewDescription("Private, possibly sensitive provider text. Known credentials and input echoes are redacted; anonymity is not guaranteed. Local only: excluded from normal logs, exports and uploads. Active records expire after 24 hours and are removed on store access; external copies may persist."));
-            const string consentText = "Observe one response for this exact saved request; retain only HTTP400/INVALID_ARGUMENT messages. Sends and approves nothing.";
+            body.Children.Add(NewDescription("Private, possibly sensitive provider text. Known credentials and input echoes are redacted; anonymity is not guaranteed. Selected-field records are unencrypted and inherit folder permissions; protected response records require Windows current-user protection. Local only: excluded from normal logs, exports and uploads. Records expire after 24 hours and are removed on store access; physical deletion while closed and external-copy cleanup are not guaranteed."));
+            const string consentText = "I consent to one response for this exact saved request in the selected private capture mode. Sends and approves nothing.";
+            const string envelopeText = "Use protected response evidence: bounded redacted errors across HTTP statuses, including malformed/partial responses. May retain article fragments. Windows current-user protection, not protection against administrators. Otherwise retain only HTTP400/INVALID_ARGUMENT explanation fields.";
+            var detailed = new CheckBox { Content = new TextBlock { Text = envelopeText, TextWrapping = TextWrapping.Wrap, MaxWidth = 520 } };
+            AutomationProperties.SetName(detailed, envelopeText);
             var consent = new CheckBox { Content = new TextBlock { Text = consentText, TextWrapping = TextWrapping.Wrap, MaxWidth = 520 } };
             AutomationProperties.SetName(consent, consentText);
             var arm = NewButton("Enable once for selected saved request (10 minutes)"); arm.IsEnabled = false;
@@ -70,7 +73,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     status.Text = (privateDiagnostics.IsArmed ? "Enabled for one exact request; no paid permission is granted. " : "Capture is off. ") + privateDiagnostics.PersistenceStatus;
                     var records = await privateDiagnostics.ReadRecordsAsync(lifetime.Token).ConfigureAwait(true);
                     lifetime.Token.ThrowIfCancellationRequested();
-                    view.Text = string.Join("\n\n", records.Select(x => $"PRIVATE {x.CreatedUtc:O} - request {x.PayloadSha256[..12]} - {(x.Truncated ? "truncated" : "bounded")}:\n{x.Message}"));
+                    view.Text = string.Join("\n\n", records.Select(x => $"PRIVATE {x.CreatedUtc:O} - request {x.PayloadSha256[..12]} - {(x.Truncated ? "truncated" : "bounded")}{(x.ProviderDetailsOmitted is true ? "; other provider details omitted" : x.ProviderDetailsOmitted is null ? "; legacy detail completeness not recorded" : string.Empty)}:\n{x.Message}" +
+                        (x.Response is { } response ? $"\nHTTP {response.HttpStatus}; {response.ErrorStatus}; {response.ReadState}; {response.ParseState}; read completed={response.ReadCompleted}; redaction={response.RedactionApplied}; omitted={response.DetailsOmitted}; truncated={response.Truncated}\n{response.RedactedBody}" : string.Empty)));
                 }
                 catch (OperationCanceledException error) when (lifetime.IsCancellationRequested)
                 { _ = ReportLocalFailure(LocalRequestStage.CaptureRead, error); }
@@ -85,11 +89,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             };
             arm.Click += (_, _) =>
             {
-                if (consent.IsChecked == true) active = ArmPrivateDiagnosticsAsync(model, arm, status, () => consent.IsChecked == true, lifetime.Token);
+                bool broad = detailed.IsChecked == true;
+                if (consent.IsChecked == true) active = ArmPrivateDiagnosticsAsync(model, arm, status,
+                    () => consent.IsChecked == true && (detailed.IsChecked == true) == broad, lifetime.Token,
+                    broad ? PrivateErrorCaptureMode.ProtectedResponseEnvelope : PrivateErrorCaptureMode.SelectedExplanation);
             };
+            detailed.IsCheckedChanged += (_, _) => { consent.IsChecked = false; _privateCaptureUiBinding = null; privateDiagnostics.Disarm(); };
             cancel.Click += (_, _) => { _privateCaptureUiBinding = null; privateDiagnostics.Disarm(); consent.IsChecked = false; activeRead = RefreshAsync(); };
             refresh.Click += (_, _) => { if (activeRead is not { IsCompleted: false }) activeRead = RefreshAsync(); };
-            foreach (Control c in new Control[] { status, consent, arm, cancel, refresh, view, CreateHistoricalCloseButton(dialog) }) body.Children.Add(c);
+            foreach (Control c in new Control[] { status, detailed, consent, arm, cancel, refresh, view, CreateHistoricalCloseButton(dialog) }) body.Children.Add(c);
             dialog.Content = new ScrollViewer { Content = body }; activeRead = RefreshAsync();
             await dialog.ShowDialog(owner).ConfigureAwait(true);
             if (active is not null) await active.ConfigureAwait(true);
@@ -100,13 +108,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         finally { _privateDialogOpen = false; }
     }
 
-    private async Task ArmPrivateDiagnosticsAsync(ShellViewModel model, Button arm, TextBlock status, Func<bool> confirmed, CancellationToken token)
+    private async Task ArmPrivateDiagnosticsAsync(ShellViewModel model, Button arm, TextBlock status, Func<bool> confirmed, CancellationToken token,
+        PrivateErrorCaptureMode mode = PrivateErrorCaptureMode.SelectedExplanation)
     {
         arm.IsEnabled = false;
         try
         {
             var binding = await new GooglePrivateDiagnosticOptIn(privateDiagnostics, (IGoogleRecoveryCurrentCompilation?)chirpPreparation ?? privateDiagnosticCompilation)
-                .PrepareAsync(model, confirmed, token).ConfigureAwait(true);
+                .PrepareAsync(model, confirmed, token, mode).ConfigureAwait(true);
             if (binding is null)
             {
                 _privateCaptureUiBinding = null; privateDiagnostics.Disarm();

@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using CloudScribe.Application.Generation;
 using CloudScribe.Application.Logging;
 using CloudScribe.Domain.Generation;
 using Microsoft.Extensions.Logging;
@@ -10,6 +12,58 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed partial class GoogleGenerationHttpTransport
 {
+    private void RequireCompletionSynthesis(GoogleHttpTransportRequest request, byte[] payload, Guid correlation)
+    {
+        bool required = _completionGate?.BeforeSynthesis(request.CredentialReferenceId, request.Endpoint, payload,
+            correlation, request.IdempotencyKeySha256) == true;
+        if (required && _privateDiagnostics?.IsActiveFor(request.PrivateDiagnosticTicket, payload, requireProtectedEnvelope: true) != true)
+            throw new PrivateDiagnosticNotReadyException();
+    }
+    private void ObserveMissingResponse(GoogleHttpTransportRequest request, string correlation, int status, byte[] input)
+    {
+        CloudScribeLog.Observe(() => _privateDiagnostics?.Observe(request.PrivateDiagnosticTicket,
+            status, ReadOnlyMemory<byte>.Empty, input, string.Empty, correlation, false,
+            status == 0 ? "NoResponseHeaders" : "HeadersWithoutBody", 0));
+    }
+    private void ObserveProviderResponse(Guid? ticket, string correlation, int status, byte[] bytes, byte[] input, string token)
+    {
+        if (status != 200) ObserveErrorResponse(correlation, status, bytes);
+        var retention = _privateDiagnostics?.Observe(ticket, status, bytes, input, token, correlation)
+            ?? GoogleExplanationRetentionState.NoActivePrivateTicket;
+        if (status != 200) ObserveExplanationEvidence(correlation, status, bytes, retention);
+    }
+
+    private void EndTransportObservation(Guid? ticket, string correlation, GoogleSynthesisStage stage, int status, long started)
+    {
+        _privateDiagnostics?.End(ticket);
+        Observe(() =>
+        {
+            long elapsed = checked((long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            CloudScribeLog.GoogleTransportEnded(_logger, correlation, stage, status, elapsed);
+        });
+    }
+
+    private void ObserveRequestId(string correlation, HttpResponseHeaders headers) => Observe(() =>
+    {
+        foreach (var (name, kind) in new[] { ("x-goog-request-id", GoogleProviderRequestIdHeader.GoogleRequestId),
+            ("x-request-id", GoogleProviderRequestIdHeader.RequestId), ("x-cloud-trace-context", GoogleProviderRequestIdHeader.CloudTraceContext) })
+        {
+            if (!headers.NonValidated.TryGetValues(name, out var values)) continue;
+            string[] bounded = values.Take(2).ToArray();
+            var state = bounded.Length != 1 ? GoogleProviderRequestIdState.Multiple
+                : bounded[0].Length > 256 ? GoogleProviderRequestIdState.Oversized
+                : string.IsNullOrWhiteSpace(bounded[0]) ? GoogleProviderRequestIdState.Invalid : GoogleProviderRequestIdState.PresentHashed;
+            string? hash = state == GoogleProviderRequestIdState.PresentHashed
+                ? Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(bounded[0]))) : null;
+            CloudScribeLog.GoogleRequestIdEvidence(_logger, correlation, kind, state, hash);
+            return;
+        }
+        CloudScribeLog.GoogleRequestIdEvidence(_logger, correlation, GoogleProviderRequestIdHeader.None, GoogleProviderRequestIdState.Absent, null);
+    });
+
+    private void ObserveExplanationEvidence(string correlation, int status, byte[] bytes, GoogleExplanationRetentionState retention) => Observe(() =>
+        CloudScribeLog.GoogleExplanationEvidence(_logger, correlation, status, bytes.Length, retention));
+
     private void ObserveErrorResponse(string correlation, int status, byte[] bytes) => Observe(() =>
     {
         var details = GoogleErrorDetailParser.Parse(bytes);
@@ -32,13 +86,17 @@ public sealed partial class GoogleGenerationHttpTransport
             diagnostic.Message, diagnostic.MessageUtf16Characters, diagnostic.Details, diagnostic.DetailCount, diagnostic.MessageHint);
     });
 
-    private async Task<byte[]> ReadObservedResponseAsync(HttpResponseMessage response, int maximum, string correlation, CancellationToken token)
+    private async Task<byte[]> ReadObservedResponseAsync(HttpResponseMessage response, int maximum, string correlation,
+        Guid? privateTicket, byte[] input, string credential, CancellationToken token)
     {
         var observation = new ResponseReadObservation();
         var headers = CaptureHeaders(response.Content.Headers);
         try { return await ReadResponseBytesAsync(response, maximum, observation, token).ConfigureAwait(false); }
         finally
         {
+            if (observation.State != GoogleResponseReadState.Complete)
+                CloudScribeLog.Observe(() => _privateDiagnostics?.Observe(privateTicket, (int)response.StatusCode,
+                    observation.Prefix.ToArray(), input, credential, correlation, false, observation.State.ToString(), observation.Bytes));
             Observe(() =>
             {
                 var length = LengthState(headers, observation);
@@ -112,6 +170,8 @@ public sealed partial class GoogleGenerationHttpTransport
                 var read = await stream.ReadAsync(rented.AsMemory(), cancellationToken).ConfigureAwait(false);
                 if (read == 0) break;
                 observation.Bytes = checked(observation.Bytes + read);
+                if ((int)response.StatusCode != 200 && observation.Prefix.Count < 16384)
+                    observation.Prefix.AddRange(rented.AsSpan(0, Math.Min(read, 16384 - observation.Prefix.Count)).ToArray());
                 if (buffer.Length + read > maximumResponseBytes)
                 {
                     observation.State = GoogleResponseReadState.Oversize;
@@ -134,6 +194,7 @@ public sealed partial class GoogleGenerationHttpTransport
     {
         public int Bytes { get; set; }
         public GoogleResponseReadState State { get; set; } = GoogleResponseReadState.Reading;
+        public List<byte> Prefix { get; } = [];
     }
 
     private sealed record ResponseHeaderObservation(GoogleResponseMediaType MediaType, long? DeclaredLength, bool InvalidLength);

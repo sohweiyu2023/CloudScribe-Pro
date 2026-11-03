@@ -14,12 +14,20 @@ public static partial class DiagnosticRedactor
 
     public static string Sanitize(string? value)
     {
+        var result = SanitizeBounded(value, MaximumInputLength, MaximumFieldLength);
+        return result.WasTruncated ? result.Text + "\u2026" : result.Text;
+    }
+
+    internal static DiagnosticRedactionResult SanitizePrivateProviderExplanation(string value) => SanitizeBounded(value, 16_384, 16_384);
+
+    private static DiagnosticRedactionResult SanitizeBounded(string? value, int maximumInput, int maximumOutput)
+    {
         if (string.IsNullOrEmpty(value))
         {
-            return string.Empty;
+            return new(string.Empty, false);
         }
 
-        string boundedValue = TruncateUtf16Safely(value, MaximumInputLength, out bool inputWasTruncated);
+        string boundedValue = TruncateUtf16Safely(value, maximumInput, out bool inputWasTruncated);
         string sanitized = ControlCharacters().Replace(boundedValue, " ");
         sanitized = AuthorizationHeader().Replace(sanitized, "${name}=[REDACTED]");
         sanitized = SecretAssignment().Replace(sanitized, "${name}=[REDACTED]");
@@ -30,8 +38,8 @@ public static partial class DiagnosticRedactor
         sanitized = WindowsUserPath().Replace(sanitized, "${prefix}\\[USER]\\");
         sanitized = MacUserPath().Replace(sanitized, "/Users/[USER]/");
         sanitized = UnixHomePath().Replace(sanitized, "/home/[USER]/");
-        sanitized = TruncateUtf16Safely(sanitized, MaximumFieldLength, out bool outputWasTruncated);
-        return inputWasTruncated || outputWasTruncated ? sanitized + "…" : sanitized;
+        sanitized = TruncateUtf16Safely(sanitized, maximumOutput, out bool outputWasTruncated);
+        return new(sanitized, inputWasTruncated || outputWasTruncated);
     }
 
     private static string TruncateUtf16Safely(string value, int maximumCodeUnits, out bool wasTruncated)

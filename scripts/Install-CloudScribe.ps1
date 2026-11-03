@@ -119,7 +119,15 @@ function Invoke-CompletionGate($Gate,[string]$Command,[Guid]$OperationId,[string
         $result=$output|ConvertFrom-Json
         $safeReason=if($result.PSObject.Properties.Name -contains 'reason' -and $result.reason -cin @('Unknown','Expired','ClockRollback','ClockDiscontinuity','PendingOutcome','Limit','PinMismatch','Storage','Protocol','Stopped','SuccessorHeadMismatch','SuccessorDatabaseMismatch','SuccessorScopeMismatch','SuccessorPending','PilotEvidenceMissing','PilotEvidenceMismatch','SuccessorNotActivated','RunRetired')){$result.reason}else{'Unknown'}
         $safeCode=if($result.PSObject.Properties.Name -contains 'code' -and $result.code -cin @('SuccessorHeadMismatch','TerminalDatabasePin','TerminalDatabaseChanged','SuccessorNotActivated','PredecessorNotRetired','RunRetired','OutsideWindow','PilotNotAccepted','PilotAttempt','PilotOutputIncomplete','PilotStoredPlan','PilotPolicyPin','PilotAttemptIdentity','PilotOutputPin','PilotAcceptedIdentity','PilotMediaLocation','PilotMediaPin','PilotMappingAbsent','PilotMappingBound','PilotMappingChain','PilotMappingIdentity','PilotMappingDispatch','PilotMappingReceipt','ClosedDatabaseRequired','TerminalAttempt','TerminalQueue','TerminalFailureEvidence','AcceptedWorkCannotRetire','RecoverableOutputCannotRetire','PendingOrUncertainWork','RetirementIdentityMismatch','SuccessorAlreadyExists','SuccessorAlreadyActivated','HandoffPin','HandoffConfigPin','HandoffScopeConfig','HandoffNewScopeBinding','HandoffApplicationLocation','SuccessorScopeBinding','SuccessorActivationReplay','ContinuationAcceptedAttempt','ContinuationAcceptedBounds','ContinuationAcceptedDuplicateOrUnknown','ContinuationAcceptedIdentity','ContinuationAcceptedOmitted','ContinuationAcceptedOrChangedCoverage','ContinuationAcceptedPin','ContinuationAcceptedProof','ContinuationAcceptedProvenance','ContinuationAcceptedSchema','ContinuationAdmissionKind','ContinuationAllInBudget','ContinuationAttemptLimit','ContinuationBudgetSchema','ContinuationBudgetType','ContinuationDatabaseChanged','ContinuationDatabasePin','ContinuationEnvelopeBound','ContinuationExactBudgetOrCoverage','ContinuationFinancialBound','ContinuationFinancialChanged','ContinuationHandoffBinding','ContinuationHeldNotClean','ContinuationHistoricalPolicy','ContinuationManifest','ContinuationMappingBound','ContinuationMappingPin','ContinuationMediaLocation','ContinuationMediaPin','ContinuationOriginalManifest','ContinuationOutputIncomplete','ContinuationOutputPin','ContinuationPolicyBinding','ContinuationProgressIdentity','ContinuationRemainingCount','ContinuationRemainingNotUntouched','ContinuationResumeTarget','ContinuationRetainedPolicyPin','ContinuationRetentionNotAdmitted','ContinuationStoredPlan','WholeArticleGrantBinding','WholeArticleHistoryBinding','WholeArticlePredecessorNotExpired','InterpreterWithdrawalSchema','InterpreterWithdrawalIdentity','InterpreterWithdrawalPin','InterpreterWithdrawalBackup','InterpreterWithdrawalReadback','InterpreterWithdrawalState','InterpreterWithdrawalClock','InterpreterTransitionSchema','InterpreterTransitionBinding','InterpreterEvidencePin','InterpreterEvidenceBinding','InterpreterPendingReadback','SentenceManifest','SentenceManifestBounds','SentenceProposal','SentenceHistory','SentenceCoverage','SentenceRemainingCount','SentenceFirstStage','SentenceLegacy','SentenceFailure','SentenceAdmissionKind','SentencePolicyBinding','SentenceReuse','SentenceCounterBinding','SentenceCounterOrWindowBinding','SentenceLegacyPin','ClockEpochEvidence','ClockEpochPolicyDeadline','FreshWindowApprovalRequired','ExpiredWindowBinding','ExpiredPredecessorRequired')){$result.code}else{'Unclassified'}
-        if($process.ExitCode -ne 0 -or $result.PSObject.Properties.Name -contains 'rejected' -or ($Command -in @('complete','complete-build','complete-successor','complete-interpreter-withdrawal') -and $result.outcome -cne 'Succeeded')){throw "Completion operation stopped: $safeReason [$safeCode]. Reconcile its private register; do not retry automatically."}
+        if($result.PSObject.Properties.Name -contains 'code' -and $result.code -cin @('DiagnosticScope','DiagnosticManifest','DiagnosticCoverageOrBudget','DiagnosticPolicy','DiagnosticBudget','DiagnosticNativePin','DiagnosticParent','DiagnosticAcceptedCoverage','DiagnosticChild','DiagnosticChildExists','DiagnosticOwnedClaim','DiagnosticFinancialChanged','DiagnosticHistory','DiagnosticPayload','DiagnosticInstalledPolicy','DiagnosticOperation','DiagnosticDispatch','DiagnosticDispatchReplay','DiagnosticCounterOrEpoch','DiagnosticDatabasePin','DiagnosticWindow','TransitionFinancialAdmissionExists')){$safeCode=$result.code}
+        $safeType=if($result.PSObject.Properties.Name -contains 'failureExceptionType' -and $result.failureExceptionType -cin @('Other','ValueError','TypeError','KeyError','IndexError','AttributeError','AssertionError','JSONDecodeError','UnicodeDecodeError','UnicodeEncodeError','MemoryError','OSError','PermissionError','FileNotFoundError','TimeoutError','OperationalError','DatabaseError','IntegrityError','EOFError','OverflowError','RuntimeError','Rejected')){$result.failureExceptionType}else{'Other'}
+        $safeComponent=if($result.PSObject.Properties.Name -contains 'failureComponent' -and $result.failureComponent -cin @('bridge','register','unavailable')){$result.failureComponent}else{'unavailable'}
+        $safeLine=0
+        if($result.PSObject.Properties.Name -contains 'failureSourceLine' -and $result.failureSourceLine -is [ValueType]){
+            $candidateLine=0
+            if([int]::TryParse([string]$result.failureSourceLine,[ref]$candidateLine) -and $candidateLine -ge 1 -and $candidateLine -le 10000){$safeLine=$candidateLine}
+        }
+        if($process.ExitCode -ne 0 -or $result.PSObject.Properties.Name -contains 'rejected' -or ($Command -in @('complete','complete-build','complete-successor','complete-interpreter-withdrawal') -and $result.outcome -cne 'Succeeded')){throw "Completion operation stopped: $safeReason [$safeCode]; $safeComponent`:$safeLine ($safeType). Reconcile its private register; do not retry automatically."}
         if($Command -in @('claim-build','claim-successor','claim-interpreter-withdrawal') -and ($result.id -cne $OperationId.ToString('D') -or $result.identitySha256 -cne $Identity -or $result.scopeSha256 -cne $Gate.Config.ScopeSha256)){throw 'The transition claim response is not bound to this exact operation.'}
         if($Command -in @('inspect-build','check-build','inspect-successor','check-successor','inspect-interpreter-withdrawal','check-interpreter-withdrawal') -and $result.valid -ne $true){throw 'Transition readiness was not positively verified.'}
         return $result
@@ -143,10 +151,23 @@ function Get-ReviewedCompletionSuccessorRun([string]$GatePath,[string]$GatePin,$
             if($handoffVersion -eq 3 -and $json.RootElement.GetProperty('TransitionKind').GetString() -ceq 'whole-article-interpreter-continuation'){
                 foreach($field in @('PreviousPythonSha256','NewPythonSha256','InterpreterEvidencePath','InterpreterEvidenceSha256','RepairApprovalSha256')){$fields[$field]='String'}
             }
-        }elseif($handoffVersion -eq 4){
+        }elseif($handoffVersion -in @(4,5,6)){
             $fields.TransitionKind='String';$fields.OriginalManifestSha256='String';$fields.AcceptedEvidenceSha256='String'
             $fields.FailedAuthorizationId='NonemptyGuid';$fields.FailedLocalAttemptId='String';$fields.FailedPlanSha256='String';$fields.FailedCoverageOrdinal='Int32';$fields.FailedPayloadSha256='String';$fields.FailedPayloadBytes='Int32'
             foreach($field in @('UsedRefreshes','UsedAdmissions','UsedResumeAdmissions')){$fields[$field]='Int32'}
+            if($handoffVersion -in @(5,6)){
+                $fields.InheritedClockEpochEvidence='Any'
+                $epoch=$json.RootElement.GetProperty('InheritedClockEpochEvidence')
+                if($epoch.ValueKind -ne [Text.Json.JsonValueKind]::Null){
+                    Assert-RecoveryRecord $epoch @{ObservedUtcMicros='Int64';ObservedMonoMicros='Int64';TrustedUtcLowerMicros='Int64';TrustedUtcUpperMicros='Int64';PreviousLastGoodUtcMicros='Int64';WindowsBootUtc='String';BootReadbackSha256='String'}
+                    if($epoch.GetProperty('BootReadbackSha256').GetString() -cnotmatch '^[a-f0-9]{64}$'){throw 'Inherited clock evidence hash is invalid.'}
+                }
+            }
+            if($handoffVersion -eq 6){
+                $fields.ClockEpochEvidence='Object';$fields.WindowApprovalSha256='String'
+                Assert-RecoveryRecord $json.RootElement.GetProperty('ClockEpochEvidence') @{ObservedUtcMicros='Int64';ObservedMonoMicros='Int64';TrustedUtcLowerMicros='Int64';TrustedUtcUpperMicros='Int64';PreviousLastGoodUtcMicros='Int64';WindowsBootUtc='String';BootReadbackSha256='String'}
+                if($json.RootElement.GetProperty('ClockEpochEvidence').GetProperty('BootReadbackSha256').GetString() -cnotmatch '^[a-f0-9]{64}$'){throw 'Fresh diagnostic clock evidence hash is invalid.'}
+            }
             if($json.RootElement.GetProperty('TransitionKind').GetString() -cin @('same-window-sentence-replan-after-reboot','expired-terminal-sentence-replan')){
                 $fields.ClockEpochEvidence='Object'
                 if($json.RootElement.GetProperty('TransitionKind').GetString() -ceq 'expired-terminal-sentence-replan'){$fields.WindowApprovalSha256='String'}
@@ -156,14 +177,14 @@ function Get-ReviewedCompletionSuccessorRun([string]$GatePath,[string]$GatePin,$
         Assert-RecoveryRecord $json.RootElement $fields
     }finally{$json.Dispose()}
     $record=[IO.File]::ReadAllText($handoffPath)|ConvertFrom-Json
-    if(($record.SchemaVersion -eq 2 -and $record.TransitionKind -cne 'accepted-continuation') -or ($record.SchemaVersion -eq 3 -and $record.TransitionKind -cnotin @('whole-article-continuation','whole-article-interpreter-continuation')) -or ($record.SchemaVersion -eq 4 -and $record.TransitionKind -cnotin @('same-window-sentence-replan','same-window-sentence-replan-after-reboot','expired-terminal-sentence-replan')) -or $record.NewGateSha256 -cne $GatePin -or $record.NewScopeSha256 -cne $Config.ScopeSha256 -or
+    if(($record.SchemaVersion -eq 2 -and $record.TransitionKind -cne 'accepted-continuation') -or ($record.SchemaVersion -eq 3 -and $record.TransitionKind -cnotin @('whole-article-continuation','whole-article-interpreter-continuation')) -or ($record.SchemaVersion -eq 4 -and $record.TransitionKind -cnotin @('same-window-sentence-replan','same-window-sentence-replan-after-reboot','expired-terminal-sentence-replan')) -or ($record.SchemaVersion -eq 5 -and $record.TransitionKind -cne 'sentence-evidence-diagnostic') -or ($record.SchemaVersion -eq 6 -and $record.TransitionKind -cne 'expired-sentence-evidence-diagnostic') -or $record.NewGateSha256 -cne $GatePin -or $record.NewScopeSha256 -cne $Config.ScopeSha256 -or
         [IO.Path]::GetFullPath($record.NewConfigPath) -ine [IO.Path]::GetFullPath($GatePath) -or
         ($record.PreviousGateSha256 -cne $OldGatePin -and (-not $CompletePendingCompletionSuccessor -or $GatePin -cne $OldGatePin))){throw 'The successor handoff does not bind the observed predecessor and reviewed successor.'}
     $hashFields=@('SourceApprovalSha256','PreviousGateSha256','PreviousScopeSha256','ExpectedPreviousHeadSha256','NewGateSha256','NewScopeSha256','DatabaseSha256')
     $hashFields+=if($record.SchemaVersion -eq 1){@('FailedPlanSha256','FailedPayloadSha256')}else{@('OriginalManifestSha256','AcceptedEvidenceSha256')}
-    if($record.SchemaVersion -eq 4){
+    if($record.SchemaVersion -in @(4,5,6)){
         $hashFields+=@('FailedPlanSha256','FailedPayloadSha256')
-        if($record.TransitionKind -ceq 'expired-terminal-sentence-replan'){
+        if($record.TransitionKind -cin @('expired-terminal-sentence-replan','expired-sentence-evidence-diagnostic')){
             $hashFields+='WindowApprovalSha256'
             if($record.WindowApprovalSha256 -cne $record.SourceApprovalSha256){throw 'Fresh exact window authorization is required.'}
         }
@@ -560,6 +581,27 @@ function Assert-ChirpRange($Range){
     Assert-RecoveryRecord $Range @{StartScalar='Int32';EndScalarExclusive='Int32';TextSha256='String';ReusedReceiptSha256='NullableString'}
     if($Range.GetProperty('StartScalar').GetInt32() -lt 0 -or $Range.GetProperty('EndScalarExclusive').GetInt32() -le $Range.GetProperty('StartScalar').GetInt32()){throw 'Article coverage range is invalid.'}
 }
+function Get-ChirpDiagnosticElementSha256($Element){
+    # Diagnostic schema4 uses exact compact native subobject bytes, not a guessed cross-language canonicalization.
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Element.GetRawText()))).ToLowerInvariant()
+}
+function Assert-ChirpDiagnosticEvidence($Root){
+    $d=$Root.GetProperty('DiagnosticEvidence')
+    Assert-RecoveryRecord $d @{Version='Int32';Purpose='String';ProposalSha256='String';SuccessorGrantSha256='String';PrivateCaptureConsentSha256='String';RequiredCaptureMode='Int32'}
+    if(@($Root.EnumerateObject().Name) -cnotcontains 'SuccessorGrant' -or $Root.GetProperty('Articles').GetArrayLength() -ne 1){throw 'Diagnostic admission requires one exact successor.'}
+    $proposal=$Root.GetProperty('Articles')[0].GetProperty('Proposal')
+    $b=$Root.GetProperty('Budget')
+    if(@($proposal.EnumerateObject().Name) -cnotcontains 'SentenceSuccessor' -or @($proposal.EnumerateObject().Name) -ccontains 'Refinement' -or
+        $d.GetProperty('Version').GetInt32() -ne 1 -or $d.GetProperty('Purpose').GetString() -cne 'unchanged-provider-evidence' -or
+        $d.GetProperty('RequiredCaptureMode').GetInt32() -ne 1 -or $d.GetProperty('PrivateCaptureConsentSha256').GetString() -cnotmatch '^[a-f0-9]{64}$' -or
+        $d.GetProperty('PrivateCaptureConsentSha256').GetString() -ceq ('0'*64) -or $d.GetProperty('PrivateCaptureConsentSha256').GetString() -ceq $Root.GetProperty('SourceApprovalSha256').GetString() -or
+        ($b.GetProperty('ProjectCeilingMinorUnits').GetInt64()-$b.GetProperty('ProjectCommittedMinorUnits').GetInt64()) -ne 1 -or
+        ($b.GetProperty('AllocationCeilingMinorUnits').GetInt64()-$b.GetProperty('AllocationCommittedMinorUnits').GetInt64()) -ne 1 -or
+        $d.GetProperty('ProposalSha256').GetString() -cne (Get-ChirpDiagnosticElementSha256 $proposal) -or
+        $d.GetProperty('SuccessorGrantSha256').GetString() -cne (Get-ChirpDiagnosticElementSha256 $Root.GetProperty('SuccessorGrant'))){
+        throw 'Diagnostic purpose must preserve the full sentence proposal, one-attempt grant and protected private consent.'
+    }
+}
 function Assert-ChirpSuccessorGrant($Root){
     if(@($Root.EnumerateObject().Name) -cnotcontains 'SuccessorGrant'){return}
     $grant=$Root.GetProperty('SuccessorGrant')
@@ -582,14 +624,15 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
     $legacy=@($Root.EnumerateObject().Name) -ccontains 'LegacyAssociations'
     if($legacy){$fields.LegacyAssociations='Array';$fields.LegacyAssociationRows='Array'}
     $schema=$Root.GetProperty('SchemaVersion').GetInt32()
-    if($schema -in @(2,3)){
+    if($schema -in @(2,3,4)){
         $fields.PriorSuccessorAttemptRows='Array'
         if(@($Root.EnumerateObject().Name) -ccontains 'SuccessorGrant'){$fields.SuccessorGrant='Object'}
     }
     if($schema -eq 3){$fields.WholeArticleGeneration='Object'}
+    if($schema -eq 4){$fields.DiagnosticEvidence='Object'}
     Assert-RecoveryRecord $Root $fields
     if($legacy){Assert-ChirpLegacyAssociations $Root}
-    if($schema -notin @(1,2,3) -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
+    if($schema -notin @(1,2,3,4) -or $Root.GetProperty('Currency').GetString() -cne 'USD' -or $Root.GetProperty('Scale').GetInt32() -ne 2 -or
         $Root.GetProperty('ExpiresAtUtc').GetDateTimeOffset() -le $ValidationTime -or ($Root.GetProperty('MaximumNewAttempts').GetInt32() -lt 1 -or $Root.GetProperty('MaximumNewAttempts').GetInt32() -gt 10000) -or
         $Root.GetProperty('MaximumAdditionalReservationMinorUnits').GetInt64() -lt 1){throw 'Article grant identity, expiry or limits are invalid.'}
     if([string]::IsNullOrWhiteSpace($Root.GetProperty('AccountId').GetString()) -or [string]::IsNullOrWhiteSpace($Root.GetProperty('ProjectId').GetString())){throw 'Article account/project is missing.'}
@@ -602,7 +645,8 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
         if($committed -lt 0 -or $ceiling -lt $committed -or $maximum -gt $ceiling-$committed){throw 'Article allocation omits retained commitments or exceeds its ceiling.'}
     }
     $pinSets=@($Root.GetProperty('ScopeRows'),$Root.GetProperty('PriorArticleAttemptRows'),$budget.GetProperty('QueueRows'),$budget.GetProperty('SpendRows'),$budget.GetProperty('RecoveryRows'),$budget.GetProperty('TransitionRows'))
-    if($schema -in @(2,3)){$pinSets+=@($Root.GetProperty('PriorSuccessorAttemptRows'));Assert-ChirpSuccessorGrant $Root}
+    if($schema -in @(2,3,4)){$pinSets+=@($Root.GetProperty('PriorSuccessorAttemptRows'));Assert-ChirpSuccessorGrant $Root}
+    if($schema -eq 4){Assert-ChirpDiagnosticEvidence $Root}
     if($schema -eq 3){
         if(@($Root.EnumerateObject().Name) -ccontains 'SuccessorGrant'){throw 'Whole-article jobs cannot admit diagnostic successors.'}
         $whole=$Root.GetProperty('WholeArticleGeneration')
@@ -638,7 +682,7 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
         if($sentence){$planFields.SentenceSuccessor='Object'}
         Assert-RecoveryRecord $plan $planFields
         if($sentence){
-            if($schema -notin @(2,3) -or $plan.GetProperty('PlannerVersion').GetString() -cne 'chirp3-existing-sentence-groups-v1'){throw 'Sentence successor requires its explicit schema and compiler version.'}
+            if($schema -notin @(2,3,4) -or $plan.GetProperty('PlannerVersion').GetString() -cne 'chirp3-existing-sentence-groups-v1'){throw 'Sentence successor requires its explicit schema and compiler version.'}
             Assert-RecoveryRecord $plan.GetProperty('SentenceSuccessor') @{Parent='Object'}
             Assert-ChirpSentenceParent $plan.GetProperty('SentenceSuccessor').GetProperty('Parent') $plan $Root $budget 0
         }

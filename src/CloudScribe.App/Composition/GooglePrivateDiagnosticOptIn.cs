@@ -7,7 +7,8 @@ namespace CloudScribe.App.Composition;
 /// <summary>Shared by the real private modal and lifecycle tests; readonly compile grants no spend authority.</summary>
 public sealed class GooglePrivateDiagnosticOptIn(GooglePrivateErrorDiagnostics diagnostics, IGoogleRecoveryCurrentCompilation compilation)
 {
-    public async Task<PrivateErrorCaptureBinding?> PrepareAsync(ShellViewModel model, Func<bool> stillConfirmed, CancellationToken token)
+    public async Task<PrivateErrorCaptureBinding?> PrepareAsync(ShellViewModel model, Func<bool> stillConfirmed, CancellationToken token,
+        PrivateErrorCaptureMode mode = PrivateErrorCaptureMode.SelectedExplanation)
     {
         bool enabled = false;
         try
@@ -27,7 +28,7 @@ public sealed class GooglePrivateDiagnosticOptIn(GooglePrivateErrorDiagnostics d
                 || !string.Equals(envelope.VoiceName, selection.VoiceStableId, StringComparison.Ordinal))
                 throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Readonly diagnostic compilation identity changed."), LocalRequestReason.CaptureIdentityChanged);
             var binding = new PrivateErrorCaptureBinding(selection.DocumentId, selection.RevisionId.Value, version, envelope.AccountId,
-                selection.ProjectStableId, envelope.VoiceName, envelope.CredentialReferenceId, envelope.CompiledPayloadSha256);
+                selection.ProjectStableId, envelope.VoiceName, envelope.CredentialReferenceId, envelope.CompiledPayloadSha256, mode);
             enabled = diagnostics.CompleteOptInReview(review, binding, stillConfirmed());
             return enabled ? binding : null;
         }

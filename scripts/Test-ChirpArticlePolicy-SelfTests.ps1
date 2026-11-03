@@ -4,7 +4,7 @@ if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8)
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer failed parsing.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpSentenceParent','Assert-ChirpLegacyAssociations','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpSentenceParent','Assert-ChirpLegacyAssociations','Get-ChirpDiagnosticElementSha256','Assert-ChirpDiagnosticEvidence','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
     $functions=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Expected exactly one reviewed validator.'};Invoke-Expression $functions[0].Extent.Text
 }
@@ -192,5 +192,39 @@ try{
     if(-not [IO.Path]::GetFullPath($fixtureRoot).StartsWith($expected,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected fixture cleanup root.'}
     Assert-NoLinks $fixtureRoot
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
+}
+function New-SentenceDiagnosticPolicy {
+    $p=New-SentenceArticlePolicy;$p.SchemaVersion=4;$p.Remove('WholeArticleGeneration')
+    $p.Budget.ProjectCeilingMinorUnits=$p.Budget.ProjectCommittedMinorUnits+1
+    $p.Budget.AllocationCeilingMinorUnits=$p.Budget.AllocationCommittedMinorUnits+1
+    $p.SuccessorGrant=(New-SuccessorArticlePolicy).SuccessorGrant
+    $proposal=[Text.Json.JsonDocument]::Parse(($p.Articles[0].Proposal|ConvertTo-Json -Depth 24 -Compress))
+    $grant=[Text.Json.JsonDocument]::Parse(($p.SuccessorGrant|ConvertTo-Json -Depth 24 -Compress))
+    try{
+        $p.DiagnosticEvidence=@{Version=1;Purpose='unchanged-provider-evidence';ProposalSha256=(Get-ChirpDiagnosticElementSha256 $proposal.RootElement);SuccessorGrantSha256=(Get-ChirpDiagnosticElementSha256 $grant.RootElement);PrivateCaptureConsentSha256=('c'*64);RequiredCaptureMode=1}
+    }finally{$proposal.Dispose();$grant.Dispose()}
+    return $p
+}
+Test-ArticleJson ((New-SentenceDiagnosticPolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
+$rejected=$false
+try{Test-ArticleJson ((New-SentenceDiagnosticPolicy)|ConvertTo-Json -Depth 24)}catch{$rejected=$true}
+if(-not $rejected){throw 'Noncompact diagnostic native subobject was accepted.'};$passed++
+foreach($case in @('old-schema','missing-consent','zero-consent','same-consent','changed-proposal','changed-grant','capture-mode','purpose','whole-job','broad-budget')){
+    $p=New-SentenceDiagnosticPolicy
+    switch($case){
+        'old-schema' {$p.SchemaVersion=2}
+        'missing-consent' {$p.DiagnosticEvidence.PrivateCaptureConsentSha256=''}
+        'zero-consent' {$p.DiagnosticEvidence.PrivateCaptureConsentSha256='0'*64}
+        'same-consent' {$p.DiagnosticEvidence.PrivateCaptureConsentSha256=$p.SourceApprovalSha256}
+        'changed-proposal' {$p.DiagnosticEvidence.ProposalSha256='b'*64}
+        'changed-grant' {$p.DiagnosticEvidence.SuccessorGrantSha256='b'*64}
+        'capture-mode' {$p.DiagnosticEvidence.RequiredCaptureMode=0}
+        'purpose' {$p.DiagnosticEvidence.Purpose='generate-all'}
+        'whole-job' {$p.WholeArticleGeneration=@{GrantId=$id;PlanSha256s=@($sha);MaximumCatalogRefreshes=1}}
+        'broad-budget' {$p.Budget.ProjectCeilingMinorUnits+=1}
+    }
+    $rejected=$false
+    try{Test-ArticleJson ($p|ConvertTo-Json -Depth 24 -Compress)}catch{$rejected=$true}
+    if(-not $rejected){throw "Invalid diagnostic policy accepted: $case"};$passed++
 }
 Write-Output "Article admission policy fixtures passed: $passed"

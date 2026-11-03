@@ -11,7 +11,7 @@ public static class ChirpPolicyValidation
     public static void RequireValid(ChirpArticleAdmissionPolicy p, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(p);
-        if (p.SchemaVersion is not (1 or 2 or 3) || p.ExpiresAtUtc <= now || !IsHash(p.AppSha256) || !IsHash(p.InfrastructureSha256)
+        if (p.SchemaVersion is not (1 or 2 or 3 or 4) || p.ExpiresAtUtc <= now || !IsHash(p.AppSha256) || !IsHash(p.InfrastructureSha256)
             || !IsHash(p.ProfileRootSha256) || !IsHash(p.SourceApprovalSha256) || string.IsNullOrWhiteSpace(p.AccountId)
             || string.IsNullOrWhiteSpace(p.ProjectId) || !string.Equals(p.Currency, "USD", StringComparison.Ordinal) || p.Scale != 2
             || p.Articles is not { Count: >= 1 and <= 200 } || p.MaximumNewAttempts is < 1 or > 10_000
@@ -26,6 +26,7 @@ public static class ChirpPolicyValidation
         foreach (var pins in new[] { b.QueueRows, b.SpendRows, b.RecoveryRows, b.TransitionRows, p.ScopeRows, p.PriorArticleAttemptRows }) RequirePins(pins);
         RequireLegacyAssociations(p);
         RequireSuccessorGrant(p);
+        RequireDiagnosticEvidence(p);
         RequireWholeArticleGrant(p);
         if (p.Articles.Select(x => x.Proposal.DocumentId).Distinct().Count() != p.Articles.Count
             || p.Articles.Select(x => x.Proposal.PlanSha256).Distinct(StringComparer.Ordinal).Count() != p.Articles.Count)
@@ -39,6 +40,26 @@ public static class ChirpPolicyValidation
                     || article.Proposal.Parts.Count(y => y.CoverageOrdinal == x.CoverageOrdinal && y.Range.ReusedReceiptSha256 is null) != 1))
                 throw new InvalidDataException("The allowed internal requests are missing, duplicated or refer to accepted coverage.");
         }
+    }
+
+    private static void RequireDiagnosticEvidence(ChirpArticleAdmissionPolicy p)
+    {
+        if (p.SchemaVersion != 4)
+        {
+            if (p.DiagnosticEvidence is not null) throw new InvalidDataException("Diagnostic evidence requires its separately reviewed policy schema.");
+            return;
+        }
+        if (p.DiagnosticEvidence is not { } d || p.SuccessorGrant is not { } grant || p.Articles.Count != 1
+            || p.Articles[0].Proposal.SentenceSuccessor is null || p.Articles[0].Proposal.Refinement is not null
+            || d.Version != 1 || !string.Equals(d.Purpose, "unchanged-provider-evidence", StringComparison.Ordinal)
+            || d.RequiredCaptureMode != PrivateErrorCaptureMode.ProtectedResponseEnvelope
+            || p.Budget.ProjectCeilingMinorUnits - p.Budget.ProjectCommittedMinorUnits != 1
+            || p.Budget.AllocationCeilingMinorUnits - p.Budget.AllocationCommittedMinorUnits != 1
+            || !IsHash(d.PrivateCaptureConsentSha256)
+            || d.PrivateCaptureConsentSha256.All(c => c == '0') || string.Equals(d.PrivateCaptureConsentSha256, p.SourceApprovalSha256, StringComparison.Ordinal)
+            || !string.Equals(d.ProposalSha256, Hash(p.Articles[0].Proposal), StringComparison.Ordinal)
+            || !string.Equals(d.SuccessorGrantSha256, Hash(grant), StringComparison.Ordinal))
+            throw new InvalidDataException("Sentence diagnostic evidence must bind the complete proposal, one-attempt grant and separate private consent.");
     }
 
     private static void RequireWholeArticleGrant(ChirpArticleAdmissionPolicy p)

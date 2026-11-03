@@ -126,7 +126,8 @@ public static class CompositionRoot
             string root = Path.Combine(Path.GetDirectoryName(paths.RootDirectory)!, ".cloudscribe-private-diagnostics",
                 InstalledRecoveryAdmissionStore.ProfileHash(paths.RootDirectory));
             return new GooglePrivateErrorDiagnostics(root, serviceProvider.GetRequiredService<TimeProvider>(),
-                serviceProvider.GetRequiredService<CompletionWorkflowGate>());
+                serviceProvider.GetRequiredService<CompletionWorkflowGate>(),
+                serviceProvider.GetRequiredService<ILogger<GooglePrivateErrorDiagnostics>>());
         });
     }
 

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Restrictive private-run gate. It supplies no credential or spending authority.</summary>
-public sealed class CompletionWorkflowGate
+public sealed partial class CompletionWorkflowGate
 {
     private readonly Func<CompletionGateConfiguration?> _load;
     private readonly ICompletionGateCommandRunner _runner;
@@ -40,10 +40,17 @@ public sealed class CompletionWorkflowGate
 
     public bool IsRequired => Load() is not null;
 
+    public void RequireDiagnosticAdmission(string policySha256)
+    {
+        var current = Load() ?? throw new CompletionGateException(CompletionGateFailure.PinMismatch,
+            CloudScribe.Domain.Generation.CompletionProtocolCode.DiagnosticScope);
+        RunObserved(current, "check-diagnostic-admission", Guid.Empty, policySha256, null);
+    }
+
     public void RequireReady()
     {
         var current = Load();
-        if (current is not null) _runner.Run(current, "status", Guid.Empty, "", null);
+        if (current is not null) RunObserved(current, "status", Guid.Empty, "", null);
     }
 
     public Guid CurrentRefreshId(Guid fallback) => _current.Value?.Id ?? fallback;
@@ -60,16 +67,19 @@ public sealed class CompletionWorkflowGate
         if (current is null) return;
         if (!string.Equals(reference, current.CredentialReferenceId, StringComparison.Ordinal)) throw new InvalidOperationException("Completion credential binding changed.");
         if (_current.Value is { } lease) lease.CheckBeforeEffect();
-        else _runner.Run(current, "status", Guid.Empty, "", null);
+        else RunObserved(current, "status", Guid.Empty, "", null);
     }
 
-    public void BeforeSynthesis(string reference, Uri endpoint)
+    public bool BeforeSynthesis(string reference, Uri endpoint, ReadOnlyMemory<byte> payload = default,
+        Guid transportCorrelation = default, string? idempotencyKeySha256 = null)
     {
         var current = Load();
-        if (current is null) return;
+        if (current is null) return false;
         if (_current.Value is not null || !string.Equals(endpoint.AbsoluteUri, current.SynthesisEndpoint, StringComparison.Ordinal))
             throw new CompletionGateException(CompletionGateFailure.PinMismatch);
         BeforeCredential(reference); // Existing per-request financial/identity guards remain mandatory.
+        if (payload.IsEmpty || transportCorrelation == Guid.Empty) throw new CompletionGateException(CompletionGateFailure.PinMismatch);
+        return CheckSynthesisObserved(current, transportCorrelation, Convert.ToHexStringLower(SHA256.HashData(payload.Span)), idempotencyKeySha256);
     }
 
     public CompletionRefreshScope BeginRefresh(Guid id)
@@ -82,7 +92,7 @@ public sealed class CompletionWorkflowGate
             return new(existing, false, null);
         }
         string identity = Hash(Encoding.UTF8.GetBytes(configuration.Pin + "|refresh|" + id.ToString("D")));
-        _runner.Run(configuration, "claim-refresh", id, identity, null);
+        RunObserved(configuration, "claim-refresh", id, identity, null);
         var lease = new CompletionRefreshLease(this, configuration, id, identity);
         _current.Value = lease;
         return new(lease, true, () => _current.Value = null);
@@ -146,7 +156,7 @@ public sealed class CompletionWorkflowGate
     {
         var current = Load() ?? throw new InvalidOperationException("Required completion gate disappeared.");
         lease.Require(this, current, null);
-        _runner.Run(current, "check", lease.Id, lease.Identity, null);
+        RunObserved(current, "check", lease.Id, lease.Identity, null);
     }
 
     internal void Finish(CompletionRefreshLease lease, bool succeeded)
@@ -167,7 +177,7 @@ public sealed class CompletionWorkflowGate
                 ["probeStatus"] = succeeded ? "INVALID_ARGUMENT" : "",
                 ["audioAbsent"] = succeeded,
             };
-            _runner.Run(current, "complete", lease.Id, lease.Identity, receipt);
+            RunObserved(current, "complete", lease.Id, lease.Identity, receipt);
         }
         catch (Exception error) when (!succeeded && GoogleCatalogRefreshDiagnostics.IsNonFatal(error))
         {

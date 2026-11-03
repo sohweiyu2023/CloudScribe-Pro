@@ -38,4 +38,24 @@ Synthetic tests cover hostile exception properties, private messages/filenames, 
 
 ## Release qualification
 
+### Provider explanation follow-up: local source, not an installed guarantee
+
+This follow-up uses the existing product event schema, rotating sink, shared redactor, private one-response store and support-export allowlist. It does not enable capture, change consent scope, authorize a request, alter a financial record or establish a provider root cause.
+
+| Boundary | New evidence / verified synthetic coverage | Explicit remaining limit |
+| --- | --- | --- |
+| Synthesis response explanation | Per-response retention state distinguishes absent ticket, pending save and terminal private persistence; nested message/description/reason/domain/field strings survive private redaction; actual file readback/restart tested | Existing consent captures only HTTP400/INVALID_ARGUMENT; other statuses and non-JSON bodies remain unavailable, explicitly marked rather than captured silently |
+| Credential/catalog/OAuth | Existing safe phase, HTTP/status/category tests remain the baseline | Full redacted explanation integration for these separate adapters is not implemented by the synthesis patch; credential-bearing bodies must not enter routine logs |
+| Wire and provider correlation | Existing immutable request hash; bounded allowlist for three response-ID headers, with hash/state only; same local transport correlation across body/retention/save; monotonic duration | Hashed headers are not original Google lookup IDs and never become financial queue ProviderRequestId values; durable attempt-to-transport mapping remains a separate gap |
+| Nested/unknown details | Root and nested-only explanations, explicit unknown-field omission and size truncation; metadata is nullable for legacy unknowns | No-omission flag describes this collector, not a guarantee that Google supplied every possible internal diagnostic |
+| Privacy and support export | Known token, input/encoded echoes, shared secret/URI/email/path masks; private text stays outside ordinary sink/export; persisted ordinary events and regenerated support records inspected | Redaction is not anonymity. Short/unrecognized/private content may remain in the private explanation; no public-safe claim |
+| Storage/logger failure | Busy/failed/expired storage remains distinct from a completed HTTP outcome; terminal observer failures cannot erase the saved private record or retry provider work | A process/power loss before async persistence may still lose the explanation. Pending is not durable success; readback required |
+| Retention/restart | One ticket/ten-minute guards, restart disarmed, eight-record rotation, logical 24-hour expiry and cleanup on access remain tested | No guaranteed physical erasure while the app is closed; external copies/backups are outside active-store cleanup |
+| Input, local review, accounting | Unchanged admission, byte, uncertainty, append-only attempt and no-automatic-retry guards | A logging change supplies no permission to re-execute discarded historical failures |
+| Decode/assembly/export | Existing ordered coverage, media and export tests remain applicable; provider success and local delivery failure stay distinct | Complete native phase-to-log coverage is not newly established by this patch |
+| Launcher/deployment/helper scripts | Existing scripts and completion register remain unchanged by this patch | App events do not prove launcher/subprocess/deployment log completeness. Broader helper integration remains open; no live deployment is used for testing |
+| Startup/crash/OS | Existing safe exception/phase summaries remain unchanged | Native compiler/process faults and external OS/hardware failures remain separate investigations; a successful repeat does not prove a crash fix |
+
+Do not claim comprehensive logging complete while the explicit adapter/helper/attempt-mapping gaps remain. Historical discarded provider wording cannot be reconstructed from category, body size, hash or public examples. Do not replay a paid request simply to fill an evidence gap.
+
 Document observations are additive and advisory. They do not alter save order, autosave sequence checks, close guards, original exceptions, approval expiry, dispatch, credentials or financial history. The tests use synthetic local fixtures. Native presentation, real installed behavior and external provider outcomes are separate acceptance evidence and must be reported separately. No statement of zero possible logging gaps is justified.
