@@ -16,6 +16,7 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
     [Theory]
     [InlineData("off")]
     [InlineData("wrong-object")]
+    [InlineData("selected-explanation")]
     [InlineData("attached")]
     [InlineData("withdrawn-after-claim")]
     public async Task ActualUiFactoryAndDatabaseEnforceOneResponseCaptureBeforeDiagnosticClaim(string mode)
@@ -26,7 +27,8 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         var request = snapshot.ProviderRequest;
         using var capture = new GooglePrivateErrorDiagnostics(f.CaptureRoot, TimeProvider.System);
         var binding = new PrivateErrorCaptureBinding(f.Selection.DocumentId, f.Selection.RevisionId!.Value, 42,
-            request.AccountId, f.Selection.ProjectStableId, f.Selection.VoiceStableId, "synthetic-credential", pending.SubmissionEnvelope.CompiledPayloadSha256);
+            request.AccountId, f.Selection.ProjectStableId, f.Selection.VoiceStableId, "synthetic-credential", pending.SubmissionEnvelope.CompiledPayloadSha256,
+            string.Equals(mode, "selected-explanation", StringComparison.Ordinal) ? PrivateErrorCaptureMode.SelectedExplanation : PrivateErrorCaptureMode.ProtectedResponseEnvelope);
         AttachSyntheticCapture(mode, capture, binding, request);
         var credential = new CaptureGateCredential();
         var handler = new CaptureGateHandler();
@@ -45,7 +47,7 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
             true, true, true, true, request, snapshot.AdmittedTrust, snapshot.PreviousState, snapshot.CurrentState,
             GoogleGenerationReconciliationResolutionEvidence.None, true, true, true, true, TestContext.Current.CancellationToken);
 
-        if (mode is "off" or "wrong-object")
+        if (mode is "off" or "wrong-object" or "selected-explanation")
         {
             await Assert.ThrowsAsync<PrivateDiagnosticNotReadyException>(RunAsync);
             Assert.Equal(0, credential.Calls); Assert.Equal(0, handler.Calls);
@@ -65,7 +67,7 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
             {
                 _ = await RunAsync();
                 await capture.WaitForPendingWriteAsync(TestContext.Current.CancellationToken);
-                Assert.Contains("unfamiliar", Assert.Single(capture.ReadRecords()).Message, StringComparison.Ordinal);
+                AssertProtectedCapture(f, capture);
                 Assert.Equal(1, handler.Calls);
                 var saved = await queueStore.LoadAsync(request.AccountId, request.OperationStableId, request.IdempotencyKey, TestContext.Current.CancellationToken);
                 Assert.Equal("google-http-400", saved!.DiagnosticCode); Assert.False(saved.UnresolvedSubmission);
@@ -74,6 +76,17 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
             await Assert.ThrowsAsync<InvalidOperationException>(RunAsync);
         }
         await AssertCaptureLineageAsync(f);
+    }
+
+    private static void AssertProtectedCapture(Fixture f, GooglePrivateErrorDiagnostics capture)
+    {
+        var record = Assert.Single(capture.ReadRecords());
+        var response = Assert.IsType<PrivateProviderResponseEnvelope>(record.Response);
+        Assert.Contains("unfamiliar", response.RedactedBody, StringComparison.Ordinal);
+        Assert.Equal(400, response.HttpStatus);
+        Assert.True(response.ReadCompleted);
+        Assert.Single(Directory.GetFiles(f.CaptureRoot, "*.pdiag"));
+        Assert.Empty(Directory.GetFiles(f.CaptureRoot, "*.json"));
     }
 
     private static async Task AssertCaptureLineageAsync(Fixture f)
