@@ -36,11 +36,19 @@ public sealed partial class GoogleSynthesisDiagnosticsTests
             var ids = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line =>
             { using var json = JsonDocument.Parse(line); return json.RootElement.GetProperty("EventId").GetInt32(); }).ToArray();
             Assert.Contains(1605, ids); Assert.Contains(1606, ids); Assert.Contains(1607, ids);
+            Assert.Contains(1608, ids); Assert.Contains(1610, ids); Assert.Contains(1611, ids);
+            Assert.Contains("NoActivePrivateTicket", text, StringComparison.Ordinal);
             Assert.Contains("SentenceLengthReported", text, StringComparison.Ordinal);
             Assert.Contains("Absent", text, StringComparison.Ordinal);
             Assert.DoesNotContain("PRIVATE_", text, StringComparison.Ordinal);
             Assert.DoesNotContain("SYNTHETIC-PRIVATE-MARKER", text, StringComparison.Ordinal);
             Assert.DoesNotContain("https://", text, StringComparison.Ordinal);
+            string exported = string.Join('\n', text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => System.Text.Encoding.UTF8.GetString(SafeDiagnosticExportEncoder.Encode(System.Text.Encoding.UTF8.GetBytes(line)))));
+            Assert.Contains("NoActivePrivateTicket", exported, StringComparison.Ordinal);
+            Assert.DoesNotContain("PRIVATE_", exported, StringComparison.Ordinal);
+            Assert.DoesNotContain("SYNTHETIC-PRIVATE-MARKER", exported, StringComparison.Ordinal);
+            Assert.DoesNotContain("ResponseSha256", exported, StringComparison.Ordinal);
         }
         finally
         {

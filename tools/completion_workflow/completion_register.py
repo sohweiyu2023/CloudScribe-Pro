@@ -55,6 +55,7 @@ SCOPE_KEYS = {"schema", "approvalSha256", "buildSha256", "profileSha256", "accou
 SUCCESSOR_SCOPE_KEYS = SCOPE_KEYS | {"maxAdmissions", "predecessorRegisterPath", "predecessorScopeSha256", "transitionId"}
 CONTINUATION_SCOPE_KEYS = SUCCESSOR_SCOPE_KEYS | {"acceptedEvidenceSha256", "maximumNewAttempts"}
 WHOLE_ARTICLE_SCOPE_KEYS = CONTINUATION_SCOPE_KEYS | {"wholeArticleGrantSha256"}
+DIAGNOSTIC_SCOPE_KEYS = CONTINUATION_SCOPE_KEYS | {"diagnosticPurpose", "privateCaptureConsentSha256", "diagnosticWindowMode"}
 
 
 def path_digest(path):
@@ -62,13 +63,18 @@ def path_digest(path):
 
 
 def validate_scope(scope):
-    if (not isinstance(scope, dict) or type(scope.get("schema")) is not int or scope["schema"] not in (1, 2, 3, 4, 5)
-            or set(scope) != {1: SCOPE_KEYS, 2: SUCCESSOR_SCOPE_KEYS, 3: CONTINUATION_SCOPE_KEYS, 4: WHOLE_ARTICLE_SCOPE_KEYS, 5: WHOLE_ARTICLE_SCOPE_KEYS}[scope["schema"]]):
+    if (not isinstance(scope, dict) or type(scope.get("schema")) is not int or scope["schema"] not in (1, 2, 3, 4, 5, 6)
+            or set(scope) != {1: SCOPE_KEYS, 2: SUCCESSOR_SCOPE_KEYS, 3: CONTINUATION_SCOPE_KEYS, 4: WHOLE_ARTICLE_SCOPE_KEYS, 5: WHOLE_ARTICLE_SCOPE_KEYS, 6: DIAGNOSTIC_SCOPE_KEYS}[scope["schema"]]):
         raise Rejected("ScopeSchema")
+    if scope["schema"] == 6 and (scope["diagnosticPurpose"] != "unchanged-provider-evidence"
+            or scope["diagnosticWindowMode"] not in ("inherited", "fresh-10-minute")
+            or type(scope["maximumNewAttempts"]) is not int or scope["maximumNewAttempts"] != 1
+            or scope["privateCaptureConsentSha256"] == scope["approvalSha256"]):
+        raise Rejected("DiagnosticScope")
     for key in scope:
         if key.endswith("Sha256"):
             hash_value(scope[key])
-    if scope["schema"] in (2, 3, 4, 5):
+    if scope["schema"] in (2, 3, 4, 5, 6):
         if type(scope["maxAdmissions"]) is not int or scope["maxAdmissions"] != 24:
             raise Rejected("FixedAdmissionLimit")
         if not isinstance(scope["predecessorRegisterPath"], str) or not Path(scope["predecessorRegisterPath"]).is_absolute():
@@ -80,7 +86,8 @@ def validate_scope(scope):
     if (type(scope["maxRefreshes"]) is not int or scope["maxRefreshes"] != 24 or
             type(scope["maxResumeAdmissions"]) is not int or scope["maxResumeAdmissions"] != 24):
         raise Rejected("FixedLimits")
-    if utc(scope["endUtc"]) - utc(scope["startUtc"]) != 6 * 3600 * 1_000_000:
+    duration = 600 if scope["schema"] == 6 and scope["diagnosticWindowMode"] == "fresh-10-minute" else 6*3600
+    if utc(scope["endUtc"]) - utc(scope["startUtc"]) != duration * 1_000_000:
         raise Rejected("FixedSixHourWindow")
 
 
@@ -195,6 +202,33 @@ def interpreter_handoff(h):
     return isinstance(h, dict) and h.get("TransitionKind") == "whole-article-interpreter-continuation"
 
 
+def diagnostic_handoff(h):
+    return isinstance(h, dict) and ((h.get("SchemaVersion"),h.get("TransitionKind")) in
+        ((5,"sentence-evidence-diagnostic"),(6,"expired-sentence-evidence-diagnostic")))
+
+
+def expired_diagnostic_handoff(h):
+    return diagnostic_handoff(h) and h["SchemaVersion"] == 6
+
+
+def diagnostic_window_binding(old, scope, h):
+    fresh = expired_diagnostic_handoff(h)
+    allowed_stop = fresh and old["stopReason"] in ("WindowExpired", "ClockRollback", "ClockDiscontinuity")
+    if (not old["activated"] or (old["stopped"] and not allowed_stop)
+            or h["InheritedClockEpochEvidence"] != old["clockEpoch"]
+            or scope["acceptedEvidenceSha256"] != old["scope"]["acceptedEvidenceSha256"]
+            or (h["UsedRefreshes"],h["UsedAdmissions"],h["UsedResumeAdmissions"]) != (old["refresh"],old["admissions"],old["resume-admission"])):
+        raise Rejected("DiagnosticCounterOrEpoch")
+    if fresh:
+        e = h["ClockEpochEvidence"]
+        if (scope["diagnosticWindowMode"] != "fresh-10-minute" or utc(scope["startUtc"]) != e["ObservedUtcMicros"]
+                or e["TrustedUtcLowerMicros"] < utc(old["scope"]["endUtc"])
+                or e["ObservedUtcMicros"] < utc(old["scope"]["endUtc"])
+                or e["PreviousLastGoodUtcMicros"] != old["lastGoodUtc"]):raise Rejected("DiagnosticWindow")
+    elif scope["diagnosticWindowMode"] != "inherited" or any(scope[k] != old["scope"][k] for k in ("startUtc", "endUtc")):
+        raise Rejected("DiagnosticWindow")
+
+
 def sentence_handoff(h):
     return isinstance(h, dict) and h.get("TransitionKind") in ("same-window-sentence-replan", "same-window-sentence-replan-after-reboot", "expired-terminal-sentence-replan")
 
@@ -241,29 +275,35 @@ def require_epoch_policy_deadline(state,expiry):
 
 
 def validate_handoff(h):
-    if (not isinstance(h, dict) or type(h.get("SchemaVersion")) is not int or h["SchemaVersion"] not in (1, 2, 3, 4)
-            or set(h) != (SENTENCE_HANDOFF_KEYS | {"ClockEpochEvidence", "WindowApprovalSha256"} if expired_sentence_handoff(h) else SENTENCE_HANDOFF_KEYS | {"ClockEpochEvidence"} if reboot_sentence_handoff(h) else SENTENCE_HANDOFF_KEYS if sentence_handoff(h) else INTERPRETER_HANDOFF_KEYS if interpreter_handoff(h) else HANDOFF_KEYS if h["SchemaVersion"] == 1 else CONTINUATION_HANDOFF_KEYS)
+    if (not isinstance(h, dict) or type(h.get("SchemaVersion")) is not int or h["SchemaVersion"] not in (1, 2, 3, 4, 5, 6)
+            or set(h) != (SENTENCE_HANDOFF_KEYS | {"InheritedClockEpochEvidence", "ClockEpochEvidence", "WindowApprovalSha256"} if expired_diagnostic_handoff(h) else SENTENCE_HANDOFF_KEYS | {"InheritedClockEpochEvidence"} if diagnostic_handoff(h) else SENTENCE_HANDOFF_KEYS | {"ClockEpochEvidence", "WindowApprovalSha256"} if expired_sentence_handoff(h) else SENTENCE_HANDOFF_KEYS | {"ClockEpochEvidence"} if reboot_sentence_handoff(h) else SENTENCE_HANDOFF_KEYS if sentence_handoff(h) else INTERPRETER_HANDOFF_KEYS if interpreter_handoff(h) else HANDOFF_KEYS if h["SchemaVersion"] == 1 else CONTINUATION_HANDOFF_KEYS)
             or (h["SchemaVersion"] == 2 and h["TransitionKind"] != "accepted-continuation")
             or (h["SchemaVersion"] == 3 and h["TransitionKind"] not in ("whole-article-continuation", "whole-article-interpreter-continuation"))
             or (interpreter_handoff(h) and h["SchemaVersion"] != 3)
-            or (h["SchemaVersion"] == 4) != sentence_handoff(h)):
+            or (h["SchemaVersion"] == 4) != sentence_handoff(h)
+            or (h["SchemaVersion"] in (5, 6)) != diagnostic_handoff(h)):
         raise Rejected("HandoffSchema")
     for key in h:
         if key.endswith("Sha256"):
             hash_value(h[key])
     if str(uuid.UUID(h["TransitionId"])) != h["TransitionId"] or uuid.UUID(h["TransitionId"]).int == 0:
         raise Rejected("HandoffId")
-    if h["SchemaVersion"] == 1 or sentence_handoff(h):
+    if h["SchemaVersion"] == 1 or sentence_handoff(h) or diagnostic_handoff(h):
         uuid_identity(h["FailedAuthorizationId"])
         if (not re.fullmatch(r"[a-f0-9]{32}", h["FailedLocalAttemptId"]) or int(h["FailedLocalAttemptId"], 16) == 0
             or type(h["FailedCoverageOrdinal"]) is not int or h["FailedCoverageOrdinal"] < 1
             or type(h["FailedPayloadBytes"]) is not int or not 1 <= h["FailedPayloadBytes"] <= 5000):
             raise Rejected("HandoffBinding")
-    if sentence_handoff(h) and (any(type(h[k]) is not int or not 0 <= h[k] <= 24 for k in
+    if (sentence_handoff(h) or diagnostic_handoff(h)) and (any(type(h[k]) is not int or not 0 <= h[k] <= 24 for k in
                                     ("UsedRefreshes", "UsedAdmissions", "UsedResumeAdmissions"))
                                 or h["UsedResumeAdmissions"] > h["UsedAdmissions"]):
         raise Rejected("SentenceCounterBinding")
     if clock_sentence_handoff(h):validate_clock_epoch(h["ClockEpochEvidence"],require_reboot=not expired_sentence_handoff(h))
+    if diagnostic_handoff(h) and h["InheritedClockEpochEvidence"] is not None:
+        validate_clock_epoch(h["InheritedClockEpochEvidence"], require_reboot=False)
+    if expired_diagnostic_handoff(h):
+        validate_clock_epoch(h["ClockEpochEvidence"], require_reboot=False)
+        if h["WindowApprovalSha256"] != h["SourceApprovalSha256"]:raise Rejected("FreshWindowApprovalRequired")
     if expired_sentence_handoff(h) and h["WindowApprovalSha256"] != h["SourceApprovalSha256"]:
         raise Rejected("FreshWindowApprovalRequired")
     if h["PreviousScopeSha256"] == h["NewScopeSha256"] or h["PreviousGateSha256"] == h["NewGateSha256"]:
@@ -279,6 +319,8 @@ def validate_handoff(h):
 
 def verify_plan_policy(manifest, scope, policy, kind):
     """Bind actual immutable proposal/coverage projection, not a caller assertion."""
+    if scope.get("schema") == 6:
+        return verify_diagnostic_policy(manifest, scope, policy, kind)
     original = policy.get("HistoricalPolicy", {}) if kind == "resume-admission" else policy
     if scope.get("schema", 1) not in (4, 5) and (original.get("SchemaVersion") == 3
             or original.get("WholeArticleGeneration") is not None):
@@ -363,6 +405,8 @@ def verify_plan_policy(manifest, scope, policy, kind):
 
 
 def successor_policy_kind(manifest, policy):
+    if "diagnostic" in manifest:
+        return "diagnostic-admission"
     if manifest.get("schema") == 4:
         allowed = {(a["Proposal"]["PlanSha256"], x["CoverageOrdinal"]) for a in policy["Articles"] for x in a["AllowedSegments"]}
         first = {(x["planSha256"], x["coverageOrdinal"]) for x in manifest["firstStage"]}
@@ -741,6 +785,87 @@ def verify_sentence_policy(manifest, scope, policy, kind, *, historical_readback
             raise Rejected("ResumeFinancialBounds")
 
 
+DIAGNOSTIC_KEYS = {"proposalSha256", "successorGrantSha256", "privateCaptureConsentSha256", "failedAuthorizationId",
+                   "failedLocalAttemptId", "planSha256", "coverageOrdinal", "payloadSha256", "payloadBytes",
+                   "financialRowsSha256", "projectCommittedMinorUnits", "allocationCommittedMinorUnits"}
+
+
+def validate_diagnostic_manifest(manifest, scope):
+    """The original sentence manifest is immutable data, not renewed batch authority."""
+    validate_scope(scope)
+    if scope["schema"] != 6 or not isinstance(manifest, dict) or "diagnostic" not in manifest or digest(manifest) != scope["plansSha256"]:
+        raise Rejected("DiagnosticManifest")
+    d = manifest["diagnostic"]
+    if not isinstance(d, dict) or set(d) != DIAGNOSTIC_KEYS:
+        raise Rejected("DiagnosticManifest")
+    for key in DIAGNOSTIC_KEYS:
+        if key.endswith("Sha256"):hash_value(d[key])
+    uuid_identity(d["failedAuthorizationId"])
+    uuid_identity(d["failedLocalAttemptId"])
+    if (d["privateCaptureConsentSha256"] != scope["privateCaptureConsentSha256"]
+            or type(d["coverageOrdinal"]) is not int or d["coverageOrdinal"] < 1
+            or type(d["payloadBytes"]) is not int or not 1 <= d["payloadBytes"] <= 5000
+            or any(type(d[k]) is not int or d[k] < 0 for k in ("projectCommittedMinorUnits", "allocationCommittedMinorUnits"))
+            or d["allocationCommittedMinorUnits"] > d["projectCommittedMinorUnits"]):
+        raise Rejected("DiagnosticManifest")
+    original = {k:v for k,v in manifest.items() if k != "diagnostic"}
+    old_scope = dict(scope, schema=5, maximumNewAttempts=len(original.get("parts", [])), plansSha256=digest(original), wholeArticleGrantSha256=digest({"unused": "validation only"}))
+    for key in ("diagnosticPurpose", "privateCaptureConsentSha256", "diagnosticWindowMode"):old_scope.pop(key)
+    parts, plans, remaining, accepted, budget = validate_sentence_manifest(original, old_scope)
+    part = parts.get((d["planSha256"], d["coverageOrdinal"]))
+    if ((d["planSha256"], d["coverageOrdinal"]) not in remaining or part is None
+            or part["payloadSha256"] != d["payloadSha256"] or part["payloadBytes"] != d["payloadBytes"]
+            or d["projectCommittedMinorUnits"] < budget["projectCommittedMinorUnits"]
+            or d["allocationCommittedMinorUnits"] < budget["allocationCommittedMinorUnits"]
+            or d["projectCommittedMinorUnits"] + 1 + budget["taxFeeUpperBoundMinorUnits"] > budget["overallCeilingMinorUnits"]):
+        raise Rejected("DiagnosticCoverageOrBudget")
+    return parts, plans, accepted, budget
+
+
+def verify_diagnostic_policy(manifest, scope, policy, kind):
+    parts, plans, _, budget = validate_diagnostic_manifest(manifest, scope)
+    d = manifest["diagnostic"]
+    if (kind != "diagnostic-admission" or type(policy.get("SchemaVersion")) is not int or policy["SchemaVersion"] != 4
+            or policy.get("WholeArticleGeneration") is not None or policy.get("SourceApprovalSha256") != scope["approvalSha256"]
+            or policy.get("AccountId") != manifest["accountId"] or policy.get("ProjectId") != manifest["projectId"]
+            or policy.get("Currency") != "USD" or type(policy.get("Scale")) is not int or policy["Scale"] != 2
+            or any(type(policy.get(k)) is not int or policy[k] != 1 for k in ("MaximumNewAttempts", "MaximumAdditionalReservationMinorUnits"))
+            or not isinstance(policy.get("Articles"), list) or len(policy["Articles"]) != 1):
+        raise Rejected("DiagnosticPolicy")
+    if (hashlib.sha256((policy["AppSha256"]+"|"+policy["InfrastructureSha256"]).encode()).hexdigest()!=scope["buildSha256"]
+            or policy["ProfileRootSha256"]!=scope["profileSha256"]):raise Rejected("DiagnosticPolicy")
+    expiry = datetime.fromisoformat(policy["ExpiresAtUtc"].replace("Z", "+00:00"))
+    if expiry.utcoffset() != timedelta(0) or expiry.timestamp() <= time.time() or int(expiry.timestamp()*1e6) > utc(scope["endUtc"]):
+        raise Rejected("PolicyWindow")
+    article = policy["Articles"][0]; proposal = article["Proposal"]
+    spec = next((x for x in manifest["proposals"] if x["planSha256"] == d["planSha256"]), None)
+    part = parts[(d["planSha256"], d["coverageOrdinal"])]
+    chosen = [x for x in proposal["Parts"] if x["CoverageOrdinal"] == d["coverageOrdinal"]]
+    if (spec is None or digest(proposal) != spec["proposalSha256"] or digest(article["ReusedAudio"]) != spec["reusedAudioSha256"]
+            or proposal.get("SentenceSuccessor") is None or proposal.get("Refinement") is not None
+            or len(chosen) != 1 or chosen[0]["Range"]["ReusedReceiptSha256"] is not None
+            or chosen[0]["PayloadSha256"] != d["payloadSha256"] or chosen[0]["PayloadBytes"] != d["payloadBytes"]
+            or proposal["VoiceName"] != part["voiceName"] or proposal["LanguageCode"] != part["languageCode"]
+            or article["AllowedSegments"] != [{"CoverageOrdinal": d["coverageOrdinal"], "MaximumMinorUnits": 1}]):
+        raise Rejected("DiagnosticPolicy")
+    expected = {"Version":1, "Purpose":"unchanged-provider-evidence", "ProposalSha256":d["proposalSha256"],
+                "SuccessorGrantSha256":d["successorGrantSha256"], "PrivateCaptureConsentSha256":d["privateCaptureConsentSha256"], "RequiredCaptureMode":1}
+    grant = policy.get("SuccessorGrant")
+    if (policy.get("DiagnosticEvidence") != expected or not isinstance(grant, dict)
+            or any(type(policy["DiagnosticEvidence"][k]) is not int for k in ("Version", "RequiredCaptureMode"))
+            or type(grant.get("CoverageOrdinal")) is not int
+            or type(article["AllowedSegments"][0]["CoverageOrdinal"]) is not int
+            or uuid_identity(grant["ParentAuthorizationId"]) != uuid_identity(d["failedAuthorizationId"])
+            or uuid_identity(grant["ParentLocalAttemptId"]) != uuid_identity(d["failedLocalAttemptId"])
+            or grant["PlanSha256"] != d["planSha256"] or grant["CoverageOrdinal"] != d["coverageOrdinal"]
+            or any(type(grant.get(k)) is not int or grant[k] != 1 for k in ("MaximumNewAttempts", "MaximumAdditionalReservationMinorUnits"))):
+        raise Rejected("DiagnosticPolicy")
+    b = policy["Budget"]
+    for key,value in {"ProjectCommittedMinorUnits":d["projectCommittedMinorUnits"], "AllocationCommittedMinorUnits":d["allocationCommittedMinorUnits"],
+                      "ProjectCeilingMinorUnits":d["projectCommittedMinorUnits"]+1, "AllocationCeilingMinorUnits":d["allocationCommittedMinorUnits"]+1}.items():
+        if type(b.get(key)) is not int or b[key] != value:raise Rejected("DiagnosticBudget")
+
+
 class Register:
     """Clock injection is for offline tests, never exposed by operational CLI."""
 
@@ -880,8 +1005,9 @@ class Register:
         if scope["registerPathSha256"] != path_digest(self.path):
             raise Rejected("RegisterPathPinMismatch")
         previous = self.scope_sha
-        state = {"refresh": 0, "resume-admission": 0, "completion-admission": 0, "pilot-admission": 0,
-                 "admissions": 0, "pilotPolicySha256": None, "pending": None, "stopped": False, "stopReason": None,
+        state = {"refresh": 0, "resume-admission": 0, "completion-admission": 0, "pilot-admission": 0, "diagnostic-admission": 0,
+                 "admissions": 0, "pilotPolicySha256": None, "diagnosticPolicySha256": None, "diagnosticDispatch": None,
+                 "pending": None, "stopped": False, "stopReason": None,
                  "lastUtc": 0, "lastMono": 0, "startUtc": 0, "startMono": 0, "lastGoodUtc":0,"clockEpoch":None,
                  "ids": set(), "scope": scope, "head": previous, "buildTransitions": 0, "helperSourceRepairs": 0,
                  "currentBuild": scope["buildSha256"], "currentGate": None, "retirement": None,
@@ -903,18 +1029,19 @@ class Register:
                       "build-complete": {"type", "utc", "mono", "id", "identity", "receiptSha256"}}
             shapes["source-claim"] = shapes["build-claim"]
             shapes["source-complete"] = shapes["build-complete"]
+            shapes["diagnostic-dispatch"] = {"type", "utc", "mono", "id", "policySha256", "payloadSha256", "authorizationId", "localAttemptId", "ordinal"}
             shapes["interpreter-withdraw-claim"] = {"type", "utc", "mono", "id", "identity", "withdrawal"}
             shapes["interpreter-withdraw-complete"] = shapes["build-complete"]
             shapes["retire-claim"] = {"type", "utc", "mono", "id", "identity", "handoff", "clockCondition", "clockDriftMicros"}
             if (event.get("type") == "retire-claim" and "observedMono" in event
-                    and scope["schema"] in (2, 3, 4) and isinstance(event.get("handoff"), dict)
-                    and (event["handoff"].get("SchemaVersion") in (2, 3) or clock_sentence_handoff(event["handoff"]))):
+                    and scope["schema"] in (2, 3, 4, 5) and isinstance(event.get("handoff"), dict)
+                    and (event["handoff"].get("SchemaVersion") in (2, 3) or clock_sentence_handoff(event["handoff"]) or expired_diagnostic_handoff(event["handoff"]))):
                 shapes["retire-claim"] |= {"observedMono"}
             shapes["retire-complete"] = {"type", "utc", "mono", "id", "identity", "receiptSha256"}
             shapes["activate"] = {"type", "utc", "mono", "id", "identity", "previousRetirementHead", "receiptSha256", "gateSha256"}
             if event.get("type") == "activate" and "interpreterHandoff" in event and scope["schema"] == 4:
                 shapes["activate"] |= {"interpreterHandoff"}
-            if event.get("type") == "activate" and "sentenceHandoff" in event and scope["schema"] == 5:
+            if event.get("type") == "activate" and "sentenceHandoff" in event and scope["schema"] in (5, 6):
                 shapes["activate"] |= {"sentenceHandoff"}
             if event.get("type") == "claim" and scope["schema"] in (2, 5) and event.get("kind") == "completion-admission":
                 shapes["claim"] = shapes["claim"] | {"pilotProofSha256"}
@@ -950,9 +1077,11 @@ class Register:
             elif event["type"] == "claim":
                 kind = event["kind"]
                 kinds = ("refresh", "resume-admission", "completion-admission", "pilot-admission") if scope["schema"] in (2, 5) else ("refresh", "resume-admission", "completion-admission")
+                if scope["schema"] == 6:kinds = ("refresh", "diagnostic-admission")
                 if (state["stopped"] or not state["activated"] or state["retirement"] or state["pending"] or kind not in kinds
-                        or event["id"] in state["ids"] or state[kind] >= (1 if kind in ("completion-admission", "pilot-admission") else 24)
-                        or (scope["schema"] in (2, 3, 4, 5) and kind != "refresh" and state["admissions"] >= 24)):
+                        or (scope["schema"] == 6 and kind == "refresh" and state["diagnosticDispatch"] is not None)
+                        or event["id"] in state["ids"] or state[kind] >= (1 if kind in ("completion-admission", "pilot-admission", "diagnostic-admission") else 24)
+                        or (scope["schema"] in (2, 3, 4, 5, 6) and kind != "refresh" and state["admissions"] >= 24)):
                     raise Rejected("InvalidClaimHistory")
                 if scope["schema"] in (2, 5) and kind == "completion-admission":
                     hash_value(event["pilotProofSha256"])
@@ -971,10 +1100,25 @@ class Register:
                     raise Rejected("InvalidCompletionHistory")
                 if state["pending"]["kind"] == "pilot-admission" and event["outcome"] == "Succeeded":
                     state["pilotPolicySha256"] = state["pending"]["identity"]
+                if state["pending"]["kind"] == "diagnostic-admission" and event["outcome"] == "Succeeded":
+                    state["diagnosticPolicySha256"] = state["pending"]["identity"]
                 state["pending"] = None
                 if event["outcome"] != "Succeeded":
                     state["stopped"] = True
                     state["stopReason"] = event["reason"]
+            elif event["type"] == "diagnostic-dispatch":
+                if (scope["schema"] != 6 or state["stopped"] or not state["activated"] or state["pending"] or state["retirement"]
+                        or state["diagnosticPolicySha256"] != event["policySha256"]):
+                    raise Rejected("DiagnosticDispatch")
+                for name in ("policySha256", "payloadSha256"):hash_value(event[name])
+                for name in ("id", "authorizationId", "localAttemptId"):uuid_identity(event[name])
+                prior = state["diagnosticDispatch"]
+                if type(event["ordinal"]) is not int or (not prior and (event["ordinal"] != 1 or event["id"] in state["ids"])) or (prior and
+                        (prior["ordinal"] != 1 or event["ordinal"] != 2 or any(event[k] != prior[k] for k in
+                         ("id", "policySha256", "payloadSha256", "authorizationId", "localAttemptId")))):
+                    raise Rejected("DiagnosticDispatchReplay")
+                state["ids"].add(event["id"])
+                state["diagnosticDispatch"] = event
             elif event["type"] in ("build-claim", "source-claim"):
                 transition = event["transition"]
                 validate_transition(transition)
@@ -1039,7 +1183,9 @@ class Register:
                 condition, drift = self._retirement_observation(state, event["utc"], observed_mono, h)
                 allowed_interpreter = scope["schema"] == 4 and interpreter_handoff(h)
                 allowed_sentence = scope["schema"] == 4 and sentence_handoff(h)
-                reboot = clock_sentence_handoff(h)
+                allowed_diagnostic = scope["schema"] == 5 and diagnostic_handoff(h)
+                if allowed_diagnostic and ((state["stopped"] and not (expired_diagnostic_handoff(h) and state["stopReason"] in ("ClockRollback","ClockDiscontinuity","WindowExpired"))) or not state["activated"] or h["InheritedClockEpochEvidence"] != state["clockEpoch"] or (h["UsedRefreshes"], h["UsedAdmissions"], h["UsedResumeAdmissions"]) != (state["refresh"], state["admissions"], state["resume-admission"])):raise Rejected("DiagnosticCounterOrEpoch")
+                reboot = clock_sentence_handoff(h) or expired_diagnostic_handoff(h)
                 clock_stop = (reboot and state["stopReason"] in ("ClockRollback","ClockDiscontinuity")) or (expired_sentence_handoff(h) and state["stopReason"] == "WindowExpired")
                 if allowed_sentence and (not state["activated"] or (state["stopped"] and not clock_stop)
                         or (h["UsedRefreshes"], h["UsedAdmissions"], h["UsedResumeAdmissions"]) != (state["refresh"], state["admissions"], state["resume-admission"])):
@@ -1048,7 +1194,7 @@ class Register:
                         or state["interpreterActivation"] is not None
                         or h["RepairApprovalSha256"] == scope["approvalSha256"]):
                     raise Rejected("InvalidRetirementHistory")
-                if (((scope["schema"], h["SchemaVersion"]) not in ((1, 1), (2, 2), (3, 3)) and not allowed_interpreter and not allowed_sentence) or state["pending"] or state["retirement"] or event["id"] in state["ids"]
+                if (((scope["schema"], h["SchemaVersion"]) not in ((1, 1), (2, 2), (3, 3)) and not allowed_interpreter and not allowed_sentence and not allowed_diagnostic) or state["pending"] or state["retirement"] or event["id"] in state["ids"]
                         or h["TransitionId"] != event["id"] or h["ExpectedPreviousHeadSha256"] != previous
                         or h["PreviousScopeSha256"] != self.scope_sha
                         or h["PreviousGateSha256"] != state["currentGate"]
@@ -1056,7 +1202,7 @@ class Register:
                         or event["clockCondition"] != condition
                         or ("observedMono" in event and event["mono"] != max(state["lastMono"], observed_mono))
                         or (state["stopped"] and state["stopReason"] != "WindowExpired" and not clock_stop)
-                        or (h["SchemaVersion"] in (2, 3, 4) and h["OriginalManifestSha256"] != scope["plansSha256"])
+                        or (h["SchemaVersion"] in (2, 3, 4, 5, 6) and h["OriginalManifestSha256"] != scope["plansSha256"])
                         or (h["SchemaVersion"] == 3 and event["utc"] < utc(scope["endUtc"]))):
                     raise Rejected("InvalidRetirementHistory")
                 state["retirement"] = event
@@ -1069,19 +1215,23 @@ class Register:
                 state["retired"] = True
                 state["pending"] = None
             elif event["type"] == "activate":
-                if (scope["schema"] not in (2, 3, 4, 5) or state["activated"] or state["pending"] or state["stopped"]
+                if (scope["schema"] not in (2, 3, 4, 5, 6) or state["activated"] or state["pending"] or state["stopped"]
                         or event["id"] != scope["transitionId"]):
                     raise Rejected("InvalidSuccessorActivation")
                 hash_value(event["identity"]); hash_value(event["previousRetirementHead"])
                 hash_value(event["gateSha256"])
                 state["activation"] = event
-                if scope["schema"] == 5:
+                if scope["schema"] in (5, 6):
                     h = event.get("sentenceHandoff"); validate_handoff(h)
-                    if (not sentence_handoff(h) or h["NewScopeSha256"] != self.scope_sha or h["NewGateSha256"] != event["gateSha256"]
+                    if ((not diagnostic_handoff(h) if scope["schema"] == 6 else not sentence_handoff(h)) or h["NewScopeSha256"] != self.scope_sha or h["NewGateSha256"] != event["gateSha256"]
                             or h["TransitionId"] != event["id"] or h["SourceApprovalSha256"] != scope["approvalSha256"]):
                         raise Rejected("InvalidSuccessorActivation")
+                    if scope["schema"] == 6 and (scope["diagnosticWindowMode"] != ("fresh-10-minute" if expired_diagnostic_handoff(h) else "inherited")
+                            or (expired_diagnostic_handoff(h) and utc(scope["startUtc"]) != h["ClockEpochEvidence"]["ObservedUtcMicros"])):
+                        raise Rejected("DiagnosticWindow")
                     state["refresh"], state["admissions"], state["resume-admission"] = h["UsedRefreshes"], h["UsedAdmissions"], h["UsedResumeAdmissions"]
                     if clock_sentence_handoff(h):state["clockEpoch"]=h["ClockEpochEvidence"]
+                    if scope["schema"] == 6:state["clockEpoch"]=h.get("ClockEpochEvidence",h["InheritedClockEpochEvidence"])
                 if "interpreterHandoff" in event:
                     h = event["interpreterHandoff"]
                     validate_handoff(h)
@@ -1096,7 +1246,7 @@ class Register:
                     raise Rejected("CheckAfterStop")
             else:
                 raise Rejected("UnknownEvent")
-            old_clock_retirement = event["type"] in ("retire-claim","retire-complete") and state["retirement"] and clock_sentence_handoff(state["retirement"]["handoff"])
+            old_clock_retirement = event["type"] in ("retire-claim","retire-complete") and state["retirement"] and (clock_sentence_handoff(state["retirement"]["handoff"]) or expired_diagnostic_handoff(state["retirement"]["handoff"]))
             if not (event["type"]=="stop" and event["reason"] in ("ClockRollback","ClockDiscontinuity")) and not old_clock_retirement and not (state["stopped"] and state["stopReason"] in ("ClockRollback","ClockDiscontinuity")):
                 state["lastGoodUtc"]=event["utc"]
             state["lastUtc"] = event["utc"]
@@ -1138,20 +1288,27 @@ class Register:
             raise Rejected("ClockRollback")
         retirement = state["retirement"]
         typed = handoff or (retirement["handoff"] if retirement else None)
-        if clock_sentence_handoff(typed):
-            e=typed["ClockEpochEvidence"];validate_clock_epoch(e,require_reboot=not expired_sentence_handoff(typed))
+        if diagnostic_handoff(typed):
+            e = typed["InheritedClockEpochEvidence"]
+            if e != state["clockEpoch"]:raise Rejected("DiagnosticCounterOrEpoch")
+            if e and not expired_diagnostic_handoff(typed):
+                delta = mono - e["ObservedMonoMicros"]
+                if delta < 0 or abs(now-e["ObservedUtcMicros"]-delta) > 250_000:raise Rejected("ClockRollback")
+                if e["TrustedUtcUpperMicros"]+delta >= utc(state["scope"]["endUtc"]):raise Rejected("WindowExpired")
+        if clock_sentence_handoff(typed) or expired_diagnostic_handoff(typed):
+            e=typed["ClockEpochEvidence"];validate_clock_epoch(e,require_reboot=not (expired_sentence_handoff(typed) or expired_diagnostic_handoff(typed)))
             if e["PreviousLastGoodUtcMicros"]!=state["lastGoodUtc"] or now<e["ObservedUtcMicros"] or mono<e["ObservedMonoMicros"]:
                 raise Rejected("ClockEpochEvidence")
             delta=mono-e["ObservedMonoMicros"]
             if abs(now-e["ObservedUtcMicros"]-delta)>250_000:raise Rejected("ClockRollback")
-            if expired_sentence_handoff(typed):
+            if expired_sentence_handoff(typed) or expired_diagnostic_handoff(typed):
                 if e["TrustedUtcLowerMicros"]+delta<utc(state["scope"]["endUtc"]):raise Rejected("ExpiredPredecessorRequired")
                 # Immutable evidence pins the ONLY proposed new six-hour window;
                 # retirement/reconciliation cannot outlive its conservative cutoff.
-                if e["TrustedUtcUpperMicros"]+delta>=e["ObservedUtcMicros"]+6*3600*1_000_000:raise Rejected("WindowExpired")
+                if e["TrustedUtcUpperMicros"]+delta>=e["ObservedUtcMicros"]+(600 if expired_diagnostic_handoff(typed) else 6*3600)*1_000_000:raise Rejected("WindowExpired")
             elif e["TrustedUtcUpperMicros"]+delta>=utc(state["scope"]["endUtc"]):raise Rejected("WindowExpired")
             if not retirement and now-e["ObservedUtcMicros"]>600*1_000_000:raise Rejected("ClockEpochEvidence")
-            return ("ApprovedExpiredTerminalWindow" if expired_sentence_handoff(typed) else "ApprovedRebootEpoch"),drift
+            return ("ApprovedExpiredDiagnosticWindow" if expired_diagnostic_handoff(typed) else "ApprovedExpiredTerminalWindow" if expired_sentence_handoff(typed) else "ApprovedRebootEpoch"),drift
         if retirement and mono < retirement.get("observedMono", retirement["mono"]):
             raise Rejected("ClockRollback")
         if mono < state["lastMono"]:
@@ -1168,7 +1325,7 @@ class Register:
         if drift < -250000:
             raise Rejected("ClockRollback")
         typed = handoff or (retirement["handoff"] if retirement else None)
-        if sentence_handoff(typed):
+        if sentence_handoff(typed) or diagnostic_handoff(typed):
             if now >= utc(state["scope"]["endUtc"]) or mono - state["startMono"] >= utc(state["scope"]["endUtc"]) - state["startUtc"]:
                 raise Rejected("WindowExpired")
             if drift > 250000:
@@ -1200,7 +1357,7 @@ class Register:
         return now
 
     def claim(self, kind, identity_sha, operation_id, pilot_proof_sha=None, accepted_proof_sha=None):
-        if kind not in ("refresh", "resume-admission", "completion-admission", "pilot-admission"):
+        if kind not in ("refresh", "resume-admission", "completion-admission", "pilot-admission", "diagnostic-admission"):
             raise Rejected("UnsupportedOperation")
         hash_value(identity_sha)
         if str(uuid.UUID(operation_id)) != operation_id:
@@ -1212,10 +1369,12 @@ class Register:
                 raise Rejected("PendingOutcomeRequiresReconciliation")
             if operation_id in state["ids"]:
                 raise Rejected("Replay")
+            if (state["scope"]["schema"] == 6 and kind not in ("refresh", "diagnostic-admission")) or (kind == "diagnostic-admission" and state["scope"]["schema"] != 6):raise Rejected("DiagnosticOperation")
+            if state["scope"]["schema"] == 6 and kind == "refresh" and state["diagnosticDispatch"] is not None:raise Rejected("DiagnosticOperation")
             if kind == "pilot-admission" and state["scope"]["schema"] not in (2, 5):
                 raise Rejected("UnsupportedOperation")
-            if (state[kind] >= (1 if kind in ("completion-admission", "pilot-admission") else 24)
-                    or (state["scope"]["schema"] in (2, 3, 4, 5) and kind != "refresh" and state["admissions"] >= 24)):
+            if (state[kind] >= (1 if kind in ("completion-admission", "pilot-admission", "diagnostic-admission") else 24)
+                    or (state["scope"]["schema"] in (2, 3, 4, 5, 6) and kind != "refresh" and state["admissions"] >= 24)):
                 raise Rejected("OperationLimit")
             event = {"type": "claim", "utc": now, "id": operation_id, "kind": kind, "identity": identity_sha}
             if state["scope"]["schema"] in (2, 5) and kind == "completion-admission":
@@ -1262,6 +1421,9 @@ class Register:
                     maximum = state["scope"]["maximumNewAttempts"]
                 if state["scope"]["schema"] == 5:
                     maximum = 2 if pending["kind"] == "pilot-admission" else state["scope"]["maximumNewAttempts"] - 2
+                if state["scope"]["schema"] == 6:
+                    maximum = 1
+                    good = good and receipt.get("maximumNewAttempts") == 1 and receipt.get("additionalReservationCents") == 1
                 good = good and type(receipt.get("maximumNewAttempts")) is int and 0 <= receipt["maximumNewAttempts"] <= maximum
                 good = good and type(receipt.get("additionalReservationCents")) is int and 0 <= receipt["additionalReservationCents"] <= maximum
             # Expiry/rollback cannot be hidden by completing a successful older claim.
@@ -1285,6 +1447,23 @@ class Register:
             if not pending or pending["type"] != "claim" or pending["id"] != operation_id or pending["identity"] != identity_sha:
                 raise Rejected("PendingEffectIdentityMismatch")
             return True
+
+    def diagnostic_dispatch(self, operation_id, policy_sha, payload_sha, authorization, local_attempt):
+        """Two irreversible pre-effect observations; caller fields require actual bridge readback."""
+        for pin in (policy_sha, payload_sha):hash_value(pin)
+        for value in (operation_id, authorization, local_attempt):uuid_identity(value)
+        with self._open() as db:
+            state = self._read(db);now = self._guard(db, state)
+            if (state["scope"]["schema"] != 6 or state["pending"] or state["diagnosticPolicySha256"] != policy_sha):
+                raise Rejected("DiagnosticDispatch")
+            prior = state["diagnosticDispatch"]
+            fields = dict(id=operation_id, policySha256=policy_sha, payloadSha256=payload_sha, authorizationId=authorization, localAttemptId=local_attempt)
+            if prior is None and operation_id in state["ids"]:raise Rejected("DiagnosticDispatchReplay")
+            if prior and (prior["ordinal"] != 1 or any(prior[k] != v for k,v in fields.items())):
+                raise Rejected("DiagnosticDispatchReplay")
+            event = dict(type="diagnostic-dispatch", utc=now, ordinal=2 if prior else 1, **fields)
+            self._append(db, self._stamp(event), state["head"]);db.commit();self._seal(db)
+            return {"valid":True, "id":operation_id, "payloadSha256":payload_sha, "authority":False}
 
     def _build_ready(self, state, transition, identity_sha, operation_id, pending=False, check_clock=True):
         validate_transition(transition)
@@ -1420,7 +1599,8 @@ class Register:
         typed_interpreter = interpreter_handoff(h)
         typed_pair = typed_interpreter and (old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) == (4, 4, 3)
         sentence_pair = sentence_handoff(h) and (old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) == (4, 5, 4)
-        if (((old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) not in ((1, 2, 1), (2, 3, 2), (3, 4, 3)) and not typed_pair and not sentence_pair)
+        diagnostic_pair = diagnostic_handoff(h) and (old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) in ((5, 6, 5),(5, 6, 6))
+        if (((old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) not in ((1, 2, 1), (2, 3, 2), (3, 4, 3)) and not typed_pair and not sentence_pair and not diagnostic_pair)
                 or (typed_interpreter and not typed_pair)
                 or (sentence_handoff(h) and not sentence_pair)
                 or h["PreviousScopeSha256"] != self.scope_sha or h["NewScopeSha256"] != successor.scope_sha
@@ -1431,6 +1611,10 @@ class Register:
                 or new_scope["approvalSha256"] == old_state["scope"]["approvalSha256"]
                 or any(new_scope[k] != old_state["scope"][k] for k in ("profileSha256", "accountSha256", "projectSha256"))):
             raise Rejected("SuccessorScopeBinding")
+        if diagnostic_handoff(h):
+            if not diagnostic_pair:raise Rejected("DiagnosticCounterOrEpoch")
+            diagnostic_window_binding(old_state,new_scope,h)
+            if not expired_diagnostic_handoff(h) and self._time_rejection(old_state):raise Rejected(self._time_rejection(old_state))
         if sentence_pair:
             clock_stop = (clock_sentence_handoff(h) and old_state["stopReason"] in ("ClockRollback","ClockDiscontinuity")) or (expired_sentence_handoff(h) and old_state["stopReason"] == "WindowExpired")
             changed_window=any(new_scope[k] != old_state["scope"][k] for k in ("startUtc", "endUtc"))
@@ -1454,7 +1638,7 @@ class Register:
             raise Rejected("SuccessorScopeBinding")
         if h["SchemaVersion"] == 3 and self.clock() < utc(old_state["scope"]["endUtc"]):
             raise Rejected("WholeArticlePredecessorNotExpired")
-        if h["SchemaVersion"] in (2, 3, 4):
+        if h["SchemaVersion"] in (2, 3, 4, 5, 6):
             if (h["OriginalManifestSha256"] != old_state["scope"]["plansSha256"]
                     or h["AcceptedEvidenceSha256"] != new_scope["acceptedEvidenceSha256"]):
                 raise Rejected("ContinuationAcceptedProof")
@@ -1463,7 +1647,7 @@ class Register:
             self._require_ancestor_snapshot(old_state, h["PreviousGateSha256"])
         # A distinct approved window may retire forward-discontinuous old time;
         # normal old permissions, backward UTC and committed failure stops stay blocked.
-        if old_state["stopped"] and old_state["stopReason"] != "WindowExpired" and not (clock_sentence_handoff(h) and old_state["stopReason"] in ("ClockRollback","ClockDiscontinuity")):
+        if old_state["stopped"] and old_state["stopReason"] != "WindowExpired" and not ((clock_sentence_handoff(h) or expired_diagnostic_handoff(h)) and old_state["stopReason"] in ("ClockRollback","ClockDiscontinuity")):
             raise Rejected("RetirementClockOrStop")
         if check_clock:
             self._retirement_observation(old_state, self.clock(), self.monotonic(), h)
@@ -1498,7 +1682,7 @@ class Register:
             self._handoff_ready(state, successor, new_scope, h, identity)
             if successor.path.exists() or successor.anchor.exists():
                 raise Rejected("SuccessorAlreadyExists")
-            deadline=effective_deadline(new_scope,h.get("ClockEpochEvidence"))
+            deadline=effective_deadline(new_scope,h.get("ClockEpochEvidence", h.get("InheritedClockEpochEvidence")))
             return {"valid": True, "deadlineUtc": deadline, "authority": False}
 
     def claim_successor(self, successor, new_scope, h, identity):
@@ -1513,7 +1697,7 @@ class Register:
             event = {"type": "retire-claim", "utc": self.clock(), "mono": self.monotonic(),
                      "id": h["TransitionId"], "identity": identity, "handoff": h}
             condition, drift = self._retirement_observation(state, event["utc"], event["mono"], h)
-            if h["SchemaVersion"] in (2, 3) or clock_sentence_handoff(h):
+            if h["SchemaVersion"] in (2, 3) or clock_sentence_handoff(h) or expired_diagnostic_handoff(h):
                 event["observedMono"] = event["mono"]
                 event["mono"] = max(state["lastMono"], event["mono"])
             event.update(clockCondition=condition, clockDriftMicros=drift)
@@ -1521,7 +1705,7 @@ class Register:
             db.commit(); self._seal(db)  # Old authority stops durably before any new state/install effect.
             successor._create_locked(new_scope, successor.scope_sha, successor.clock())
             return {"id": h["TransitionId"], "identitySha256": identity, "scopeSha256": successor.scope_sha,
-                    "deadlineUtc": effective_deadline(new_scope,h.get("ClockEpochEvidence")), "authority": False}
+                    "deadlineUtc": effective_deadline(new_scope,h.get("ClockEpochEvidence", h.get("InheritedClockEpochEvidence"))), "authority": False}
 
     def check_successor(self, successor, new_scope, h, identity):
         with self.pair(successor), self._transaction() as db, successor._transaction() as new_db:
@@ -1553,7 +1737,7 @@ class Register:
                                                        "receiptSha256": observed_sha, "gateSha256": h["NewGateSha256"]}
             if interpreter_handoff(h):
                 activation["interpreterHandoff"] = h
-            if sentence_handoff(h):
+            if sentence_handoff(h) or diagnostic_handoff(h):
                 activation["sentenceHandoff"] = h
             successor._append(new_db, successor._stamp(activation), new_state["head"])
             new_db.commit(); successor._seal(new_db)
@@ -1563,7 +1747,7 @@ class Register:
         # Called on EVERY operational bridge entry, never a caller success assertion.
         with self._open() as db:
             new_state = self._read(db)
-        if new_state["scope"]["schema"] not in (2, 3, 4, 5):
+        if new_state["scope"]["schema"] not in (2, 3, 4, 5, 6):
             return
         scope = new_state["scope"]
         old = Register(scope["predecessorRegisterPath"], scope["predecessorScopeSha256"])
@@ -1574,7 +1758,7 @@ class Register:
     def _require_ancestor_snapshot(self, current, config_pin, seen=None, maximum_depth=None):
         """Read only terminal ancestors, never recursively acquire an owned lease."""
         seen = set() if seen is None else set(seen)
-        maximum_depth = (6 if current["scope"]["schema"] == 5 else 5) if maximum_depth is None else maximum_depth
+        maximum_depth = (7 if current["scope"]["schema"] == 6 else 6 if current["scope"]["schema"] == 5 else 5) if maximum_depth is None else maximum_depth
         identity = os.path.normcase(str(self.path))
         if identity in seen or len(seen) >= maximum_depth:
             raise Rejected("PredecessorNotRetired")
@@ -1602,10 +1786,15 @@ class Register:
                     or item["handoff"]["SourceApprovalSha256"] != scope["approvalSha256"]
                     or item["handoff"]["PreviousGateSha256"] != state["currentGate"]
                     or ("interpreterHandoff" in a and a["interpreterHandoff"] != item["handoff"])
-                    or (schema in (3, 4, 5) and (item["handoff"]["SchemaVersion"] != schema - 1
+                    or (schema in (3, 4, 5, 6) and ((item["handoff"]["SchemaVersion"] != schema - 1 and not (schema==6 and expired_diagnostic_handoff(item["handoff"])))
                         or item["handoff"]["OriginalManifestSha256"] != state["scope"]["plansSha256"]
                         or item["handoff"]["AcceptedEvidenceSha256"] != scope["acceptedEvidenceSha256"]))):
                 raise Rejected("PredecessorNotRetired")
+            if schema == 6:
+                h = item["handoff"]
+                if not diagnostic_handoff(h) or a.get("sentenceHandoff") != h:raise Rejected("DiagnosticCounterOrEpoch")
+                diagnostic_window_binding(state,scope,h)
+                if current["clockEpoch"] != h.get("ClockEpochEvidence",state["clockEpoch"]):raise Rejected("DiagnosticCounterOrEpoch")
             if schema == 5:
                 h = item["handoff"]
                 if (not sentence_handoff(h) or a.get("sentenceHandoff") != h

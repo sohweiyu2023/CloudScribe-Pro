@@ -15,4 +15,6 @@ public sealed record ChirpArticleAdmissionPolicy(int SchemaVersion, string AppSh
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<RecoveryFinancialRowPin>? PriorSuccessorAttemptRows = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    ChirpWholeArticleGrant? WholeArticleGeneration = null);
+    ChirpWholeArticleGrant? WholeArticleGeneration = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ChirpSentenceDiagnosticAdmission? DiagnosticEvidence = null);

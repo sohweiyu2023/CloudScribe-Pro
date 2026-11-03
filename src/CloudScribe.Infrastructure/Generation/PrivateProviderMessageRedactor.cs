@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Diagnostics;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -11,15 +12,27 @@ public static class PrivateProviderMessageRedactor
 {
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(100);
     public static string? Extract(ReadOnlyMemory<byte> body, ReadOnlyMemory<byte> input, string token)
+        => ExtractDetailed(body, input, token)?.Message;
+
+    internal static PrivateProviderExplanationText? ExtractDetailed(ReadOnlyMemory<byte> body, ReadOnlyMemory<byte> input, string token)
     {
         var diagnostic = GoogleErrorResponseDiagnosticParser.Parse(body);
-        if (diagnostic.Parse != GoogleErrorBodyParseState.ValidError || diagnostic.Message != GoogleErrorMemberState.TextValue || diagnostic.Status != GoogleErrorMemberState.TextValue
+        if (diagnostic.Parse != GoogleErrorBodyParseState.ValidError || diagnostic.Status != GoogleErrorMemberState.TextValue
             || body.Length > 16384 || input.Length > 16384 || token.Length > 16384) return null;
         using var json = JsonDocument.Parse(body);
         var error = json.RootElement.GetProperty("error");
         if (!error.TryGetProperty("status", out var status) || !string.Equals(status.GetString(), "INVALID_ARGUMENT", StringComparison.Ordinal)) return null;
-        string message = error.GetProperty("message").GetString()!;
+        var explanation = CollectExplanation(error);
+        string message = explanation.Message;
         if (string.IsNullOrWhiteSpace(message)) return null;
+        var sanitized = RedactText(message, input, token);
+        return new(sanitized.Text, explanation.DetailsOmitted, sanitized.WasTruncated);
+    }
+
+    internal static DiagnosticRedactionResult RedactText(string message, ReadOnlyMemory<byte> input, string token)
+    {
+        if (input.Length > 16384 || token.Length > 16384 || message.Length > 32768)
+            throw new InvalidDataException("Private redaction input exceeds its bound.");
         using var request = JsonDocument.Parse(input);
         var content = request.RootElement.GetProperty("input");
         string rawText = content.TryGetProperty("text", out var plain) ? plain.GetString()!
@@ -37,7 +50,50 @@ public static class PrivateProviderMessageRedactor
         message = Replace(message, @"(?is)-----BEGIN[^-]{0,40}PRIVATE KEY-----.*?-----END[^-]{0,40}PRIVATE KEY-----", "[credential redacted]");
         message = Replace(message, @"(?i)(access_token|refresh_token|api[_-]?key|password|authorization|token)[\""']?\s*[=:]\s*[\""']?[^\s,;<>]+", "[credential redacted]");
         message = Replace(message, @"<[^>]{0,2048}>", "[markup removed]");
-        return string.Concat(message.EnumerateRunes().Where(r => Rune.GetUnicodeCategory(r) is not UnicodeCategory.Control and not UnicodeCategory.Format));
+        string inert = string.Concat(message.EnumerateRunes().Where(r => Rune.GetUnicodeCategory(r) is not UnicodeCategory.Control and not UnicodeCategory.Format));
+        var sanitized = DiagnosticRedactor.SanitizePrivateProviderExplanation(inert);
+        return sanitized;
+    }
+
+    private static PrivateProviderExplanationText CollectExplanation(JsonElement error)
+    {
+        List<string> messages = [];
+        HashSet<string> seen = new(StringComparer.Ordinal);
+        bool omitted = false;
+        void Visit(JsonElement node, int depth)
+        {
+            if (depth > 8) { omitted = true; return; }
+            if (node.ValueKind == JsonValueKind.Array)
+            {
+                int count = 0;
+                foreach (var item in node.EnumerateArray())
+                { if (++count > 32) { omitted = true; break; } Visit(item, depth + 1); }
+            }
+            else if (node.ValueKind == JsonValueKind.Object)
+            {
+                int count = 0;
+                foreach (var property in node.EnumerateObject())
+                {
+                    if (++count > 64) { omitted = true; break; }
+                    if (property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array) Visit(property.Value, depth + 1);
+                    else if (property.Value.ValueKind == JsonValueKind.String)
+                    {
+                        if (property.Name is "message" or "description" or "reason" or "domain" or "field")
+                        {
+                            string text = property.Value.GetString()!;
+                            if (string.IsNullOrWhiteSpace(text) || !seen.Add(text)) continue;
+                            if (messages.Count >= 32) { omitted = true; continue; }
+                            messages.Add(depth == 0 && string.Equals(property.Name, "message", StringComparison.Ordinal) ? text : property.Name + ": " + text);
+                        }
+                        else if (property.Name is not ("status" or "@type")) omitted = true;
+                    }
+                    else if (!string.Equals(property.Name, "code", StringComparison.Ordinal)) omitted = true;
+                }
+            }
+            else omitted = true;
+        }
+        Visit(error, 0);
+        return new(string.Join("\nDetail: ", messages), omitted);
     }
 
     private static string RemoveKnown(string message, string known)

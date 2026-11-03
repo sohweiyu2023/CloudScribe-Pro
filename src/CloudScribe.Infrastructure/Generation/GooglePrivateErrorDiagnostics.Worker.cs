@@ -1,5 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using CloudScribe.Application.Logging;
+using CloudScribe.Domain.Generation;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -22,25 +25,68 @@ public sealed partial class GooglePrivateErrorDiagnostics
         _ => "No private record has been captured in this session.",
     };
 
-    private void QueueWrite(string message, string payloadHash, string correlation)
+    private GoogleExplanationRetentionState QueueWrite(PrivateProviderExplanationText explanation, string payloadHash, string correlation)
+        => QueueRecord(BoundRecord(explanation, payloadHash, correlation));
+
+    private GoogleExplanationRetentionState QueueEnvelope(PrivateProviderResponseEnvelope envelope, string payloadHash, string correlation)
+    {
+        var record = new PrivateProviderErrorRecord(Guid.NewGuid(), clock.GetUtcNow(),
+            "Private response evidence; inspect completeness and redaction flags before interpretation.", envelope.Truncated,
+            payloadHash, correlation, envelope.DetailsOmitted, envelope);
+        while (JsonSerializer.SerializeToUtf8Bytes(record).Length > PrivateRecordProtection.MaximumPlaintextBytes)
+        {
+            envelope = envelope with
+            {
+                RedactedBody = PrivateProviderEnvelopeRedactor.LimitUtf8(envelope.RedactedBody,
+                Encoding.UTF8.GetByteCount(envelope.RedactedBody) * 3 / 4),
+                Truncated = true
+            };
+            record = record with { Response = envelope, Truncated = true };
+        }
+        return QueueRecord(record);
+    }
+
+    private GoogleExplanationRetentionState QueueRecord(PrivateProviderErrorRecord record)
     {
         long sequence = Interlocked.Increment(ref _writeSequence);
-        if (Interlocked.CompareExchange(ref _writerBusy, 1, 0) != 0) { Volatile.Write(ref _writeState, 3); return; } // Never backpressure a provider outcome.
+        if (Interlocked.CompareExchange(ref _writerBusy, 1, 0) != 0)
+        { Volatile.Write(ref _writeState, 3); return GoogleExplanationRetentionState.StorageBusy; } // Never backpressure a provider outcome.
         try
         {
-            var record = BoundRecord(message, payloadHash, correlation);
             Volatile.Write(ref _writeState, 1);
             using (ExecutionContext.SuppressFlow())
                 _pendingWrite = Task.Run(() => PersistRedactedRecord(record, sequence)); // Closure has only bounded redacted record, sequence and owner.
+            return GoogleExplanationRetentionState.PrivateWritePending;
         }
         catch { Volatile.Write(ref _writerBusy, 0); throw; }
     }
 
     private void PersistRedactedRecord(PrivateProviderErrorRecord record, long sequence)
     {
-        try { bool saved = persistence.Save(record); if (sequence == Volatile.Read(ref _writeSequence)) Volatile.Write(ref _writeState, saved ? 2 : 7); }
+        var outcome = GoogleExplanationRetentionState.StorageFailed;
+        try
+        {
+            bool saved = persistence.Save(record);
+            outcome = saved ? GoogleExplanationRetentionState.SavedPrivately : GoogleExplanationRetentionState.ExpiredBeforeSave;
+            if (sequence == Volatile.Read(ref _writeSequence)) Volatile.Write(ref _writeState, saved ? 2 : 7);
+        }
         catch (Exception error) when (NonFatal(error)) { if (sequence == Volatile.Read(ref _writeSequence)) Volatile.Write(ref _writeState, 4); }
-        finally { Volatile.Write(ref _writerBusy, 0); }
+        finally
+        {
+            Volatile.Write(ref _writerBusy, 0);
+            ObservePersistence(record, outcome);
+        }
+    }
+
+    private void ObservePersistence(PrivateProviderErrorRecord record, GoogleExplanationRetentionState outcome)
+    {
+        if (logger is null || !CloudScribeLog.ObserveIsEnabled(logger, LogLevel.Information)) return;
+        CloudScribeLog.Observe(() =>
+        {
+            int bytes = Encoding.UTF8.GetByteCount(record.Message);
+            CloudScribeLog.GooglePrivateExplanationPersistence(logger,
+                record.TransportCorrelation, record.PayloadSha256, outcome, bytes, record.Truncated, record.ProviderDetailsOmitted);
+        });
     }
 
     public Task WaitForPendingWriteAsync(CancellationToken cancellationToken = default) =>
@@ -61,10 +107,12 @@ public sealed partial class GooglePrivateErrorDiagnostics
         return await read.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private PrivateProviderErrorRecord BoundRecord(string message, string payloadHash, string correlation)
+    private PrivateProviderErrorRecord BoundRecord(PrivateProviderExplanationText explanation, string payloadHash, string correlation)
     {
+        string message = explanation.Message;
         string bounded = TruncatePrivateText(message, 2048);
-        var record = new PrivateProviderErrorRecord(Guid.NewGuid(), clock.GetUtcNow(), bounded, bounded.Length != message.Length, payloadHash, correlation);
+        var record = new PrivateProviderErrorRecord(Guid.NewGuid(), clock.GetUtcNow(), bounded, explanation.Truncated || bounded.Length != message.Length,
+            payloadHash, correlation, explanation.DetailsOmitted);
         while (JsonSerializer.SerializeToUtf8Bytes(record).Length > 4096)
         {
             bounded = TruncatePrivateText(bounded, Encoding.UTF8.GetByteCount(bounded) * 3 / 4);

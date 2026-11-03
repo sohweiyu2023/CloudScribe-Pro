@@ -68,6 +68,12 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
         try { ChirpPolicyValidation.RequireValid(owned, clock.GetUtcNow()); }
         catch (InvalidDataException error)
         { throw LocalRequestDiagnostics.Mark(error, LocalRequestReason.AdmissionChanged, admissionExpiresUtc: owned.ExpiresAtUtc); }
+        if (owned.SchemaVersion == 4)
+        {
+            if (completionGate is null) throw new CompletionGateException(CompletionGateFailure.PinMismatch,
+                CloudScribe.Domain.Generation.CompletionProtocolCode.DiagnosticScope);
+            completionGate.RequireDiagnosticAdmission(ChirpPolicyValidation.Hash(owned));
+        }
         return owned;
     }
 

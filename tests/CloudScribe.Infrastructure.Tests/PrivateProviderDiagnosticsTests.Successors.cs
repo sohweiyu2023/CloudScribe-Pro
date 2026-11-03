@@ -15,6 +15,7 @@ public sealed partial class PrivateProviderDiagnosticsTests
     [InlineData("other-object")]
     [InlineData("wrong-reference")]
     [InlineData("expired")]
+    [InlineData("selected-only")]
     public async Task DiagnosticChildCannotDispatchWithoutExactAttachedUnexpiredTicket(string state)
     {
         using var fixture = new Fixture(); var child = DiagnosticChild(fixture);
@@ -22,6 +23,8 @@ public sealed partial class PrivateProviderDiagnosticsTests
         {
             var binding = string.Equals(state, "wrong-reference", StringComparison.Ordinal)
                 ? fixture.Binding with { CredentialReferenceId = "wrong-reference" } : fixture.Binding;
+            if (!string.Equals(state, "selected-only", StringComparison.Ordinal))
+                binding = binding with { CaptureMode = PrivateErrorCaptureMode.ProtectedResponseEnvelope };
             fixture.Store.Arm(binding, true);
             var attached = string.Equals(state, "other-object", StringComparison.Ordinal)
                 ? new GenerationProviderRequest(child.ProviderStableId, child.OperationStableId, child.AccountId, child.IdempotencyKey, child.CompiledPayload, child.OutputFormat) : child;
@@ -40,7 +43,8 @@ public sealed partial class PrivateProviderDiagnosticsTests
     public async Task ConsentLossDuringCredentialAwaitPreventsDiagnosticHttpDispatch(bool expire)
     {
         using var fixture = new Fixture(); var child = DiagnosticChild(fixture);
-        fixture.Store.Arm(fixture.Binding, true); fixture.Store.Attach(child, fixture.Binding);
+        var binding = fixture.Binding with { CaptureMode = PrivateErrorCaptureMode.ProtectedResponseEnvelope };
+        fixture.Store.Arm(binding, true); fixture.Store.Attach(child, binding);
         var credential = new DelayedDiagnosticCredential();
         using var http = new HttpClient(fixture.Handler, disposeHandler: false);
         var transport = new GoogleGenerationHttpTransport(http, credential, new Uri("https://texttospeech.googleapis.com"), privateDiagnostics: fixture.Store);
@@ -59,13 +63,14 @@ public sealed partial class PrivateProviderDiagnosticsTests
     public async Task ExactChildRetainsUnknownErrorOnceAndRootCompatibilityIsUnchanged()
     {
         using var fixture = new Fixture(); var child = DiagnosticChild(fixture);
-        fixture.Store.Arm(fixture.Binding, true); fixture.Store.Attach(child, fixture.Binding);
+        var binding = fixture.Binding with { CaptureMode = PrivateErrorCaptureMode.ProtectedResponseEnvelope };
+        fixture.Store.Arm(binding, true); fixture.Store.Attach(child, binding);
         fixture.Handler.Body = JsonSerializer.Serialize(new { error = new { status = "INVALID_ARGUMENT", message = "An unfamiliar provider explanation remains useful." } });
         fixture.Provider.RequirePrivateDiagnosticsReady(child);
         var response = await fixture.Provider.SubmitAsync(child, TestContext.Current.CancellationToken);
         await fixture.Store.WaitForPendingWriteAsync(TestContext.Current.CancellationToken);
         Assert.Equal("google-http-400", response.DiagnosticCode);
-        Assert.Contains("unfamiliar", Assert.Single(fixture.Store.ReadRecords()).Message, StringComparison.Ordinal);
+        Assert.Contains("unfamiliar", Assert.Single(fixture.Store.ReadRecords()).Response!.RedactedBody, StringComparison.Ordinal);
         await Assert.ThrowsAsync<PrivateDiagnosticNotReadyException>(() => fixture.Provider.SubmitAsync(child, TestContext.Current.CancellationToken));
         var root = new GenerationProviderRequest(child.ProviderStableId, child.OperationStableId, child.AccountId,
             ChirpArticleService.KeyPrefix + new string('b', 64) + ":1", child.CompiledPayload, child.OutputFormat);

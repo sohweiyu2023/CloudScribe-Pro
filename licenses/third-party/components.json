@@ -2378,6 +2378,42 @@
           "sha256": "508a76d186356c0dd807a670ef510964f8724557024796a2c426c6c0e19ab683"
         }
       ]
+    },
+    {
+      "package": "System.Security.Cryptography.ProtectedData",
+      "version": "10.0.13",
+      "license_metadata": {
+        "text": "MIT",
+        "attributes": {
+          "type": "expression"
+        }
+      },
+      "copyright_metadata": {
+        "text": "© Microsoft Corporation. All rights reserved.",
+        "attributes": {}
+      },
+      "repository_metadata": {
+        "text": null,
+        "attributes": {
+          "type": "git",
+          "url": "https://github.com/dotnet/dotnet",
+          "commit": "4099f83977f4d29604a9aeb971fb0a7bc1d5f699"
+        }
+      },
+      "distributed_files": [
+        {
+          "path": "System.Security.Cryptography.ProtectedData.dll",
+          "sha256": "2495a79b01bf74ec3a5d2029fa9b94e0c167ab09b0cba1b9b7e9b89661f3ebe6",
+          "dependency_asset": "lib/net10.0/System.Security.Cryptography.ProtectedData.dll"
+        }
+      ],
+      "notice_files": [
+        {
+          "path": "texts/Microsoft.Extensions.Caching.Abstractions/10.0.10/THIRD-PARTY-NOTICES.TXT",
+          "source": "NuGet:System.Security.Cryptography.ProtectedData/10.0.13/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+        }
+      ]
     }
   ],
   "first_party_dlls": [

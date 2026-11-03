@@ -16,6 +16,38 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def safe_exception_name(error):
+    name=type(error).__name__
+    return name if name in {"Rejected","KeyError","TypeError","ValueError","AttributeError","IndexError","OverflowError",
+        "UnicodeDecodeError","UnicodeEncodeError","JSONDecodeError","OperationalError","DatabaseError","IntegrityError",
+        "FileNotFoundError","PermissionError","OSError","TimeoutError","RuntimeError","AssertionError","MemoryError","EOFError"} else "Other"
+
+
+def safe_failure_evidence(error):
+    """Only bounded owned-source locations, never exception prose, paths, locals or traceback text."""
+    component="unavailable";line=None
+    frame=BaseException.__traceback__.__get__(error)
+    for _ in range(128):
+        if frame is None:break
+        name=os.path.basename(frame.tb_frame.f_code.co_filename)
+        if name in ("gate_cli.py","completion_register.py") and 1 <= frame.tb_lineno <= 10000:
+            component="bridge" if name=="gate_cli.py" else "register";line=frame.tb_lineno
+        frame=frame.tb_next
+    else:component="unavailable";line=None
+    return {"failureExceptionType":safe_exception_name(error),"failureComponent":component,"failureSourceLine":line}
+
+
+def rejection_packet(error,reasons):
+    args=BaseException.args.__get__(error)
+    coded=isinstance(error,ValueError) or (isinstance(error,RuntimeError) and type(error).__name__=="Rejected")
+    detail=args[0] if coded and len(args)==1 and type(args[0]) is str and len(args[0])<=128 else ""
+    reason=reasons.get(detail,"Storage" if isinstance(error,(OSError,sqlite3.Error)) else "Unknown")
+    result={"rejected":True,"category":safe_exception_name(error),"reason":reason,
+            "code":detail if detail in reasons else "Unclassified","requiresReconciliation":True}
+    if result["code"]=="Unclassified":result.update(safe_failure_evidence(error))
+    return result
+
+
 def bounded(path, limit):
     path = Path(os.path.abspath(path))
     for part in (path, *path.parents):
@@ -500,6 +532,103 @@ def continuation_acceptance(config, manifest, scope, module, database_sha=None, 
     return scope["acceptedEvidenceSha256"] if sentence else module.digest(accepted)
 
 
+def diagnostic_policy_bytes(raw, manifest, scope, module):
+    policy = json.loads(raw, object_pairs_hook=unique)
+    module.verify_diagnostic_policy(manifest, scope, policy, "diagnostic-admission")
+    text = raw.decode("utf-8")
+    grant = exact_object_property(text, "SuccessorGrant")
+    articles = exact_object_property(text, "Articles").decode("utf-8")
+    decoder = json.JSONDecoder(object_pairs_hook=unique)
+    _, end = decoder.raw_decode(articles, 1 + len(articles[1:]) - len(articles[1:].lstrip()))
+    article = articles[1:end].strip()
+    d = manifest["diagnostic"]
+    if sha(grant) != d["successorGrantSha256"] or sha(exact_object_property(article, "Proposal")) != d["proposalSha256"]:
+        raise ValueError("DiagnosticNativePin")
+    return policy
+
+
+def diagnostic_admission_check(register, config, config_pin, manifest, scope, module, app, identity):
+    if scope["schema"]!=6:raise ValueError("DiagnosticScope")
+    if os.path.normcase(str(app))!=os.path.normcase(os.path.abspath(config["ApplicationDirectory"])):raise ValueError("InstalledReadbackRequired")
+    status=register.status()
+    if status["requiresReconciliation"]:raise ValueError("DiagnosticDispatch")
+    with register._open() as db:state=register._read(db)
+    installed_readback(config,config_pin,allow_financial=True)
+    marker=json.loads(bounded(app.parent/"cloudscribe-install.json",32768),object_pairs_hook=unique)
+    raw=bounded(app.parent/"chirp-article-admission-policy.json",8*1024*1024);pin=sha(raw)
+    if identity!=pin or marker.get("ChirpArticlePolicySha256")!=pin or state["diagnosticPolicySha256"]!=pin:raise ValueError("DiagnosticInstalledPolicy")
+    diagnostic_policy_bytes(raw,manifest,scope,module)
+    module.require_epoch_policy_deadline(state,json.loads(raw,object_pairs_hook=unique)["ExpiresAtUtc"])
+    return {"valid":True,"policySha256":pin,"authority":False}
+
+
+def diagnostic_acceptance(config, manifest, scope, module, *, database_sha=None, policy=None, policy_sha=None, dispatch=False):
+    """Read actual native ledger. No provider, reservation, writes or caller-success assertions."""
+    parts, plans, accepted, _ = module.validate_diagnostic_manifest(manifest, scope)
+    d = manifest["diagnostic"]
+    if dispatch:
+        marker = json.loads(bounded(Path(config["ApplicationDirectory"]).parent / "cloudscribe-install.json", 32768), object_pairs_hook=unique)
+        profile = Path(os.path.abspath(marker["Profile"]));db = profile / "data/cloudscribe.db"
+        if sha(str(profile).rstrip("/\\").upper().encode()) != config["ProfileRootSha256"]:raise ValueError("InstalledProfileBinding")
+        physical = module.physical(db)
+        if physical.stat().st_size > 512*1024*1024:raise ValueError("ContinuationFinancialBound")
+        uri = physical.as_uri()+"?mode=ro"
+    else:
+        profile, db = profile_database(config)
+        before = sha(bounded(db,512*1024*1024))
+        if database_sha is not None and before != database_sha:raise ValueError("DiagnosticDatabasePin")
+        uri = db.as_uri()+"?mode=ro&immutable=1"
+    with closing(sqlite3.connect(uri,uri=True,timeout=0)) as connection:
+        connection.row_factory=sqlite3.Row;connection.execute("PRAGMA query_only=ON");connection.execute("BEGIN")
+        for entry in accepted:_continuation_member(connection,config,module,profile,parts,plans,entry,historical_readback=True)
+        sentence_legacy_acceptance(connection,config,module,profile,manifest["history"]["legacy"])
+        parent = connection.execute("SELECT * FROM chirp_article_owned_attempts WHERE AuthorizationId=?",(module.uuid_identity(d["failedAuthorizationId"]),)).fetchone()
+        if parent is None:raise ValueError("DiagnosticParent")
+        pq=connection.execute("SELECT * FROM google_generation_queue_states WHERE AccountId=? AND OperationStableId='synthesize-speech' AND IdempotencyKey=?",(config["AccountId"],parent["ChildKey"])).fetchone()
+        if (parent["PlanSha256"]!=d["planSha256"] or parent["CoverageOrdinal"]!=d["coverageOrdinal"] or parent["Consumed"]!=1
+                or parent["AccountId"]!=config["AccountId"] or parent["ProjectId"]!=config["ProjectId"]
+                or parent["ClaimedLocalAttemptId"]!=module.uuid_identity(d["failedLocalAttemptId"]) or pq is None
+                or pq["SubmissionAttempted"]!=1 or pq["UnresolvedSubmission"]!=0 or pq["ProviderRequestId"] is not None
+                or pq["DiagnosticCode"]!='google-http-400' or pq["ErrorStatus"]!=1
+                or pq["LocalAttemptId"]!=parent["ClaimedLocalAttemptId"] or pq["PayloadSha256"]!=d["payloadSha256"] or pq["PayloadBytes"]!=d["payloadBytes"]):
+            raise ValueError("DiagnosticParent")
+        if (connection.execute("SELECT COUNT(*) FROM chirp_article_receipts WHERE PlanSha256=? AND CoverageOrdinal=?",(d["planSha256"],d["coverageOrdinal"])).fetchone()[0]
+                or connection.execute("SELECT COUNT(*) FROM chirp_article_output_journals j JOIN chirp_article_owned_attempts a ON a.AuthorizationId=j.AuthorizationId WHERE a.PlanSha256=? AND a.CoverageOrdinal=?",(d["planSha256"],d["coverageOrdinal"])).fetchone()[0]):
+            raise ValueError("DiagnosticAcceptedCoverage")
+        children=connection.execute("SELECT * FROM chirp_article_successor_attempts WHERE ParentAuthorizationId=?",(parent["AuthorizationId"],)).fetchall()
+        child=None
+        if dispatch:
+            if len(children)!=1 or policy is None or policy_sha is None:raise ValueError("DiagnosticChild")
+            child=children[0];grant=policy["SuccessorGrant"]
+            if (child["PolicySha256"]!=policy_sha or child["SourceApprovalSha256"]!=scope["approvalSha256"]
+                    or child["PlanSha256"]!=d["planSha256"] or child["CoverageOrdinal"]!=d["coverageOrdinal"]
+                    or child["RootAuthorizationId"]!=module.uuid_identity(grant["RootAuthorizationId"])
+                    or child["GrantId"]!=module.uuid_identity(grant["GrantId"]) or child["GrantSha256"]!=d["successorGrantSha256"]
+                    or child["ParentStateSha256"]!=grant["ParentQueueRowSha256"] or child["Consumed"]!=1
+                    or child["AccountId"]!=config["AccountId"] or child["ProjectId"]!=config["ProjectId"]
+                    or child["Currency"]!='USD' or child["Scale"]!=2 or child["EstimateMinorUnits"]!=1 or child["ReservedMinorUnits"]!=1):
+                raise ValueError("DiagnosticChild")
+            module.uuid_identity(child["ClaimedLocalAttemptId"])
+            q=connection.execute("SELECT * FROM google_generation_queue_states WHERE AccountId=? AND OperationStableId='synthesize-speech' AND IdempotencyKey=?",(config["AccountId"],child["ChildKey"])).fetchone()
+            if (q is None or q["SubmissionAttempted"]!=1 or q["UnresolvedSubmission"]!=1 or q["ProviderRequestId"] is not None
+                    or q["DiagnosticCode"]!='google-dispatch-claimed' or q["LocalAttemptId"]!=child["ClaimedLocalAttemptId"]
+                    or q["PayloadSha256"]!=d["payloadSha256"] or q["PayloadBytes"]!=d["payloadBytes"]):raise ValueError("DiagnosticOwnedClaim")
+            envelope=json.loads(child["EnvelopeJson"],object_pairs_hook=unique)
+            if (module.uuid_identity(envelope["ChirpAuthorizationId"])!=child["AuthorizationId"] or envelope.get("RecoveryAuthorizationId") is not None
+                    or envelope["CredentialReferenceId"]!=config["CredentialReferenceId"] or envelope["AccountId"]!=config["AccountId"]
+                    or envelope["VoiceName"]!=config["VoiceName"] or envelope["AudioEncoding"]!='MP3'
+                    or envelope["CompiledPayloadSha256"]!=d["payloadSha256"] or envelope["CompiledPayloadBytes"]!=d["payloadBytes"]):raise ValueError("DiagnosticOwnedClaim")
+        elif children:raise ValueError("DiagnosticChildExists")
+        for a in connection.execute("SELECT * FROM chirp_article_owned_attempts WHERE AccountId=? AND ProjectId=?",(config["AccountId"],config["ProjectId"])):
+            if a["Consumed"]==0:raise ValueError("PendingOrUncertainWork")
+        for q in connection.execute("SELECT * FROM google_generation_queue_states WHERE AccountId=? AND UnresolvedSubmission<>0",(config["AccountId"],)):
+            if child is None or q["IdempotencyKey"]!=child["ChildKey"] or q["OperationStableId"]!='synthesize-speech':raise ValueError("PendingOrUncertainWork")
+        if continuation_financial_projection(connection,module,() if child is None else (child["AuthorizationId"],))!=d["financialRowsSha256"]:
+            raise ValueError("DiagnosticFinancialChanged")
+    if not dispatch and sha(bounded(db,512*1024*1024))!=before:raise ValueError("ContinuationDatabaseChanged")
+    return child
+
+
 def interpreter_identity(transition, old, config, module):
     data = bounded(transition["InterpreterEvidencePath"], 32768)
     if sha(data) != transition["InterpreterEvidenceSha256"]:
@@ -718,13 +847,22 @@ def successor_materials(request, config, config_keys, module):
                 "accountSha256": sha(config["AccountId"].encode()), "projectSha256": sha(config["ProjectId"].encode()),
                 "plansSha256": module.digest(manifest)}
     if (sha(manifest_bytes) != config["PlanManifestSha256"] or module.digest(new_scope) != config["ScopeSha256"]
-            or new_scope["schema"] != (h["SchemaVersion"] + 1)
+            or new_scope["schema"] != (6 if module.diagnostic_handoff(h) else h["SchemaVersion"] + 1)
             or new_scope["approvalSha256"] != h["SourceApprovalSha256"]
             or any(new_scope[k] != value for k, value in bindings.items())):
         raise ValueError("HandoffNewScopeBinding")
     sentence = module.sentence_handoff(h)
     continuation = h["SchemaVersion"] in (2, 3, 4)
-    if continuation:
+    if module.diagnostic_handoff(h):
+        module.validate_diagnostic_manifest(manifest, new_scope)
+        original = {k:v for k,v in manifest.items() if k != "diagnostic"}
+        old_manifest = json.loads(bounded(old["PlanManifestPath"],1024*1024),object_pairs_hook=unique)
+        d=manifest["diagnostic"]
+        pins={"FailedAuthorizationId":d["failedAuthorizationId"],"FailedLocalAttemptId":d["failedLocalAttemptId"],"FailedPlanSha256":d["planSha256"],"FailedCoverageOrdinal":d["coverageOrdinal"],"FailedPayloadSha256":d["payloadSha256"],"FailedPayloadBytes":d["payloadBytes"]}
+        if (sha(bounded(old["PlanManifestPath"],1024*1024))!=old["PlanManifestSha256"] or module.digest(old_manifest)!=h["OriginalManifestSha256"]
+                or module.canonical(original)!=module.canonical(old_manifest) or any(h[k]!=v for k,v in pins.items())
+                or h["AcceptedEvidenceSha256"]!=new_scope["acceptedEvidenceSha256"]):raise ValueError("DiagnosticHistory")
+    elif continuation:
         module.validate_continuation_manifest(manifest, new_scope)
         if sentence and (h["OriginalManifestSha256"] != manifest["replan"]["originalManifestSha256"]
                 or any(h[k] != v for k,v in manifest["replan"]["failure"].items())):
@@ -748,7 +886,7 @@ def successor_materials(request, config, config_keys, module):
                     or any(entry not in after_accepted for entry in before_accepted)
                     or any(after_budget[k] < before_budget[k] for k in ("projectCommittedMinorUnits", "allocationCommittedMinorUnits"))):
                 raise ValueError("WholeArticleHistoryBinding")
-    else:
+    elif not module.diagnostic_handoff(h):
         module.validate_successor_manifest(manifest, new_scope)
     old_r = module.Register(old["RegisterPath"], old["ScopeSha256"])
     new_r = module.Register(config["RegisterPath"], config["ScopeSha256"])
@@ -764,14 +902,18 @@ def successor_command(request, config, config_keys, module, app):
         raise ValueError("HandoffApplicationLocation")
     if command == "complete-successor":
         evidence = installed_readback(config, request["configSha256"])
-        if continuation:
+        if module.diagnostic_handoff(h):
+            diagnostic_acceptance(config,manifest,new_scope,module,database_sha=h["DatabaseSha256"])
+        elif continuation:
             continuation_acceptance(config, manifest, new_scope, module, h["DatabaseSha256"])
             if module.sentence_handoff(h): terminal_failure(config,h)
         else:
             terminal_failure(config, h)
         return old_r.complete_successor(new_r, new_scope, h, pin, evidence)
     installed_readback(old, h["PreviousGateSha256"], allow_financial=not typed_interpreter)
-    if continuation:
+    if module.diagnostic_handoff(h):
+        diagnostic_acceptance(old,manifest,new_scope,module,database_sha=h["DatabaseSha256"])
+    elif continuation:
         continuation_acceptance(old, manifest, new_scope, module, h["DatabaseSha256"])
         if module.sentence_handoff(h): terminal_failure(old,h)
     else:
@@ -790,8 +932,9 @@ def main():
     if len(request_bytes) > 8192:
         raise ValueError("InputBound")
     request = json.loads(request_bytes, object_pairs_hook=unique)
-    if set(request) - {"command", "configPath", "configSha256", "appDirectory", "id", "identitySha256", "receipt", "policyPath", "transitionPath", "transitionSha256", "handoffPath", "handoffSha256", "withdrawalPath", "withdrawalSha256"}:
+    if set(request) - {"command", "configPath", "configSha256", "appDirectory", "id", "identitySha256", "receipt", "policyPath", "transitionPath", "transitionSha256", "handoffPath", "handoffSha256", "withdrawalPath", "withdrawalSha256", "payloadSha256"}:
         raise ValueError("RequestShape")
+    if "payloadSha256" in request and request["command"] != "check-diagnostic-dispatch":raise ValueError("RequestShape")
     config_bytes = bounded(request["configPath"], 32768)
     if sha(config_bytes) != request["configSha256"]:
         raise ValueError("GatePin")
@@ -844,7 +987,7 @@ def main():
     if not build_command and (state["currentBuild"] != build_digest(config)
                               or (state["currentGate"] is not None and state["currentGate"] != request["configSha256"])):
         raise ValueError("CurrentBuildBinding")
-    if scope["schema"] in (2, 3, 4, 5):
+    if scope["schema"] in (2, 3, 4, 5, 6):
         if build_command and scope["schema"] != 4:
             raise ValueError("SuccessorBuildChangeNotAdmitted")
         if not build_command:
@@ -858,7 +1001,27 @@ def main():
     if not manifest["parts"] or any(part["voiceName"] != config["VoiceName"] or part["languageCode"] != config["LanguageCode"] for part in manifest["parts"]):
         raise ValueError("VoiceManifestBinding")
     command = request["command"]
-    if withdrawal_command:
+    if command == "check-diagnostic-admission":
+        if uuid.UUID(request["id"]).int!=0 or request.get("receipt") is not None:raise ValueError("DiagnosticPolicy")
+        module.hash_value(request["identitySha256"])
+        result=diagnostic_admission_check(register,config,request["configSha256"],manifest,scope,module,app,request["identitySha256"])
+    elif command == "check-diagnostic-dispatch":
+        if request.get("payloadSha256") != request["identitySha256"]:raise ValueError("DiagnosticPayload")
+        module.hash_value(request["payloadSha256"]);module.uuid_identity(request["id"])
+        if scope["schema"] != 6:
+            register.status();result={"valid":True,"id":request["id"],"payloadSha256":request["payloadSha256"],"requireProtectedCapture":False,"idempotencyKeySha256":None}
+        else:
+            if os.path.normcase(str(app))!=os.path.normcase(os.path.abspath(config["ApplicationDirectory"])):raise ValueError("InstalledReadbackRequired")
+            installed_readback(config,request["configSha256"],allow_financial=True)
+            marker=json.loads(bounded(app.parent/"cloudscribe-install.json",32768),object_pairs_hook=unique)
+            raw=bounded(app.parent/"chirp-article-admission-policy.json",8*1024*1024);pin=sha(raw)
+            if marker.get("ChirpArticlePolicySha256")!=pin or state["diagnosticPolicySha256"]!=pin:raise ValueError("DiagnosticInstalledPolicy")
+            policy=diagnostic_policy_bytes(raw,manifest,scope,module);module.require_epoch_policy_deadline(state,policy["ExpiresAtUtc"])
+            if request["payloadSha256"]!=manifest["diagnostic"]["payloadSha256"]:raise ValueError("DiagnosticPayload")
+            child=diagnostic_acceptance(config,manifest,scope,module,policy=policy,policy_sha=pin,dispatch=True)
+            result=register.diagnostic_dispatch(request["id"],pin,request["payloadSha256"],child["AuthorizationId"],child["ClaimedLocalAttemptId"])
+            result.update(requireProtectedCapture=True,idempotencyKeySha256=sha(child["ChildKey"].encode("utf-8")))
+    elif withdrawal_command:
         result = interpreter_withdrawal_command(request, config, expected, register, module, scope, app)
     elif build_command:
         result = transition_command(request, config, expected, register, module, scope, app)
@@ -876,8 +1039,9 @@ def main():
         if sha(policy_bytes) != request["identitySha256"]:
             raise ValueError("PolicyHash")
         policy = json.loads(policy_bytes, object_pairs_hook=unique)
-        verified_kind = module.successor_policy_kind(manifest, policy) if scope["schema"] in (2, 3, 4, 5) else "completion-admission"
+        verified_kind = module.successor_policy_kind(manifest, policy) if scope["schema"] in (2, 3, 4, 5, 6) else "completion-admission"
         module.verify_plan_policy(manifest, scope, policy, verified_kind)
+        if scope["schema"]==6:diagnostic_policy_bytes(policy_bytes,manifest,scope,module)
         module.require_epoch_policy_deadline(state, policy["ExpiresAtUtc"])
         if scope["schema"] in (3, 4, 5):
             retained = retained_continuation_policy(config, manifest, scope, module, register, request["identitySha256"])
@@ -897,9 +1061,12 @@ def main():
             if sha(policy_bytes) != request["identitySha256"]:
                 raise ValueError("PolicyHash")
             policy = json.loads(policy_bytes, object_pairs_hook=unique)
-            if kind == "completion-admission" and scope["schema"] in (2, 3, 4, 5):
+            if kind == "completion-admission" and scope["schema"] in (2, 3, 4, 5, 6):
                 kind = module.successor_policy_kind(manifest, policy)
             module.verify_plan_policy(manifest, scope, policy, kind)
+            if scope["schema"]==6:
+                diagnostic_policy_bytes(policy_bytes,manifest,scope,module)
+                diagnostic_acceptance(config,manifest,scope,module)
             module.require_epoch_policy_deadline(state, policy["ExpiresAtUtc"])
         pilot_proof = pilot_acceptance(config, manifest, state, module) if scope["schema"] == 2 and kind == "completion-admission" else None
         if scope["schema"] == 5 and kind == "completion-admission":
@@ -916,6 +1083,7 @@ def main():
         result = register.claim(kind,
                                 request["identitySha256"], request["id"], pilot_proof_sha=pilot_proof, accepted_proof_sha=accepted_proof)
     elif command == "check":
+        if scope["schema"]==6:diagnostic_acceptance(config,manifest,scope,module)
         if scope["schema"] in (3, 4, 5):
             with register._open() as db:
                 current = register._read(db); pending = current["pending"]
@@ -947,6 +1115,9 @@ def main():
                 raise ValueError("InstalledPolicyPin")
             policy = json.loads(policy_bytes, object_pairs_hook=unique)
             module.verify_plan_policy(manifest, scope, policy, pending["kind"])
+            if scope["schema"]==6:
+                diagnostic_policy_bytes(policy_bytes,manifest,scope,module)
+                diagnostic_acceptance(config,manifest,scope,module)
             module.require_epoch_policy_deadline(current, policy["ExpiresAtUtc"])
             if scope["schema"] in (3, 4, 5):
                 retained = None; target = None
@@ -1050,8 +1221,9 @@ if __name__ == "__main__":
         reasons.update({"ClockEpochEvidence":"ClockRollback","ClockEpochPolicyDeadline":"Expired",
                         "FreshWindowApprovalRequired":"PinMismatch","ExpiredWindowBinding":"PinMismatch",
                         "ExpiredPredecessorRequired":"SuccessorPending"})
-        detail = str(error)
-        reason = reasons.get(detail, "Storage" if isinstance(error, (OSError, sqlite3.Error)) else "Unknown")
-        print(json.dumps({"rejected": True, "category": type(error).__name__, "reason": reason,
-                          "code": detail if detail in reasons else "Unclassified", "requiresReconciliation": True}))
+        for code in ("DiagnosticScope","DiagnosticManifest","DiagnosticCoverageOrBudget","DiagnosticPolicy","DiagnosticBudget","DiagnosticNativePin","DiagnosticParent","DiagnosticAcceptedCoverage","DiagnosticChild","DiagnosticChildExists","DiagnosticOwnedClaim","DiagnosticFinancialChanged","DiagnosticHistory","DiagnosticPayload","DiagnosticInstalledPolicy","DiagnosticOperation","DiagnosticDispatch","DiagnosticDispatchReplay","DiagnosticCounterOrEpoch","DiagnosticWindow"):
+            reasons[code]="SuccessorScopeMismatch"
+        reasons["DiagnosticDatabasePin"]="SuccessorDatabaseMismatch"
+        reasons["TransitionFinancialAdmissionExists"]="SuccessorScopeMismatch"
+        print(json.dumps(rejection_packet(error,reasons)))
         sys.exit(1)
