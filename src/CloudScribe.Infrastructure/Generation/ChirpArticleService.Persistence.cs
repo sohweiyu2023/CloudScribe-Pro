@@ -10,7 +10,7 @@ public sealed partial class ChirpArticleService
     {
         string proposal = JsonSerializer.Serialize(article.Proposal), lineage = JsonSerializer.Serialize(article.Lineage), reused = JsonSerializer.Serialize(article.ReusedAudio);
         using (var existing = ChirpArticleSql.Command(connection, transaction,
-            "SELECT ProposalJson FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 3;", ("$document", article.Proposal.DocumentId.ToString("D"))))
+            "SELECT ProposalJson FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 4;", ("$document", article.Proposal.DocumentId.ToString("D"))))
         {
             List<ChirpArticlePlanProposal> plans = [];
             using (var reader = await existing.ExecuteReaderAsync(token).ConfigureAwait(false))

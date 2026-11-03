@@ -5,4 +5,6 @@ public sealed record ChirpArticlePlanProposal(
     Guid DocumentId, Guid RevisionId, string SourceSha256, int SourceScalars, string LanguageCode, string VoiceName,
     string PlannerVersion, string PlanSha256, IReadOnlyList<ChirpArticlePlanPart> Parts,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    ChirpFailedPlanRefinement? Refinement = null);
+    ChirpFailedPlanRefinement? Refinement = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ChirpSentencePlanSuccessor? SentenceSuccessor = null);

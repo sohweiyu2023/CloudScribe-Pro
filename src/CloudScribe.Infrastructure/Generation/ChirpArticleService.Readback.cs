@@ -38,7 +38,7 @@ public sealed partial class ChirpArticleService
     private static async Task<string> UniqueStoredPlanAsync(SqliteConnection connection, SqliteTransaction transaction, Guid documentId, CancellationToken token)
     {
         using var command = ChirpArticleSql.Command(connection, transaction,
-            "SELECT PlanSha256,ProposalJson FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 3;", ("$document", documentId.ToString("D")));
+            "SELECT PlanSha256,ProposalJson FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 4;", ("$document", documentId.ToString("D")));
         using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
         List<ChirpArticlePlanProposal> plans = [];
         while (await reader.ReadAsync(token).ConfigureAwait(false))

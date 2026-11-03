@@ -1,6 +1,7 @@
 """Pinned private workflow bridge. -I -S; no user modules, UI or provider requests."""
 import hashlib
 from contextlib import closing
+from datetime import datetime, timezone
 import json
 import os
 import re
@@ -34,6 +35,32 @@ def unique(pairs):
             raise ValueError("DuplicateField")
         result[key] = value
     return result
+
+
+def exact_object_property(raw, name):
+    """Hash native serialized bytes, not a different Python JSON canonicalization."""
+    decoder=json.JSONDecoder(object_pairs_hook=unique);index=0
+    def skip(pos):
+        while pos<len(raw) and raw[pos].isspace():pos+=1
+        return pos
+    index=skip(index)
+    if index>=len(raw) or raw[index]!='{':raise ValueError("ContinuationHistoricalPolicy")
+    index+=1;found=None
+    while True:
+        index=skip(index)
+        if index<len(raw) and raw[index]=='}':break
+        key,end=decoder.raw_decode(raw,index);index=skip(end)
+        if not isinstance(key,str) or index>=len(raw) or raw[index]!=':':raise ValueError("ContinuationHistoricalPolicy")
+        start=skip(index+1);_,end=decoder.raw_decode(raw,start)
+        if key==name:
+            if found is not None:raise ValueError("DuplicateField")
+            found=raw[start:end].encode('utf-8')
+        index=skip(end)
+        if index<len(raw) and raw[index]==',':index+=1;continue
+        if index<len(raw) and raw[index]=='}':break
+        raise ValueError("ContinuationHistoricalPolicy")
+    if found is None:raise ValueError("ContinuationHistoricalPolicy")
+    return found
 
 
 def build_digest(config):
@@ -174,7 +201,7 @@ def pilot_acceptance(config, manifest, state, module):
         return module.digest({"authorization": a["AuthorizationId"], "receipt": rr["ReceiptSha256"], "audio": sha(data), "mapping": mapping})
 
 
-def verify_pilot_mapping(connection, attempt, envelope, receipt, config, historical):
+def verify_pilot_mapping(connection, attempt, envelope, receipt, config, historical, historical_readback=False):
     rows = connection.execute("SELECT * FROM chirp_reserved_catalog_mappings WHERE AuthorizationId=? ORDER BY CreatedAtUnixMilliseconds,MappingId", (attempt["AuthorizationId"],)).fetchall()
     dispatch = connection.execute("SELECT * FROM chirp_reserved_dispatch_mappings WHERE AuthorizationId=?", (attempt["AuthorizationId"],)).fetchall()
     if not rows:
@@ -200,14 +227,15 @@ def verify_pilot_mapping(connection, attempt, envelope, receipt, config, histori
                 or uuid.UUID(p["AuthorizationId"]).hex != attempt["AuthorizationId"] or uuid.UUID(p["MappingId"]).hex != row["MappingId"]
                 or p["OriginalEnvelope"] != envelope or dict(p["ExecutionEnvelope"], RequestRevision=envelope["RequestRevision"]) != envelope
                 or p["HistoricalPolicy"] != historical or p["ProfileRootSha256"] != config["ProfileRootSha256"]
-                or p["AppSha256"] != config["AppSha256"] or p["InfrastructureSha256"] != config["InfrastructureSha256"]
+                or (not historical_readback and (p["AppSha256"] != config["AppSha256"] or p["InfrastructureSha256"] != config["InfrastructureSha256"]))
+                or any(not isinstance(p[k],str) or re.fullmatch('[0-9a-f]{64}',p[k]) is None or p[k]=='0'*64 for k in ('AppSha256','InfrastructureSha256'))
                 or p["MaximumExistingDispatches"] != 1 or p["MaximumNewReservations"] != 0 or p["MaximumAdditionalReservationMinorUnits"] != 0):
             raise ValueError("PilotMappingIdentity")
         approvals.add(p["SourceApprovalSha256"]); previous = row["PolicySha256"]
         last_created = row["CreatedAtUnixMilliseconds"]
         d = dispatch[0]
         if d["MappingId"] == row["MappingId"]:
-            from datetime import datetime
+            from datetime import datetime, timezone
             expiry = datetime.fromisoformat(p["ExpiresAtUtc"].replace("Z", "+00:00")).timestamp() * 1000
             catalog_expiry = datetime.fromisoformat(p["CatalogExpiresAtUtc"].replace("Z", "+00:00")).timestamp() * 1000
             if (d["PolicySha256"] != row["PolicySha256"] or d["ClaimedLocalAttemptId"] != attempt["ClaimedLocalAttemptId"]
@@ -219,7 +247,7 @@ def verify_pilot_mapping(connection, attempt, envelope, receipt, config, histori
     return used
 
 
-def _continuation_member(connection, config, module, profile, parts, plans, entry, historical_policy=None):
+def _continuation_member(connection, config, module, profile, parts, plans, entry, historical_policy=None, historical_readback=False):
     key = (entry["planSha256"], entry["coverageOrdinal"]); part = parts[key]
     attempts = connection.execute("SELECT * FROM chirp_article_owned_attempts WHERE AuthorizationId=?",
                                   (entry["authorizationId"],)).fetchall()
@@ -266,7 +294,10 @@ def _continuation_member(connection, config, module, profile, parts, plans, entr
             or audio["LanguageCode"] != config["LanguageCode"] or audio["PayloadSha256"] != part["payloadSha256"]
             or audio["AccountId"] != config["AccountId"] or audio["OperationId"] != "synthesize-speech"
             or audio["IdempotencyKey"] != a["ChildKey"] or audio["LocalAttemptId"] != a["ClaimedLocalAttemptId"]
-            or envelope["AccountId"] != config["AccountId"] or envelope["CredentialReferenceId"] != config["CredentialReferenceId"]
+            or envelope["AccountId"] != config["AccountId"]
+            or (not historical_readback and envelope["CredentialReferenceId"] != config["CredentialReferenceId"])
+            or not isinstance(envelope["CredentialReferenceId"],str) or not 1 <= len(envelope["CredentialReferenceId"]) <= 128
+            or any(ord(c)<32 or 127<=ord(c)<=159 for c in envelope["CredentialReferenceId"])
             or envelope["VoiceName"] != config["VoiceName"] or envelope["AudioEncoding"] != "MP3"
             or envelope["RecoveryAuthorizationId"] is not None
             or uuid.UUID(envelope["ChirpAuthorizationId"]).hex != a["AuthorizationId"]
@@ -283,9 +314,9 @@ def _continuation_member(connection, config, module, profile, parts, plans, entr
             raise ValueError("ContinuationMappingBound")
         historical = json.loads(mapping[0], object_pairs_hook=unique)["HistoricalPolicy"]
         if ((historical_policy is not None and module.canonical(historical) != module.canonical(historical_policy))
-                    or (historical_policy is None and module.digest(historical) != a["PolicySha256"])):
+                    or (historical_policy is None and sha(exact_object_property(mapping[0],"HistoricalPolicy")) != a["PolicySha256"])):
             raise ValueError("ContinuationHistoricalPolicy")
-    mapped = verify_pilot_mapping(connection, a, envelope, receipt, config, historical)
+    mapped = verify_pilot_mapping(connection, a, envelope, receipt, config, historical, historical_readback=historical_readback)
     if mapped != entry["executionMappingSha256"]:
         raise ValueError("ContinuationMappingPin")
     media = profile / "accepted-chirp-article-audio" / (a["AuthorizationId"] + ".mp3")
@@ -324,13 +355,20 @@ def retained_continuation_policy(config, manifest, scope, module, register, expe
             or (expected is not None and expected != pin)):
         raise ValueError("ContinuationRetainedPolicyPin")
     policy = json.loads(raw, object_pairs_hook=unique)
-    module.verify_plan_policy(manifest, scope, policy, "completion-admission")
+    kind = module.successor_policy_kind(manifest, policy) if scope["schema"] == 5 else "completion-admission"
     with register._open() as db:
         state = register._read(db)
+        module.require_epoch_policy_deadline(state, policy["ExpiresAtUtc"])
         events = [json.loads(row[0]) for row in db.execute("SELECT body FROM events ORDER BY seq")]
-        claims = {e["id"] for e in events if e["type"] == "claim" and e["kind"] == "completion-admission" and e["identity"] == pin}
+        claims = {e["id"] for e in events if e["type"] == "claim" and e["kind"] == kind and e["identity"] == pin}
         if (state["stopped"] or not any(e["type"] == "complete" and e["id"] in claims and e["outcome"] == "Succeeded" for e in events)):
             raise ValueError("ContinuationRetentionNotAdmitted")
+    if scope["schema"] == 5:
+        # Immutable, already-admitted provenance ONLY. The fresh OUTER resume
+        # policy and current register clock are independently checked before any effect.
+        module.verify_sentence_policy(manifest, scope, policy, kind, historical_readback=True)
+    else:
+        module.verify_plan_policy(manifest, scope, policy, kind)
     return policy, pin
 
 
@@ -359,7 +397,44 @@ def _continuation_clean_held(connection, config, module, scope, parts, a, policy
         raise ValueError("ContinuationHeldNotClean")
 
 
-def continuation_acceptance(config, manifest, scope, module, database_sha=None, retained=None, resume_authorization=None):
+def sentence_legacy_acceptance(connection, config, module, profile, entries):
+    for entry in entries:
+        raw = bounded(profile / "accepted-article-audio" / (entry["localAttemptId"] + ".json"), 16384)
+        if sha(raw) != entry["receiptSha256"]: raise ValueError("SentenceLegacyPin")
+        audio = json.loads(raw, object_pairs_hook=unique)
+        q = connection.execute("SELECT * FROM google_generation_queue_states WHERE AccountId=? AND OperationStableId='synthesize-speech' AND IdempotencyKey=?",
+                               (config["AccountId"], audio["IdempotencyKey"])).fetchone()
+        media = bounded(audio["AudioPath"], 256 * 1024 * 1024)
+        if (audio["AccountId"] != config["AccountId"] or audio["OperationId"] != "synthesize-speech"
+                or audio["VoiceName"] != config["VoiceName"] or audio["LanguageCode"] != config["LanguageCode"]
+                or audio["LocalAttemptId"] != entry["localAttemptId"] or audio["AudioBytes"] != len(media)
+                or audio["AudioSha256"] != entry["audioSha256"] or sha(media) != entry["audioSha256"] or len(media) < 12
+                or q is None or q["SubmissionAttempted"] != 1 or q["UnresolvedSubmission"] != 0 or q["DiagnosticCode"] != "google-accepted"
+                or q["LocalAttemptId"] != audio["LocalAttemptId"] or q["PayloadSha256"] != audio["PayloadSha256"]):
+            raise ValueError("SentenceLegacyPin")
+
+
+def sentence_stage_acceptance(config, manifest, scope, module, state):
+    """Both actual new outputs, derived from the journaled first-stage policy and native receipts."""
+    if state["pilotPolicySha256"] is None or state["stopped"]: raise ValueError("PilotNotAccepted")
+    parts, plans, _, _, _ = module.validate_sentence_manifest(manifest, scope)
+    profile, db = profile_database(config); before = sha(bounded(db, 512 * 1024 * 1024)); proof = []
+    with closing(sqlite3.connect(db.as_uri()+"?mode=ro&immutable=1", uri=True)) as c:
+        c.row_factory=sqlite3.Row; c.execute("BEGIN")
+        for part in manifest["firstStage"]:
+            row=c.execute("SELECT * FROM chirp_article_owned_attempts WHERE PlanSha256=? AND CoverageOrdinal=?", (part["planSha256"],part["coverageOrdinal"])).fetchall()
+            if len(row)!=1 or row[0]["PolicySha256"]!=state["pilotPolicySha256"]: raise ValueError("PilotAttemptIdentity")
+            a=row[0]; rr=c.execute("SELECT * FROM chirp_article_receipts WHERE AuthorizationId=?",(a["AuthorizationId"],)).fetchone()
+            if rr is None or len(rr["ReceiptJson"].encode())>32768: raise ValueError("PilotOutputIncomplete")
+            receipt=json.loads(rr["ReceiptJson"],object_pairs_hook=unique)
+            entry=dict(part,authorizationId=a["AuthorizationId"],policySha256=state["pilotPolicySha256"],sourceApprovalSha256=scope["approvalSha256"],
+                receiptSha256=rr["ReceiptSha256"],audioSha256=receipt["Audio"]["AudioSha256"],executionMappingSha256=receipt.get("ExecutionMappingSha256"))
+            _continuation_member(c,config,module,profile,parts,plans,entry);proof.append(entry)
+    if sha(bounded(db,512*1024*1024))!=before:raise ValueError("ContinuationDatabaseChanged")
+    return module.digest(proof)
+
+
+def continuation_acceptance(config, manifest, scope, module, database_sha=None, retained=None, resume_authorization=None, pilot_policy_sha=None):
     """Initial mode requires untouched remaining coverage. Retention is derived from journal+installed policy."""
     parts, plans, remaining, accepted, _ = module.validate_continuation_manifest(manifest, scope)
     profile, db = profile_database(config); before = sha(bounded(db, 512 * 1024 * 1024))
@@ -368,7 +443,12 @@ def continuation_acceptance(config, manifest, scope, module, database_sha=None, 
     with closing(sqlite3.connect(db.as_uri() + "?mode=ro&immutable=1", uri=True)) as connection:
         connection.row_factory = sqlite3.Row; connection.execute("BEGIN")
         for entry in accepted:
-            _continuation_member(connection, config, module, profile, parts, plans, entry)
+            # Completed historical outputs retain their immutable mapping/build/credential reference,
+            # not the context now reading local audio. Current/new outputs retain current-context checks.
+            _continuation_member(connection, config, module, profile, parts, plans, entry, historical_readback=True)
+        sentence = scope["schema"] == 5
+        first = {(x["planSha256"],x["coverageOrdinal"]) for x in manifest["firstStage"]} if sentence else set()
+        if sentence: sentence_legacy_acceptance(connection,config,module,profile,manifest["history"]["legacy"])
         if connection.execute("SELECT COUNT(*) FROM google_generation_queue_states WHERE AccountId=? AND UnresolvedSubmission<>0", (config["AccountId"],)).fetchone()[0]:
             raise ValueError("PendingOrUncertainWork")
         excluded = set(); held = []; coverage = set()
@@ -379,9 +459,12 @@ def continuation_acceptance(config, manifest, scope, module, database_sha=None, 
                 if a["Consumed"] == 0:
                     raise ValueError("PendingOrUncertainWork")
                 continue
-            if retained is None:
+            stage_accepted = sentence and key in first and a["Consumed"] == 1 and pilot_policy_sha is not None and a["PolicySha256"] == pilot_policy_sha
+            if retained is None and not stage_accepted:
                 raise ValueError("ContinuationRemainingNotUntouched")
-            policy, policy_sha = retained
+            policy, policy_sha = (None, pilot_policy_sha) if stage_accepted else retained
+            if sentence and not stage_accepted and key not in {(x["Proposal"]["PlanSha256"],p["CoverageOrdinal"]) for x in policy["Articles"] for p in x["AllowedSegments"]}:
+                raise ValueError("ContinuationProgressIdentity")
             if (key in coverage or a["PolicySha256"] != policy_sha or a["SourceApprovalSha256"] != scope["approvalSha256"]
                     or a["Currency"] != "USD" or a["Scale"] != 2 or a["EstimateMinorUnits"] != 1 or a["ReservedMinorUnits"] != 1):
                 raise ValueError("ContinuationProgressIdentity")
@@ -408,13 +491,13 @@ def continuation_acceptance(config, manifest, scope, module, database_sha=None, 
                 if (connection.execute("SELECT COUNT(*) FROM chirp_article_receipts WHERE PlanSha256=? AND CoverageOrdinal=?", (plan, ordinal)).fetchone()[0]
                         or connection.execute("SELECT COUNT(*) FROM chirp_article_output_journals j JOIN chirp_article_owned_attempts a ON a.AuthorizationId=j.AuthorizationId WHERE a.PlanSha256=? AND a.CoverageOrdinal=?", (plan, ordinal)).fetchone()[0]):
                     raise ValueError("ContinuationAcceptedOmitted")
-        if continuation_financial_projection(connection, module, excluded) != manifest["continuation"]["financialRowsSha256"]:
+        if continuation_financial_projection(connection, module, excluded) != manifest["replan" if sentence else "continuation"]["financialRowsSha256"]:
             # No automatic exclusion of legacy/recovery changes: their legitimacy
             # requires a separately reviewed production resolver, or stop safely.
             raise ValueError("ContinuationFinancialChanged")
     if sha(bounded(db, 512 * 1024 * 1024)) != before:
         raise ValueError("ContinuationDatabaseChanged")
-    return module.digest(accepted)
+    return scope["acceptedEvidenceSha256"] if sentence else module.digest(accepted)
 
 
 def interpreter_identity(transition, old, config, module):
@@ -639,9 +722,13 @@ def successor_materials(request, config, config_keys, module):
             or new_scope["approvalSha256"] != h["SourceApprovalSha256"]
             or any(new_scope[k] != value for k, value in bindings.items())):
         raise ValueError("HandoffNewScopeBinding")
-    continuation = h["SchemaVersion"] in (2, 3)
+    sentence = module.sentence_handoff(h)
+    continuation = h["SchemaVersion"] in (2, 3, 4)
     if continuation:
         module.validate_continuation_manifest(manifest, new_scope)
+        if sentence and (h["OriginalManifestSha256"] != manifest["replan"]["originalManifestSha256"]
+                or any(h[k] != v for k,v in manifest["replan"]["failure"].items())):
+            raise ValueError("SentenceFailure")
         if ((h["SchemaVersion"] == 2 and h["OriginalManifestSha256"] != manifest["continuation"]["originalManifestSha256"])
                 or h["AcceptedEvidenceSha256"] != new_scope["acceptedEvidenceSha256"]):
             raise ValueError("ContinuationHandoffBinding")
@@ -679,12 +766,14 @@ def successor_command(request, config, config_keys, module, app):
         evidence = installed_readback(config, request["configSha256"])
         if continuation:
             continuation_acceptance(config, manifest, new_scope, module, h["DatabaseSha256"])
+            if module.sentence_handoff(h): terminal_failure(config,h)
         else:
             terminal_failure(config, h)
         return old_r.complete_successor(new_r, new_scope, h, pin, evidence)
     installed_readback(old, h["PreviousGateSha256"], allow_financial=not typed_interpreter)
     if continuation:
         continuation_acceptance(old, manifest, new_scope, module, h["DatabaseSha256"])
+        if module.sentence_handoff(h): terminal_failure(old,h)
     else:
         terminal_failure(old, h)
     if command == "inspect-successor":
@@ -755,7 +844,7 @@ def main():
     if not build_command and (state["currentBuild"] != build_digest(config)
                               or (state["currentGate"] is not None and state["currentGate"] != request["configSha256"])):
         raise ValueError("CurrentBuildBinding")
-    if scope["schema"] in (2, 3, 4):
+    if scope["schema"] in (2, 3, 4, 5):
         if build_command and scope["schema"] != 4:
             raise ValueError("SuccessorBuildChangeNotAdmitted")
         if not build_command:
@@ -779,7 +868,7 @@ def main():
             now = register.clock()
             if state["stopped"] or state["pending"] or register._time_rejection(state):
                 raise ValueError("InspectionNotReady")
-        result = {"valid": True, "deadlineUtc": scope["endUtc"]}
+        result = {"valid": True, "deadlineUtc": module.effective_deadline(scope,state.get("clockEpoch"))}
     elif command == "status":
         result = register.status()
     elif command == "verify-completion":
@@ -787,11 +876,12 @@ def main():
         if sha(policy_bytes) != request["identitySha256"]:
             raise ValueError("PolicyHash")
         policy = json.loads(policy_bytes, object_pairs_hook=unique)
-        verified_kind = module.successor_policy_kind(manifest, policy) if scope["schema"] in (2, 3, 4) else "completion-admission"
+        verified_kind = module.successor_policy_kind(manifest, policy) if scope["schema"] in (2, 3, 4, 5) else "completion-admission"
         module.verify_plan_policy(manifest, scope, policy, verified_kind)
-        if scope["schema"] in (3, 4):
+        module.require_epoch_policy_deadline(state, policy["ExpiresAtUtc"])
+        if scope["schema"] in (3, 4, 5):
             retained = retained_continuation_policy(config, manifest, scope, module, register, request["identitySha256"])
-            continuation_acceptance(config, manifest, scope, module, retained=retained)
+            continuation_acceptance(config, manifest, scope, module, retained=retained, pilot_policy_sha=state["pilotPolicySha256"])
         with register._open() as db:
             state = register._read(db)
             events = [json.loads(row[0]) for row in db.execute("SELECT body FROM events ORDER BY seq")]
@@ -807,33 +897,36 @@ def main():
             if sha(policy_bytes) != request["identitySha256"]:
                 raise ValueError("PolicyHash")
             policy = json.loads(policy_bytes, object_pairs_hook=unique)
-            if kind == "completion-admission" and scope["schema"] in (2, 3, 4):
+            if kind == "completion-admission" and scope["schema"] in (2, 3, 4, 5):
                 kind = module.successor_policy_kind(manifest, policy)
             module.verify_plan_policy(manifest, scope, policy, kind)
+            module.require_epoch_policy_deadline(state, policy["ExpiresAtUtc"])
         pilot_proof = pilot_acceptance(config, manifest, state, module) if scope["schema"] == 2 and kind == "completion-admission" else None
+        if scope["schema"] == 5 and kind == "completion-admission":
+            pilot_proof = sentence_stage_acceptance(config,manifest,scope,module,state)
         accepted_proof = None
-        if scope["schema"] in (3, 4) and kind != "refresh":
+        if scope["schema"] in (3, 4, 5) and kind != "refresh":
             retained = None; target = None
             if kind == "resume-admission":
                 retained = retained_continuation_policy(config, manifest, scope, module, register)
                 if module.canonical(policy["HistoricalPolicy"]) != module.canonical(retained[0]):
                     raise ValueError("ContinuationRetainedPolicyPin")
                 target = policy["AuthorizationId"]
-            accepted_proof = continuation_acceptance(config, manifest, scope, module, retained=retained, resume_authorization=target)
+            accepted_proof = continuation_acceptance(config, manifest, scope, module, retained=retained, resume_authorization=target, pilot_policy_sha=state["pilotPolicySha256"])
         result = register.claim(kind,
                                 request["identitySha256"], request["id"], pilot_proof_sha=pilot_proof, accepted_proof_sha=accepted_proof)
     elif command == "check":
-        if scope["schema"] in (3, 4):
+        if scope["schema"] in (3, 4, 5):
             with register._open() as db:
-                pending = register._read(db)["pending"]
+                current = register._read(db); pending = current["pending"]
             if pending and pending["kind"] != "refresh":
                 retained = retained_continuation_policy(config, manifest, scope, module, register) if pending["kind"] == "resume-admission" else None
-                continuation_acceptance(config, manifest, scope, module, retained=retained)
+                continuation_acceptance(config, manifest, scope, module, retained=retained, pilot_policy_sha=current["pilotPolicySha256"])
         result = {"valid": register.require_pending_before_effect(request["id"], request["identitySha256"])}
     elif command == "complete":
         receipt = request["receipt"]
         with register._open() as db:
-            pending = register._read(db)["pending"]
+            current = register._read(db); pending = current["pending"]
         if pending and pending["kind"] != "refresh":
             if os.path.normcase(str(app)) != os.path.normcase(os.path.abspath(config["ApplicationDirectory"])):
                 raise ValueError("InstalledReadbackRequired")
@@ -854,14 +947,15 @@ def main():
                 raise ValueError("InstalledPolicyPin")
             policy = json.loads(policy_bytes, object_pairs_hook=unique)
             module.verify_plan_policy(manifest, scope, policy, pending["kind"])
-            if scope["schema"] in (3, 4):
+            module.require_epoch_policy_deadline(current, policy["ExpiresAtUtc"])
+            if scope["schema"] in (3, 4, 5):
                 retained = None; target = None
                 if resume:
                     retained = retained_continuation_policy(config, manifest, scope, module, register)
                     if module.canonical(policy["HistoricalPolicy"]) != module.canonical(retained[0]):
                         raise ValueError("ContinuationRetainedPolicyPin")
                     target = policy["AuthorizationId"]
-                continuation_acceptance(config, manifest, scope, module, retained=retained, resume_authorization=target)
+                continuation_acceptance(config, manifest, scope, module, retained=retained, resume_authorization=target, pilot_policy_sha=current["pilotPolicySha256"])
             receipt = {"id": request["id"], "identitySha256": pending["identity"], "outcome": "Succeeded",
                        "evidenceSha256": sha(marker_bytes), "policyVerified": True}
             if resume:
@@ -948,6 +1042,14 @@ if __name__ == "__main__":
                         "InterpreterWithdrawalPin": "PinMismatch", "InterpreterWithdrawalBackup": "PinMismatch",
                         "InterpreterWithdrawalReadback": "PinMismatch", "InterpreterWithdrawalState": "Stopped",
                         "InterpreterWithdrawalClock": "ClockRollback"})
+        for code in ("SentenceManifest", "SentenceManifestBounds", "SentenceProposal", "SentenceHistory", "SentenceCoverage",
+                     "SentenceRemainingCount", "SentenceFirstStage", "SentenceLegacy", "SentenceFailure", "SentenceAdmissionKind",
+                     "SentencePolicyBinding", "SentenceReuse", "SentenceCounterBinding", "SentenceCounterOrWindowBinding"):
+            reasons[code] = "SuccessorScopeMismatch"
+        reasons["SentenceLegacyPin"] = "PilotEvidenceMismatch"
+        reasons.update({"ClockEpochEvidence":"ClockRollback","ClockEpochPolicyDeadline":"Expired",
+                        "FreshWindowApprovalRequired":"PinMismatch","ExpiredWindowBinding":"PinMismatch",
+                        "ExpiredPredecessorRequired":"SuccessorPending"})
         detail = str(error)
         reason = reasons.get(detail, "Storage" if isinstance(error, (OSError, sqlite3.Error)) else "Unknown")
         print(json.dumps({"rejected": True, "category": type(error).__name__, "reason": reason,

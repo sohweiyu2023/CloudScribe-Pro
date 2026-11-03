@@ -74,9 +74,9 @@ public sealed partial class NarrationPartGroupTests
         Assert.Single(await FinancialRowsAsync(f, "chirp_article_receipts"));
     }
 
-    private static async Task<RefinedFixture> RefinedEvidenceAsync(Fixture f, bool legacy = false)
+    private static async Task<RefinedFixture> RefinedEvidenceAsync(Fixture f, bool legacy = false, bool sentenceSource = false)
     {
-        var evidence = legacy ? await LegacyAssociationEvidenceAsync(f).ConfigureAwait(false) : await ChirpEvidenceAsync(f, 10).ConfigureAwait(false);
+        var evidence = legacy ? await LegacyAssociationEvidenceAsync(f).ConfigureAwait(false) : await ChirpEvidenceAsync(f, 10, sentenceSource).ConfigureAwait(false);
         if (!legacy)
         {
             var accepted = await AcceptChirpAsync(f, evidence.Service, ChirpIntent(evidence, 2), 2).ConfigureAwait(false);

@@ -18,6 +18,11 @@ internal sealed partial class ChirpArticleEvidenceResolver
     private async Task RequireRefinementCoreAsync(SqliteConnection connection, SqliteTransaction transaction,
         AdmittedChirpArticle admitted, string account, string project, RecoveryFinancialSnapshot financial, CancellationToken token)
     {
+        if (admitted.Proposal.SentenceSuccessor is not null)
+        {
+            await RequireSentenceSuccessorAsync(connection, transaction, admitted, account, project, financial, token).ConfigureAwait(false);
+            return;
+        }
         if (admitted.Proposal.Refinement is not { } refinement)
         {
             if (admitted.ReusedAudio.Any(x => x.SourcePlanSha256 is not null || x.SourceAuthorizationId is not null))
@@ -112,8 +117,17 @@ internal sealed partial class ChirpArticleEvidenceResolver
     private async Task RequireInternalReusedCoreAsync(SqliteConnection connection, SqliteTransaction transaction,
         AdmittedChirpArticle admitted, ChirpReusedArticleAudio retained, RecoveryFinancialSnapshot financial, CancellationToken token)
     {
-        if (admitted.Proposal.Refinement is not { } refinement || retained.SourceAuthorizationId is not { } id || id == Guid.Empty
-            || !string.Equals(retained.SourcePlanSha256, refinement.Parent.PlanSha256, StringComparison.Ordinal)) throw new InvalidOperationException("Internal reuse lacks its exact predecessor.");
+        var parent = admitted.Proposal.SentenceSuccessor?.Parent ?? admitted.Proposal.Refinement?.Parent;
+        if (parent is null) throw new InvalidOperationException("Internal reuse lacks its exact predecessor.");
+        if (admitted.Proposal.SentenceSuccessor is not null && !string.Equals(retained.SourcePlanSha256, parent.PlanSha256, StringComparison.Ordinal))
+        {
+            // RequireSentenceSuccessorAsync already independently resolved this exact immutable parent and every inherited receipt/media file.
+            var inherited = await ReadSentenceParentAsync(connection, transaction, admitted, retained.Audio.AccountId, token).ConfigureAwait(false);
+            if (!inherited.ReusedAudio.Contains(retained)) throw new InvalidOperationException("Inherited accepted audio changed.");
+            return;
+        }
+        if (retained.SourceAuthorizationId is not { } id || id == Guid.Empty
+            || !string.Equals(retained.SourcePlanSha256, parent.PlanSha256, StringComparison.Ordinal)) throw new InvalidOperationException("Internal reuse lacks its exact predecessor.");
         using var cmd = ChirpArticleSql.Command(connection, transaction, """
             SELECT r.ReceiptJson,r.ReceiptSha256,a.Consumed,a.ClaimedLocalAttemptId,a.ChildKey,a.EnvelopeJson,a.AccountId,a.ProjectId,p.AccountId,p.ProjectId
             FROM chirp_article_receipts r JOIN chirp_article_owned_attempts a ON a.AuthorizationId=r.AuthorizationId
@@ -133,7 +147,7 @@ internal sealed partial class ChirpArticleEvidenceResolver
                 || envelope.ChirpAuthorizationId != id || envelope.RecoveryAuthorizationId is not null)
                 throw new InvalidOperationException("The consumed predecessor receipt identity changed.");
         }
-        var originalPart = refinement.Parent.Parts.Single(x => x.CoverageOrdinal == receipt.CoverageOrdinal);
+        var originalPart = parent.Parts.Single(x => x.CoverageOrdinal == receipt.CoverageOrdinal);
         if (!string.Equals(receipt.PlanSha256, retained.SourcePlanSha256, StringComparison.Ordinal) || receipt.Range != originalPart.Range || receipt.Audio != retained.Audio
             || retained.Range with { ReusedReceiptSha256 = null } != receipt.Range || !string.Equals(retained.Range.ReusedReceiptSha256, retained.ReceiptSha256, StringComparison.Ordinal) || receipt.Audio.DocumentId != admitted.Proposal.DocumentId || receipt.Audio.RevisionId != admitted.Proposal.RevisionId
             || !string.Equals(receipt.Audio.TextSha256, originalPart.Range.TextSha256, StringComparison.Ordinal) || !string.Equals(receipt.Audio.PayloadSha256, originalPart.PayloadSha256, StringComparison.Ordinal) || !string.Equals(envelope.CompiledPayloadSha256, originalPart.PayloadSha256, StringComparison.Ordinal) || envelope.CompiledPayloadBytes != originalPart.PayloadBytes

@@ -17,6 +17,8 @@ internal sealed partial class ChirpArticleEvidenceResolver(AppPaths paths)
     {
         var matches = policy.Articles.Where(x => x.Proposal.DocumentId == documentId).ToArray();
         if (matches.Length != 1) throw new InvalidOperationException("The saved article has no unique independently admitted internal plan.");
+        if (matches[0].Proposal.SentenceSuccessor is not null && (policy.SchemaVersion is not (2 or 3) || policy.SuccessorGrant is not null))
+            throw new InvalidOperationException("Sentence continuation requires its independently reviewed article policy.");
         if (matches[0].Proposal.Refinement is { } refinement && (policy.SchemaVersion is not (2 or 3) || policy.SuccessorGrant is not null
             || !policy.PriorArticleAttemptRows.Any(x => string.Equals(x.Sha256, refinement.FailedAttemptRowSha256, StringComparison.Ordinal))
             || !policy.Budget.QueueRows.Any(x => string.Equals(x.Sha256, refinement.FailedQueueRowSha256, StringComparison.Ordinal))))

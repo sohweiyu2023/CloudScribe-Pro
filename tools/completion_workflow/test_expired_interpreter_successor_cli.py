@@ -12,7 +12,9 @@ import interpreter_test_fixture as fixture
 
 
 def prepare_successor(owner):
-    f=fixture.prepare(owner,whole_end_after=8)
+    # Leave hosted process startup time before the deliberately observed expiry.
+    # The scope stays exactly six hours and expires naturally; guards are unchanged.
+    f=fixture.prepare(owner,whole_end_after=45)
     old_config=dict(f.config);old_path=f.config_path;old_pin=f.pin;old_scope=dict(f.scope)
     old=m.Register(old_config['RegisterPath'],old_config['ScopeSha256'])
     with old._open() as c:before=old._read(c)

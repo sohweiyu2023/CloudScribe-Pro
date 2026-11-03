@@ -32,7 +32,7 @@ public sealed partial class ChirpArticleService
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: true);
         var admittedNow = await admission.LoadVerifiedAsync(cancellationToken).ConfigureAwait(false);
-        var refining = admittedNow?.Articles.SingleOrDefault(x => x.Proposal.DocumentId == documentId && x.Proposal.Refinement is not null);
+        var refining = admittedNow?.Articles.SingleOrDefault(x => x.Proposal.DocumentId == documentId && (x.Proposal.Refinement is not null || x.Proposal.SentenceSuccessor is not null));
         if (refining is not null)
         {
             var financial = await ReadFinancialAsync(connection, transaction, admittedNow!, cancellationToken).ConfigureAwait(false);
