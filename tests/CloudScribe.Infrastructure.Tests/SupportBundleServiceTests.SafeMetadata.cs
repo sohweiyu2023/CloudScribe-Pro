@@ -19,6 +19,7 @@ public sealed partial class SupportBundleServiceTests
     [InlineData(CompletionProtocolCode.DiagnosticOwnedClaim)]
     [InlineData(CompletionProtocolCode.ClosedDatabaseRequired)]
     [InlineData(CompletionProtocolCode.Oversized)]
+    [InlineData(CompletionProtocolCode.DiagnosticUnusedRenewal)]
     public async Task CompletionProtocolCodeSurvivesActualFileAndExportWithoutExceptionProse(CompletionProtocolCode code)
     {
         await using TemporaryDirectory temporary = new();

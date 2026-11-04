@@ -7,5 +7,5 @@ public enum CompletionProtocolCode
     DiagnosticNativePin, DiagnosticParent, DiagnosticAcceptedCoverage, DiagnosticChild, DiagnosticChildExists,
     DiagnosticOwnedClaim, DiagnosticFinancialChanged, DiagnosticHistory, DiagnosticPayload, DiagnosticInstalledPolicy,
     DiagnosticOperation, DiagnosticDispatch, DiagnosticDispatchReplay, DiagnosticCounterOrEpoch, DiagnosticDatabasePin, DiagnosticWindow,
-    TransitionFinancialAdmissionExists, ClosedDatabaseRequired, Oversized,
+    TransitionFinancialAdmissionExists, ClosedDatabaseRequired, Oversized, DiagnosticUnusedRenewal,
 }

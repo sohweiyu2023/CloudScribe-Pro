@@ -1,12 +1,22 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$PythonPath,[switch]$ExpiredWindow)
+param([Parameter(Mandatory)][string]$PythonPath,[switch]$ExpiredWindow,[switch]$UnusedDiagnostic)
 $ErrorActionPreference='Stop'
+if($ExpiredWindow -and $UnusedDiagnostic){throw 'Choose one synthetic diagnostic transition kind.'}
 Write-Output 'Synthetic diagnostic stage: setup (no live profile or provider).'
 # Inert caller-owned temporary package/profile only. No production install, credentials or provider requests.
 . (Join-Path $PSScriptRoot 'Install-CloudScribe.ps1') -CompletionFunctionsOnly
-$root=Join-Path ([IO.Path]::GetTempPath()) ('cloudscribe-diagnostic-installer-'+[Guid]::NewGuid().ToString('N'))
+# Python owns and confines the fixture; use its root rather than a different runtime's temp alias.
+$pythonTemp=& $PythonPath -I -S -c "import tempfile; print(tempfile.gettempdir())"
+if($LASTEXITCODE -ne 0 -or @($pythonTemp).Count -ne 1){throw 'Python synthetic temp-root discovery failed.'}
+$pythonTemp=[string]$pythonTemp
+if(-not [IO.Path]::IsPathFullyQualified($pythonTemp) -or -not (Test-Path -LiteralPath $pythonTemp -PathType Container)){throw 'Python synthetic temp root is invalid.'}
+Assert-NoLinks $pythonTemp
+$pythonTemp=[IO.Path]::GetFullPath($pythonTemp)
+Assert-NoLinks $pythonTemp
+$root=Join-Path $pythonTemp ('cloudscribe-diagnostic-installer-'+[Guid]::NewGuid().ToString('N'))
 $arguments=@('-I','-S',(Join-Path $PSScriptRoot '../tools/completion_workflow/make_synthetic_sentence_diagnostic_fixture.py'),$root)
 if($ExpiredWindow){$arguments+='expired'}
+if($UnusedDiagnostic){$arguments+='unused'}
 $metadata=& $PythonPath @arguments
 if($LASTEXITCODE -ne 0){throw 'Synthetic diagnostic fixture setup failed.'}
 $f=$metadata|ConvertFrom-Json
@@ -27,7 +37,7 @@ $gate=Get-ReviewedCompletionGate $profile
 if(Test-Path -LiteralPath $gate.Config.RegisterPath){throw 'Read-only inspection created an executable register.'}
 if([DateTimeOffset]$gate.DeadlineUtc -ne [DateTimeOffset]$f.deadlineUtc){throw 'The reader extended or changed the reviewed cutoff.'}
 $h=$gate.SuccessorTransition
-if($h.Record.SchemaVersion -ne $(if($ExpiredWindow){6}else{5})){throw 'Unexpected diagnostic handoff type.'}
+if($h.Record.SchemaVersion -ne $(if($UnusedDiagnostic){7}elseif($ExpiredWindow){6}else{5})){throw 'Unexpected diagnostic handoff type.'}
 $before=(Get-FileHash -LiteralPath $f.databasePath -Algorithm SHA256).Hash
 Write-Output 'Synthetic diagnostic stage: claim-successor.'
 $null=Invoke-CompletionGate $gate 'claim-successor' $h.Id $h.Sha256 $null (Join-Path $package 'app')

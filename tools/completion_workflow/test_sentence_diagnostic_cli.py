@@ -14,9 +14,9 @@ import gate_cli as g
 import test_sentence_replan_cli as previous
 
 
-def prepare_diagnostic(owner, expired=False):
+def prepare_diagnostic(owner, expired=False, short_window=False):
     fixture=previous.SentenceCliTests();owner.addCleanup(fixture.doCleanups)
-    f,_,_,_,proposal,new_parts,first,_,old_policy,reuse,_,_,_=fixture.prepare(whole_end_after=90 if expired else None)
+    f,_,_,_,proposal,new_parts,first,_,old_policy,reuse,_,_,_=fixture.prepare(whole_end_after=90 if expired or short_window else None)
     f.activate()
     probe=m.digest({'synthetic':'legacy transport payload'})
     request=dict(command='check-diagnostic-dispatch',configPath=str(f.config_path),configSha256=f.pin,

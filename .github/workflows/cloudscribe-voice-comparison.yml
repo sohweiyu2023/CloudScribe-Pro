@@ -75,6 +75,9 @@ jobs:
           ./scripts/Test-SentenceReplan-SelfTests.ps1 -PythonPath (Get-Command python).Source
           ./scripts/Test-SentenceReplan-SelfTests.ps1 -PythonPath (Get-Command python).Source -AfterReboot
           ./scripts/Test-SentenceReplan-SelfTests.ps1 -PythonPath (Get-Command python).Source -ExpiredTerminal
+          ./scripts/Test-SentenceDiagnostic-SelfTests.ps1 -PythonPath (Get-Command python).Source
+          ./scripts/Test-SentenceDiagnostic-SelfTests.ps1 -PythonPath (Get-Command python).Source -ExpiredWindow
+          ./scripts/Test-SentenceDiagnostic-SelfTests.ps1 -PythonPath (Get-Command python).Source -UnusedDiagnostic
       - name: Offline durable completion gate and isolated bridge
         shell: pwsh
         run: |

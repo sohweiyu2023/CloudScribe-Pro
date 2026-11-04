@@ -30,6 +30,14 @@ The view shows saved/reused coverage and incomplete status. **Export complete ar
 
 Private one-response diagnostics remain default-off and separately consented. If enabled, they observe the exact already reserved slice, not a reconstructed hash or an unrelated current document. They do not appear in normal logs or public source. See [Google failure diagnostics](GOOGLE_FAILURE_DIAGNOSTICS.md).
 
+## Unused diagnostic recovery
+
+An expired diagnostic can use one explicitly reviewed `expired-unused-diagnostic-renewal` handoff (version 7) only after a validated failed **catalog refresh**. The prior diagnostic must have no dispatch, child reservation, uncertain request or accepted output for the target. A generic stopped state does not establish that proof. Claim, replay and restart derive the original failed operation kind from immutable records.
+
+This transition preserves the original failed request, text, voice, accepted audio, financial projection and total refresh/admission counters. It retires the old scope and creates a distinct ten-minute scope with fresh explicit authorization, separate capture consent and independently bounded time evidence. It never edits the old deadline or transfers its expired policy. A fresh native admission remains required; this handoff itself permits no reservation or provider request. The resulting scope cannot use this handoff a second time.
+
+Installation and handoff checks require a closed database. Matching owned catalog-refresh checks inside the running app instead use a read-only SQLite transaction, including its WAL, with the same financial, identity and uncertainty checks before effect. This distinction avoids requiring the user to close CloudScribe merely to load voices. Synthetic installer tests exercise each diagnostic handoff kind and interrupted-install readback without credentials or provider calls.
+
 ## Delivery and verification limits
 
 The additive migration retains all existing document, revision, group, queue, spend, recovery and grant rows. Its internal plan/attempt/journal/receipt history cannot be discarded by a downgrade. Keep a closed-profile backup and retained application rollback; older binaries do not understand these retained reservations, so successful startup alone is insufficient for a safe rollback.

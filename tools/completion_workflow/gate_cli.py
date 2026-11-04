@@ -865,10 +865,17 @@ def successor_materials(request, config, config_keys, module):
         module.validate_diagnostic_manifest(manifest, new_scope)
         original = {k:v for k,v in manifest.items() if k != "diagnostic"}
         old_manifest = json.loads(bounded(old["PlanManifestPath"],1024*1024),object_pairs_hook=unique)
+        old_original = {k:v for k,v in old_manifest.items() if k != "diagnostic"} if module.diagnostic_renewal_handoff(h) else old_manifest
         d=manifest["diagnostic"]
+        if module.diagnostic_renewal_handoff(h):
+            prior=old_manifest.get("diagnostic",{})
+            renewed={"successorGrantSha256","privateCaptureConsentSha256"}
+            if (set(prior)!=set(d) or any(prior[k]!=d[k] for k in d.keys()-renewed)
+                    or any(prior[k]==d[k] for k in renewed)):
+                raise ValueError("DiagnosticUnusedRenewal")
         pins={"FailedAuthorizationId":d["failedAuthorizationId"],"FailedLocalAttemptId":d["failedLocalAttemptId"],"FailedPlanSha256":d["planSha256"],"FailedCoverageOrdinal":d["coverageOrdinal"],"FailedPayloadSha256":d["payloadSha256"],"FailedPayloadBytes":d["payloadBytes"]}
         if (sha(bounded(old["PlanManifestPath"],1024*1024))!=old["PlanManifestSha256"] or module.digest(old_manifest)!=h["OriginalManifestSha256"]
-                or module.canonical(original)!=module.canonical(old_manifest) or any(h[k]!=v for k,v in pins.items())
+                or module.canonical(original)!=module.canonical(old_original) or any(h[k]!=v for k,v in pins.items())
                 or h["AcceptedEvidenceSha256"]!=new_scope["acceptedEvidenceSha256"]):raise ValueError("DiagnosticHistory")
     elif continuation:
         module.validate_continuation_manifest(manifest, new_scope)
@@ -1239,6 +1246,7 @@ if __name__ == "__main__":
         for code in ("DiagnosticScope","DiagnosticManifest","DiagnosticCoverageOrBudget","DiagnosticPolicy","DiagnosticBudget","DiagnosticNativePin","DiagnosticParent","DiagnosticAcceptedCoverage","DiagnosticChild","DiagnosticChildExists","DiagnosticOwnedClaim","DiagnosticFinancialChanged","DiagnosticHistory","DiagnosticPayload","DiagnosticInstalledPolicy","DiagnosticOperation","DiagnosticDispatch","DiagnosticDispatchReplay","DiagnosticCounterOrEpoch","DiagnosticWindow"):
             reasons[code]="SuccessorScopeMismatch"
         reasons["DiagnosticDatabasePin"]="SuccessorDatabaseMismatch"
+        reasons["DiagnosticUnusedRenewal"]="SuccessorPending"
         reasons["TransitionFinancialAdmissionExists"]="SuccessorScopeMismatch"
         print(json.dumps(rejection_packet(error,reasons)))
         sys.exit(1)
