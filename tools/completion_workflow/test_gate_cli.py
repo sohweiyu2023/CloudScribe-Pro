@@ -23,8 +23,8 @@ class CliTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.app = self.root / "app"
-        self.app.mkdir()
+        self.app = self.root / "installation" / "app"
+        self.app.mkdir(parents=True)
         (self.app / "CloudScribe.dll").write_bytes(b"synthetic app, not executable")
         (self.app / "CloudScribe.Infrastructure.dll").write_bytes(b"synthetic infrastructure, not executable")
         self.cli = self.root / "gate_cli.py"

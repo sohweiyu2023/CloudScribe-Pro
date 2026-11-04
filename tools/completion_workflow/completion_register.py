@@ -1,7 +1,7 @@
 """Private, fail-closed workflow gate. Never supplies Google or spending authority.
 
-An admitted scope digest must come from independent review. No live scope is bundled.
-Only fixed metadata/hashes are persisted. Native UI is NOT intercepted by this module.
+Scope digests require independent review. No live scope is bundled.
+Only metadata/hashes persist. This module does not intercept UI.
 """
 from __future__ import annotations
 
@@ -140,10 +140,12 @@ def interpreter_pre_effect(state):
             and state["buildTransitions"] == 0)
 
 
+WITHDRAWAL_STATE = "SuccessorWithdrawalState"
+WITHDRAWAL_KEYS = frozenset("SchemaVersion WithdrawalId WithdrawalApprovalSha256 RepairTransitionId RepairIdentitySha256 ScopeSha256 ExpectedHeadSha256 PreviousGateSha256 RestoredGateSha256 BackupPath PreviousInstallSha256 PreviousRequiredSha256".split())
+
+
 def validate_interpreter_withdrawal(record):
-    keys = {"SchemaVersion", "WithdrawalId", "WithdrawalApprovalSha256", "RepairTransitionId", "RepairIdentitySha256",
-            "ScopeSha256", "ExpectedHeadSha256", "PreviousGateSha256", "RestoredGateSha256", "BackupPath",
-            "PreviousInstallSha256", "PreviousRequiredSha256"}
+    keys = WITHDRAWAL_KEYS
     if not isinstance(record, dict) or set(record) != keys or type(record["SchemaVersion"]) is not int or record["SchemaVersion"] != 1:
         raise Rejected("InterpreterWithdrawalSchema")
     for key in keys:
@@ -158,6 +160,30 @@ def validate_interpreter_withdrawal(record):
 
 def interpreter_binding_event(state):
     return state["interpreterRepair"] or state["interpreterActivation"]
+
+
+def successor_withdrawal_matches(s, r):
+    extra = {"NewScopeSha256", "NewHeadSha256", "AdministrativeOnly"}
+    if not isinstance(r, dict) or set(r) != WITHDRAWAL_KEYS | extra or r["AdministrativeOnly"] is not True:
+        raise Rejected("SuccessorWithdrawalSchema")
+    validate_interpreter_withdrawal({k: v for k, v in r.items() if k not in extra})
+    for key in extra - {"AdministrativeOnly"}:hash_value(r[key])
+    p = s["retirement"]
+    if not unused_diagnostic_predecessor(s) or not p or s["retired"] or not diagnostic_renewal_handoff(p["handoff"]):
+        raise Rejected(WITHDRAWAL_STATE)
+    h = p["handoff"]
+    if (r["ScopeSha256"] != digest(s["scope"]) or r["RepairTransitionId"] != p["id"]
+            or r["RepairIdentitySha256"] != p["identity"] or r["NewScopeSha256"] != h["NewScopeSha256"]
+            or r["PreviousGateSha256"] != h["NewGateSha256"] or r["RestoredGateSha256"] != h["PreviousGateSha256"]
+            or r["WithdrawalApprovalSha256"] in (s["scope"]["approvalSha256"], h["SourceApprovalSha256"])):
+        raise Rejected("SuccessorWithdrawalIdentity")
+
+
+def reject_withdrawn_handoff(s, h):
+    w = s["successorWithdrawal"]
+    if w and (h["TransitionId"] == w["withdrawal"]["RepairTransitionId"] or h["SourceApprovalSha256"] in
+              (w["sourceApproval"], w["withdrawal"]["WithdrawalApprovalSha256"])):
+        raise Rejected(WITHDRAWAL_STATE)
 
 
 def interpreter_withdrawal_matches(state, record):
@@ -558,8 +584,7 @@ def validate_continuation_manifest(manifest, scope):
     for name in BUDGET_KEYS - {"taxFeeEvidenceSha256"}:
         if type(budget[name]) is not int or budget[name] < 0:
             raise reject("ContinuationBudgetType")
-    # This is a reviewed upper BOUND for all project taxes/fees, not an assumed
-    # tax rate or an authenticated invoice. Missing evidence fails closed.
+    # Reviewed tax/fee upper bound, not an invoice. Missing evidence fails closed.
     if (budget["overallCeilingMinorUnits"] != 500
             or budget["projectCeilingMinorUnits"] + budget["taxFeeUpperBoundMinorUnits"] > 500
             or budget["projectCommittedMinorUnits"] + len(remaining) > budget["projectCeilingMinorUnits"]
@@ -1028,7 +1053,8 @@ class Register:
                  "ids": set(), "scope": scope, "head": previous, "buildTransitions": 0, "helperSourceRepairs": 0,
                  "currentBuild": scope["buildSha256"], "currentGate": None, "retirement": None,
                  "retired": False, "activation": None, "activated": scope["schema"] == 1,
-                 "interpreterRepair": None, "interpreterActivation": None, "interpreterWithdrawal": None}
+                 "interpreterRepair": None, "interpreterActivation": None, "interpreterWithdrawal": None,
+                 "successorWithdrawal": None}
         rows = db.execute("SELECT seq,body,sha FROM events ORDER BY seq").fetchall()
         if not rows or len(rows) > 4096:
             raise Rejected("InvalidEventCount")
@@ -1046,8 +1072,9 @@ class Register:
             shapes["source-claim"] = shapes["build-claim"]
             shapes["source-complete"] = shapes["build-complete"]
             shapes["diagnostic-dispatch"] = {"type", "utc", "mono", "id", "policySha256", "payloadSha256", "authorizationId", "localAttemptId", "ordinal"}
-            shapes["interpreter-withdraw-claim"] = {"type", "utc", "mono", "id", "identity", "withdrawal"}
-            shapes["interpreter-withdraw-complete"] = shapes["build-complete"]
+            for kind in ("interpreter", "successor"):
+                shapes[kind + "-withdraw-claim"] = {"type", "utc", "mono", "id", "identity", "withdrawal"}
+                shapes[kind + "-withdraw-complete"] = shapes["build-complete"]
             shapes["retire-claim"] = {"type", "utc", "mono", "id", "identity", "handoff", "clockCondition", "clockDriftMicros"}
             if (event.get("type") == "retire-claim" and "observedMono" in event
                     and (scope["schema"] in (2, 3, 4, 5) or (scope["schema"] == 6 and diagnostic_renewal_handoff(event.get("handoff")))) and isinstance(event.get("handoff"), dict)
@@ -1066,13 +1093,13 @@ class Register:
                 shapes["claim"] = shapes["claim"] | {"acceptedProofSha256"}
             if event.get("type") not in shapes or set(event) != shapes[event["type"]]:
                 raise Rejected("EventSchema")
-            if event["type"] in ("claim", "complete", "build-claim", "build-complete", "source-claim", "source-complete", "retire-claim", "retire-complete", "activate", "interpreter-withdraw-claim", "interpreter-withdraw-complete"):
+            if "id" in event and event["type"] != "diagnostic-dispatch":
                 try:
                     if str(uuid.UUID(event["id"])) != event["id"]:
                         raise Rejected("EventId")
                 except (ValueError, TypeError, AttributeError) as error:
                     raise Rejected("EventId") from error
-                hash_value(event["identity"] if event["type"] in ("claim", "build-claim", "source-claim", "retire-claim", "interpreter-withdraw-claim") else event["receiptSha256"])
+                hash_value(event.get("receiptSha256", event.get("identity")))
             if event["type"] == "complete" and event["outcome"] not in ("Succeeded", "Stopped"):
                 raise Rejected("EventOutcome")
             if event["type"] == "complete" and event["reason"] not in ("None", "ObservedFailure", "ReceiptValidation", "ClockRollback", "ClockDiscontinuity", "WindowExpired"):
@@ -1190,12 +1217,27 @@ class Register:
                     raise Rejected("InterpreterWithdrawalState")
                 state["currentGate"] = pending["withdrawal"]["RestoredGateSha256"]
                 state["pending"] = None
+            elif event["type"] == "successor-withdraw-claim":
+                r = event["withdrawal"]; successor_withdrawal_matches(state, r)
+                p = state["pending"]
+                if state["successorWithdrawal"] or not p or p["type"] != "retire-claim" or event["id"] != r["WithdrawalId"] or event["id"] in state["ids"] or r["ExpectedHeadSha256"] != previous:
+                    raise Rejected(WITHDRAWAL_STATE)
+                state["successorWithdrawal"] = dict(event, sourceApproval=state["retirement"]["handoff"]["SourceApprovalSha256"])
+                state["pending"] = dict(event, kind="successor-withdrawal")
+                state["ids"].add(event["id"])
+            elif event["type"] == "successor-withdraw-complete":
+                p = state["pending"]
+                if not p or p["type"] != "successor-withdraw-claim" or event["id"] != p["id"] or event["identity"] != p["identity"]:
+                    raise Rejected(WITHDRAWAL_STATE)
+                state["currentGate"] = p["withdrawal"]["RestoredGateSha256"]
+                state["pending"] = state["retirement"] = None
             elif event["type"] == "stop":
                 state["stopped"] = True
                 state["stopReason"] = event["reason"]
             elif event["type"] == "retire-claim":
                 h = event["handoff"]
                 validate_handoff(h)
+                reject_withdrawn_handoff(state, h)
                 observed_mono = event.get("observedMono", event["mono"])
                 condition, drift = self._retirement_observation(state, event["utc"], observed_mono, h)
                 allowed_interpreter = scope["schema"] == 4 and interpreter_handoff(h)
@@ -1264,7 +1306,7 @@ class Register:
                     raise Rejected("CheckAfterStop")
             else:
                 raise Rejected("UnknownEvent")
-            old_clock_retirement = event["type"] in ("retire-claim","retire-complete") and state["retirement"] and (clock_sentence_handoff(state["retirement"]["handoff"]) or expired_diagnostic_handoff(state["retirement"]["handoff"]))
+            old_clock_retirement = event["type"].startswith("successor-withdraw-") or (event["type"] in ("retire-claim","retire-complete") and state["retirement"] and (clock_sentence_handoff(state["retirement"]["handoff"]) or expired_diagnostic_handoff(state["retirement"]["handoff"])))
             if not (event["type"]=="stop" and event["reason"] in ("ClockRollback","ClockDiscontinuity")) and not old_clock_retirement and not (state["stopped"] and state["stopReason"] in ("ClockRollback","ClockDiscontinuity")):
                 state["lastGoodUtc"]=event["utc"]
             state["lastUtc"] = event["utc"]
@@ -1297,8 +1339,7 @@ class Register:
 
     @staticmethod
     def _retirement_observation(state, now, mono, handoff=None):
-        # Retirement creates no old-run permission. A separately approved new
-        # scope supplies its own dual deadline; never repair old clock anchors.
+        # Retirement grants nothing; fresh scope deadlines cannot repair old anchors.
         if type(now) is not int or type(mono) is not int or mono < 0:
             raise Rejected("ClockRollback")
         drift = now - state["startUtc"] - (mono - state["startMono"])
@@ -1330,8 +1371,7 @@ class Register:
         if retirement and mono < retirement.get("observedMono", retirement["mono"]):
             raise Rejected("ClockRollback")
         if mono < state["lastMono"]:
-            # This retires expired authority, never resumes it or proves a reboot.
-            # The exact typed handoff and fresh approval are checked separately.
+            # Retire only. Typed handoff/fresh approval are checked separately.
             pending = state["pending"]
             typed = handoff or (retirement["handoff"] if retirement else None)
             if ((state["scope"]["schema"] in (2, 3) or (state["scope"]["schema"] == 4 and interpreter_handoff(typed))) and now >= utc(state["scope"]["endUtc"])
@@ -1601,6 +1641,29 @@ class Register:
             db.commit(); self._seal(db)
             return {"outcome": "Succeeded", "authority": False, "runStopped": True}
 
+    def successor_withdrawal(self, successor, r, pin, phase, observed=None):
+        hash_value(pin)
+        if phase not in ("inspect", "claim", "check", "complete") or not successor.path.is_file():raise Rejected(WITHDRAWAL_STATE)
+        with self.pair(successor), self._transaction() as db, successor._transaction() as nd:
+            s = self._read(db); n = successor._read(nd)
+            successor_withdrawal_matches(s, r)
+            if (successor.scope_sha != r["NewScopeSha256"] or n["head"] != r["NewHeadSha256"]
+                    or n["activated"] or nd.execute("SELECT COUNT(*) FROM events").fetchone()[0] != 1
+                    or r["WithdrawalApprovalSha256"] == n["scope"]["privateCaptureConsentSha256"]):raise Rejected(WITHDRAWAL_STATE)
+            p = s["pending"]
+            if phase in ("check", "complete"):
+                if not p or p["type"] != "successor-withdraw-claim" or p["identity"] != pin or p["withdrawal"] != r:raise Rejected(WITHDRAWAL_STATE)
+            elif s["successorWithdrawal"] or r["ExpectedHeadSha256"] != s["head"] or r["WithdrawalId"] in s["ids"]:raise Rejected(WITHDRAWAL_STATE)
+            now = self.clock()
+            if now < s["lastUtc"]:raise Rejected("ClockRollback")
+            if phase in ("inspect", "check"):return {"valid": True, "authority": False}
+            event = {"type": "successor-withdraw-" + phase, "utc": now, "id": r["WithdrawalId"], "identity": pin}
+            if phase == "claim":event["withdrawal"] = r
+            else:event["receiptSha256"] = hash_value(observed)
+            self._append(db, self._stamp(event, s["lastMono"]), s["head"])
+            db.commit(); self._seal(db)
+            return {"outcome": "Succeeded", "authority": False}
+
     @contextmanager
     def pair(self, successor):
         old_paths = {os.path.normcase(str(x)) for x in (self.path, self.anchor, physical(str(self.path) + ".lease"))}
@@ -1614,6 +1677,9 @@ class Register:
 
     def _handoff_ready(self, old_state, successor, new_scope, h, identity, pending=False, check_clock=True):
         validate_handoff(h); hash_value(identity); validate_scope(new_scope)
+        reject_withdrawn_handoff(old_state, h)
+        if old_state["pending"] and old_state["pending"]["type"] == "successor-withdraw-claim":
+            raise Rejected(WITHDRAWAL_STATE)
         typed_interpreter = interpreter_handoff(h)
         typed_pair = typed_interpreter and (old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) == (4, 4, 3)
         sentence_pair = sentence_handoff(h) and (old_state["scope"]["schema"], new_scope["schema"], h["SchemaVersion"]) == (4, 5, 4)
@@ -1689,7 +1755,7 @@ class Register:
             return self._retirement_observation(state, self.clock(), self.monotonic(), handoff)
         except Rejected as error:
             typed = handoff or (state["retirement"]["handoff"] if state["retirement"] else None)
-            reason = str(error) if sentence_handoff(typed) and str(error) in ("WindowExpired", "ClockDiscontinuity") else "ClockRollback"
+            reason = str(error) if (sentence_handoff(typed) or diagnostic_handoff(typed)) and str(error) in ("WindowExpired", "ClockDiscontinuity") else "ClockRollback"
             self._append(db, self._stamp({"type": "stop", "utc": max(self.clock(), state["lastUtc"]), "reason": reason}, state["lastMono"]), state["head"])
             db.commit(); self._seal(db)
             raise Rejected(reason)

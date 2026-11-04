@@ -68,6 +68,20 @@ class UnusedRenewalCliTests(unittest.TestCase):
     def test_real_paired_transition_rejects_child_and_changed_funding_then_requires_new_admission(self):
         f,path,policy,old,before=prepare_unused_renewal(self)
         original=f.f.db.read_bytes();parent=m.uuid_identity(policy['SuccessorGrant']['ParentAuthorizationId'])
+        installed_gate=Path(f.config['ApplicationDirectory']).parent/'completion-workflow-gate.json'
+        old_raw=Path(f.h['PreviousConfigPath']).read_bytes()
+        self.assertEqual(f.h['PreviousGateSha256'],g.sha(installed_gate.read_bytes()))
+        # Reproduce the real faulty producer shape BEFORE any durable claim.
+        f.h['PreviousConfigPath']=str(installed_gate)
+        f.h_path.write_text(json.dumps(f.h));f.h_pin=g.sha(f.h_path.read_bytes())
+        result=f.command('inspect-successor')
+        self.assertNotEqual(0,result[0]);self.assertEqual('MutablePreviousGatePath',result[1]['code'])
+        with old._open() as db:self.assertEqual(before['head'],old._read(db)['head'])
+        self.assertFalse(Path(f.config['RegisterPath']).exists())
+        frozen=f.new_folder/'immutable-reviewed-predecessor.json'
+        g.freeze_predecessor_config(installed_gate,f.h['PreviousGateSha256'],frozen,f.config['ApplicationDirectory'])
+        f.h['PreviousConfigPath']=str(frozen)
+        f.h_path.write_text(json.dumps(f.h));f.h_pin=g.sha(f.h_path.read_bytes())
         def inspect_changed_snapshot():
             saved=f.h_path.read_bytes();pin=f.h_pin
             changed=dict(f.h,DatabaseSha256=g.sha(f.f.db.read_bytes()))
@@ -98,6 +112,8 @@ class UnusedRenewalCliTests(unittest.TestCase):
         # Normal supported readback after a simulated interrupted install.
         self.assertNotEqual(0,f.command('complete-successor')[0])
         f.f.b.write_installed(f.config,f.pin,f.config_path)
+        self.assertEqual(old_raw,frozen.read_bytes())
+        self.assertEqual(f.pin,g.sha(installed_gate.read_bytes()))
         result=f.command('complete-successor');self.assertEqual(0,result[0],result)
         self.assertNotEqual(0,f.command('complete-successor')[0])
         self.assertEqual(original,f.f.db.read_bytes())

@@ -78,6 +78,7 @@ jobs:
           ./scripts/Test-SentenceDiagnostic-SelfTests.ps1 -PythonPath (Get-Command python).Source
           ./scripts/Test-SentenceDiagnostic-SelfTests.ps1 -PythonPath (Get-Command python).Source -ExpiredWindow
           ./scripts/Test-SentenceDiagnostic-SelfTests.ps1 -PythonPath (Get-Command python).Source -UnusedDiagnostic
+          ./scripts/Test-PendingInstallWithdrawal-SelfTests.ps1 -PythonPath (Get-Command python).Source
       - name: Offline durable completion gate and isolated bridge
         shell: pwsh
         run: |

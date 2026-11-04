@@ -8,4 +8,5 @@ public enum CompletionProtocolCode
     DiagnosticOwnedClaim, DiagnosticFinancialChanged, DiagnosticHistory, DiagnosticPayload, DiagnosticInstalledPolicy,
     DiagnosticOperation, DiagnosticDispatch, DiagnosticDispatchReplay, DiagnosticCounterOrEpoch, DiagnosticDatabasePin, DiagnosticWindow,
     TransitionFinancialAdmissionExists, ClosedDatabaseRequired, Oversized, DiagnosticUnusedRenewal,
+    PreviousGatePin, MutablePreviousGatePath, PredecessorSnapshotChanged, PredecessorSnapshotLocation,
 }

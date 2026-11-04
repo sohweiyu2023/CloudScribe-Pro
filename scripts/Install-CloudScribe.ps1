@@ -16,11 +16,17 @@ param(
     [string]$ReviewedCompletionSuccessorRunSha256,
     [switch]$CompletePendingCompletionSuccessor,
     [switch]$CompletePendingCompletionInterpreterRepair,
+    [string]$ReviewedPendingInstallWithdrawalPlanPath,
+    [string]$ReviewedPendingInstallWithdrawalPlanSha256,
+    [switch]$ResumePendingInstallWithdrawal,
     [switch]$CompletionFunctionsOnly,
     [switch]$ValidateOnly,
     [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
+if([bool]$ReviewedPendingInstallWithdrawalPlanPath -ne [bool]$ReviewedPendingInstallWithdrawalPlanSha256){throw 'Administrative installation withdrawal requires its separately reviewed plan and exact hash.'}
+if($ResumePendingInstallWithdrawal -and -not $ReviewedPendingInstallWithdrawalPlanPath){throw 'Administrative restoration resume requires the original exact plan.'}
+if($ReviewedPendingInstallWithdrawalPlanPath -and @($PSBoundParameters.Keys|Where-Object {$_ -notin @('PackageRoot','ReviewedPendingInstallWithdrawalPlanPath','ReviewedPendingInstallWithdrawalPlanSha256','ResumePendingInstallWithdrawal','ValidateOnly')}).Count){throw 'Administrative installation withdrawal cannot be combined with migration, admission, successor activation or other installation modes.'}
 if($CompletionFunctionsOnly -and @($PSBoundParameters.Keys|Where-Object {$_ -cne 'CompletionFunctionsOnly'}).Count){throw 'Function loading cannot be combined with an installation operation.'}
 if($CompletePendingCompletionInterpreterRepair -and (-not $ReviewedCompletionBuildTransitionPath -or -not $ReviewedCompletionGatePath -or $CompletePendingCompletionSuccessor -or $ValidateOnly -or $ValidatePackageOnly -or $MigrateProfileFrom -or $ReviewedRecoveryPolicyPath -or $ReviewedChirpArticlePolicyPath -or $ReviewedChirpResumePolicyPath -or $ReviewedCompletionSuccessorRunPath)){throw 'Interpreter repair readback requires only the same reviewed pending transition and gate.'}
 if([bool]$ReviewedCompletionSuccessorRunPath -ne [bool]$ReviewedCompletionSuccessorRunSha256){throw 'A successor run requires independently reviewed handoff bytes and hash.'}
@@ -119,7 +125,7 @@ function Invoke-CompletionGate($Gate,[string]$Command,[Guid]$OperationId,[string
         $result=$output|ConvertFrom-Json
         $safeReason=if($result.PSObject.Properties.Name -contains 'reason' -and $result.reason -cin @('Unknown','Expired','ClockRollback','ClockDiscontinuity','PendingOutcome','Limit','PinMismatch','Storage','Protocol','Stopped','SuccessorHeadMismatch','SuccessorDatabaseMismatch','SuccessorScopeMismatch','SuccessorPending','PilotEvidenceMissing','PilotEvidenceMismatch','SuccessorNotActivated','RunRetired')){$result.reason}else{'Unknown'}
         $safeCode=if($result.PSObject.Properties.Name -contains 'code' -and $result.code -cin @('SuccessorHeadMismatch','TerminalDatabasePin','TerminalDatabaseChanged','SuccessorNotActivated','PredecessorNotRetired','RunRetired','OutsideWindow','PilotNotAccepted','PilotAttempt','PilotOutputIncomplete','PilotStoredPlan','PilotPolicyPin','PilotAttemptIdentity','PilotOutputPin','PilotAcceptedIdentity','PilotMediaLocation','PilotMediaPin','PilotMappingAbsent','PilotMappingBound','PilotMappingChain','PilotMappingIdentity','PilotMappingDispatch','PilotMappingReceipt','ClosedDatabaseRequired','TerminalAttempt','TerminalQueue','TerminalFailureEvidence','AcceptedWorkCannotRetire','RecoverableOutputCannotRetire','PendingOrUncertainWork','RetirementIdentityMismatch','SuccessorAlreadyExists','SuccessorAlreadyActivated','HandoffPin','HandoffConfigPin','HandoffScopeConfig','HandoffNewScopeBinding','HandoffApplicationLocation','SuccessorScopeBinding','SuccessorActivationReplay','ContinuationAcceptedAttempt','ContinuationAcceptedBounds','ContinuationAcceptedDuplicateOrUnknown','ContinuationAcceptedIdentity','ContinuationAcceptedOmitted','ContinuationAcceptedOrChangedCoverage','ContinuationAcceptedPin','ContinuationAcceptedProof','ContinuationAcceptedProvenance','ContinuationAcceptedSchema','ContinuationAdmissionKind','ContinuationAllInBudget','ContinuationAttemptLimit','ContinuationBudgetSchema','ContinuationBudgetType','ContinuationDatabaseChanged','ContinuationDatabasePin','ContinuationEnvelopeBound','ContinuationExactBudgetOrCoverage','ContinuationFinancialBound','ContinuationFinancialChanged','ContinuationHandoffBinding','ContinuationHeldNotClean','ContinuationHistoricalPolicy','ContinuationManifest','ContinuationMappingBound','ContinuationMappingPin','ContinuationMediaLocation','ContinuationMediaPin','ContinuationOriginalManifest','ContinuationOutputIncomplete','ContinuationOutputPin','ContinuationPolicyBinding','ContinuationProgressIdentity','ContinuationRemainingCount','ContinuationRemainingNotUntouched','ContinuationResumeTarget','ContinuationRetainedPolicyPin','ContinuationRetentionNotAdmitted','ContinuationStoredPlan','WholeArticleGrantBinding','WholeArticleHistoryBinding','WholeArticlePredecessorNotExpired','InterpreterWithdrawalSchema','InterpreterWithdrawalIdentity','InterpreterWithdrawalPin','InterpreterWithdrawalBackup','InterpreterWithdrawalReadback','InterpreterWithdrawalState','InterpreterWithdrawalClock','InterpreterTransitionSchema','InterpreterTransitionBinding','InterpreterEvidencePin','InterpreterEvidenceBinding','InterpreterPendingReadback','SentenceManifest','SentenceManifestBounds','SentenceProposal','SentenceHistory','SentenceCoverage','SentenceRemainingCount','SentenceFirstStage','SentenceLegacy','SentenceFailure','SentenceAdmissionKind','SentencePolicyBinding','SentenceReuse','SentenceCounterBinding','SentenceCounterOrWindowBinding','SentenceLegacyPin','ClockEpochEvidence','ClockEpochPolicyDeadline','FreshWindowApprovalRequired','ExpiredWindowBinding','ExpiredPredecessorRequired')){$result.code}else{'Unclassified'}
-        if($result.PSObject.Properties.Name -contains 'code' -and $result.code -cin @('DiagnosticScope','DiagnosticManifest','DiagnosticCoverageOrBudget','DiagnosticPolicy','DiagnosticBudget','DiagnosticNativePin','DiagnosticParent','DiagnosticAcceptedCoverage','DiagnosticChild','DiagnosticChildExists','DiagnosticOwnedClaim','DiagnosticFinancialChanged','DiagnosticHistory','DiagnosticPayload','DiagnosticInstalledPolicy','DiagnosticOperation','DiagnosticDispatch','DiagnosticDispatchReplay','DiagnosticCounterOrEpoch','DiagnosticDatabasePin','DiagnosticWindow','TransitionFinancialAdmissionExists','Oversized','DiagnosticUnusedRenewal')){$safeCode=$result.code}
+        if($result.PSObject.Properties.Name -contains 'code' -and $result.code -cin @('DiagnosticScope','DiagnosticManifest','DiagnosticCoverageOrBudget','DiagnosticPolicy','DiagnosticBudget','DiagnosticNativePin','DiagnosticParent','DiagnosticAcceptedCoverage','DiagnosticChild','DiagnosticChildExists','DiagnosticOwnedClaim','DiagnosticFinancialChanged','DiagnosticHistory','DiagnosticPayload','DiagnosticInstalledPolicy','DiagnosticOperation','DiagnosticDispatch','DiagnosticDispatchReplay','DiagnosticCounterOrEpoch','DiagnosticDatabasePin','DiagnosticWindow','TransitionFinancialAdmissionExists','Oversized','DiagnosticUnusedRenewal','PreviousGatePin','MutablePreviousGatePath','PredecessorSnapshotChanged','PredecessorSnapshotLocation')){$safeCode=$result.code}
         $safeType=if($result.PSObject.Properties.Name -contains 'failureExceptionType' -and $result.failureExceptionType -cin @('Other','ValueError','TypeError','KeyError','IndexError','AttributeError','AssertionError','JSONDecodeError','UnicodeDecodeError','UnicodeEncodeError','MemoryError','OSError','PermissionError','FileNotFoundError','TimeoutError','OperationalError','DatabaseError','IntegrityError','EOFError','OverflowError','RuntimeError','Rejected')){$result.failureExceptionType}else{'Other'}
         $safeComponent=if($result.PSObject.Properties.Name -contains 'failureComponent' -and $result.failureComponent -cin @('bridge','register','unavailable')){$result.failureComponent}else{'unavailable'}
         $safeLine=0
@@ -921,6 +927,45 @@ function Get-AllowedNoticeFiles {
     }
     return ,$allowed
 }
+function Invoke-PendingCompletionInstallWithdrawal([string]$PlanPath,[string]$PlanSha256,[string]$Phase){
+    if($Phase -cnotin @('inspect','restore','resume') -or $PlanSha256 -cnotmatch '^[0-9a-f]{64}$'){throw 'Invalid administrative restoration request.'}
+    Assert-NoLinks $PlanPath
+    if((Get-FileHash -LiteralPath $PlanPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $PlanSha256){throw 'Administrative restoration plan pin mismatch.'}
+    if((Get-Item -LiteralPath $PlanPath).Length -gt 2097152){throw 'Administrative restoration plan is oversized.'}
+    $plan=Get-Content -LiteralPath $PlanPath -Raw|ConvertFrom-Json
+    if($plan.AdministrativeOnly -isnot [bool] -or -not $plan.AdministrativeOnly -or $plan.PaidAuthority -isnot [bool] -or $plan.PaidAuthority){throw 'Restoration grants no paid or provider authority.'}
+    $operator=[string]$plan.OperatorPath;Assert-NoLinks $operator
+    if((Get-FileHash -LiteralPath $operator -Algorithm SHA256).Hash.ToLowerInvariant() -cne [string]$plan.SourceSha256.'pending_install_operator.py'){throw 'Administrative restoration source pin mismatch.'}
+    $configPath=[string]$plan.ImmutableNewGate.Path;Assert-NoLinks $configPath
+    if((Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne [string]$plan.ImmutableNewGate.Sha256){throw 'Restoration gate evidence pin mismatch.'}
+    $config=Get-Content -LiteralPath $configPath -Raw|ConvertFrom-Json
+    $python=[string]$config.PythonPath;Assert-NoLinks $python
+    if((Get-FileHash -LiteralPath $python -Algorithm SHA256).Hash.ToLowerInvariant() -cne [string]$config.PythonSha256){throw 'Restoration interpreter pin mismatch; no verification is relaxed.'}
+    $rawResult=@(& $python -I -S -B $operator $PlanPath $PlanSha256 $Phase 2>&1);$exitCode=$LASTEXITCODE
+    $textResult=$rawResult -join "`n"
+    if($textResult.Length -gt 16384){throw 'Restoration response is oversized; reconcile before retry.'}
+    try{$result=$textResult|ConvertFrom-Json}catch{throw 'Restoration response is unavailable or malformed; reconcile before retry.'}
+    if($exitCode -ne 0 -or $result.rejected){
+        $safeCodes=('RecoveryPath LinkedPath Oversized DuplicateField RecoveryReference RecoveryEvidencePin RecoverySourcePins '+
+            'RecoveryWindowsRequired RecoveryPlan RecoveryInstallationRoot RecoveryIdentity RecoveryBackupChanged RecoveryProfile RecoveryInterpreterPin '+
+            'RecoveryImmutablePredecessor RecoveryOriginalHandoff RecoveryInvocation RecoveryJournalNotConfirmed RecoveryInventory '+
+            'RecoveryInventoryBounds RecoveryPathOverlap RecoveryRequiredChanged RecoveryInitialState RecoveryDisplacedChanged '+
+            'RecoveryInstallationChanged RecoveryStageChanged RecoveryReadback SuccessorWithdrawalState SuccessorWithdrawalSchema '+
+            'SuccessorWithdrawalIdentity ClockRollback DiagnosticFinancialChanged DiagnosticDatabasePin DiagnosticChildExists '+
+            'PendingOrUncertainWork DiagnosticAcceptedCoverage DiagnosticParent ClosedDatabaseRequired InstalledBuildBinding RecoveryMutableEvidence RecoveryLeaseUnavailable '+
+            'InstalledGatePin InstalledGateBytes RequiredGatePin InstalledProfileBinding AnchorDatabaseMismatch').Split(' ')
+        $code=if([string]$result.code -cin $safeCodes){[string]$result.code}else{'Unclassified'}
+        $component=if($result.sourceComponent -cin @('pending_install_operator.py','pending_install_files.py','gate_cli.py','completion_register.py')){$result.sourceComponent}else{'unavailable'}
+        $line=if($result.sourceLine -is [long] -and $result.sourceLine -ge 1 -and $result.sourceLine -le 10000){$result.sourceLine}else{0}
+        $kind=if($result.exceptionType -cin @('ValueError','Rejected','OSError','PermissionError','FileNotFoundError','OperationalError')){$result.exceptionType}else{'Other'}
+        $systemCode=if($result.systemErrorCode -is [long] -and $result.systemErrorCode -ge 0 -and $result.systemErrorCode -le 65535){$result.systemErrorCode}else{0}
+        throw "Administrative restoration stopped [$code]; type=$kind component=$component line=$line system=$systemCode. Reconcile before retry."
+    }
+    if($result.authority -isnot [bool] -or $result.authority -or ($result.providerRequests -isnot [long] -and $result.providerRequests -isnot [int]) -or $result.providerRequests -ne 0 -or
+        ($Phase -ceq 'inspect' -and $result.valid -isnot [bool]) -or ($Phase -ceq 'inspect' -and -not $result.valid) -or
+        ($Phase -cne 'inspect' -and ($result.restored -isnot [bool] -or -not $result.restored))){throw 'Restoration did not confirm its expected administrative result.'}
+    return $result
+}
 if($CompletionFunctionsOnly){return}
 foreach($required in @('app/CloudScribe.exe','app/CloudScribe.dll','app/appsettings.json','runtime/dotnet.exe','LICENSE','THIRD-PARTY-NOTICES.md','licenses/third-party/components.json')){
     if(-not (Test-Path -LiteralPath (Join-Path $package $required) -PathType Leaf)){throw "Incomplete clean package: $required"}
@@ -943,6 +988,11 @@ foreach($file in $all | Where-Object {-not $_.PSIsContainer}){
 $settings=Get-Content -LiteralPath (Join-Path $package 'app/appsettings.json') -Raw | ConvertFrom-Json
 if($settings.CloudScribe.AppDataDirectoryOverride){throw 'The source package must not contain a personal profile override.'}
 if($ValidatePackageOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;NoticeFiles=$allowedNotices.Count;PackageOnly=$true};return}
+if($ReviewedPendingInstallWithdrawalPlanPath){
+    $phase=if($ValidateOnly){'inspect'}elseif($ResumePendingInstallWithdrawal){'resume'}else{'restore'}
+    Invoke-PendingCompletionInstallWithdrawal $ReviewedPendingInstallWithdrawalPlanPath $ReviewedPendingInstallWithdrawalPlanSha256 $phase
+    return
+}
 $programs=[IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs'))
 $target=Join-Path $programs 'CloudScribe Pro'
 if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($target)) -ne $programs){throw 'Install root escaped the Programs directory.'}
