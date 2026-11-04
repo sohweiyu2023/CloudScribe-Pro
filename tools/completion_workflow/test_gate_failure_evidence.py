@@ -10,6 +10,17 @@ CANARY='SYNTHETIC_PRIVATE_EXCEPTION_CANARY_DO_NOT_EXPORT'
 
 
 class FailureEvidenceTests(unittest.TestCase):
+    def test_known_bounded_storage_failure_retains_safe_location(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'synthetic';path.write_bytes(b'xx')
+            try:g.bounded(path,1)
+            except ValueError as error:packet=g.rejection_packet(error,{'Oversized':'Storage'})
+        self.assertEqual('Oversized',packet['code']);self.assertEqual('Storage',packet['reason'])
+        self.assertEqual('bridge',packet['failureComponent'])
+        self.assertTrue(1<=packet['failureSourceLine']<=10000)
+        self.assertNotIn(folder,json.dumps(packet))
+
     def test_keyerror_uses_last_owned_frame_without_message_or_paths(self):
         class Hostile(dict):
             def __getitem__(self,key):raise KeyError(CANARY)
