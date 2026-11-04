@@ -43,6 +43,8 @@ print(json.dumps(dict(authority=mode=='authority',providerRequests=0,valid=True,
     try{Invoke-PendingCompletionInstallWithdrawal $planPath ('a'*64) 'restore'|Out-Null}catch{$failure=$_.Exception.Message}
     Assert-Test ($failure -match 'plan pin mismatch') 'Wrong plan hash did not fail before helper execution.'
     [pscustomobject]@{Passed=$count;ProviderCalls=0;RealProfileAccess=$false;Scope='Synthetic installer transport only; actual Windows restoration tested separately'}
+    # Expected native failures above were asserted. Do not leak their exit into CI's wrapper.
+    $global:LASTEXITCODE=0
 }finally{
     $resolved=[IO.Path]::GetFullPath($testRoot)
     if($resolved.StartsWith($temporaryBase,[StringComparison]::OrdinalIgnoreCase) -and
