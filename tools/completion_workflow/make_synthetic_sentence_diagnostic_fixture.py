@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-if len(sys.argv) not in (2,3) or (len(sys.argv)==3 and sys.argv[2]!='expired'):
+if len(sys.argv) not in (2,3) or (len(sys.argv)==3 and sys.argv[2] not in ('expired','unused')):
     raise ValueError('SyntheticRootRequired')
 root=Path(sys.argv[1]).absolute()
 if (root.exists() or any(p.is_symlink() or p.is_junction() for p in (root,*root.parents))
@@ -20,7 +20,11 @@ class OwnedDirectory:
     def cleanup(self):pass
 owner=unittest.TestCase()
 with patch('test_gate_cli.tempfile.TemporaryDirectory',return_value=OwnedDirectory()):
-    f,policy_path,_,old,before=fixtures.prepare_diagnostic(owner,expired=len(sys.argv)==3)
+    if len(sys.argv)==3 and sys.argv[2]=='unused':
+        import test_unused_diagnostic_renewal_cli as renewal
+        f,policy_path,_,old,before=renewal.prepare_unused_renewal(owner)
+    else:
+        f,policy_path,_,old,before=fixtures.prepare_diagnostic(owner,expired=len(sys.argv)==3)
 print(json.dumps(dict(root=str(root),package=str(Path(f.config['CandidateApplicationDirectory']).parent),
     target=str(Path(f.config['ApplicationDirectory']).parent),profile=str(f.f.b.f.profile),gatePath=str(f.config_path),gateSha256=f.pin,
     scopeSha256=f.config['ScopeSha256'],scopePath=str(f.scope_path),handoffPath=str(f.h_path),handoffSha256=f.h_pin,
