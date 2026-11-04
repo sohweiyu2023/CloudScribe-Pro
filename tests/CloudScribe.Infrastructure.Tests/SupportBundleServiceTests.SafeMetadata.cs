@@ -20,6 +20,10 @@ public sealed partial class SupportBundleServiceTests
     [InlineData(CompletionProtocolCode.ClosedDatabaseRequired)]
     [InlineData(CompletionProtocolCode.Oversized)]
     [InlineData(CompletionProtocolCode.DiagnosticUnusedRenewal)]
+    [InlineData(CompletionProtocolCode.PreviousGatePin)]
+    [InlineData(CompletionProtocolCode.MutablePreviousGatePath)]
+    [InlineData(CompletionProtocolCode.PredecessorSnapshotChanged)]
+    [InlineData(CompletionProtocolCode.PredecessorSnapshotLocation)]
     public async Task CompletionProtocolCodeSurvivesActualFileAndExportWithoutExceptionProse(CompletionProtocolCode code)
     {
         await using TemporaryDirectory temporary = new();

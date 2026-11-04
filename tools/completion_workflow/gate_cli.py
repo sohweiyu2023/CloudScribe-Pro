@@ -815,6 +815,32 @@ def interpreter_withdrawal_command(request, config, config_keys, register, modul
     return register.complete_interpreter_withdrawal(record, pin, request["id"], module.digest({name: sha(raw) for name, raw in saved.items()}))
 
 
+def immutable_predecessor_location(path, application_directory):
+    if not Path(path).is_absolute() or not Path(application_directory).is_absolute():
+        raise ValueError("PredecessorSnapshotLocation")
+    root = Path(application_directory).parent.resolve()
+    target = Path(path)
+    for part in (target, *target.parents):
+        if part.is_symlink() or part.is_junction():
+            raise ValueError("LinkedPath")
+    if target.resolve().is_relative_to(root):
+        raise ValueError("MutablePreviousGatePath")
+
+
+def freeze_predecessor_config(path, expected_sha, output, application_directory):
+    """Create reviewed predecessor evidence, never overwrite an installed control."""
+    raw = bounded(path, 32768)
+    if sha(raw) != expected_sha:
+        raise ValueError("PreviousGatePin")
+    immutable_predecessor_location(output, application_directory)
+    target = Path(output)
+    with target.open("xb") as stream:
+        stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+    if bounded(target, 32768) != raw or bounded(path, 32768) != raw:
+        raise ValueError("PredecessorSnapshotChanged")
+    return {"Path": str(target.absolute()), "Sha256": expected_sha}
+
+
 def successor_materials(request, config, config_keys, module):
     raw = bounded(request["handoffPath"], 32768); pin = sha(raw)
     if pin != request["handoffSha256"] or pin != request["identitySha256"]:
@@ -839,6 +865,8 @@ def successor_materials(request, config, config_keys, module):
             or any(old[k] != config[k] for k in config_keys - changes) or old["ScopeSha256"] != h["PreviousScopeSha256"]
             or config["ScopeSha256"] != h["NewScopeSha256"]):
         raise ValueError("HandoffScopeConfig")
+    immutable_predecessor_location(h["PreviousConfigPath"], old["ApplicationDirectory"])
+    immutable_predecessor_location(old["ScriptPath"], old["ApplicationDirectory"])
     if typed_interpreter:
         if any(old[k] != config[k] for k in ("AppSha256", "InfrastructureSha256", "CandidateApplicationDirectory")):
             raise ValueError("HandoffScopeConfig")
@@ -1247,6 +1275,9 @@ if __name__ == "__main__":
             reasons[code]="SuccessorScopeMismatch"
         reasons["DiagnosticDatabasePin"]="SuccessorDatabaseMismatch"
         reasons["DiagnosticUnusedRenewal"]="SuccessorPending"
+        reasons["MutablePreviousGatePath"]="SuccessorScopeMismatch"
+        reasons["PredecessorSnapshotChanged"]="SuccessorScopeMismatch"
+        reasons["PredecessorSnapshotLocation"]="SuccessorScopeMismatch"
         reasons["TransitionFinancialAdmissionExists"]="SuccessorScopeMismatch"
         print(json.dumps(rejection_packet(error,reasons)))
         sys.exit(1)
