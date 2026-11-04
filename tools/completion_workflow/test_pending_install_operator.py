@@ -21,6 +21,7 @@ class PendingInstallOperatorTests(unittest.TestCase):
         saved=folder/'retained-original-required.json';saved.write_bytes(required.read_bytes())
         original_db=f.f.db.read_bytes();old_gate=Path(f.h['PreviousConfigPath'])
         self.assertEqual(0,f.command('claim-successor')[0])
+        for _ in range(2):self.assertEqual(0,f.command('check-successor')[0])
         # The real install ordering: installed slot is replaced before completion.
         f.f.b.write_installed(f.config,f.pin,f.config_path)
         with old._open() as db:s=old._read(db)

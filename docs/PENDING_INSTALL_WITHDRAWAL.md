@@ -13,6 +13,12 @@ distinct administrative approval. Evidence and source files must remain outside
 the installation, stage and displaced roots. The old gate is derived from its
 original activation, not from the installed slot that was replaced.
 
+The inactive replacement journal may contain the supported installer's sealed
+pre-install `check` events after `start`. Only these two event types are allowed;
+the complete chain is authenticated and the exact reviewed head must still match.
+Activation, claims, completions, stops, malformed checks and any changed head are
+rejected. No journal row is filtered, reset or rewritten to manufacture this state.
+
 Before any restoration, the operator holds the app instance, database, existing
 sidecars and administrative installation leases. It verifies the unchanged
 database, financial projection, accepted media, failed parent and absence of a

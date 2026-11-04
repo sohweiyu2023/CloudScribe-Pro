@@ -1,8 +1,4 @@
-"""Private, fail-closed workflow gate. Never supplies Google or spending authority.
-
-Scope digests require independent review. No live scope is bundled.
-Only metadata/hashes persist. This module does not intercept UI.
-"""
+"""Fail-closed register: reviewed scope hashes; no provider/spend authority or UI interception."""
 from __future__ import annotations
 
 import hashlib
@@ -1648,7 +1644,7 @@ class Register:
             s = self._read(db); n = successor._read(nd)
             successor_withdrawal_matches(s, r)
             if (successor.scope_sha != r["NewScopeSha256"] or n["head"] != r["NewHeadSha256"]
-                    or n["activated"] or nd.execute("SELECT COUNT(*) FROM events").fetchone()[0] != 1
+                    or n["activated"] or any(json.loads(x[0])["type"] not in ("start","check") for x in nd.execute("SELECT body FROM events"))
                     or r["WithdrawalApprovalSha256"] == n["scope"]["privateCaptureConsentSha256"]):raise Rejected(WITHDRAWAL_STATE)
             p = s["pending"]
             if phase in ("check", "complete"):

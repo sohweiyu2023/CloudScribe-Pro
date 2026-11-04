@@ -17,6 +17,8 @@ class SuccessorWithdrawalTests(unittest.TestCase):
         self.f.prepare();self.old=self.f.old;self.new=self.f.new;self.clock=self.f.clock
         self.identity=m.digest(self.f.h)
         self.old.claim_successor(self.new,self.f.scope,self.f.h,self.identity)
+        # Match the actual installer: two inactive pre-install checks precede replacement.
+        for _ in range(2):self.old.check_successor(self.new,self.f.scope,self.f.h,self.identity)
         with self.old._open() as db:self.before=self.old._read(db)
         with self.new._open() as db:self.child=self.new._read(db)
         self.clock.now=m.utc(self.f.scope['endUtc'])+1_000_000
@@ -68,6 +70,8 @@ class SuccessorWithdrawalTests(unittest.TestCase):
             s=self.new._read(db);self.new._append(db,self.new._stamp({'type':'stop','utc':self.clock.now,'reason':'WindowExpired'}),s['head'])
             db.commit();self.new._seal(db)
         with self.assertRaises(m.Rejected):self.action('claim')
+        with self.new._open() as db:self.record['NewHeadSha256']=self.new._read(db)['head']
+        with self.assertRaises(m.Rejected):self.action('claim',self.record,m.digest(self.record))
 
     def test_concurrent_claim_has_one_owner_and_stale_or_foreign_completion_rejects(self):
         def claim(_):
@@ -135,6 +139,29 @@ class SuccessorWithdrawalTests(unittest.TestCase):
         before=self.old.path.read_bytes();self.clock.now=self.before['lastUtc']-1
         with self.assertRaisesRegex(m.Rejected,'ClockRollback'):self.action('claim')
         self.assertEqual(before,self.old.path.read_bytes())
+
+    def test_additional_valid_check_after_the_reviewed_head_is_stale(self):
+        with self.new._open() as db:
+            s=self.new._read(db)
+            self.new._append(db,dict(type='check',utc=s['lastUtc']+1,mono=s['lastMono']+1),s['head'])
+            db.commit();self.new._seal(db)
+        with self.assertRaises(m.Rejected):self.action('claim')
+        with self.new._open() as db:self.record['NewHeadSha256']=self.new._read(db)['head']
+        self.assertFalse(self.action('inspect',self.record,m.digest(self.record))['authority'])
+
+    def test_foreign_events_or_extra_field_check_never_become_unused_history(self):
+        for kind in ('activate','claim','complete','build-claim','source-claim','retire-claim','diagnostic-dispatch','check'):
+            with self.subTest(kind=kind):
+                case=SuccessorWithdrawalTests();case.setUp()
+                try:
+                    with case.new._open() as db:
+                        s=case.new._read(db)
+                        event=dict(type=kind,utc=s['lastUtc']+1,mono=s['lastMono']+1,unexpected='synthetic')
+                        pin=case.new._append(db,event,s['head']);db.commit();case.new._seal(db)
+                    case.record['NewHeadSha256']=pin
+                    with self.assertRaises(m.Rejected):case.action('claim',case.record,m.digest(case.record))
+                    with case.old._open() as db:self.assertEqual(case.before['head'],case.old._read(db)['head'])
+                finally:case.doCleanups()
 
 
 if __name__=='__main__':unittest.main()
