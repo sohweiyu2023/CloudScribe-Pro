@@ -22,7 +22,7 @@ class CliTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.app = self.root / "installation" / "app"
         self.app.mkdir(parents=True)
         (self.app / "CloudScribe.dll").write_bytes(b"synthetic app, not executable")

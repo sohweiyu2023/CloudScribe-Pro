@@ -1,6 +1,11 @@
 """Actual closed-profile adapter, Windows leases, SQLite and staged replacement. All synthetic."""
 import json
 import copy
+import ctypes
+from ctypes import wintypes
+import hashlib
+import os
+import tempfile
 from pathlib import Path
 import shutil
 import unittest
@@ -10,9 +15,31 @@ import gate_cli as g
 import pending_install_operator as operator
 import pending_install_files as files
 import test_unused_diagnostic_renewal_cli as fixture
+import test_gate_cli as base_fixture
 
 
 class PendingInstallOperatorTests(unittest.TestCase):
+    def test_short_temp_alias_is_canonical_before_sealing_profile_identity(self):
+        if os.name!='nt':self.skipTest('Windows short-path identity fixture')
+        with tempfile.TemporaryDirectory(prefix='cloudscribe-long-identity-fixture-') as parent:
+            kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+            kernel.GetShortPathNameW.argtypes=(wintypes.LPCWSTR,wintypes.LPWSTR,wintypes.DWORD)
+            kernel.GetShortPathNameW.restype=wintypes.DWORD
+            buffer=ctypes.create_unicode_buffer(32768)
+            length=kernel.GetShortPathNameW(parent,buffer,len(buffer))
+            if not 0<length<len(buffer) or buffer.value==str(Path(parent).resolve()):
+                self.skipTest('No distinct short alias available; no OS settings changed')
+            self.assertTrue(Path(buffer.value).samefile(parent))
+            from unittest.mock import patch
+            with patch.object(tempfile,'tempdir',buffer.value):
+                f=base_fixture.CliTests();f.setUp()
+            try:
+                self.assertNotEqual(str(Path(f.temporary.name)),str(f.root))
+                self.assertEqual(f.root,f.root.resolve())
+                self.assertEqual(f.config['ProfileRootSha256'],hashlib.sha256(str(f.profile.resolve()).rstrip('/\\').upper().encode()).hexdigest())
+                self.assertFalse(f.profile.resolve().is_relative_to(f.app.parent.resolve()))
+            finally:f.doCleanups()
+
     def test_actual_replacement_interruption_and_explicit_administrative_recovery(self):
         f,_,_,old,_=fixture.prepare_unused_renewal(self)
         target=Path(f.config['ApplicationDirectory']).parent;folder=f.new_folder
