@@ -58,6 +58,15 @@ def path_digest(path):
     return hashlib.sha256(os.path.normcase(str(physical(path))).encode("utf-8")).hexdigest()
 
 
+def _maintenance(operation, *args):
+    path = physical(Path(_maintenance.__code__.co_filename).with_name("maintenance_register.py"))
+    with path.open("rb") as stream: data = stream.read(16385)
+    if len(data) > 16384 or hashlib.sha256(data).hexdigest() != "8730ede270ffb3afa022fd20d6e0699161bd889c0d58247f5aa3bf721044c81d":
+        raise Rejected("ModuleHash")
+    namespace = dict(globals()); exec(compile(data, str(path), "exec"), namespace)
+    return namespace["maintenance_" + operation](*args)
+
+
 def validate_scope(scope):
     if (not isinstance(scope, dict) or type(scope.get("schema")) is not int or scope["schema"] not in (1, 2, 3, 4, 5, 6)
             or set(scope) != {1: SCOPE_KEYS, 2: SUCCESSOR_SCOPE_KEYS, 3: CONTINUATION_SCOPE_KEYS, 4: WHOLE_ARTICLE_SCOPE_KEYS, 5: WHOLE_ARTICLE_SCOPE_KEYS, 6: DIAGNOSTIC_SCOPE_KEYS}[scope["schema"]]):
@@ -177,6 +186,10 @@ def successor_withdrawal_matches(s, r):
 
 def reject_withdrawn_handoff(s, h):
     w = s["successorWithdrawal"]
+    if any(h["SourceApprovalSha256"] == item["transition"]["MaintenanceApprovalSha256"] for item in s.get("maintenance", [])):
+        raise Rejected("MaintenanceAuthorityNotNarration")
+    if s.get("maintenanceRelease") and h["SourceApprovalSha256"] == s["maintenanceRelease"]["record"]["ReleaseApprovalSha256"]:
+        raise Rejected("MaintenanceAuthorityNotNarration")
     if w and (h["TransitionId"] == w["withdrawal"]["RepairTransitionId"] or h["SourceApprovalSha256"] in
               (w["sourceApproval"], w["withdrawal"]["WithdrawalApprovalSha256"])):
         raise Rejected(WITHDRAWAL_STATE)
@@ -296,7 +309,6 @@ def validate_clock_epoch(e, *, require_reboot=True):
 
 
 def epoch_deadline(scope,e):
-    # Conservative local-clock cutoff: independent UTC uncertainty can only shorten permission.
     return utc(scope["endUtc"])-max(0,e["TrustedUtcUpperMicros"]-e["ObservedUtcMicros"])-250_000
 
 
@@ -580,7 +592,6 @@ def validate_continuation_manifest(manifest, scope):
     for name in BUDGET_KEYS - {"taxFeeEvidenceSha256"}:
         if type(budget[name]) is not int or budget[name] < 0:
             raise reject("ContinuationBudgetType")
-    # Reviewed tax/fee upper bound, not an invoice. Missing evidence fails closed.
     if (budget["overallCeilingMinorUnits"] != 500
             or budget["projectCeilingMinorUnits"] + budget["taxFeeUpperBoundMinorUnits"] > 500
             or budget["projectCommittedMinorUnits"] + len(remaining) > budget["projectCeilingMinorUnits"]
@@ -971,13 +982,11 @@ class Register:
         now = register.clock()
         if not utc(scope["startUtc"]) <= now < utc(scope["endUtc"]):
             raise Rejected("OutsideWindow")
-        # Exclusive creation: an existing/corrupt journal is NEVER replaced.
         with register._lease():
             register._create_locked(scope, reviewed_sha, now)
         return register
 
     def _create_locked(self, scope, reviewed_sha, now):
-        # Sentinel survives partial initialization; NEVER delete/retry/reset it.
         fd = os.open(self.anchor, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(fd)
         fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -1067,6 +1076,8 @@ class Register:
                       "build-complete": {"type", "utc", "mono", "id", "identity", "receiptSha256"}}
             shapes["source-claim"] = shapes["build-claim"]
             shapes["source-complete"] = shapes["build-complete"]
+            if isinstance(event.get("type"), str) and event["type"].startswith("maintenance-"):
+                shapes[event["type"]] = _maintenance("shape", event["type"])
             shapes["diagnostic-dispatch"] = {"type", "utc", "mono", "id", "policySha256", "payloadSha256", "authorizationId", "localAttemptId", "ordinal"}
             for kind in ("interpreter", "successor"):
                 shapes[kind + "-withdraw-claim"] = {"type", "utc", "mono", "id", "identity", "withdrawal"}
@@ -1159,6 +1170,8 @@ class Register:
                     raise Rejected("DiagnosticDispatchReplay")
                 state["ids"].add(event["id"])
                 state["diagnosticDispatch"] = event
+            elif event["type"].startswith("maintenance-"):
+                _maintenance("replay", self, state, event, previous)
             elif event["type"] in ("build-claim", "source-claim"):
                 transition = event["transition"]
                 validate_transition(transition)
@@ -1302,7 +1315,7 @@ class Register:
                     raise Rejected("CheckAfterStop")
             else:
                 raise Rejected("UnknownEvent")
-            old_clock_retirement = event["type"].startswith("successor-withdraw-") or (event["type"] in ("retire-claim","retire-complete") and state["retirement"] and (clock_sentence_handoff(state["retirement"]["handoff"]) or expired_diagnostic_handoff(state["retirement"]["handoff"])))
+            old_clock_retirement = event["type"].startswith(("successor-withdraw-", "maintenance-")) or (event["type"] in ("retire-claim","retire-complete") and state["retirement"] and (clock_sentence_handoff(state["retirement"]["handoff"]) or expired_diagnostic_handoff(state["retirement"]["handoff"])))
             if not (event["type"]=="stop" and event["reason"] in ("ClockRollback","ClockDiscontinuity")) and not old_clock_retirement and not (state["stopped"] and state["stopReason"] in ("ClockRollback","ClockDiscontinuity")):
                 state["lastGoodUtc"]=event["utc"]
             state["lastUtc"] = event["utc"]
@@ -1323,7 +1336,6 @@ class Register:
             e=state["clockEpoch"];delta=mono-e["ObservedMonoMicros"]
             if delta<0 or abs(now-e["ObservedUtcMicros"]-delta)>250_000:return "ClockRollback"
             if e["TrustedUtcUpperMicros"]+delta>=utc(state["scope"]["endUtc"]):return "WindowExpired"
-        # An unobserved backward wall-clock adjustment cannot extend six hours.
         if now - state["startUtc"] + 250000 < mono - state["startMono"]:
             return "ClockRollback"
         if now - state["startUtc"] > mono - state["startMono"] + 250000:
@@ -1335,7 +1347,6 @@ class Register:
 
     @staticmethod
     def _retirement_observation(state, now, mono, handoff=None):
-        # Retirement grants nothing; fresh scope deadlines cannot repair old anchors.
         if type(now) is not int or type(mono) is not int or mono < 0:
             raise Rejected("ClockRollback")
         drift = now - state["startUtc"] - (mono - state["startMono"])
@@ -1358,8 +1369,6 @@ class Register:
             if abs(now-e["ObservedUtcMicros"]-delta)>250_000:raise Rejected("ClockRollback")
             if expired_sentence_handoff(typed) or expired_diagnostic_handoff(typed):
                 if e["TrustedUtcLowerMicros"]+delta<utc(state["scope"]["endUtc"]):raise Rejected("ExpiredPredecessorRequired")
-                # Immutable evidence pins the ONLY proposed new six-hour window;
-                # retirement/reconciliation cannot outlive its conservative cutoff.
                 if e["TrustedUtcUpperMicros"]+delta>=e["ObservedUtcMicros"]+(600 if expired_diagnostic_handoff(typed) else 6*3600)*1_000_000:raise Rejected("WindowExpired")
             elif e["TrustedUtcUpperMicros"]+delta>=utc(state["scope"]["endUtc"]):raise Rejected("WindowExpired")
             if not retirement and now-e["ObservedUtcMicros"]>600*1_000_000:raise Rejected("ClockEpochEvidence")
@@ -1367,7 +1376,6 @@ class Register:
         if retirement and mono < retirement.get("observedMono", retirement["mono"]):
             raise Rejected("ClockRollback")
         if mono < state["lastMono"]:
-            # Retire only. Typed handoff/fresh approval are checked separately.
             pending = state["pending"]
             typed = handoff or (retirement["handoff"] if retirement else None)
             if ((state["scope"]["schema"] in (2, 3) or (state["scope"]["schema"] == 4 and interpreter_handoff(typed))) and now >= utc(state["scope"]["endUtc"])
@@ -1396,12 +1404,10 @@ class Register:
         now = self.clock()
         reason = self._time_rejection(state)
         if reason:
-            # Commit the stop BEFORE raising; clock recovery cannot renew the window.
             self._append(db, self._stamp({"type": "stop", "utc": max(now, state["lastUtc"]), "reason": reason}, state["lastMono"]), state["head"])
             db.commit()
             self._seal(db)
             raise Rejected(reason)
-        # Persist the UTC/monotonic high-water marks on EVERY pre-effect check.
         event = self._stamp({"type": "check", "utc": now})
         state["head"] = self._append(db, event, state["head"])
         state["lastUtc"] = now
@@ -1448,7 +1454,6 @@ class Register:
                     "deadlineUtc": effective_deadline(state["scope"],state.get("clockEpoch")), "authority": False}
 
     def complete(self, operation_id, receipt):
-        # Receipts are observed evidence from separately reviewed adapters, never authority.
         allowed = {"id", "identitySha256", "outcome", "evidenceSha256", "catalogVerified", "probeInputEmpty",
                    "probeHttpStatus", "probeStatus", "audioAbsent", "policyVerified", "zeroNewFunds",
                    "maximumNewAttempts", "additionalReservationCents"}
@@ -1480,7 +1485,6 @@ class Register:
                     good = good and receipt.get("maximumNewAttempts") == 1 and receipt.get("additionalReservationCents") == 1
                 good = good and type(receipt.get("maximumNewAttempts")) is int and 0 <= receipt["maximumNewAttempts"] <= maximum
                 good = good and type(receipt.get("additionalReservationCents")) is int and 0 <= receipt["additionalReservationCents"] <= maximum
-            # Expiry/rollback cannot be hidden by completing a successful older claim.
             time_reason = self._time_rejection(state)
             reason = time_reason or ("ObservedFailure" if receipt.get("outcome") != "Succeeded" else "ReceiptValidation")
             good = good and time_reason is None
@@ -1547,6 +1551,9 @@ class Register:
               or (state["currentGate"] is not None and state["currentGate"] != transition["PreviousGateSha256"])):
             raise Rejected("BuildTransitionHeadOrState")
 
+    def maintenance(self, record, identity, phase, observed=None):
+        return _maintenance("operate", self, record, identity, phase, observed)
+
     def inspect_build(self, transition, identity_sha, operation_id):
         with self._open() as db:
             state = self._read(db)
@@ -1556,7 +1563,6 @@ class Register:
     def claim_build(self, transition, identity_sha, operation_id):
         with self._open() as db:
             state = self._read(db)
-            # Expected head is checked under the exclusive lease before any append.
             self._build_ready(state, transition, identity_sha, operation_id, check_clock=False)
             if self._time_rejection(state):
                 self._guard(db, state)  # Persist terminal stop without altering a valid expected head.
@@ -1576,7 +1582,6 @@ class Register:
             return {"valid": True}
 
     def complete_build(self, transition, identity_sha, operation_id, observed_sha):
-        # Only the independently reviewed CLI adapter supplies actual readback.
         hash_value(observed_sha)
         with self._open() as db:
             state = self._read(db)
@@ -1722,11 +1727,7 @@ class Register:
             if (h["OriginalManifestSha256"] != old_state["scope"]["plansSha256"]
                     or h["AcceptedEvidenceSha256"] != new_scope["acceptedEvidenceSha256"]):
                 raise Rejected("ContinuationAcceptedProof")
-            # Current pair leases already own this old2 register. Its root1
-            # ancestor is terminal/immutable; read it without re-entering leases.
             self._require_ancestor_snapshot(old_state, h["PreviousGateSha256"])
-        # A distinct approved window may retire forward-discontinuous old time;
-        # normal old permissions, backward UTC and committed failure stops stay blocked.
         if old_state["stopped"] and old_state["stopReason"] != "WindowExpired" and not (diagnostic_renewal_handoff(h) and unused_diagnostic_predecessor(old_state)) and not ((clock_sentence_handoff(h) or expired_diagnostic_handoff(h)) and old_state["stopReason"] in ("ClockRollback","ClockDiscontinuity")):
             raise Rejected("RetirementClockOrStop")
         if check_clock:
@@ -1810,7 +1811,6 @@ class Register:
                 self._append(db, self._stamp({"type": "retire-complete", "utc": max(self.clock(), state["lastUtc"]),
                                              "id": h["TransitionId"], "identity": identity, "receiptSha256": observed_sha}, state["lastMono"]), state["head"])
                 db.commit(); self._seal(db)
-            # If a crash followed old completion, only exact readback of this SAME handoff can finish.
             previous_head = self._read(db)["head"]
             activation = {"type": "activate", "utc": successor.clock(), "id": h["TransitionId"],
                                                        "identity": identity, "previousRetirementHead": previous_head,
@@ -1824,7 +1824,6 @@ class Register:
             return {"outcome": "Succeeded", "authority": False}
 
     def require_predecessor_retired(self, new_config_pin):
-        # Called on EVERY operational bridge entry, never a caller success assertion.
         with self._open() as db:
             new_state = self._read(db)
         if new_state["scope"]["schema"] not in (2, 3, 4, 5, 6):
@@ -1855,10 +1854,8 @@ class Register:
             db.execute("PRAGMA query_only=ON"); db.execute("BEGIN")
             state = old._read(db)
             a = current["activation"]; item = state["retirement"]
-            # A single validated pre-effect interpreter repair may change only
-            # the current gate pin. The immutable retirement still binds the
-            # ORIGINAL activation pin; never rewrite an ancestor to match it.
             activation_pin = (a["gateSha256"] if a and schema == 4 and current["helperSourceRepairs"] == 1 else config_pin)
+            if current.get("maintenance"): activation_pin = _maintenance("activation", current, activation_pin)
             typed_pair = schema == 4 and state["scope"]["schema"] == 4 and item and interpreter_handoff(item["handoff"])
             typed_pair = typed_pair or (schema == 6 and state["scope"]["schema"] == 6 and item and diagnostic_renewal_handoff(item["handoff"]))
             if ((state["scope"]["schema"] != schema - 1 and not typed_pair) or not state["retired"] or state["pending"] or not a or not item

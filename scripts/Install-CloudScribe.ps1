@@ -19,11 +19,17 @@ param(
     [string]$ReviewedPendingInstallWithdrawalPlanPath,
     [string]$ReviewedPendingInstallWithdrawalPlanSha256,
     [switch]$ResumePendingInstallWithdrawal,
+    [string]$ReviewedStoppedMaintenancePlanPath,
+    [string]$ReviewedStoppedMaintenancePlanSha256,
+    [ValidateSet('update','resume','rollback','resume-rollback','release','resume-release')][string]$StoppedMaintenancePhase='update',
     [switch]$CompletionFunctionsOnly,
     [switch]$ValidateOnly,
     [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
+if([bool]$ReviewedStoppedMaintenancePlanPath -ne [bool]$ReviewedStoppedMaintenancePlanSha256){throw 'Stopped maintenance requires its separately reviewed plan and exact hash.'}
+if($PSBoundParameters.ContainsKey('StoppedMaintenancePhase') -and -not $ReviewedStoppedMaintenancePlanPath){throw 'Stopped maintenance phase requires its original reviewed plan.'}
+if($ReviewedStoppedMaintenancePlanPath -and @($PSBoundParameters.Keys|Where-Object {$_ -notin @('PackageRoot','ReviewedStoppedMaintenancePlanPath','ReviewedStoppedMaintenancePlanSha256','StoppedMaintenancePhase','ValidateOnly')}).Count){throw 'Stopped maintenance cannot be combined with migration, narration admission, gate activation or other installation modes.'}
 if([bool]$ReviewedPendingInstallWithdrawalPlanPath -ne [bool]$ReviewedPendingInstallWithdrawalPlanSha256){throw 'Administrative installation withdrawal requires its separately reviewed plan and exact hash.'}
 if($ResumePendingInstallWithdrawal -and -not $ReviewedPendingInstallWithdrawalPlanPath){throw 'Administrative restoration resume requires the original exact plan.'}
 if($ReviewedPendingInstallWithdrawalPlanPath -and @($PSBoundParameters.Keys|Where-Object {$_ -notin @('PackageRoot','ReviewedPendingInstallWithdrawalPlanPath','ReviewedPendingInstallWithdrawalPlanSha256','ResumePendingInstallWithdrawal','ValidateOnly')}).Count){throw 'Administrative installation withdrawal cannot be combined with migration, admission, successor activation or other installation modes.'}
@@ -966,6 +972,49 @@ function Invoke-PendingCompletionInstallWithdrawal([string]$PlanPath,[string]$Pl
         ($Phase -cne 'inspect' -and ($result.restored -isnot [bool] -or -not $result.restored))){throw 'Restoration did not confirm its expected administrative result.'}
     return $result
 }
+function Invoke-StoppedMaintenance([string]$PlanPath,[string]$PlanSha256,[string]$Phase){
+    if($PlanSha256 -cnotmatch '^[0-9a-f]{64}$' -or $Phase -cnotin @('inspect','update','resume','rollback','resume-rollback','inspect-release','release','resume-release')){throw 'Invalid stopped maintenance request.'}
+    Assert-NoLinks $PlanPath
+    if((Get-Item -LiteralPath $PlanPath).Length -gt 2097152 -or (Get-FileHash -LiteralPath $PlanPath).Hash.ToLowerInvariant() -cne $PlanSha256){throw 'Stopped maintenance plan pin mismatch.'}
+    $json=[Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText($PlanPath))
+    try{Assert-UniqueRecoveryJson $json.RootElement}finally{$json.Dispose()}
+    $plan=Get-Content -LiteralPath $PlanPath -Raw|ConvertFrom-Json
+    if($plan.AdministrativeOnly -isnot [bool] -or -not $plan.AdministrativeOnly -or $plan.PaidAuthority -isnot [bool] -or $plan.PaidAuthority){throw 'Maintenance grants no narration or provider authority.'}
+    $configPath=[string]$plan.PreviousGate.Path;Assert-NoLinks $configPath
+    if((Get-FileHash -LiteralPath $configPath).Hash.ToLowerInvariant() -cne [string]$plan.PreviousGate.Sha256){throw 'Maintenance predecessor evidence differs.'}
+    $config=Get-Content -LiteralPath $configPath -Raw|ConvertFrom-Json
+    $python=[string]$config.PythonPath;Assert-NoLinks $python
+    if((Get-FileHash -LiteralPath $python).Hash.ToLowerInvariant() -cne [string]$config.PythonSha256){throw 'Maintenance interpreter pin differs; verification is unchanged.'}
+    # The immutable new gate identifies its source directory; the plan pins every source.
+    $newPath=[string]$plan.NewGate.Path;Assert-NoLinks $newPath
+    if((Get-FileHash -LiteralPath $newPath).Hash.ToLowerInvariant() -cne [string]$plan.NewGate.Sha256){throw 'Maintenance new evidence differs.'}
+    $new=Get-Content -LiteralPath $newPath -Raw|ConvertFrom-Json
+    $operator=Join-Path (Split-Path -Parent ([string]$new.ScriptPath)) 'maintenance_operator.py';Assert-NoLinks $operator
+    if((Get-Item -LiteralPath $operator).Length -gt 131072 -or (Get-FileHash -LiteralPath $operator).Hash.ToLowerInvariant() -cne [string]$plan.SourceSha256.'maintenance_operator.py'){throw 'Maintenance source pin mismatch.'}
+    $rawResult=@(& $python -I -S -B $operator $PlanPath $PlanSha256 $Phase 2>&1);$exitCode=$LASTEXITCODE
+    $textResult=$rawResult -join "`n"
+    if($textResult.Length -gt 16384){throw 'Maintenance response oversized; reconcile before retry.'}
+    try{
+        $json=[Text.Json.JsonDocument]::Parse($textResult)
+        try{Assert-UniqueRecoveryJson $json.RootElement}finally{$json.Dispose()}
+        $result=$textResult|ConvertFrom-Json
+    }catch{throw 'Maintenance response unavailable or malformed; reconcile before retry.'}
+    if($exitCode -ne 0 -or $result.rejected){
+        $codes=('MaintenanceSchema MaintenancePin MaintenanceBinding MaintenanceState MaintenanceClock MaintenancePending MaintenanceReplay MaintenanceIdentity '+
+            'RecoverySourcePins RecoveryPath RecoveryPlan RecoveryInstallationRoot RecoveryInterpreterPin RecoveryPathOverlap RecoveryMutableEvidence '+
+            'RecoveryBackupChanged RequiredGatePin InstalledBuildBinding RecoveryProfile RecoveryEvidencePin DiagnosticFinancialChanged DiagnosticDatabasePin '+
+            'PendingOrUncertainWork ClosedDatabaseRequired RecoveryLeaseUnavailable RecoveryReadback RecoveryStageChanged RecoveryDisplacedChanged '+
+            'RecoveryRequiredChanged RecoveryInitialState RecoveryInstallationChanged RecoveryInvocation RecoveryJournalNotConfirmed LinkedPath DuplicateField ModuleHash').Split(' ')
+        $code=if([string]$result.code -cin $codes){[string]$result.code}else{'Unclassified'}
+        $component=if($result.sourceComponent -cin @('maintenance_operator.py','maintenance_files.py','maintenance_register.py','completion_register.py','gate_cli.py','pending_install_files.py')){$result.sourceComponent}else{'unavailable'}
+        $line=if($result.sourceLine -is [long] -and $result.sourceLine -ge 1 -and $result.sourceLine -le 10000){$result.sourceLine}else{0}
+        throw "Stopped maintenance rejected [$code] component=$component line=$line. Reconcile before retry."
+    }
+    if($result.authority -isnot [bool] -or $result.authority -or ($result.providerRequests -isnot [long] -and $result.providerRequests -isnot [int]) -or $result.providerRequests -ne 0 -or
+        ($Phase -cin @('inspect','inspect-release') -and ($result.valid -isnot [bool] -or -not $result.valid)) -or
+        ($Phase -cnotin @('inspect','inspect-release') -and ($result.restored -isnot [bool] -or -not $result.restored))){throw 'Maintenance did not confirm its expected non-activating result.'}
+    return $result
+}
 if($CompletionFunctionsOnly){return}
 foreach($required in @('app/CloudScribe.exe','app/CloudScribe.dll','app/appsettings.json','runtime/dotnet.exe','LICENSE','THIRD-PARTY-NOTICES.md','licenses/third-party/components.json')){
     if(-not (Test-Path -LiteralPath (Join-Path $package $required) -PathType Leaf)){throw "Incomplete clean package: $required"}
@@ -988,6 +1037,11 @@ foreach($file in $all | Where-Object {-not $_.PSIsContainer}){
 $settings=Get-Content -LiteralPath (Join-Path $package 'app/appsettings.json') -Raw | ConvertFrom-Json
 if($settings.CloudScribe.AppDataDirectoryOverride){throw 'The source package must not contain a personal profile override.'}
 if($ValidatePackageOnly){[pscustomobject]@{Valid=$true;PackageFiles=@($all | Where-Object {-not $_.PSIsContainer}).Count;NoticeFiles=$allowedNotices.Count;PackageOnly=$true};return}
+if($ReviewedStoppedMaintenancePlanPath){
+    $phase=if($ValidateOnly -and $StoppedMaintenancePhase -in @('release','resume-release')){'inspect-release'}elseif($ValidateOnly){'inspect'}else{$StoppedMaintenancePhase}
+    Invoke-StoppedMaintenance $ReviewedStoppedMaintenancePlanPath $ReviewedStoppedMaintenancePlanSha256 $phase
+    return
+}
 if($ReviewedPendingInstallWithdrawalPlanPath){
     $phase=if($ValidateOnly){'inspect'}elseif($ResumePendingInstallWithdrawal){'resume'}else{'restore'}
     Invoke-PendingCompletionInstallWithdrawal $ReviewedPendingInstallWithdrawalPlanPath $ReviewedPendingInstallWithdrawalPlanSha256 $phase
