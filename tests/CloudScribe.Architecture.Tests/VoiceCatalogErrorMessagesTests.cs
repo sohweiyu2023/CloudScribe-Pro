@@ -2,6 +2,7 @@ using System.Collections;
 using System.Net;
 using CloudScribe.App.Composition;
 using CloudScribe.Application.Security;
+using CloudScribe.Domain.Generation;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
 
@@ -9,6 +10,23 @@ namespace CloudScribe.Architecture.Tests;
 
 public sealed class VoiceCatalogErrorMessagesTests
 {
+    [Theory]
+    [InlineData(CompletionProtocolCode.ClosedDatabaseRequired, "closed database")]
+    [InlineData(CompletionProtocolCode.Oversized, "allowed size")]
+    public void LocalVerifierFailureExplainsCauseAndPreservesPreciseStage(CompletionProtocolCode code, string cause)
+    {
+        var failure = new CompletionGateException(CompletionGateFailure.Storage, code);
+        failure.Data["private"] = "synthetic secret document fragment";
+        GoogleCatalogRefreshDiagnostics.Failure(null, Guid.NewGuid(), GoogleCatalogRefreshPhase.AccountLookup, failure);
+        GoogleCatalogRefreshDiagnostics.Failure(null, Guid.NewGuid(), GoogleCatalogRefreshPhase.UiBootstrap, failure);
+        string message = VoiceCatalogErrorMessages.For(failure, GoogleCatalogRefreshPhase.UiBootstrap);
+        Assert.Contains(cause, message, StringComparison.Ordinal);
+        Assert.Contains(code.ToString(), message, StringComparison.Ordinal);
+        Assert.Contains("AccountLookup", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("UiBootstrap", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("synthetic secret", message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized, "saved connection")]
     [InlineData(HttpStatusCode.Forbidden, "billing")]
@@ -73,7 +91,9 @@ public sealed class VoiceCatalogErrorMessagesTests
     [Fact]
     public void BrokenExceptionMetadataCannotBreakSafeErrorPresentation()
     {
-        string message = VoiceCatalogErrorMessages.For(new BrokenData(), GoogleCatalogRefreshPhase.UiQuery);
+        var failure = new BrokenData();
+        GoogleCatalogRefreshDiagnostics.Failure(null, Guid.NewGuid(), GoogleCatalogRefreshPhase.AccountLookup, failure);
+        string message = VoiceCatalogErrorMessages.For(failure, GoogleCatalogRefreshPhase.UiQuery);
         Assert.Contains("unexpected", message, StringComparison.Ordinal);
         Assert.DoesNotContain("private-data", message, StringComparison.Ordinal);
     }

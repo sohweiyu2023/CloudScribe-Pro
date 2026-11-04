@@ -44,7 +44,7 @@ def rejection_packet(error,reasons):
     reason=reasons.get(detail,"Storage" if isinstance(error,(OSError,sqlite3.Error)) else "Unknown")
     result={"rejected":True,"category":safe_exception_name(error),"reason":reason,
             "code":detail if detail in reasons else "Unclassified","requiresReconciliation":True}
-    if result["code"]=="Unclassified":result.update(safe_failure_evidence(error))
+    result.update(safe_failure_evidence(error))
     return result
 
 
@@ -133,8 +133,13 @@ def profile_database(config):
     db = profile / "data/cloudscribe.db"
     bounded(db, 512 * 1024 * 1024)  # Refuse linked/oversized inputs before SQLite opens.
     wal = Path(str(db) + "-wal")
-    if wal.exists() and bounded(wal, 1):
-        raise ValueError("ClosedDatabaseRequired")
+    if wal.exists():
+        for part in (wal, *wal.parents):
+            if part.is_symlink() or part.is_junction():
+                raise ValueError("LinkedPath")
+        with wal.open("rb") as stream:
+            if stream.read(1):
+                raise ValueError("ClosedDatabaseRequired")
     return profile, db
 
 
@@ -562,16 +567,19 @@ def diagnostic_admission_check(register, config, config_pin, manifest, scope, mo
     return {"valid":True,"policySha256":pin,"authority":False}
 
 
-def diagnostic_acceptance(config, manifest, scope, module, *, database_sha=None, policy=None, policy_sha=None, dispatch=False):
+def diagnostic_acceptance(config, manifest, scope, module, *, database_sha=None, policy=None, policy_sha=None, dispatch=False, live_readonly=False):
     """Read actual native ledger. No provider, reservation, writes or caller-success assertions."""
     parts, plans, accepted, _ = module.validate_diagnostic_manifest(manifest, scope)
     d = manifest["diagnostic"]
-    if dispatch:
+    if live_readonly and (dispatch or database_sha is not None):
+        raise ValueError("DiagnosticOperation")
+    if dispatch or live_readonly:
         marker = json.loads(bounded(Path(config["ApplicationDirectory"]).parent / "cloudscribe-install.json", 32768), object_pairs_hook=unique)
         profile = Path(os.path.abspath(marker["Profile"]));db = profile / "data/cloudscribe.db"
         if sha(str(profile).rstrip("/\\").upper().encode()) != config["ProfileRootSha256"]:raise ValueError("InstalledProfileBinding")
         physical = module.physical(db)
         if physical.stat().st_size > 512*1024*1024:raise ValueError("ContinuationFinancialBound")
+        module.physical(str(db)+'-wal');module.physical(str(db)+'-shm')
         uri = physical.as_uri()+"?mode=ro"
     else:
         profile, db = profile_database(config)
@@ -625,7 +633,7 @@ def diagnostic_acceptance(config, manifest, scope, module, *, database_sha=None,
             if child is None or q["IdempotencyKey"]!=child["ChildKey"] or q["OperationStableId"]!='synthesize-speech':raise ValueError("PendingOrUncertainWork")
         if continuation_financial_projection(connection,module,() if child is None else (child["AuthorizationId"],))!=d["financialRowsSha256"]:
             raise ValueError("DiagnosticFinancialChanged")
-    if not dispatch and sha(bounded(db,512*1024*1024))!=before:raise ValueError("ContinuationDatabaseChanged")
+    if not dispatch and not live_readonly and sha(bounded(db,512*1024*1024))!=before:raise ValueError("ContinuationDatabaseChanged")
     return child
 
 
@@ -1083,7 +1091,13 @@ def main():
         result = register.claim(kind,
                                 request["identitySha256"], request["id"], pilot_proof_sha=pilot_proof, accepted_proof_sha=accepted_proof)
     elif command == "check":
-        if scope["schema"]==6:diagnostic_acceptance(config,manifest,scope,module)
+        if scope["schema"]==6:
+            with register._open() as db:
+                current = register._read(db); pending = current["pending"]
+            owned_refresh = bool(pending and pending["kind"] == "refresh")
+            if owned_refresh:
+                register.require_pending_before_effect(request["id"], request["identitySha256"])
+            diagnostic_acceptance(config,manifest,scope,module,live_readonly=owned_refresh)
         if scope["schema"] in (3, 4, 5):
             with register._open() as db:
                 current = register._read(db); pending = current["pending"]
@@ -1157,7 +1171,8 @@ if __name__ == "__main__":
                    "OperationLimit": "Limit", "RunStopped": "Stopped", "InspectionNotReady": "Stopped",
                    "ScopePinMismatch": "PinMismatch", "GatePin": "PinMismatch", "BuildBinding": "PinMismatch",
                    "ModuleHash": "PinMismatch", "ScriptHash": "PinMismatch", "InterpreterHash": "PinMismatch",
-                   "AnchorDatabaseMismatch": "Storage", "AnchorUnavailable": "Storage", "RegisterUnavailableOrOversized": "Storage"}
+                   "AnchorDatabaseMismatch": "Storage", "AnchorUnavailable": "Storage", "RegisterUnavailableOrOversized": "Storage",
+                   "Oversized": "Storage"}
         reasons.update({"ReceiptSchema": "Protocol", "ReceiptMismatchOrReplay": "Protocol", "PlanManifestPin": "PinMismatch",
                         "ExactProposalBinding": "PinMismatch", "ExactRemainingCoverage": "PinMismatch", "PolicyWindow": "Expired"})
         reasons.update({"SuccessorHeadMismatch": "SuccessorHeadMismatch", "SuccessorPending": "SuccessorPending",

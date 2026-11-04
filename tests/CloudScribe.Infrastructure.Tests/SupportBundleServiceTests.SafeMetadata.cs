@@ -15,8 +15,11 @@ public sealed partial class SupportBundleServiceTests
 {
     private const string PrivateSentinel = "synthetic unpublished prose fragment 7391";
 
-    [Fact]
-    public async Task CompletionProtocolCodeSurvivesActualFileAndExportWithoutExceptionProse()
+    [Theory]
+    [InlineData(CompletionProtocolCode.DiagnosticOwnedClaim)]
+    [InlineData(CompletionProtocolCode.ClosedDatabaseRequired)]
+    [InlineData(CompletionProtocolCode.Oversized)]
+    public async Task CompletionProtocolCodeSurvivesActualFileAndExportWithoutExceptionProse(CompletionProtocolCode code)
     {
         await using TemporaryDirectory temporary = new();
         var paths = CreatePaths(temporary.Path); var options = Options.Create(new CloudScribeOptions { AppDataDirectoryOverride = temporary.Path });
@@ -25,21 +28,27 @@ public sealed partial class SupportBundleServiceTests
         using (var factory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Information).AddProvider(provider)))
         {
             logPath = provider.CurrentLogPath;
-            var expected = new CompletionGateException(CompletionGateFailure.PinMismatch, CompletionProtocolCode.DiagnosticOwnedClaim, CompletionProtocolExceptionType.TypeError, CompletionProtocolFailureComponent.Register, 431);
+            var expected = new CompletionGateException(CompletionGateFailure.PinMismatch, code, CompletionProtocolExceptionType.TypeError, CompletionProtocolFailureComponent.Register, 431);
             var gate = new CompletionWorkflowGate(CompletionGatePayloadTests.Configuration, new CompletionFailureRunner(expected), factory.CreateLogger<CompletionWorkflowGate>());
             Assert.Same(expected, Assert.Throws<CompletionGateException>(gate.RequireReady));
+            GoogleCatalogRefreshDiagnostics.Failure(factory.CreateLogger("synthetic-refresh"), Guid.NewGuid(), GoogleCatalogRefreshPhase.AccountLookup, expected);
+            GoogleCatalogRefreshDiagnostics.Failure(factory.CreateLogger("synthetic-refresh"), Guid.NewGuid(), GoogleCatalogRefreshPhase.UiBootstrap, expected);
             var unexpected = new IOException(PrivateSentinel);
             var other = new CompletionWorkflowGate(CompletionGatePayloadTests.Configuration, new CompletionFailureRunner(unexpected), factory.CreateLogger<CompletionWorkflowGate>());
             Assert.Same(unexpected, Assert.Throws<IOException>(other.RequireReady));
         }
         string text = await File.ReadAllTextAsync(logPath, TestContext.Current.CancellationToken);
-        Assert.Contains("DiagnosticOwnedClaim", text, StringComparison.Ordinal);
+        Assert.Contains(code.ToString(), text, StringComparison.Ordinal);
+        Assert.Contains("AccountLookup", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("UiBootstrap", text, StringComparison.Ordinal);
         Assert.Contains("TypeError", text, StringComparison.Ordinal);
         Assert.Contains("431", text, StringComparison.Ordinal);
         Assert.DoesNotContain(PrivateSentinel, text, StringComparison.Ordinal);
         string exported = string.Join('\n', text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(line => System.Text.Encoding.UTF8.GetString(SafeDiagnosticExportEncoder.Encode(System.Text.Encoding.UTF8.GetBytes(line)))));
-        Assert.Contains("DiagnosticOwnedClaim", exported, StringComparison.Ordinal);
+        Assert.Contains(code.ToString(), exported, StringComparison.Ordinal);
+        Assert.Contains("AccountLookup", exported, StringComparison.Ordinal);
+        Assert.DoesNotContain("UiBootstrap", exported, StringComparison.Ordinal);
         Assert.Contains("TypeError", exported, StringComparison.Ordinal);
         Assert.Contains("431", exported, StringComparison.Ordinal);
         Assert.DoesNotContain(PrivateSentinel, exported, StringComparison.Ordinal);

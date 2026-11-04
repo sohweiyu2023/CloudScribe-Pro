@@ -85,8 +85,15 @@ public static partial class GoogleCatalogRefreshDiagnostics
     {
         try
         {
+            // Preserve the first precise stage through outer UI/bootstrap observers.
+            // Only our private typed key is trusted; arbitrary exception prose is never copied.
+            if (ReportedPhase(exception, null) is null && Enum.IsDefined(phase)) exception.Data[PhaseContextKey] = phase;
+        }
+        catch (Exception failure) when (IsNonFatal(failure)) { /* Metadata must not replace the original failure. */ }
+        try
+        {
             if (logger?.IsEnabled(LogLevel.Warning) != true) return;
-            FailureMessage(logger, refreshId, phase, Category(exception), OAuthFailure(exception), HttpStatus(exception),
+            FailureMessage(logger, refreshId, ReportedPhase(exception, phase) ?? phase, Category(exception), OAuthFailure(exception), HttpStatus(exception),
                 exception is SqliteException sqlite ? sqlite.SqliteErrorCode : 0,
                 exception is SqliteException extended ? extended.SqliteExtendedErrorCode : 0);
         }

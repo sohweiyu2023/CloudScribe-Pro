@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 import uuid
 import completion_register as m
 import gate_cli as g
@@ -98,6 +99,59 @@ def prepare_diagnostic(owner, expired=False):
 
 
 class DiagnosticCliTests(unittest.TestCase):
+    def admitted_fixture(self):
+        f,path,policy,_,_=prepare_diagnostic(self)
+        f.activate();operation=str(uuid.uuid4())
+        for command in ('claim-completion','check'):
+            result=f.command(command,path,operation);self.assertEqual(0,result[0],result)
+        f.install_policy(path,f.config,f.pin)
+        result=f.command('complete',path,operation,{'outcome':'Succeeded'})
+        self.assertEqual(0,result[0],result)
+        return f,path,policy
+
+    def test_owned_refresh_reads_real_open_wal_and_retains_identity_financial_guards(self):
+        f,path,policy=self.admitted_fixture()
+        operation=str(uuid.uuid4())
+        self.assertEqual(0,f.command('claim-refresh',operation=operation)[0])
+        with closing(sqlite3.connect(f.f.db)) as writer:
+            self.assertEqual('wal',writer.execute('PRAGMA journal_mode=WAL').fetchone()[0])
+            writer.execute('CREATE TABLE synthetic_nonfinancial_startup (value INTEGER)')
+            writer.execute('INSERT INTO synthetic_nonfinancial_startup VALUES(1)');writer.commit()
+            self.assertGreater(Path(str(f.f.db)+'-wal').stat().st_size,1)
+            with self.assertRaisesRegex(ValueError,'ClosedDatabaseRequired'):
+                g.profile_database(f.config)
+            # A WAL does not confer ownership or permit a new/replayed request.
+            self.assertNotEqual(0,f.command('check',operation=str(uuid.uuid4()))[0])
+            result=f.command('check',operation=operation);self.assertEqual(0,result[0],result)
+            physical=m.physical
+            for suffix in ('-wal','-shm'):
+                def reject_link(value):
+                    if str(value)==str(f.f.db)+suffix:raise m.Rejected('LinkedPath')
+                    return physical(value)
+                with patch.object(m,'physical',side_effect=reject_link):
+                    with self.assertRaisesRegex(m.Rejected,'LinkedPath'):
+                        g.diagnostic_acceptance(f.config,f.manifest,f.scope,m,live_readonly=True)
+            parent=m.uuid_identity(policy['SuccessorGrant']['ParentAuthorizationId'])
+            writer.execute('UPDATE chirp_article_attempts SET ReservedMinorUnits=ReservedMinorUnits+1 WHERE AuthorizationId=?',(parent,));writer.commit()
+            result=f.command('check',operation=operation)
+            self.assertNotEqual(0,result[0]);self.assertEqual('DiagnosticFinancialChanged',result[1]['code'])
+            writer.execute('UPDATE chirp_article_attempts SET ReservedMinorUnits=ReservedMinorUnits-1 WHERE AuthorizationId=?',(parent,));writer.commit()
+            writer.execute('UPDATE google_generation_queue_states SET UnresolvedSubmission=1 WHERE LocalAttemptId=?',(policy['SuccessorGrant']['ParentLocalAttemptId'],));writer.commit()
+            self.assertNotEqual(0,f.command('check',operation=operation)[0])
+            writer.execute('UPDATE google_generation_queue_states SET UnresolvedSubmission=0 WHERE LocalAttemptId=?',(policy['SuccessorGrant']['ParentLocalAttemptId'],));writer.commit()
+            result=f.command('check',operation=operation);self.assertEqual(0,result[0],result)
+
+    def test_non_refresh_admission_keeps_closed_database_requirement(self):
+        f,path,policy,_,_=prepare_diagnostic(self);f.activate();operation=str(uuid.uuid4())
+        self.assertEqual(0,f.command('claim-completion',path,operation)[0])
+        with closing(sqlite3.connect(f.f.db)) as writer:
+            writer.execute('PRAGMA journal_mode=WAL')
+            writer.execute('CREATE TABLE synthetic_nonfinancial_startup (value INTEGER)');writer.commit()
+            result=f.command('check',path,operation)
+            self.assertNotEqual(0,result[0]);self.assertEqual('ClosedDatabaseRequired',result[1]['code'])
+            self.assertEqual('SuccessorPending',result[1]['reason'])
+            self.assertEqual('bridge',result[1]['failureComponent'])
+
     def test_expired_actual_bridge_installs_only_fresh_ten_minute_scope(self):
         f,path,policy,old,before=prepare_diagnostic(self,expired=True)
         database=f.f.db.read_bytes();f.activate();self.assertEqual(database,f.f.db.read_bytes())
