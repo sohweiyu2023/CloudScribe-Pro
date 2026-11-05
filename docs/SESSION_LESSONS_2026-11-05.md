@@ -39,3 +39,10 @@ Apply these practices to the other maintained projects as relevant, while preser
 - Native review JSON is metadata, not authority. Historical diagnostic policies can include hashes of raw JSON subobjects. A private policy assembler must preserve the verified original historical bytes, compare their parsed content with the new native draft, and never repin old hashes merely to accommodate formatting.
 - Exercise the actual cold-start path after admission. A warm-process resume test cannot reveal an automatic bootstrap that replaces the newly admitted snapshot.
 - PowerShell scripts need explicit success/readback handling. A successful script without a native process can leave an earlier LASTEXITCODE intact; do not mistake that stale value for a failed backup or repeat completed work.
+
+## Final release and retained history
+
+- SQLite's connection context manager commits or rolls back a transaction but does not close the connection. Synthetic fixtures must close it explicitly before exercising real Windows file leases; preserve the production lock rather than suppressing sharing errors.
+- Test harnesses that extract production functions must load their dependencies too. Check related harnesses together when a helper is added instead of discovering the same missing import in successive CI runs.
+- Reconcile exact current job identities while retaining superseded stopped jobs. A completed two-article delivery does not imply that the history table contains only two rows.
+- Test the actual serialized retained-history shape through every reader before installation. In-memory validation alone cannot detect a writer/reader JSON-depth mismatch. Keep a coherent finite format boundary alongside file-size, schema, hash, duplicate-key, identity, cycle and financial validation.

@@ -5,7 +5,7 @@ $installer=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScri
 if($errors.Count){throw 'Installer failed parsing.'}
 $articleTests=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Test-ChirpArticlePolicy-SelfTests.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Article fixture failed parsing.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Get-ChirpPreviousContinuity','Test-ChirpCompletionBound','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpLegacyAssociations','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Assert-ChirpResumePolicy','Get-ReviewedChirpResumePolicy','New-ArticlePolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Get-ChirpPreviousContinuity','Test-ChirpCompletionBound','Assert-ChirpCompletionContinuity','Assert-ChirpCompletionRecoveryBound','Get-ChirpDiagnosticElementSha256','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpLegacyAssociations','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Assert-ChirpResumePolicy','Get-ReviewedChirpResumePolicy','New-ArticlePolicy')){
     $from=if($name -eq 'New-ArticlePolicy'){$articleTests}else{$installer}
     $functions=@($from.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Expected one reviewed fixture/validator.'};Invoke-Expression $functions[0].Extent.Text
@@ -67,4 +67,34 @@ $ReviewedChirpResumePolicySha256='0'*64;$rejected=$false;try{Get-ReviewedChirpRe
 $ReviewedChirpResumePolicySha256=(Get-FileHash -LiteralPath $ReviewedChirpResumePolicyPath).Hash
 $rejected=$false;try{Get-ReviewedChirpResumePolicy (Join-Path $fixtureRoot 'other-profile')|Out-Null}catch{$rejected=$true};if(-not $rejected){throw 'Another profile accepted.'};$passed++
 [IO.File]::WriteAllText((Join-Path $package 'app/CloudScribe.dll'),'changed inert bytes');$rejected=$false;try{Get-ReviewedChirpResumePolicy $profile|Out-Null}catch{$rejected=$true};if(-not $rejected){throw 'Changed build accepted.'};$passed++
+[IO.File]::WriteAllText((Join-Path $package 'app/CloudScribe.dll'),'inert synthetic app')
+foreach($case in @('deep-valid','deep-unknown','deep-wrong-pin','depth65')){
+    $p=New-ResumePolicy;$history=$p.HistoricalPolicy;$history.SchemaVersion=3;$history.PriorSuccessorAttemptRows=@()
+    $history.WholeArticleGeneration=@{GrantId=$id;PlanSha256s=@($sha);MaximumCatalogRefreshes=2}
+    for($i=1;$i -le 8;$i++){
+        $previous=$history;$history=$previous.Clone();$history.SourceApprovalSha256=$i.ToString('x64')
+        $history.CompletionContinuity=@{Version=1;JobId=$id;PreviousJobSha256=$sha;PreviousPolicy=$previous}
+    }
+    $p.HistoricalPolicy=$history
+    # Reuse the exact inspected profile identity, including every retained predecessor.
+    $p.ProfileRootSha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant()
+    for($ancestor=$history;$null -ne $ancestor;$ancestor=$ancestor.CompletionContinuity.PreviousPolicy){$ancestor.ProfileRootSha256=$p.ProfileRootSha256}
+    $p.AppSha256=(Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash.ToLowerInvariant()
+    $p.InfrastructureSha256=(Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash.ToLowerInvariant()
+    if($case -eq 'deep-unknown'){$p.UnreviewedAuthority=$true}
+    $text=$p|ConvertTo-Json -Depth 64 -Compress
+    if($case -eq 'depth65'){$text=('['*65)+'0'+(']'*65)}
+    [IO.File]::WriteAllText($ReviewedChirpResumePolicyPath,$text)
+    $ReviewedChirpResumePolicySha256=(Get-FileHash -LiteralPath $ReviewedChirpResumePolicyPath).Hash
+    if($case -eq 'deep-wrong-pin'){$ReviewedChirpResumePolicySha256='0'*64}
+    $rejected=$false
+    try{Get-ReviewedChirpResumePolicy $profile|Out-Null}catch{
+        $rejected=$true
+        if($case -eq 'depth65'){
+            $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
+            if($cause -isnot [Text.Json.JsonException]){throw 'Depth65 resume did not reach the bounded production JSON reader.'}
+        }
+    }
+    if(($case -eq 'deep-valid') -eq $rejected){throw "Unexpected deep resume reader result: $case"};$passed++
+}
 [pscustomobject]@{Passed=$passed;ProviderCalls=0;Installs=0;CredentialOperations=0;FixtureRoot=$fixtureRoot}

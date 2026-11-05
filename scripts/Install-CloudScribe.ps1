@@ -1140,7 +1140,7 @@ function Get-ReviewedChirpPolicy([string]$Profile){
     try{if($stream.Length -lt 1 -or $stream.Length -gt 8388608){throw 'Article policy exceeds its bound.'};$bytes=[byte[]]::new([int]$stream.Length);$stream.ReadExactly($bytes)}finally{$stream.Dispose()}
     $sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
     if($sha -ne $ReviewedChirpArticlePolicySha256){throw 'Article policy differs from the independently approved hash.'}
-    $options=[Text.Json.JsonDocumentOptions]::new();$options.MaxDepth=24;$json=[Text.Json.JsonDocument]::Parse([ReadOnlyMemory[byte]]::new($bytes),$options)
+    $options=[Text.Json.JsonDocumentOptions]::new();$options.MaxDepth=64;$json=[Text.Json.JsonDocument]::Parse([ReadOnlyMemory[byte]]::new($bytes),$options)
     try{
         Assert-UniqueRecoveryJson $json.RootElement;Assert-ChirpPolicy $json.RootElement;$root=$json.RootElement
         if($root.GetProperty('AppSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash -or
@@ -1197,7 +1197,7 @@ function Get-ReviewedChirpResumePolicy([string]$Profile){
     if((Get-Item -LiteralPath $path).Length -gt 8MB){throw 'Resume policy exceeds its review bound.'}
     $bytes=[IO.File]::ReadAllBytes($path);$sha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
     if($sha -ne $ReviewedChirpResumePolicySha256){throw 'Resume policy differs from the independently approved bytes.'}
-    $options=[Text.Json.JsonDocumentOptions]::new();$options.MaxDepth=24;$json=[Text.Json.JsonDocument]::Parse([ReadOnlyMemory[byte]]::new($bytes),$options)
+    $options=[Text.Json.JsonDocumentOptions]::new();$options.MaxDepth=64;$json=[Text.Json.JsonDocument]::Parse([ReadOnlyMemory[byte]]::new($bytes),$options)
     try{
         Assert-UniqueRecoveryJson $json.RootElement;Assert-ChirpResumePolicy $json.RootElement;$root=$json.RootElement
         if($root.GetProperty('AppSha256').GetString() -ne (Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash -or

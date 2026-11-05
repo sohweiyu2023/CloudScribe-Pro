@@ -4,7 +4,7 @@ if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8)
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer failed parsing.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Get-ChirpPreviousContinuity','Test-ChirpCompletionBound','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpSentenceParent','Assert-ChirpLegacyAssociations','Get-ChirpDiagnosticElementSha256','Assert-ChirpDiagnosticEvidence','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Get-ChirpPreviousContinuity','Test-ChirpCompletionBound','Assert-ChirpCompletionContinuity','Assert-ChirpCompletionRecoveryBound','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpSentenceParent','Assert-ChirpLegacyAssociations','Get-ChirpDiagnosticElementSha256','Assert-ChirpDiagnosticEvidence','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
     $functions=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Expected exactly one reviewed validator.'};Invoke-Expression $functions[0].Extent.Text
 }
@@ -35,6 +35,14 @@ Test-ArticleJson ((New-RefinedArticlePolicy)|ConvertTo-Json -Depth 24 -Compress)
 function New-WholeArticlePolicy {
     $p=New-RefinedArticlePolicy;$p.SchemaVersion=3
     $p.WholeArticleGeneration=@{GrantId=[Guid]::NewGuid().ToString('D');PlanSha256s=@($sha);MaximumCatalogRefreshes=2}
+    return $p
+}
+function New-DeepWholeArticlePolicy {
+    $p=New-WholeArticlePolicy
+    for($i=1;$i -le 8;$i++){
+        $previous=$p;$p=$previous.Clone();$p.SourceApprovalSha256=$i.ToString('x64')
+        $p.CompletionContinuity=@{Version=1;JobId=$id;PreviousJobSha256=$sha;PreviousPolicy=$previous}
+    }
     return $p
 }
 Test-ArticleJson ((New-WholeArticlePolicy)|ConvertTo-Json -Depth 24 -Compress);$passed++
@@ -173,18 +181,38 @@ try{
     [IO.File]::WriteAllText((Join-Path $package 'app/CloudScribe.dll'),'inert synthetic app')
     [IO.File]::WriteAllText((Join-Path $package 'app/CloudScribe.Infrastructure.dll'),'inert synthetic infrastructure')
     $ReviewedChirpArticlePolicyPath=Join-Path $fixtureRoot 'private-policy.json'
-    foreach($case in @('valid','wrong-app','wrong-module','wrong-profile','wrong-digest','expired')){
-        $p=New-ArticlePolicy
+    foreach($case in @('valid','wrong-app','wrong-module','wrong-profile','wrong-digest','expired','deep-valid','deep-wrong-digest','deep-unknown','deep-reused-approval','depth65')){
+        $p=if($case.StartsWith('deep-',[StringComparison]::Ordinal)){New-DeepWholeArticlePolicy}else{New-ArticlePolicy}
         $p.AppSha256=(Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.dll')).Hash.ToLowerInvariant()
         $p.InfrastructureSha256=(Get-FileHash -LiteralPath (Join-Path $package 'app/CloudScribe.Infrastructure.dll')).Hash.ToLowerInvariant()
         $canonical=[IO.Path]::GetFullPath($profile).TrimEnd([char[]]@('\','/')).ToUpperInvariant()
         $p.ProfileRootSha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant()
+        if($case.StartsWith('deep-',[StringComparison]::Ordinal)){
+            for($ancestor=$p.CompletionContinuity.PreviousPolicy;$null -ne $ancestor;$ancestor=$ancestor.CompletionContinuity.PreviousPolicy){
+                $ancestor.AppSha256=$p.AppSha256;$ancestor.InfrastructureSha256=$p.InfrastructureSha256;$ancestor.ProfileRootSha256=$p.ProfileRootSha256
+            }
+        }
         switch($case){'wrong-app' {$p.AppSha256=$sha};'wrong-module' {$p.InfrastructureSha256=$sha};'wrong-profile' {$p.ProfileRootSha256=$sha};'expired' {$p.ExpiresAtUtc=[DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('O')}}
-        [IO.File]::WriteAllText($ReviewedChirpArticlePolicyPath,($p|ConvertTo-Json -Depth 24 -Compress))
+        if($case -eq 'deep-unknown'){$p.UnreviewedAuthority=$true}
+        if($case -eq 'deep-reused-approval'){$p.SourceApprovalSha256=$p.CompletionContinuity.PreviousPolicy.SourceApprovalSha256}
+        $text=$p|ConvertTo-Json -Depth 64 -Compress
+        if($case -eq 'depth65'){$text=('['*65)+'0'+(']'*65)}
+        if($case -eq 'deep-valid'){
+            $shallow=[Text.Json.JsonDocumentOptions]::new();$shallow.MaxDepth=24;$tooDeepForOldReader=$false
+            try{$d=[Text.Json.JsonDocument]::Parse($text,$shallow);$d.Dispose()}catch{$tooDeepForOldReader=$true}
+            if(-not $tooDeepForOldReader){throw 'Deep continuity fixture did not exercise the old reader boundary.'}
+        }
+        [IO.File]::WriteAllText($ReviewedChirpArticlePolicyPath,$text)
         $ReviewedChirpArticlePolicySha256=(Get-FileHash -LiteralPath $ReviewedChirpArticlePolicyPath).Hash
-        if($case -eq 'wrong-digest'){$ReviewedChirpArticlePolicySha256=$sha}
-        $rejected=$false;$result=$null;try{$result=Get-ReviewedChirpPolicy $profile}catch{$rejected=$true}
-        if($case -eq 'valid'){if($rejected -or -not $result.Bytes.Length){throw 'Valid article entry rejected.'}}
+        if($case -in @('wrong-digest','deep-wrong-digest')){$ReviewedChirpArticlePolicySha256=$sha}
+        $rejected=$false;$result=$null;try{$result=Get-ReviewedChirpPolicy $profile}catch{
+            $rejected=$true
+            if($case -eq 'depth65'){
+                $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
+                if($cause -isnot [Text.Json.JsonException]){throw 'Depth65 did not reach the bounded production JSON reader.'}
+            }
+        }
+        if($case -in @('valid','deep-valid')){if($rejected -or -not $result.Bytes.Length){throw 'Valid article entry rejected.'}}
         elseif(-not $rejected){throw "Invalid article entry accepted: $case"};$passed++
     }
 }finally{
