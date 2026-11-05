@@ -15,7 +15,7 @@ class MaintenanceReleaseTests(unittest.TestCase):
     def test_each_release_interruption_remains_blocked_until_durable_retirement(self):
         for boundary in ('release-claimed', 'release-marker', 'release-retired', 'release-detached'):
             with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary); f = fixture.StoppedMaintenanceTests(); f.setUp()
+                root = Path(temporary).resolve(); f = fixture.StoppedMaintenanceTests(); f.setUp()
                 try:
                     f.action('claim'); f.action('complete'); state = f.state()
                     target = root / 'installed'; prepared = root / 'prepared'; profile = root / 'profile'
