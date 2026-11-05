@@ -4,7 +4,7 @@ if($PSVersionTable.PSVersion.Major -lt 7 -or [Environment]::Version.Major -lt 8)
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer failed parsing.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpSentenceParent','Assert-ChirpLegacyAssociations','Get-ChirpDiagnosticElementSha256','Assert-ChirpDiagnosticEvidence','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Get-ChirpPreviousContinuity','Test-ChirpCompletionBound','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpSentenceParent','Assert-ChirpLegacyAssociations','Get-ChirpDiagnosticElementSha256','Assert-ChirpDiagnosticEvidence','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Get-ReviewedChirpPolicy')){
     $functions=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Expected exactly one reviewed validator.'};Invoke-Expression $functions[0].Extent.Text
 }

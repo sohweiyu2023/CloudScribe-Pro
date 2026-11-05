@@ -1,5 +1,11 @@
 # Safe Google synthesis failure diagnostics
 
+## Whole-article capture and history
+
+Complete-article review has separate private-capture consent for its exact admitted job and requests. It does not silently widen the older one-request opt-in described below. Required article diagnostics wait for a truthful saved/failed acknowledgement; storage failure preserves the provider outcome and does not authorize a resend. Article errors are not discarded merely because eight earlier errors exist. Protected responses still expire logically after the agreed 24 hours and are purged on access; closed-app storage and backups can retain encrypted remnants.
+
+Content-free structural history persists without automatic age/count rotation. Bounded reports disclose omitted or unavailable data. A body read or logging call alone is not proof of private persistence: use the correlated terminal acknowledgement and protected readback. This article-route coverage does not establish full provider-wording retention at every authentication, catalog or support boundary.
+
 HTTP status and canonical `error.status` are recorded independently from queue admission decisions. A completed error response does not prove no charge and does not authorize retry. Keep existing reservations and inspect the durable request identity before any separately approved recovery.
 
 Local event 1604 additionally records fixed enum categories derived from `google.rpc.ErrorInfo` and `google.rpc.BadRequest`, when the provider actually supplies those structured details. Parsing is bounded to 16 KiB, JSON depth 8, 16 detail entries and 16 field violations. Duplicate or malformed consumed fields produce Unknown. Unsupported values never become log strings.

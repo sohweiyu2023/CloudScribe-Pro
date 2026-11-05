@@ -5,7 +5,7 @@ $installer=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScri
 if($errors.Count){throw 'Installer failed parsing.'}
 $articleTests=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Test-ChirpArticlePolicy-SelfTests.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Article fixture failed parsing.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpLegacyAssociations','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Assert-ChirpResumePolicy','Get-ReviewedChirpResumePolicy','New-ArticlePolicy')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Assert-ChirpPolicyHashes','Get-ChirpPreviousContinuity','Test-ChirpCompletionBound','Assert-ChirpRange','Assert-ChirpLineage','Assert-ChirpLegacyAssociations','Assert-ChirpSuccessorGrant','Assert-ChirpPolicy','Assert-ChirpResumePolicy','Get-ReviewedChirpResumePolicy','New-ArticlePolicy')){
     $from=if($name -eq 'New-ArticlePolicy'){$articleTests}else{$installer}
     $functions=@($from.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Expected one reviewed fixture/validator.'};Invoke-Expression $functions[0].Extent.Text
