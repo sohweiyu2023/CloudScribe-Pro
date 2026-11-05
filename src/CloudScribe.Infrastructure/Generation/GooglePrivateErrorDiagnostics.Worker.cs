@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CloudScribe.Application.Logging;
@@ -13,6 +14,20 @@ public sealed partial class GooglePrivateErrorDiagnostics
     private Task<IReadOnlyList<PrivateProviderErrorRecord>>? _pendingRead;
     private int _writeState;
     private long _writeSequence;
+    private int _readStatus;
+    private PrivateArticlePersistenceEvidence? _lastArticlePersistence;
+    public PrivateProviderErrorReadStatus ReadStatus => (PrivateProviderErrorReadStatus)Volatile.Read(ref _readStatus);
+    public GoogleExplanationRetentionState PersistenceOutcome => Volatile.Read(ref _writeState) switch
+    {
+        1 => GoogleExplanationRetentionState.PrivateWritePending,
+        2 => GoogleExplanationRetentionState.SavedPrivately,
+        3 => GoogleExplanationRetentionState.StorageBusy,
+        4 => GoogleExplanationRetentionState.StorageFailed,
+        5 => GoogleExplanationRetentionState.IneligibleOrUnparseable,
+        6 => GoogleExplanationRetentionState.ExpiredOrChanged,
+        7 => GoogleExplanationRetentionState.ExpiredBeforeSave,
+        _ => GoogleExplanationRetentionState.NoActivePrivateTicket
+    };
     public string PersistenceStatus => Volatile.Read(ref _writeState) switch
     {
         1 => "Private record save pending; durability is not yet verified.",
@@ -32,7 +47,7 @@ public sealed partial class GooglePrivateErrorDiagnostics
     {
         var record = new PrivateProviderErrorRecord(Guid.NewGuid(), clock.GetUtcNow(),
             "Private response evidence; inspect completeness and redaction flags before interpretation.", envelope.Truncated,
-            payloadHash, correlation, envelope.DetailsOmitted, envelope);
+            payloadHash, correlation, envelope.DetailsOmitted, envelope, _activeArticleJob, _activeArticleOrdinal);
         while (JsonSerializer.SerializeToUtf8Bytes(record).Length > PrivateRecordProtection.MaximumPlaintextBytes)
         {
             envelope = envelope with
@@ -67,15 +82,39 @@ public sealed partial class GooglePrivateErrorDiagnostics
         try
         {
             bool saved = persistence.Save(record);
-            outcome = saved ? GoogleExplanationRetentionState.SavedPrivately : GoogleExplanationRetentionState.ExpiredBeforeSave;
-            if (sequence == Volatile.Read(ref _writeSequence)) Volatile.Write(ref _writeState, saved ? 2 : 7);
+            bool verified = saved && VerifySavedRecord(record);
+            outcome = verified ? GoogleExplanationRetentionState.SavedPrivately : saved
+                ? GoogleExplanationRetentionState.StorageFailed : GoogleExplanationRetentionState.ExpiredBeforeSave;
+            if (sequence == Volatile.Read(ref _writeSequence)) Volatile.Write(ref _writeState, verified ? 2 : saved ? 4 : 7);
         }
         catch (Exception error) when (NonFatal(error)) { if (sequence == Volatile.Read(ref _writeSequence)) Volatile.Write(ref _writeState, 4); }
         finally
         {
+            Volatile.Write(ref _lastArticlePersistence, new(record.ArticleJobId, record.ArticleOrdinal, record.PayloadSha256,
+                outcome == GoogleExplanationRetentionState.SavedPrivately,
+                outcome == GoogleExplanationRetentionState.SavedPrivately && !record.Truncated
+                    && record.Response is { HttpStatus: 400, ReadCompleted: true, Truncated: false, ParseState: "Json" }));
             Volatile.Write(ref _writerBusy, 0);
             ObservePersistence(record, outcome);
         }
+    }
+
+    private bool VerifySavedRecord(PrivateProviderErrorRecord record)
+    {
+        try
+        {
+            var read = persistence.ReadWithStatus(record.Id);
+            Volatile.Write(ref _readStatus, (int)read.Status);
+            if (read.Status != PrivateProviderErrorReadStatus.Success) return false;
+            var saved = read.Records.SingleOrDefault(x => x.Id == record.Id);
+            if (saved is not null && string.Equals(saved.PayloadSha256, record.PayloadSha256, StringComparison.Ordinal)
+                && string.Equals(saved.TransportCorrelation, record.TransportCorrelation, StringComparison.Ordinal)
+                && SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(saved)).AsSpan()
+                    .SequenceEqual(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(record)))) return true;
+        }
+        catch (Exception error) when (NonFatal(error)) { }
+        Volatile.Write(ref _readStatus, (int)PrivateProviderErrorReadStatus.Failed);
+        return false;
     }
 
     private void ObservePersistence(PrivateProviderErrorRecord record, GoogleExplanationRetentionState outcome)
@@ -83,23 +122,35 @@ public sealed partial class GooglePrivateErrorDiagnostics
         if (logger is null || !CloudScribeLog.ObserveIsEnabled(logger, LogLevel.Information)) return;
         CloudScribeLog.Observe(() =>
         {
-            int bytes = Encoding.UTF8.GetByteCount(record.Message);
+            int bytes = Encoding.UTF8.GetByteCount(record.Response?.RedactedBody ?? record.Message);
+            int recordBytes = JsonSerializer.SerializeToUtf8Bytes(record).Length;
             CloudScribeLog.GooglePrivateExplanationPersistence(logger,
-                record.TransportCorrelation, record.PayloadSha256, outcome, bytes, record.Truncated, record.ProviderDetailsOmitted);
+                record.TransportCorrelation, record.PayloadSha256, outcome, record.Response is not null, bytes, recordBytes,
+                record.Truncated, record.ProviderDetailsOmitted);
         });
     }
 
     public Task WaitForPendingWriteAsync(CancellationToken cancellationToken = default) =>
         Volatile.Read(ref _pendingWrite).WaitAsync(cancellationToken);
 
-    public IReadOnlyList<PrivateProviderErrorRecord> ReadRecords() => persistence.Read();
+    public IReadOnlyList<PrivateProviderErrorRecord> ReadRecords()
+    {
+        try
+        {
+            var result = persistence.ReadWithStatus();
+            Volatile.Write(ref _readStatus, (int)result.Status);
+            return result.Status == PrivateProviderErrorReadStatus.Success ? result.Records : [];
+        }
+        catch (Exception error) when (NonFatal(error))
+        { Volatile.Write(ref _readStatus, (int)PrivateProviderErrorReadStatus.Failed); return []; }
+    }
 
     public async Task<IReadOnlyList<PrivateProviderErrorRecord>> ReadRecordsAsync(CancellationToken cancellationToken = default)
     {
         Task<IReadOnlyList<PrivateProviderErrorRecord>> read;
         lock (_gate)
         {
-            if (_disposed) return [];
+            if (_disposed) { Volatile.Write(ref _readStatus, (int)PrivateProviderErrorReadStatus.Disposed); return []; }
             if (_pendingRead is null || _pendingRead.IsCompleted)
                 using (ExecutionContext.SuppressFlow()) _pendingRead = Task.Run(ReadRecords);
             read = _pendingRead;

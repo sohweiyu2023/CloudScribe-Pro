@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Pricing;
 
 namespace CloudScribe.App.Composition;
@@ -8,7 +9,8 @@ namespace CloudScribe.App.Composition;
 /// <summary>Conservative provider-list subtotal from authenticated rates and exact compiled input; no tax, credit or FX assertion.</summary>
 public static class GoogleTtsStudioCostEstimator
 {
-    public static EstimateResult Estimate(V222ControlSet controls, string voiceName, ReadOnlyMemory<byte> compiledPayload, string region)
+    public static EstimateResult Estimate(V222ControlSet controls, string voiceName, ReadOnlyMemory<byte> compiledPayload, string region,
+        GoogleSpeechCompilationOptions? sentenceOptions = null)
     {
         ArgumentNullException.ThrowIfNull(controls);
         string model = GoogleTtsVoiceBillingFamilyClassifier.Classify(voiceName) switch
@@ -39,7 +41,15 @@ public static class GoogleTtsStudioCostEstimator
         bool isChirp = string.Equals(model, "google.chirp-3-hd", StringComparison.Ordinal);
         bool hasSsml = input.TryGetProperty("ssml", out JsonElement ssml);
         if (isChirp && hasSsml)
-            throw new InvalidOperationException("Chirp 3 HD estimates require the supported plain-text request, not SSML.");
+        {
+            if (sentenceOptions?.SentenceMarkers is null || !string.Equals(sentenceOptions.VoiceName, voiceName, StringComparison.Ordinal))
+                throw new InvalidOperationException("Chirp SSML requires its explicitly typed source-preserving sentence format.");
+            string exactText = GoogleSpeechPlanCompiler.ReadSentenceMarkedText(ssml.GetString()!);
+            var expected = GoogleSpeechPlanCompiler.Compile(new(sentenceOptions.LanguageCode,
+                [new CloudScribe.Domain.Generation.SpeechText(exactText)], "sentence-marker-billing-check"), sentenceOptions);
+            if (!expected.Payload.Span.SequenceEqual(compiledPayload.Span))
+                throw new InvalidOperationException("The billed sentence format differs from the exact independently compiled request.");
+        }
         string? text = hasSsml ? ssml.GetString() : input.GetProperty("text").GetString();
         if (string.IsNullOrEmpty(text))
             throw new InvalidOperationException("Compiled Google input is empty.");

@@ -70,9 +70,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 refresh.IsEnabled = false;
                 try
                 {
-                    status.Text = (privateDiagnostics.IsArmed ? "Enabled for one exact request; no paid permission is granted. " : "Capture is off. ") + privateDiagnostics.PersistenceStatus;
+                    status.Text = (privateDiagnostics.IsArmed ? "Enabled for one exact request; no paid permission is granted. " : "Capture is off. ") + privateDiagnostics.PersistenceStatus + TrendHistoryStatus();
                     var records = await privateDiagnostics.ReadRecordsAsync(lifetime.Token).ConfigureAwait(true);
                     lifetime.Token.ThrowIfCancellationRequested();
+                    status.Text += privateDiagnostics.ReadStatus == PrivateProviderErrorReadStatus.Success
+                        ? $" Read completed: {records.Count} available record(s)."
+                        : $" Read did not complete ({privateDiagnostics.ReadStatus}); an empty view does not mean no response was retained. Keep existing files and inspect storage health.";
                     view.Text = string.Join("\n\n", records.Select(x => $"PRIVATE {x.CreatedUtc:O} - request {x.PayloadSha256[..12]} - {(x.Truncated ? "truncated" : "bounded")}{(x.ProviderDetailsOmitted is true ? "; other provider details omitted" : x.ProviderDetailsOmitted is null ? "; legacy detail completeness not recorded" : string.Empty)}:\n{x.Message}" +
                         (x.Response is { } response ? $"\nHTTP {response.HttpStatus}; {response.ErrorStatus}; {response.ReadState}; {response.ParseState}; read completed={response.ReadCompleted}; redaction={response.RedactionApplied}; omitted={response.DetailsOmitted}; truncated={response.Truncated}\n{response.RedactedBody}" : string.Empty)));
                 }

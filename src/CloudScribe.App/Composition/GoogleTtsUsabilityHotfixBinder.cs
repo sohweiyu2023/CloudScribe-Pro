@@ -35,7 +35,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     ChirpArticleService? chirpArticles = null, ChirpArticlePreparationService? chirpPreparation = null,
     ILogger<GoogleTtsUsabilityHotfixBinder>? catalogLogger = null, GoogleCredentialRepairService? credentialRepair = null,
     GoogleGenerationProductionRuntimeRequestSource? wholeArticleRequests = null,
-    GoogleGenerationProductionExecutionContextResolver? wholeArticleResolver = null)
+    IGoogleGenerationExecutionContextResolver? wholeArticleResolver = null,
+    CloudScribe.Application.Diagnostics.IGoogleTrendHistoryHealth? trendHistory = null)
 {
     private static readonly string[] ProviderControlHostNames =
     [
@@ -620,8 +621,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         void Refresh()
         {
             outputPath.Text = string.IsNullOrWhiteSpace(viewModel.LastGeneratedGoogleMp3Path)
-                ? "No verified MP3 is available in this session yet. Older MP3 files stay on disk after restart: use Open saved MP3 folder here or in Setups and open a file in your audio player. You do not need to generate it again. Play/export enable after a verified result."
-                : $"Verified MP3 · {viewModel.LastGeneratedGoogleMp3Path}";
+                ? "No verified single-request MP3 is available in this session yet. To start, use the cost review/generation action fixed at the bottom of Create MP3. Complete articles use their own final-output controls. Older saved MP3 files remain on disk; never regenerate accepted audio just to enable playback."
+                : $"Last generated single-request audio (may belong to an earlier document or voice): {viewModel.LastGeneratedGoogleMp3Path}. This is not a claim that the currently open article is complete.";
             play.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3;
             export.IsEnabled = viewModel.CanPlayLastGeneratedGoogleMp3 && window.StorageProvider.CanSave;
         }

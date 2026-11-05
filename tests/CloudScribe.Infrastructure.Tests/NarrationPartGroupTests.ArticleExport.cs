@@ -39,6 +39,23 @@ public sealed partial class NarrationPartGroupTests
     }
 
     [Fact]
+    public async Task ArticleExportRejectsInvalidContainerBeforeProbeOrPublication()
+    {
+        using var fixture = new Fixture(); await fixture.InitializeAsync();
+        var batch = await fixture.CreateBatchAsync("Invalid native output", 1);
+        await fixture.Groups.RegisterAsync(batch.Preparation.GroupId, batch.Members, TestContext.Current.CancellationToken);
+        var queue = new ArticleQueue(); var media = new ArticleNative { InvalidSignature = true };
+        var service = new ArticleAudioExportService(fixture, fixture.Library, queue, fixture.Paths, media);
+        await RecordArticlePartAsync(service, queue, batch.Children[0], fixture.Root, 0);
+        string destination = Path.Combine(fixture.Root, "invalid.mp3");
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.ExportAsync(batch.Parent.Id, destination,
+            CreateArticleTools(fixture.Root), TestContext.Current.CancellationToken));
+        Assert.Equal(2, media.Calls); // Input probe, assembly; never final probe/decode.
+        Assert.False(File.Exists(destination));
+        Assert.Equal(0, queue.Writes);
+    }
+
+    [Fact]
     public async Task ChangedOrUncertainAudioFailsBeforeAssemblyWithoutPrivateErrorText()
     {
         using var fixture = new Fixture(); await fixture.InitializeAsync();
@@ -113,6 +130,7 @@ public sealed partial class NarrationPartGroupTests
     private sealed class ArticleNative : INativeMediaTool
     {
         public int Calls { get; private set; }
+        public bool InvalidSignature { get; init; }
         public List<byte> InputMarkers { get; } = [];
         public async Task<NativeMediaToolResult> RunAsync(NativeMediaToolInvocation invocation, CancellationToken cancellationToken = default)
         {
@@ -120,11 +138,16 @@ public sealed partial class NarrationPartGroupTests
             string output = "";
             if (invocation.Arguments.Contains("-show_entries", StringComparer.Ordinal))
                 output = JsonSerializer.Serialize(new { streams = new[] { new { codec_name = "mp3", sample_rate = "24000", channels = 1 } }, format = new { duration = InputMarkers.Count > 0 ? "2" : "1" } });
-            else if (invocation.Arguments.Contains("-filter_complex", StringComparer.Ordinal))
+            else if (invocation.Arguments.Contains("concat", StringComparer.Ordinal))
             {
-                for (int i = 0; i < invocation.Arguments.Count; i++)
-                    if (string.Equals(invocation.Arguments[i], "-i", StringComparison.Ordinal)) InputMarkers.Add((await File.ReadAllBytesAsync(invocation.Arguments[i + 1], cancellationToken).ConfigureAwait(false))[10]);
-                byte[] bytes = new byte[128]; Encoding.ASCII.GetBytes("ID3").CopyTo(bytes, 0);
+                string manifest = await File.ReadAllTextAsync(Path.Combine(invocation.WorkingDirectory, "article-inputs.ffconcat"), cancellationToken).ConfigureAwait(false);
+                foreach (string line in manifest.Split('\n').Where(line => line.StartsWith("file '", StringComparison.Ordinal)))
+                {
+                    string name = line[6..^1];
+                    InputMarkers.Add((await File.ReadAllBytesAsync(Path.Combine(invocation.WorkingDirectory, name), cancellationToken).ConfigureAwait(false))[10]);
+                }
+                byte[] bytes = new byte[128];
+                if (!InvalidSignature) Encoding.ASCII.GetBytes("ID3").CopyTo(bytes, 0);
                 await File.WriteAllBytesAsync(invocation.Arguments[^1], bytes, cancellationToken).ConfigureAwait(false);
             }
             return new(0, false, output, "", TimeSpan.Zero);

@@ -1,4 +1,5 @@
 using CloudScribe.Application.Generation;
+using CloudScribe.Application.Logging;
 using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.App.ViewModels;
@@ -57,7 +58,7 @@ public sealed partial class ShellViewModel
             throw new InvalidOperationException("The current local document has no text to synthesize.");
 
         VoiceLabCatalogSelection voice = SelectedVoiceLabVoice
-            ?? throw new InvalidOperationException("Select a verified Google voice before preparing generation.");
+            ?? throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Select a verified Google voice before preparing generation."), LocalRequestReason.VerifiedVoiceMissing);
         voice.Validate();
 
         string providerStableId = RequireCanonical(voice.ProviderStableId, "selected Google provider identity");

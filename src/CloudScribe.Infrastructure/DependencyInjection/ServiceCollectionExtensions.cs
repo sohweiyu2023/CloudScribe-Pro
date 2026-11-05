@@ -49,6 +49,10 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<CloudScribeOptions>, CloudScribeOptionsValidator>();
         services.AddSingleton<AppPaths>();
+        services.AddSingleton<GoogleTrendHistoryLoggerProvider>();
+        services.AddSingleton<IGoogleTrendHistoryHealth>(provider => provider.GetRequiredService<GoogleTrendHistoryLoggerProvider>());
+        services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<GoogleTrendHistoryLoggerProvider>());
+        services.AddLogging(builder => builder.AddFilter<GoogleTrendHistoryLoggerProvider>(null, LogLevel.Trace));
         services.AddSingleton<BoundedJsonFileLoggerProvider>();
         services.AddSingleton<ILoggerProvider>(serviceProvider =>
             serviceProvider.GetRequiredService<BoundedJsonFileLoggerProvider>());

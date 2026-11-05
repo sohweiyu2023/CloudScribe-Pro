@@ -97,7 +97,7 @@ public sealed partial class NarrationPartGroupTests
         Assert.Empty(await FinancialRowsAsync(f, "chirp_article_successor_attempts"));
     }
 
-    private static async Task<ChirpSuccessorFixture> SentenceDiagnosticAsync(Fixture f)
+    private static async Task<ChirpSuccessorFixture> SentenceDiagnosticAsync(Fixture f, string? pricingSha256 = null)
     {
         var sentence = await SentenceEvidenceAsync(f).ConfigureAwait(false); var e = sentence.Evidence;
         int ordinal = e.Article.AllowedSegments[0].CoverageOrdinal;
@@ -111,6 +111,7 @@ public sealed partial class NarrationPartGroupTests
             MaximumAdditionalReservationMinorUnits = 1
         };
         var intent = ChirpIntent(e, ordinal);
+        if (pricingSha256 is not null) intent = intent with { Envelope = intent.Envelope with { PricingProvenanceId = pricingSha256 } };
         var review = await e.Service.PrepareAsync(intent, TestContext.Current.CancellationToken).ConfigureAwait(false);
         var parent = await e.Service.ApproveAsync(ChirpConfirmation(review), TestContext.Current.CancellationToken).ConfigureAwait(false);
         var claim = ChirpClaim(intent, parent);

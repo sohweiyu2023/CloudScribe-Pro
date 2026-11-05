@@ -12,7 +12,10 @@ public sealed partial class GoogleTextToSpeechCatalogBootstrapService
         // Reopening Create MP3 still performs real authenticated catalog/probe
         // verification. Do NOT silently replace an unexpired independently admitted
         // snapshot merely because the UI reopened. Never extend its old lifetime.
-        if (completionGate?.IsRequired != true || resumeAdmission is null) return null;
+        // Native resume admissions also exist after a terminal diagnostic release.
+        // Their verified pin, current snapshot and observed provider evidence are
+        // the authority to retain identity; an unrelated run marker is not.
+        if (resumeAdmission is null) return null;
         var policy = await resumeAdmission.LoadVerifiedAsync(token).ConfigureAwait(false);
         var current = await _capabilities.GetLatestAsync(GoogleGenerationProvider.StableProviderId, account.Reference.AccountId, token).ConfigureAwait(false);
         var now = _timeProvider.GetUtcNow();

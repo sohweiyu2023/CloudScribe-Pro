@@ -42,11 +42,15 @@ public sealed class ChirpClauseSubdivisionTests
     }
 
     [Fact]
-    public void PathologicalPartCountAndUnsplitLongClauseAreBounded()
+    public void FiniteNaturalBoundariesAreNotRejectedByHeuristicPartOrClauseCounts()
     {
-        string many = string.Concat(Enumerable.Repeat("甲，", 201));
-        Assert.Throws<InvalidOperationException>(() => ChirpClauseSubdivision.Plan(many, new(0, many.Length, ArticleAudioManifest.HashText(many), null)));
-        string longClause = new string('甲', 334) + "，乙。";
-        Assert.Throws<InvalidOperationException>(() => ChirpClauseSubdivision.Plan(longClause, new(0, longClause.Length, ArticleAudioManifest.HashText(longClause), null)));
+        string many = string.Concat(Enumerable.Repeat("a,", 201));
+        var parts = ChirpClauseSubdivision.Plan(many, new(0, many.Length, ArticleAudioManifest.HashText(many), null));
+        Assert.Equal(201, parts.Count);
+        Assert.Equal(many, string.Concat(parts.Select(x => ChirpNarrationPlanner.Slice(many, x))));
+        string longClause = new string('a', 334) + ",bb";
+        var longer = ChirpClauseSubdivision.Plan(longClause, new(0, longClause.Length, ArticleAudioManifest.HashText(longClause), null));
+        Assert.Equal(2, longer.Count);
+        Assert.Equal(longClause, string.Concat(longer.Select(x => ChirpNarrationPlanner.Slice(longClause, x))));
     }
 }

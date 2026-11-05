@@ -12,13 +12,17 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         if (model.IsConnectedVoiceCatalogLoading) return false;
         model.IsConnectedVoiceCatalogLoading = true;
         model.InvalidateVoiceLanguageCatalog();
-        model.ConnectedVoiceCatalogStatus = "Loading voices from your saved Google connection. This does not generate speech. You can close this window to stop waiting.";
+        bool restrictedRefresh = true; // Unknown gate state must not suggest an ordinary retry.
         model.SelectedVoiceLabVoice = null;
         model.VoiceLabCatalogResults.Clear();
         Guid refreshId = Guid.NewGuid();
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.UiBootstrap;
         try
         {
+            restrictedRefresh = _bootstrapService.RequiresReviewedRefresh;
+            model.ConnectedVoiceCatalogStatus = restrictedRefresh
+                ? "Checking voices within the diagnostic run. Closing or timing out can stop this run and require review. Existing audio and reservations are retained."
+                : "Loading voices from your saved Google connection. This does not generate speech. You can close this window to stop waiting.";
             using var completion = _bootstrapService.BeginUiRefresh(refreshId);
             GoogleCatalogRefreshDiagnostics.Phase(catalogLogger, refreshId, phase);
             var observed = await _bootstrapService.RefreshConfiguredAsync(refreshId, token).ConfigureAwait(true);
@@ -28,14 +32,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             token.ThrowIfCancellationRequested();
             if (!model.VoiceLabCatalogLastRefreshSucceeded)
             {
-                model.ConnectedVoiceCatalogStatus = model.StatusMessage;
-                return false;
+                return VoiceCatalogRefreshPresentation.RejectIncomplete(model, restrictedRefresh, model.StatusMessage);
             }
             model.SetVoiceLanguageCatalog(observed.Voices.SelectMany(voice => voice.LanguageCodes), observed.ExpiresAtUtc, observed.CatalogProvenanceId);
             if (!model.HasCurrentVoiceLanguageCatalog)
             {
-                model.StatusMessage = model.ConnectedVoiceCatalogStatus;
-                return false;
+                return VoiceCatalogRefreshPresentation.RejectIncomplete(model, restrictedRefresh, model.ConnectedVoiceCatalogStatus);
             }
             model.ConnectedVoiceCatalogStatus = model.VoiceLabCatalogResults.Count == 0
                 ? "No verified voices match the selected language and search. Choose a language from the list or clear the voice search, then refresh."
@@ -48,7 +50,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             model.SelectedVoiceLabVoice = null;
             model.VoiceLabCatalogResults.Clear();
             GoogleCatalogRefreshDiagnostics.Failure(catalogLogger, refreshId, phase, exception);
-            model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception, phase);
+            model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception, phase, restrictedRefresh);
             model.StatusMessage = model.ConnectedVoiceCatalogStatus;
             return false;
         }
@@ -61,6 +63,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             int count = (await accounts.ListAsync(token).ConfigureAwait(true)).Count(account => account.IsEnabled &&
                 string.Equals(account.Reference.ProviderStableId, GoogleGenerationProvider.StableProviderId, StringComparison.Ordinal));
+            if (count == 1 && _bootstrapService.RequiresReviewedRefresh)
+            {
+                model.ConnectedVoiceCatalogStatus = "Diagnostic mode is active. Opening this window has not started verification or consumed a refresh. Review the diagnostic state before explicitly refreshing; interrupted verification can stop the run. Existing audio and reservations are retained.";
+                return;
+            }
             if (count == 1) await refresh().ConfigureAwait(true);
             else model.ConnectedVoiceCatalogStatus = count == 0
                 ? "Connect Google once before voices can load. Use Help and Include Google setup guide; your document stays local."

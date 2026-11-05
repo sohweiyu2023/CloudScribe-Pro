@@ -38,7 +38,7 @@ public sealed partial class ChirpArticleService
     private static async Task<string> UniqueStoredPlanAsync(SqliteConnection connection, SqliteTransaction transaction, Guid documentId, CancellationToken token)
     {
         using var command = ChirpArticleSql.Command(connection, transaction,
-            "SELECT PlanSha256,ProposalJson FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 4;", ("$document", documentId.ToString("D")));
+            "SELECT PlanSha256,ProposalJson FROM chirp_article_plans WHERE lower(DocumentId)=$document LIMIT 6;", ("$document", documentId.ToString("D")));
         using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
         List<ChirpArticlePlanProposal> plans = [];
         while (await reader.ReadAsync(token).ConfigureAwait(false))
@@ -61,7 +61,8 @@ public sealed partial class ChirpArticleService
         var financial = await RecoveryFinancialSnapshot.ReadAsync(connection, transaction, token).ConfigureAwait(false);
         await _evidence.ResolveSnapshotAsync(connection, transaction, stored.Article, stored.AccountId, stored.ProjectId, financial, token).ConfigureAwait(false);
         var receipts = await SegmentReceiptsAsync(connection, transaction, stored, financial, token).ConfigureAwait(false);
-        return (stored.Article.Proposal, ChirpArticleAudioCoverage.RequireComplete(stored.Article.Proposal, receipts, stored.Article.ReusedAudio));
+        var recovered = await RecoveredCoverageAsync(connection, transaction, stored, token).ConfigureAwait(false);
+        return (stored.Article.Proposal, ChirpArticleAudioCoverage.RequireComplete(stored.Article.Proposal, receipts, stored.Article.ReusedAudio, recovered));
     }
 
     private async Task<IReadOnlyList<ChirpSegmentAcceptedAudio>> SegmentReceiptsAsync(SqliteConnection connection,

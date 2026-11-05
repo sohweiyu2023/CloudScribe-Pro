@@ -53,8 +53,12 @@ public sealed partial class ChirpArticleService
         var snapshot = await RecoveryFinancialSnapshot.ReadAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
         await _evidence.ResolveSnapshotAsync(connection, transaction, stored.Article, stored.AccountId, stored.ProjectId, snapshot, cancellationToken).ConfigureAwait(false);
         var receipts = await SegmentReceiptsAsync(connection, transaction, stored, snapshot, cancellationToken).ConfigureAwait(false);
+        var recovered = await RecoveredCoverageAsync(connection, transaction, stored, cancellationToken).ConfigureAwait(false);
         foreach (var receipt in receipts) await VerifyMediaAsync(receipt.Audio.AudioPath, receipt.Audio, cancellationToken).ConfigureAwait(false);
         var rows = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_owned_attempts", cancellationToken).ConfigureAwait(false);
+        var splitIds = (await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_split_attempts", cancellationToken).ConfigureAwait(false))
+            .Select(x => (string)x[0]!).ToHashSet(StringComparer.Ordinal);
+        rows = rows.Where(x => !splitIds.Contains((string)x[0]!)).ToArray();
         var policyNow = await admission.LoadVerifiedAsync(cancellationToken).ConfigureAwait(false);
         var active = policyNow?.Articles.SingleOrDefault(x => string.Equals(x.Proposal.PlanSha256, plan, StringComparison.Ordinal));
         IReadOnlyList<ChirpSegmentAllowance> allowed = active?.AllowedSegments ?? [];
@@ -63,12 +67,14 @@ public sealed partial class ChirpArticleService
             var target = rows.SingleOrDefault(x => Equals(x[0], resume.AuthorizationId.ToString("N")) && Equals(x[1], plan) && Equals(x[16], 0L));
             if (target is not null) allowed = [new((int)(long)target[2]!, (long)target[13]!)];
         }
-        return DescribeProgress(stored.Article with { AllowedSegments = allowed }, receipts, rows, snapshot.QueueStates);
+        return DescribeProgress(stored.Article with { AllowedSegments = allowed }, receipts, rows, snapshot.QueueStates, recovered);
     }
 
     private static ChirpArticleProgress DescribeProgress(AdmittedChirpArticle article, IReadOnlyList<ChirpSegmentAcceptedAudio> receipts,
-        IReadOnlyList<object?[]> attempts, IReadOnlyList<RecoveryFinancialSnapshot.QueueState> queues)
+        IReadOnlyList<object?[]> attempts, IReadOnlyList<RecoveryFinancialSnapshot.QueueState> queues,
+        IReadOnlyList<ChirpRecoveredArticleCoverage>? recovered = null)
     {
+        recovered ??= [];
         List<ChirpPartProgress> progress = [];
         foreach (var part in article.Proposal.Parts)
         {
@@ -76,7 +82,7 @@ public sealed partial class ChirpArticleService
             var latest = rows.FirstOrDefault(x => Equals(x[16], 0L))
                 ?? rows.FirstOrDefault(x => queues.Any(q => Equals(q.Key, x[7]) && string.Equals(q.DiagnosticCode, "google-accepted", StringComparison.Ordinal)))
                 ?? rows.FirstOrDefault();
-            bool saved = receipts.Any(x => x.CoverageOrdinal == part.CoverageOrdinal);
+            bool saved = receipts.Any(x => x.CoverageOrdinal == part.CoverageOrdinal) || recovered.Any(x => x.CoverageOrdinal == part.CoverageOrdinal);
             string status = part.Range.ReusedReceiptSha256 is not null ? "Reused accepted audio" : saved ? "Saved accepted audio"
                 : latest is null ? "Not requested" : Equals(latest[16], 0L) ? "Reserved; review the same identity to resume"
                 : queues.Any(x => Equals(x.Key, latest[7]) && string.Equals(x.DiagnosticCode, "google-accepted", StringComparison.Ordinal))
@@ -85,9 +91,9 @@ public sealed partial class ChirpArticleService
                 article.AllowedSegments.Any(x => x.CoverageOrdinal == part.CoverageOrdinal)));
         }
         bool complete = false;
-        try { _ = ChirpArticleAudioCoverage.RequireComplete(article.Proposal, receipts, article.ReusedAudio); complete = true; }
+        try { _ = ChirpArticleAudioCoverage.RequireComplete(article.Proposal, receipts, article.ReusedAudio, recovered); complete = true; }
         catch (InvalidOperationException) { /* Partial coverage is displayed without exposing an export path. */ }
-        return new(article.Proposal.DocumentId, article.Proposal.PlanSha256, receipts.Count + article.ReusedAudio.Count,
+        return new(article.Proposal.DocumentId, article.Proposal.PlanSha256, receipts.Count + article.ReusedAudio.Count + recovered.Count,
             article.Proposal.Parts.Count, complete, progress.AsReadOnly());
     }
 }

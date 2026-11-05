@@ -57,8 +57,9 @@ internal sealed class GoogleTtsStudioTrustContextFactory(V222ControlSet controls
         GoogleCapabilitySnapshot capability) =>
         new(
             HashIdentity("speech-plan", intent.Plan.ProvenanceId, intent.Plan.LanguageTag, selection.ExactText),
-            HashIdentity(
-                "synthesis-controls",
+            intent.CompilationOptions.SentenceMarkers is not null
+                ? HashIdentity("sentence-marker-controls", ChirpPolicyValidation.Hash(intent.CompilationOptions))
+                : HashIdentity("synthesis-controls",
                 intent.CompilationOptions.LanguageCode,
                 intent.CompilationOptions.VoiceName,
                 intent.CompilationOptions.AudioEncoding,

@@ -6,7 +6,11 @@ public sealed record PrivateProviderErrorRecord(Guid Id, DateTimeOffset CreatedU
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     bool? ProviderDetailsOmitted = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    PrivateProviderResponseEnvelope? Response = null)
+    PrivateProviderResponseEnvelope? Response = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    Guid? ArticleJobId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    int? ArticleOrdinal = null)
 {
     public override string ToString() => "Private provider error record (contents omitted)";
 }

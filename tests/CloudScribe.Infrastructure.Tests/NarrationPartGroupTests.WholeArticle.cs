@@ -28,8 +28,10 @@ public sealed partial class NarrationPartGroupTests
         Assert.Equal(148, a.RetainedCommitmentsMinorUnits);
         Assert.Empty(await FinancialRowsAsync(f, "chirp_article_attempts"));
         await Assert.ThrowsAsync<InvalidOperationException>(() => e.Service.StartWholeArticleAsync(WholeConfirmation(a) with { ConfirmedByUser = false }, TestContext.Current.CancellationToken));
-        var job = await e.Service.StartWholeArticleAsync(WholeConfirmation(a), TestContext.Current.CancellationToken);
-        Assert.Equal(job, await e.Service.StartWholeArticleAsync(WholeConfirmation(b), TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => e.Service.StartWholeArticleAsync(WholeConfirmation(a), TestContext.Current.CancellationToken));
+        var job = await e.Service.StartWholeArticleAsync(WholeConfirmation(b), TestContext.Current.CancellationToken);
+        var c = await e.Service.PrepareWholeArticleAsync(e.Document.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(job, await e.Service.StartWholeArticleAsync(WholeConfirmation(c), TestContext.Current.CancellationToken));
         Assert.Equal(job, await new ChirpArticleService(f, e.Admission, f.Paths, e.Clock).ReadWholeArticleJobAsync(job.JobId, TestContext.Current.CancellationToken));
         Assert.Empty(await FinancialRowsAsync(f, "chirp_article_attempts"));
         await Assert.ThrowsAsync<InvalidOperationException>(() => e.Service.StartWholeArticleAsync(WholeConfirmation(a), TestContext.Current.CancellationToken));
@@ -88,7 +90,7 @@ public sealed partial class NarrationPartGroupTests
     {
         using var f = new Fixture(); await f.InitializeAsync(); var e = await WholeEvidenceAsync(f);
         var review = await e.Service.PrepareWholeArticleAsync(e.Document.Id, TestContext.Current.CancellationToken);
-        if (string.Equals(failure, "expired", StringComparison.Ordinal)) e.Clock.Now += TimeSpan.FromMinutes(11);
+        if (string.Equals(failure, "expired", StringComparison.Ordinal)) e.Clock.Now = review.ExpiresAtUtc.AddTicks(1);
         if (string.Equals(failure, "rollback", StringComparison.Ordinal)) e.Clock.Now -= TimeSpan.FromSeconds(1);
         if (string.Equals(failure, "budget", StringComparison.Ordinal)) e.Admission.Policy = e.Admission.Policy! with { MaximumAdditionalReservationMinorUnits = 1 };
         if (string.Equals(failure, "account", StringComparison.Ordinal)) e.Admission.Policy = e.Admission.Policy! with { AccountId = "changed" };
@@ -193,6 +195,7 @@ public sealed partial class NarrationPartGroupTests
         public List<int> Ordinals { get; } = [];
         public bool Exported { get; private set; }
         public bool FailAfterReservation { get; init; }
+        public bool RejectAfterReservation { get; init; }
         public bool RequireRefreshBeforeEveryRequest { get; init; }
         public bool RequiresCatalogRefresh { get; private set; }
         public int Refreshes { get; private set; }
@@ -203,8 +206,25 @@ public sealed partial class NarrationPartGroupTests
         {
             Ordinals.Add(ordinal);
             var intent = ChirpIntent(evidence, ordinal);
+            if (evidence.Article.Proposal.InputFormat is not null)
+            {
+                using var wire = System.Text.Json.JsonDocument.Parse(intent.CompiledPayload);
+                var part = evidence.Article.Proposal.Parts.Single(x => x.CoverageOrdinal == ordinal);
+                Assert.False(wire.RootElement.GetProperty("input").TryGetProperty("text", out _));
+                Assert.Equal(CloudScribe.Application.Generation.ChirpNarrationPlanner.Slice(evidence.Document.Text, part.Range),
+                    System.Xml.Linq.XElement.Parse(wire.RootElement.GetProperty("input").GetProperty("ssml").GetString()!, System.Xml.Linq.LoadOptions.PreserveWhitespace).Value);
+            }
             var review = await evidence.Service.PrepareAsync(intent, cancellationToken).ConfigureAwait(false);
             var approved = await evidence.Service.ApproveWholeArticleRequestAsync(job.JobId, review.PreviewId, cancellationToken).ConfigureAwait(false);
+            if (RejectAfterReservation)
+            {
+                var claim = ChirpClaim(intent, approved);
+                Assert.True(await evidence.Service.TryClaimAuthorizedAsync(intent.Envelope with { ChirpAuthorizationId = approved.AuthorizationId },
+                    intent.ProjectId, "USD", 2, 1, claim, cancellationToken).ConfigureAwait(false));
+                await new GoogleGenerationPersistedQueueStateStore(fixture, evidence.Admission).SaveOutcomeAsync(claim with
+                { UnresolvedSubmission = false, DiagnosticCode = "google-http-400", ErrorStatus = CloudScribe.Domain.Generation.GoogleErrorStatus.InvalidArgument }, cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException("Synthetic terminal HTTP400; no retry.");
+            }
             if (FailAfterReservation) throw new IOException("SYNTHETIC_PRIVATE_ERROR_NOT_PERSISTED");
             var accepted = await AcceptChirpAsync(fixture, evidence.Service, intent, ordinal, approved).ConfigureAwait(false);
             await evidence.Service.PersistAcceptedAsync(accepted.Request, accepted.Outcome, cancellationToken).ConfigureAwait(false);

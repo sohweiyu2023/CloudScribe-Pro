@@ -157,14 +157,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         try
         {
             NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Open);
-            var tools = await dialog.StorageProvider.OpenFilePickerAsync(new()
-            {
-                Title = "Select installed ffmpeg.exe (with ffprobe.exe alongside)",
-                AllowMultiple = false,
-                FileTypeFilter = [new FilePickerFileType("FFmpeg executable") { Patterns = ["ffmpeg.exe"] }],
-            }).ConfigureAwait(true);
+            var tool = await ChooseExistingMediaToolsAsync(dialog, status).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
-            if (tools.Count != 1 || !tools[0].Path.IsFile) { status.Text = "Article export cancelled; originals unchanged."; return; }
+            if (tool is null) return;
             var destination = await dialog.StorageProvider.SaveFilePickerAsync(new()
             {
                 Title = "Save one continuous article MP3 to a new file",
@@ -176,7 +171,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             cancellationToken.ThrowIfCancellationRequested();
             if (destination is null || !destination.Path.IsFile) { status.Text = "Article export cancelled; originals unchanged."; return; }
             status.Text = "Verifying and joining complete local audio. No provider call will be made.";
-            await articleAudio.ExportAsync(parentId, destination.Path.LocalPath, tools[0].Path.LocalPath, cancellationToken).ConfigureAwait(true);
+            await articleAudio.ExportAsync(parentId, destination.Path.LocalPath, tool, cancellationToken).ConfigureAwait(true);
             NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Complete);
             status.Text = "One continuous article MP3 exported and locally decoded successfully. Originals preserved.";
             model.StatusMessage = status.Text;

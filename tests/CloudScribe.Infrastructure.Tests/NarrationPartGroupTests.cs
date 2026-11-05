@@ -119,9 +119,10 @@ public sealed partial class NarrationPartGroupTests
             using var context = CreateDbContext();
             await context.Database.MigrateAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
         }
-        public async Task<Batch> CreateBatchAsync(string title, int count, bool sentenceSource = false)
+        public async Task<Batch> CreateBatchAsync(string title, int count, bool sentenceSource = false, bool compactSentenceSource = false)
         {
-            string[] texts = Enumerable.Range(0, count).Select(index => $"{title}-marker-{index:D2} 中文 😀{(sentenceSource ? "\u3002" : string.Empty)}\n").ToArray();
+            string[] texts = compactSentenceSource ? Enumerable.Range(0, count).Select(index => $"a{index:D2}, b{index:D2}, c{index:D2};\n").ToArray() :
+                Enumerable.Range(0, count).Select(index => $"{title}-marker-{index:D2} 中文 😀{(sentenceSource ? "\u3002" : string.Empty)}\n").ToArray();
             var parent = await Library.CreateAsync(title, string.Concat(texts), TestContext.Current.CancellationToken).ConfigureAwait(false);
             var preparation = await Groups.BeginAsync(parent.Id, parent.CurrentRevisionId!.Value, Hash(parent.Text),
                 texts.Select(Hash).ToArray(), TestContext.Current.CancellationToken).ConfigureAwait(false);

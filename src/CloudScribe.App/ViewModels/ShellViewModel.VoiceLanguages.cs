@@ -9,6 +9,7 @@ public sealed partial class ShellViewModel
 
     public IReadOnlyList<string> VoiceLanguageCodes => _voiceLanguageCodes;
     public bool HasCurrentVoiceLanguageCatalog => _hasCurrentVoiceLanguageCatalog && _timeProvider.GetUtcNow() < _voiceLanguageCatalogExpires;
+    internal DateTimeOffset VoiceLanguageCatalogExpiresAtUtc => _voiceLanguageCatalogExpires;
     public string? VoiceLanguageCatalogScope => HasCurrentVoiceLanguageCatalog ? _voiceLanguageCatalogScope : null;
 
     public void SetVoiceLanguageCatalog(IEnumerable<string> codes, DateTimeOffset expiresAtUtc, string scope)

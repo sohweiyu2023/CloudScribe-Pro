@@ -21,12 +21,16 @@ public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorP
     private string? _activePayloadSha256;
     private long _activeStarted;
     private PrivateErrorCaptureMode _activeMode;
+    private Guid? _activeArticleJob;
+    private int? _activeArticleOrdinal;
     private long _reviewEpoch;
     private bool _disposed;
+    private Guid? _articleCaptureOwner;
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<GenerationProviderRequest, object> _requiredArticleRequests = new();
 
     public long BeginOptInReview()
     {
-        lock (_gate) { ObjectDisposedException.ThrowIf(_disposed, this); _arm = null; _ticket = null; return ++_reviewEpoch; }
+        lock (_gate) { ObjectDisposedException.ThrowIf(_disposed, this); RequireArticleOwner(null); _arm = null; _ticket = null; return ++_reviewEpoch; }
     }
 
     public bool CompleteOptInReview(long review, PrivateErrorCaptureBinding binding, bool stillConfirmed)
@@ -41,6 +45,9 @@ public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorP
     public bool IsArmed { get { lock (_gate) return _arm is { } arm && !Expired(arm.ExpiresUtc, arm.Started); } }
 
     public void Arm(PrivateErrorCaptureBinding binding, bool explicitlyConfirmed)
+        => ArmOwned(binding, explicitlyConfirmed, null);
+
+    private void ArmOwned(PrivateErrorCaptureBinding binding, bool explicitlyConfirmed, Guid? owner)
     {
         completionGate?.RequireReady();
         ArgumentNullException.ThrowIfNull(binding);
@@ -48,22 +55,27 @@ public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorP
             || binding.RequestVersion < 0 || string.IsNullOrWhiteSpace(binding.AccountId)
             || string.IsNullOrWhiteSpace(binding.ProjectId) || string.IsNullOrWhiteSpace(binding.VoiceId)
             || string.IsNullOrWhiteSpace(binding.CredentialReferenceId) || binding.PayloadSha256.Length != 64
-            || !binding.PayloadSha256.All(char.IsAsciiHexDigit) || !Enum.IsDefined(binding.CaptureMode)) throw new InvalidOperationException("An exact saved request and explicit diagnostic opt-in are required.");
+            || !binding.PayloadSha256.All(char.IsAsciiHexDigit) || !Enum.IsDefined(binding.CaptureMode)
+            || binding.ArticleJobId is null != (binding.ArticleOrdinal is null)
+            || binding.ArticleJobId == Guid.Empty || binding.ArticleOrdinal is < 1 or > 10_000
+            || binding.NotAfterUtc is { } expiry && expiry <= clock.GetUtcNow()) throw new InvalidOperationException("An exact saved request and explicit diagnostic opt-in are required.");
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            RequireArticleOwner(owner);
             if (_active is not null) throw new InvalidOperationException("A diagnostic response is still in flight.");
             _arm = null; _ticket = null;
             if (binding.CaptureMode == PrivateErrorCaptureMode.ProtectedResponseEnvelope && !persistence.PrepareProtectedCapture())
                 throw new InvalidOperationException("Protected private response storage is not ready; nothing may be submitted.");
             _ticket = null;
-            _arm = new(binding, clock.GetUtcNow().AddMinutes(10), clock.GetTimestamp());
+            var maximumExpiry = clock.GetUtcNow().AddMinutes(10);
+            _arm = new(binding, binding.NotAfterUtc is { } notAfter && notAfter < maximumExpiry ? notAfter : maximumExpiry, clock.GetTimestamp());
         }
     }
 
     public void Disarm()
     {
-        lock (_gate) { ++_reviewEpoch; _arm = null; _ticket = null; _active = null; }
+        lock (_gate) { ++_reviewEpoch; _arm = null; _ticket = null; _active = null; _articleCaptureOwner = null; }
     }
 
     public void Attach(GenerationProviderRequest request, PrivateErrorCaptureBinding current)
@@ -92,6 +104,7 @@ public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorP
             _activePayloadSha256 = ticket.Binding.PayloadSha256;
             _activeStarted = ticket.Started;
             _activeMode = ticket.Binding.CaptureMode;
+            _activeArticleJob = ticket.Binding.ArticleJobId; _activeArticleOrdinal = ticket.Binding.ArticleOrdinal;
             return ticket.Id;
         }
     }
@@ -127,7 +140,12 @@ public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorP
             _active = null; // Consumed even for success, missing/malformed message or disk/redaction failure.
             try
             {
-                if (Expired(_activeExpires, _activeStarted) || !string.Equals(_activePayloadSha256, Hash(input.Span), StringComparison.Ordinal))
+                // An already-dispatched article response remains evidence of that exact owned request.
+                // Expiry still blocks Begin/IsActiveFor before sending; explicit withdrawal clears _active.
+                bool ownedArticleResponse = _activeArticleJob is not null && _articleCaptureOwner is not null
+                    && _activeMode == PrivateErrorCaptureMode.ProtectedResponseEnvelope;
+                if (!ownedArticleResponse && Expired(_activeExpires, _activeStarted)
+                    || !string.Equals(_activePayloadSha256, Hash(input.Span), StringComparison.Ordinal))
                 { Volatile.Write(ref _writeState, 6); return GoogleExplanationRetentionState.ExpiredOrChanged; }
                 if (_activeMode == PrivateErrorCaptureMode.ProtectedResponseEnvelope)
                 {
@@ -153,7 +171,7 @@ public sealed partial class GooglePrivateErrorDiagnostics(IPrivateProviderErrorP
         lock (_gate)
         {
             if (_disposed) return;
-            _disposed = true; ++_reviewEpoch; _arm = null; _ticket = null; _active = null;
+            _disposed = true; ++_reviewEpoch; _arm = null; _ticket = null; _active = null; _articleCaptureOwner = null;
         }
         // Best effort at orderly host disposal, never an unbounded shutdown or a durable-outcome dependency.
         try { _ = Volatile.Read(ref _pendingWrite).Wait(TimeSpan.FromMilliseconds(250)); }

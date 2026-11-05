@@ -8,9 +8,9 @@ namespace CloudScribe.Infrastructure.Tests;
 
 public sealed partial class NarrationPartGroupTests
 {
-    private static async Task<ChirpEvidence> ChirpEvidenceAsync(Fixture f, int legacyParts = 60, bool sentenceSource = false)
+    private static async Task<ChirpEvidence> ChirpEvidenceAsync(Fixture f, int legacyParts = 60, bool sentenceSource = false, bool compactSentenceSource = false)
     {
-        var batch = await f.CreateBatchAsync("Synthetic internal " + Guid.NewGuid().ToString("N"), legacyParts, sentenceSource).ConfigureAwait(false);
+        var batch = await f.CreateBatchAsync("Synthetic internal " + Guid.NewGuid().ToString("N"), legacyParts, sentenceSource, compactSentenceSource).ConfigureAwait(false);
         await f.Groups.RegisterAsync(batch.Preparation.GroupId, batch.Members, TestContext.Current.CancellationToken).ConfigureAwait(false);
         var compiledOld = CompileChirp(batch.Children[0].Text);
         var oldEnvelope = ChirpEnvelope(compiledOld);
@@ -55,7 +55,7 @@ public sealed partial class NarrationPartGroupTests
     private static ChirpRequestIntent ChirpIntent(ChirpEvidence e, int ordinal = 1)
     {
         var part = e.Article.Proposal.Parts.Single(x => x.CoverageOrdinal == ordinal);
-        var compiled = CompileChirp(ChirpNarrationPlanner.Slice(e.Document.Text, part.Range));
+        var compiled = ChirpArticlePlanCompiler.CompilePart(e.Document.Text, e.Article.Proposal, part);
         return new(e.Document.Id, ordinal, "synthetic-project", ChirpEnvelope(compiled), compiled.Payload, "USD", 2, 1);
     }
     private static ChirpApprovalConfirmation ChirpConfirmation(ChirpRequestReview review) => new(review.PreviewId, review.ReviewSha256, review.MaximumMinorUnits, true, true);

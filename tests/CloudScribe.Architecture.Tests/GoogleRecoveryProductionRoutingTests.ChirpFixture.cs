@@ -19,11 +19,11 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         public ChirpArticleService CreateArticles() => new(this,
             new InstalledChirpArticleAdmissionStore(Path.Combine(_root, "install", "app"), _paths, TimeProvider.System), _paths, TimeProvider.System);
 
-        public async Task InitializeChirpAsync()
+        public async Task InitializeChirpAsync(string? sourceText = null)
         {
             using var db = CreateDbContext(); await db.Database.MigrateAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
             var library = new EfDocumentLibrary(this, new DocumentContentStore(_paths), TimeProvider.System);
-            string text = string.Join(' ', Enumerable.Repeat("Synthetic local clause;", 30));
+            string text = sourceText ?? string.Join(' ', Enumerable.Repeat("Synthetic local clause;", 30));
             var document = await library.CreateAsync("Synthetic internal article", text, TestContext.Current.CancellationToken).ConfigureAwait(false);
             Selection = new(document.Id, document.CurrentRevisionId, text, GoogleGenerationProvider.StableProviderId, "synthetic-account", "synthetic-project",
                 "cmn-CN-Chirp3-HD-Alnilam", "synthetic-capability", "synthetic-fingerprint", "cmn-CN", "cmn-CN", DateTimeOffset.UtcNow);
@@ -51,13 +51,22 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         public bool FullRequestIdentity { get; set; }
         public TaskCompletionSource<bool>? Block { get; set; }
         public TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<GoogleGenerationProductionPendingApprovalStateOwner.PendingState> CompileReadonlyAsync(
+        public Task<GoogleGenerationProductionPendingApprovalStateOwner.PendingState> CompileReadonlyAsync(
             ShellViewModel.GoogleTtsStudioRequestSelection s, CancellationToken cancellationToken)
+            => CompileCoreAsync(s, null, cancellationToken);
+
+        public Task<GoogleGenerationProductionPendingApprovalStateOwner.PendingState> CompileArticleReadonlyAsync(
+            ShellViewModel.GoogleTtsStudioRequestSelection s, ChirpResolvedSegment source, CancellationToken cancellationToken)
+            => CompileCoreAsync(s with { ExactText = source.ExactText },
+                ChirpArticlePlanCompiler.SentenceMarkersForPart(source.ExactText, source.Proposal, source.Part), cancellationToken);
+
+        private async Task<GoogleGenerationProductionPendingApprovalStateOwner.PendingState> CompileCoreAsync(
+            ShellViewModel.GoogleTtsStudioRequestSelection s, GoogleSentenceMarkers? markers, CancellationToken cancellationToken)
         {
             Entered.TrySetResult(true);
             if (Block is { } block) await block.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             var compiled = GoogleSpeechPlanCompiler.Compile(new SpeechPlan(s.LanguageCode, [new SpeechText(s.ExactText + PayloadSuffix)], "synthetic-current"),
-                new(s.LanguageCode, s.VoiceStableId, "MP3", 5000));
+                new(s.LanguageCode, s.VoiceStableId, "MP3", 5000) { SentenceMarkers = markers });
             var envelope = new GoogleGenerationSubmissionEnvelope(s.AccountStableId, "synthetic-credential", Capability, Pricing, Revision,
                 s.VoiceStableId, "MP3", compiled.PayloadSha256, compiled.Payload.Length);
             var request = new CloudScribe.Providers.Abstractions.GenerationProviderRequest(GoogleGenerationProvider.StableProviderId,

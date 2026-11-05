@@ -6,16 +6,18 @@ namespace CloudScribe.Infrastructure.Generation;
 public static class ChirpArticleAudioCoverage
 {
     public static IReadOnlyList<ArticleAcceptedAudio> RequireComplete(ChirpArticlePlanProposal plan,
-        IReadOnlyList<ChirpSegmentAcceptedAudio> segments, IReadOnlyList<ChirpReusedArticleAudio> reused)
+        IReadOnlyList<ChirpSegmentAcceptedAudio> segments, IReadOnlyList<ChirpReusedArticleAudio> reused,
+        IReadOnlyList<ChirpRecoveredArticleCoverage>? recovered = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(segments);
         ArgumentNullException.ThrowIfNull(reused);
+        recovered ??= [];
         if (plan.DocumentId == Guid.Empty || plan.RevisionId == Guid.Empty || !IsHash(plan.PlanSha256) || !IsHash(plan.SourceSha256)
             || plan.SourceScalars is < 1 or > ChirpNarrationPlanner.MaximumSourceScalars
             || plan.Parts.Count is < 1 or > ChirpNarrationPlanner.MaximumCoverageParts
             || segments.Count > ChirpNarrationPlanner.MaximumCoverageParts || reused.Count > ChirpNarrationPlanner.MaximumCoverageParts
-            || segments.Count + reused.Count != plan.Parts.Count
+            || segments.Count + reused.Count + recovered.Count != plan.Parts.Count
             || !plan.Parts.Select(x => x.CoverageOrdinal).SequenceEqual(Enumerable.Range(1, plan.Parts.Count)))
             throw new InvalidOperationException("Complete internal article coverage is unavailable; no export was started.");
         List<ArticleAcceptedAudio> ordered = [];
@@ -27,6 +29,14 @@ public static class ChirpArticleAudioCoverage
             if (part.Range.StartScalar != cursor || part.Range.EndScalarExclusive <= cursor || part.Range.EndScalarExclusive > plan.SourceScalars)
                 throw new InvalidOperationException("Internal article coverage is missing, overlapping or truncated.");
             cursor = part.Range.EndScalarExclusive;
+            var composite = recovered.Where(x => x.CoverageOrdinal == part.CoverageOrdinal).ToArray();
+            if (composite.Length != 0)
+            {
+                if (composite.Length != 1 || byOrdinal[part.CoverageOrdinal].Any() || part.Range.ReusedReceiptSha256 is not null)
+                    throw new InvalidOperationException("Recovery coverage competes with an accepted original range.");
+                ordered.AddRange(RequireRecoveredPart(plan, part, composite[0]));
+                continue;
+            }
             ArticleAcceptedAudio audio;
             if (part.Range.ReusedReceiptSha256 is { } receipt)
             {
@@ -58,6 +68,27 @@ public static class ChirpArticleAudioCoverage
         if (cursor != plan.SourceScalars) throw new InvalidOperationException("Internal article coverage does not reach the original cutoff.");
         RequireUniqueBoundedAudio(ordered);
         return ordered.AsReadOnly();
+    }
+
+    private static ArticleAcceptedAudio[] RequireRecoveredPart(ChirpArticlePlanProposal plan,
+        ChirpArticlePlanPart part, ChirpRecoveredArticleCoverage recovered)
+    {
+        if (!string.Equals(recovered.PlanSha256, plan.PlanSha256, StringComparison.Ordinal) || recovered.Range != part.Range
+            || recovered.Leaves.Count < 2 || recovered.Leaves.Count > part.Range.EndScalarExclusive - part.Range.StartScalar)
+            throw new InvalidOperationException("Recovered coverage lacks its exact original source range.");
+        int cursor = part.Range.StartScalar;
+        foreach (var leaf in recovered.Leaves)
+        {
+            if (!string.Equals(leaf.PlanSha256, plan.PlanSha256, StringComparison.Ordinal) || leaf.CoverageOrdinal != part.CoverageOrdinal
+                || leaf.Range.StartScalar != cursor || leaf.Range.EndScalarExclusive <= cursor || leaf.Range.EndScalarExclusive > part.Range.EndScalarExclusive
+                || leaf.Range.ReusedReceiptSha256 is not null || leaf.Audio.DocumentId != plan.DocumentId || leaf.Audio.RevisionId != plan.RevisionId
+                || !string.Equals(leaf.Range.TextSha256, leaf.Audio.TextSha256, StringComparison.Ordinal)
+                || !string.Equals(leaf.Audio.VoiceName, plan.VoiceName, StringComparison.Ordinal) || !string.Equals(leaf.Audio.LanguageCode, plan.LanguageCode, StringComparison.Ordinal))
+                throw new InvalidOperationException("Recovered leaves are missing, reordered, stale or change the exact voice.");
+            cursor = leaf.Range.EndScalarExclusive;
+        }
+        if (cursor != part.Range.EndScalarExclusive) throw new InvalidOperationException("Recovered leaves do not reach the original cutoff.");
+        return recovered.Leaves.Select(x => x.Audio).ToArray();
     }
 
     private static void RequireUniqueBoundedAudio(List<ArticleAcceptedAudio> audio)

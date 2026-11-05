@@ -6,18 +6,23 @@ namespace CloudScribe.App.Composition;
 
 public static class VoiceCatalogErrorMessages
 {
-    public static string For(Exception exception, GoogleCatalogRefreshPhase? phase = null)
+    public static string For(Exception exception, GoogleCatalogRefreshPhase? phase = null) =>
+        For(exception, phase, restrictedRefresh: false);
+
+    public static string For(Exception exception, GoogleCatalogRefreshPhase? phase, bool restrictedRefresh)
     {
         var reported = GoogleCatalogRefreshDiagnostics.ReportedPhase(exception, phase);
         int status = GoogleCatalogRefreshDiagnostics.HttpStatus(exception);
-        return Message(exception, status) + $" Diagnostic: {GoogleCatalogRefreshDiagnostics.Category(exception)}"
+        return Message(exception, status, restrictedRefresh) + $" Diagnostic: {GoogleCatalogRefreshDiagnostics.Category(exception)}"
             + (reported is null ? string.Empty : $" at {reported}")
             + (exception is CompletionGateException gate && gate.Code != CompletionProtocolCode.Unknown && Enum.IsDefined(gate.Code) ? $"; local code {gate.Code}" : string.Empty)
             + (GoogleCatalogRefreshDiagnostics.OAuthFailure(exception) is var oauth && oauth != GoogleOAuthFailure.None ? $"; OAuth {oauth}" : string.Empty)
             + (status == 0 ? "." : $"; HTTP {status}.");
     }
 
-    private static string Message(Exception exception, int status) => GoogleCatalogRefreshDiagnostics.Category(exception) is "saved-credential-unavailable"
+    private static string Message(Exception exception, int status, bool restrictedRefresh) => restrictedRefresh && exception is not CompletionGateException
+        ? "Diagnostic voice verification did not complete. The run may be stopped or awaiting reconciliation. Review its recorded state before another attempt. Existing audio and reservations are retained; no automatic retry was made."
+        : GoogleCatalogRefreshDiagnostics.Category(exception) is "saved-credential-unavailable"
         ? "The saved Google connection's local credential material is unavailable in this Windows user context. Check the Windows account and Setups, and keep your original service-account file for recovery. No speech was requested and no key was changed."
         : status switch
         {

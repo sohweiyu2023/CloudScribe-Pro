@@ -7,7 +7,7 @@ namespace CloudScribe.App.Composition;
 /// Resolves the production Stage6 execution context only after the current UI snapshot and
 /// runtime authorization evidence have both passed their fail-closed production boundaries.
 /// </summary>
-public sealed class GoogleGenerationProductionExecutionContextResolver
+public sealed class GoogleGenerationProductionExecutionContextResolver : IGoogleGenerationExecutionContextResolver
 {
     private readonly GoogleGenerationProductionRuntimeEvidenceResolver _runtimeEvidenceResolver;
     private readonly IGoogleGenerationPersistedQueueStateStore _persistedQueueStateStore;

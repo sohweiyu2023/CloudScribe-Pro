@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public static class ChirpPolicyValidation
+public static partial class ChirpPolicyValidation
 {
     public static string Hash<T>(T value) => Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
     internal static bool IsHash(string? value) => value is { Length: 64 } && value.All(x => x is >= '0' and <= '9' or >= 'a' and <= 'f');
@@ -11,7 +11,7 @@ public static class ChirpPolicyValidation
     public static void RequireValid(ChirpArticleAdmissionPolicy p, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(p);
-        if (p.SchemaVersion is not (1 or 2 or 3 or 4) || p.ExpiresAtUtc <= now || !IsHash(p.AppSha256) || !IsHash(p.InfrastructureSha256)
+        if (p.SchemaVersion is not (1 or 2 or 3 or 4) || !IsCompletionBound(p) && p.ExpiresAtUtc <= now || !IsHash(p.AppSha256) || !IsHash(p.InfrastructureSha256)
             || !IsHash(p.ProfileRootSha256) || !IsHash(p.SourceApprovalSha256) || string.IsNullOrWhiteSpace(p.AccountId)
             || string.IsNullOrWhiteSpace(p.ProjectId) || !string.Equals(p.Currency, "USD", StringComparison.Ordinal) || p.Scale != 2
             || p.Articles is not { Count: >= 1 and <= 200 } || p.MaximumNewAttempts is < 1 or > 10_000
@@ -28,6 +28,14 @@ public static class ChirpPolicyValidation
         RequireSuccessorGrant(p);
         RequireDiagnosticEvidence(p);
         RequireWholeArticleGrant(p);
+        RequireSentenceFormat(p);
+        RequireSentenceRecovery(p);
+        RequireRecoveryContinuation(p, now);
+        RequireCompletionContinuity(p, now);
+        foreach (var article in p.Articles.Where(x => x.Proposal.InputFormat is not null))
+            if (p.SchemaVersion != 3 || article.Proposal.InputFormat is not { Version: 1 } || article.Proposal.Refinement is not null
+                || !string.Equals(article.Proposal.PlannerVersion, ChirpArticlePlanCompiler.SentenceMarkedArticleVersion, StringComparison.Ordinal))
+                throw new InvalidDataException("Article sentence markers require their exact independently admitted whole-article format.");
         if (p.Articles.Select(x => x.Proposal.DocumentId).Distinct().Count() != p.Articles.Count
             || p.Articles.Select(x => x.Proposal.PlanSha256).Distinct(StringComparer.Ordinal).Count() != p.Articles.Count)
             throw new InvalidDataException("Article-plan identities are ambiguous.");
@@ -39,6 +47,29 @@ public static class ChirpPolicyValidation
                 || article.AllowedSegments.Any(x => x.MaximumMinorUnits < 1 || x.MaximumMinorUnits > p.MaximumAdditionalReservationMinorUnits
                     || article.Proposal.Parts.Count(y => y.CoverageOrdinal == x.CoverageOrdinal && y.Range.ReusedReceiptSha256 is null) != 1))
                 throw new InvalidDataException("The allowed internal requests are missing, duplicated or refer to accepted coverage.");
+        }
+    }
+
+    private static void RequireSentenceFormat(ChirpArticleAdmissionPolicy p)
+    {
+        foreach (var article in p.Articles.Where(a => a.Proposal.Refinement?.SentenceMarkers is not null))
+        {
+            var refinement = article.Proposal.Refinement!;
+            if (refinement.SentenceMarkers is not { Version: 1, EndScalars.Count: >= 1 and <= 32 }
+                || article.Proposal.SentenceSuccessor is not null || refinement.Parent.Refinement is not null
+                || !string.Equals(article.Proposal.PlannerVersion, ChirpArticlePlanCompiler.SentenceMarkedRefinementVersion, StringComparison.Ordinal))
+                throw new InvalidDataException("Sentence format must be the exact single failed-range refinement.");
+            if (p.SchemaVersion == 2 && p.SuccessorGrant is { } grant)
+            {
+                if (grant.ParentAuthorizationId != refinement.FailedAuthorizationId || grant.CoverageOrdinal != refinement.FailedCoverageOrdinal
+                    || !string.Equals(grant.ParentAttemptRowSha256, refinement.FailedAttemptRowSha256, StringComparison.Ordinal)
+                    || !string.Equals(grant.ParentQueueRowSha256, refinement.FailedQueueRowSha256, StringComparison.Ordinal)
+                    || !string.Equals(grant.ParentLocalAttemptId, refinement.FailedLocalAttemptId, StringComparison.Ordinal))
+                    throw new InvalidDataException("Sentence format grant differs from the exact pinned terminal failure.");
+            }
+            else if (p.SchemaVersion != 3 || p.SuccessorGrant is not null
+                || article.AllowedSegments.Any(a => a.CoverageOrdinal == refinement.FailedCoverageOrdinal))
+                throw new InvalidDataException("Sentence format needs one fresh request grant, or already accepted coverage excluded from a later article run.");
         }
     }
 

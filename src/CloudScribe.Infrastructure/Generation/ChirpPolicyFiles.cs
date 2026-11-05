@@ -6,7 +6,9 @@ namespace CloudScribe.Infrastructure.Generation;
 
 internal static class ChirpPolicyFiles
 {
-    internal static readonly JsonSerializerOptions Json = new() { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = 24 };
+    // Match the standard serializer's finite resource bound for retained policy history.
+    private const int MaximumJsonDepth = 64;
+    internal static readonly JsonSerializerOptions Json = new() { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = MaximumJsonDepth };
     internal static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
     internal static void RejectLinks(string path)
     {
@@ -28,7 +30,7 @@ internal static class ChirpPolicyFiles
 
     internal static T Parse<T>(byte[] bytes)
     {
-        using var document = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = 24 });
+        using var document = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = MaximumJsonDepth });
         RequireUnique(document.RootElement);
         return JsonSerializer.Deserialize<T>(bytes, Json) ?? throw new InvalidDataException("Article-plan evidence is empty.");
     }

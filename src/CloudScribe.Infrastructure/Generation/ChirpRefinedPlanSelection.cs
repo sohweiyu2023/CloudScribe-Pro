@@ -14,7 +14,14 @@ public static class ChirpRefinedPlanSelection
 
     private static ChirpArticlePlanProposal RequireUniqueLeafCore(IReadOnlyList<ChirpArticlePlanProposal> plans)
     {
-        if (plans.Count is < 1 or > 3) throw new InvalidOperationException("A unique bounded article plan is required.");
+        int articleFormats = plans.Count(p => p.InputFormat is not null);
+        int failedFormats = plans.Count(p => p.Refinement?.SentenceMarkers is not null);
+        if (plans.Count is < 1 or > 5 || articleFormats > 1
+            || plans.Count == 4 && failedFormats != 1 && articleFormats != 1
+            || plans.Count == 5 && (failedFormats != 1 || articleFormats != 1)
+            || plans.Any(p => p.InputFormat is not null && (p.InputFormat.Version != 1 || p.Refinement is not null
+                || !string.Equals(p.PlannerVersion, ChirpArticlePlanCompiler.SentenceMarkedArticleVersion, StringComparison.Ordinal))))
+            throw new InvalidOperationException("A unique bounded article plan is required.");
         foreach (var plan in plans) ChirpArticlePlanCompiler.RequireIntegrity(plan);
         ChirpArticlePlanProposal? Parent(ChirpArticlePlanProposal p)
         {
@@ -23,6 +30,8 @@ public static class ChirpRefinedPlanSelection
         }
         var roots = plans.Where(x => Parent(x) is null).ToArray();
         var leaves = plans.Where(x => !plans.Any(y => string.Equals(Parent(y)?.PlanSha256, x.PlanSha256, StringComparison.Ordinal))).ToArray();
+        if (plans.Any(p => p.InputFormat is not null && !leaves.Contains(p)))
+            throw new InvalidOperationException("An article input-format transition cannot have another successor.");
         if (roots.Length != 1 || leaves.Length != 1 || plans.Select(x => x.PlanSha256).Distinct(StringComparer.Ordinal).Count() != plans.Count)
             throw new InvalidOperationException("Article successors are ambiguous, orphaned or duplicated.");
         HashSet<string> visited = []; var cursor = leaves[0];

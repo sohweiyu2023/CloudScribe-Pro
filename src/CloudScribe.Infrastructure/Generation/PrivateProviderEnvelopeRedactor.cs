@@ -11,31 +11,40 @@ internal static class PrivateProviderEnvelopeRedactor
     private static readonly string[] SensitiveNames = ["authorization", "cookie", "token", "password", "secret", "privatekey", "apikey", "audiocontent", "audio", "base64"];
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One bounded recursive transform owns per-response completeness state; no persistence or provider effects.")]
     internal static PrivateProviderResponseEnvelope Create(int status, int observedBytes, bool complete, string readState,
-        ReadOnlyMemory<byte> body, ReadOnlyMemory<byte> input, string token)
+        ReadOnlyMemory<byte> body, ReadOnlyMemory<byte> input, string token, bool operationError = false)
     {
         bool omitted = !complete || body.Length > 16384;
         bool truncated = omitted;
         bool redactionApplied = false;
         string parse = "Unavailable", text = string.Empty;
-        if (status == 200) parse = "SuccessBodyExcluded";
+        if (status == 200 && !operationError) parse = "SuccessBodyExcluded";
         else
         {
             try
             {
                 var bounded = body[..Math.Min(body.Length, 16384)];
                 string decoded = new UTF8Encoding(false, true).GetString(bounded.Span);
+                if (operationError && (status != 200 || decoded.Length == 0))
+                    throw new InvalidDataException("Operation error capture requires a valid error object.");
                 if (decoded.Length == 0) parse = "Empty";
                 else
                 {
                     try
                     {
                         using var document = JsonDocument.Parse(bounded, new JsonDocumentOptions { MaxDepth = 16 });
+                        if (operationError && (status != 200 || document.RootElement.ValueKind != JsonValueKind.Object
+                            || !document.RootElement.TryGetProperty("error", out var operationFailure) || operationFailure.ValueKind != JsonValueKind.Object
+                            || !operationFailure.TryGetProperty("code", out var operationCode) || operationCode.ValueKind != JsonValueKind.Number
+                            || !operationCode.TryGetInt32(out int canonicalCode) || canonicalCode is < 1 or > 16
+                            || !operationFailure.TryGetProperty("message", out var operationMessage) || operationMessage.ValueKind != JsonValueKind.String))
+                            throw new InvalidDataException("Operation error capture requires a valid error object.");
                         using var stream = new MemoryStream();
                         using (var writer = new Utf8JsonWriter(stream)) Write(document.RootElement, writer, 0);
                         text = Encoding.UTF8.GetString(stream.ToArray()); parse = "Json";
                     }
-                    catch (JsonException)
+                    catch (JsonException parseFailure)
                     {
+                        if (operationError) throw new InvalidDataException("Operation error capture requires valid JSON.", parseFailure);
                         parse = "NonJsonOrMalformed";
                         // Unstructured base64/audio cannot safely be distinguished from text. Omit rather than expose it.
                         if (ContainsExcludedData(decoded)) { omitted = true; redactionApplied = true; parse = "UnstructuredContentExcluded"; }
@@ -68,7 +77,11 @@ internal static class PrivateProviderEnvelopeRedactor
                                 writer.WritePropertyName(safeName);
                                 omitted |= name.WasTruncated || name.Text.Length > 128;
                                 redactionApplied |= !string.Equals(name.Text, property.Name, StringComparison.Ordinal);
-                                Write(property.Value, writer, depth + 1);
+                                // Canonical protocol status is safe structured evidence, not ambiguous encoded content.
+                                // All unknown strings still pass through the normal privacy transform.
+                                if (property.NameEquals("status") && property.Value.ValueKind == JsonValueKind.String
+                                    && CanonicalStatus(property.Value.GetString())) writer.WriteStringValue(property.Value.GetString());
+                                else Write(property.Value, writer, depth + 1);
                             }
                             writer.WriteEndObject(); break;
                         case JsonValueKind.Array:
@@ -105,6 +118,9 @@ internal static class PrivateProviderEnvelopeRedactor
 
     private static bool Sensitive(string name) => SensitiveNames
         .Any(part => name.Replace("_", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal).Contains(part, StringComparison.OrdinalIgnoreCase));
+
+    private static bool CanonicalStatus(string? value) => value is "INVALID_ARGUMENT" or "UNAUTHENTICATED" or "PERMISSION_DENIED"
+        or "RESOURCE_EXHAUSTED" or "FAILED_PRECONDITION" or "NOT_FOUND" or "UNIMPLEMENTED" or "INTERNAL" or "UNAVAILABLE" or "DEADLINE_EXCEEDED";
 
     private static bool ContainsExcludedData(string value)
     {

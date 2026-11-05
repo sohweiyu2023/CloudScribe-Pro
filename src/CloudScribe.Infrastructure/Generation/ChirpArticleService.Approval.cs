@@ -91,10 +91,15 @@ public sealed partial class ChirpArticleService
         foreach (var row in financial.Extra.Where(x => Equals(x[16], 1L)))
         {
             var q = financial.Old.QueueStates.Single(x => Equals(x.Account, row[5]) && Equals(x.Operation, GoogleGenerationProvider.SynthesizeOperationStableId) && Equals(x.Key, row[7]));
-            if (q.Unresolved != 0 || !string.Equals(q.DiagnosticCode, "google-accepted", StringComparison.Ordinal))
-                throw new InvalidOperationException("An article request failed or is uncertain. Stop; this grant cannot be used for another request.");
+            if (q.Unresolved != 0) throw new InvalidOperationException("An article outcome is uncertain; reconcile before another request.");
+            if (!string.Equals(q.DiagnosticCode, "google-accepted", StringComparison.Ordinal))
+            {
+                var policy = await PolicyAsync(token).ConfigureAwait(false);
+                if (await IsCompletedRecoveryFailureAsync(connection, transaction, policy, row, token).ConfigureAwait(false)) continue;
+                throw new InvalidOperationException("An article request failed. Only complete independently admitted recovery permits continuation.");
+            }
             using var receipt = ChirpArticleSql.Command(connection, transaction,
-                "SELECT ReceiptJson,ReceiptSha256 FROM chirp_article_receipts WHERE AuthorizationId=$id;", ("$id", row[0]));
+                "SELECT ReceiptJson,ReceiptSha256 FROM chirp_article_receipts WHERE AuthorizationId=$id UNION ALL SELECT ReceiptJson,ReceiptSha256 FROM chirp_article_split_receipts WHERE AuthorizationId=$id;", ("$id", row[0]));
             using (var reader = await receipt.ExecuteReaderAsync(token).ConfigureAwait(false))
                 if (!await reader.ReadAsync(token).ConfigureAwait(false) || reader.GetString(0).Length > 32768
                     || !string.Equals(ChirpPolicyValidation.Hash(ChirpPolicyFiles.Parse<ChirpSegmentAcceptedAudio>(System.Text.Encoding.UTF8.GetBytes(reader.GetString(0)))), reader.GetString(1), StringComparison.Ordinal))

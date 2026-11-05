@@ -1,5 +1,13 @@
 # Chirp 3 internal article narration
 
+## Complete-article workflow
+
+For a complete recording, select the saved original article, choose **Create MP3**, then **Review full article and cost**. Review the estimate, exact voice and retained commitments, choose a destination and select **Generate complete article MP3** once. The admitted job handles internal requests, progress, accepted-audio reuse and ordered assembly. Completed-output controls refer to that article's verified export. The individual-request procedure below is the advanced diagnostic route, not a required click for every chunk.
+
+An approved recovery plan can split confirmed sentence-length rejections into strictly smaller source-preserving requests. It stops on indivisible input, no progress, the cumulative spending cap, uncertainty or a distinct provider/system failure, rather than an arbitrary split-depth count. Acceptance is not guaranteed and no numerical Google sentence limit is established. Completion-bound jobs have no fixed run deadline; historical explicitly time-bounded diagnostic scopes retain their own rules and are not renewed implicitly.
+
+Private article capture requires the separate consent shown in review. Cost acknowledgement and an old one-request ticket do not enable it. Protected responses keep their agreed 24-hour logical expiry; content-free structural trend history has no automatic age/count rotation.
+
 Chirp 3 can reject sentence content even when the request fits the byte limit. CloudScribe's **Internal article narration (Chirp 3)** view offers smaller requests taken from the saved original article. It preserves every character, whitespace, source order and final cutoff. It creates no extra Library documents.
 
 The planner uses existing sentence/clause punctuation and whitespace within a maximum window of 333 Unicode scalars. This is a local conservative heuristic, **not a published Google sentence limit or a guarantee of acceptance**. A long span without a usable existing boundary fails closed; the planner never inserts punctuation or changes wording. UTF-8 input/envelope limits and character-based cost estimation remain separate checks.

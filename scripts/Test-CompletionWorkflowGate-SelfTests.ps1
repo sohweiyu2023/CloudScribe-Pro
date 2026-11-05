@@ -5,7 +5,7 @@ $installerPath=Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'
 $tokens=$null;$parseErrors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($installerPath,[ref]$tokens,[ref]$parseErrors)
 if($parseErrors.Count){throw 'Installer parse failure.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Get-ReviewedCompletionSuccessorRun','Assert-CompletionInterpreterIdentity','Set-CompletionInterpreterPins','Invoke-CompletionGate','Get-ReviewedCompletionGate','Assert-CompletionInstallEffect','Complete-CompletionBuildInstall')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Get-ReviewedCompletionSuccessorRun','Assert-CompletionInterpreterIdentity','Set-CompletionInterpreterPins','Wait-CompletionBridgeProcess','Invoke-CompletionGate','Get-ReviewedCompletionGate','Assert-CompletionInstallEffect','Complete-CompletionBuildInstall')){
     $found=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($found.Count -ne 1){throw 'Expected one production installer function.'}
     Invoke-Expression $found[0].Extent.Text

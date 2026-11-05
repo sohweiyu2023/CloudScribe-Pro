@@ -4,7 +4,7 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-/// <summary>Observability only: no returned field participates in provider, retry or financial policy.</summary>
+/// <summary>Safe parsed metadata, never authority. A sentence hint may qualify an exact terminal native outcome only together with an independently admitted bounded recovery grant.</summary>
 public static partial class GoogleErrorResponseDiagnosticParser
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);

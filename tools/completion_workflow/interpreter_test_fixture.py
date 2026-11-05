@@ -61,8 +61,8 @@ def prepare(owner, whole_end_after=None, mismatched_interpreter=True):
         (candidate/name).write_bytes((Path(old_config['CandidateApplicationDirectory'])/name).read_bytes())
     f.config['CandidateApplicationDirectory']=str(candidate)
     old_sources=root/'old-source';old_sources.mkdir()
-    for name in ('gate_cli.py','completion_register.py'):
-        (old_sources/name).write_bytes((f.f.source/name).read_bytes()+b'\n# preserved synthetic historical source\n')
+    for name in ('gate_cli.py','completion_register.py','successor_register.py','maintenance_register.py'):
+        (old_sources/name).write_bytes((f.f.source/name).read_bytes()+(b'\n# preserved synthetic historical source\n' if name in ('gate_cli.py','completion_register.py') else b''))
     import sys
     interpreter = m.digest({'unavailable':'synthetic former interpreter'}) if mismatched_interpreter else fixtures.sha(Path(sys.executable).read_bytes())
     f.config.update(PythonSha256=interpreter,ScriptPath=str(old_sources/'gate_cli.py'),ScriptSha256=fixtures.sha((old_sources/'gate_cli.py').read_bytes()),ModuleSha256=fixtures.sha((old_sources/'completion_register.py').read_bytes()))

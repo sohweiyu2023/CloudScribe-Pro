@@ -20,11 +20,16 @@ internal sealed partial class ChirpArticleEvidenceResolver(AppPaths paths)
         bool typedDiagnostic = policy.SchemaVersion == 4 && policy.DiagnosticEvidence is not null && policy.SuccessorGrant is not null;
         if (matches[0].Proposal.SentenceSuccessor is not null && !typedDiagnostic && (policy.SchemaVersion is not (2 or 3) || policy.SuccessorGrant is not null))
             throw new InvalidOperationException("Sentence continuation requires its independently reviewed article policy.");
-        if (matches[0].Proposal.Refinement is { } refinement && (policy.SchemaVersion is not (2 or 3) || policy.SuccessorGrant is not null
+        if (matches[0].Proposal.Refinement is { } refinement && (policy.SchemaVersion is not (2 or 3)
+            || policy.SuccessorGrant is not null && refinement.SentenceMarkers is null
             || !policy.PriorArticleAttemptRows.Any(x => string.Equals(x.Sha256, refinement.FailedAttemptRowSha256, StringComparison.Ordinal))
+                && !(refinement.SentenceMarkers is not null && (policy.PriorSuccessorAttemptRows ?? []).Any(x => string.Equals(x.Identity,
+                    RecoveryFinancialSnapshot.Identity([refinement.FailedAuthorizationId.ToString("N")], 1), StringComparison.Ordinal)))
             || !policy.Budget.QueueRows.Any(x => string.Equals(x.Sha256, refinement.FailedQueueRowSha256, StringComparison.Ordinal))))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Refinement must preserve its failed original attempt and queue in the independent financial baseline."), LocalRequestReason.RefinementEvidenceChanged);
         var result = await ResolveSnapshotAsync(connection, transaction, matches[0], policy.AccountId, policy.ProjectId, financial, token).ConfigureAwait(false);
+        if (matches[0].Proposal.Refinement is { SentenceMarkers: not null } format && policy.SuccessorGrant is null)
+            await RequireAcceptedFormatAsync(connection, transaction, matches[0], format.FailedCoverageOrdinal, financial, token).ConfigureAwait(false);
         await RequireMissingLegacyAsync(connection, transaction, matches[0], policy, financial, token).ConfigureAwait(false);
         await RequireLegacyAsync(connection, transaction, matches[0], policy.AccountId, policy.ProjectId, financial,
             (policy.LegacyAssociations ?? []).Where(x => string.Equals(x.PlanSha256, matches[0].Proposal.PlanSha256, StringComparison.Ordinal)).ToArray(), requirePersistedLegacy, token).ConfigureAwait(false);

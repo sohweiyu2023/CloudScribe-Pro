@@ -7,4 +7,6 @@ public sealed record ChirpArticlePlanProposal(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     ChirpFailedPlanRefinement? Refinement = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    ChirpSentencePlanSuccessor? SentenceSuccessor = null);
+    ChirpSentencePlanSuccessor? SentenceSuccessor = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ChirpArticleInputFormat? InputFormat = null);

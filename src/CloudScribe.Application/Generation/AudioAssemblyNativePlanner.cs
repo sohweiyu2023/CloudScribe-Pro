@@ -5,6 +5,27 @@ namespace CloudScribe.Application.Generation;
 
 public static class AudioAssemblyNativePlanner
 {
+    /// <summary>File-based concat for homogeneous, integrity-verified article snapshots named input-NNN.mp3.</summary>
+    public static (NativeMediaToolInvocation Invocation, string Manifest) PlanArticleSnapshots(
+        int inputCount, string outputDirectory, string ffmpegExecutablePath)
+    {
+        if (inputCount is < 1 or > ChirpNarrationPlanner.MaximumCoverageParts)
+            throw new ArgumentOutOfRangeException(nameof(inputCount));
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        if (!Path.IsPathFullyQualified(outputDirectory))
+            throw new ArgumentException("Article snapshot directory must be absolute.", nameof(outputDirectory));
+        // Only generated basenames enter the manifest. User paths never become concat directives.
+        string manifest = "ffconcat version 1.0\n" + string.Concat(Enumerable.Range(1, inputCount)
+            .Select(index => $"file 'input-{index.ToString("D3", CultureInfo.InvariantCulture)}.mp3'\n"));
+        var invocation = new NativeMediaToolInvocation(ffmpegExecutablePath,
+            ["-hide_banner", "-nostdin", "-n", "-f", "concat", "-safe", "1", "-i",
+                Path.Combine(outputDirectory, "article-inputs.ffconcat"), "-map", "0:a:0", "-vn", "-af", "alimiter=limit=1",
+                "-c:a", "libmp3lame", "-q:a", "2", Path.Combine(outputDirectory, "article.part-001.mp3")],
+            outputDirectory, TimeSpan.FromMinutes(30), 64_000);
+        invocation.Validate();
+        return (invocation, manifest);
+    }
+
     public static IReadOnlyList<NativeMediaToolInvocation> Plan(
         AudioAssemblyPlan assembly,
         string ffmpegExecutablePath,

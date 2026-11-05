@@ -13,4 +13,8 @@ public enum LocalRequestReason
     ResumePinMismatch, ResumeExpired, ResumeBuildMismatch, ResumeProfileMismatch, ResumePolicyMalformed,
     ResumeHistoryChanged, ResumeProviderChanged, ResumeMappingChanged,
     RefinementEvidenceChanged, RefinementOutputRecoveryRequired, RefinementPlanAmbiguous,
+    VerifiedVoiceMissing,
+    ProviderRejected, ProviderOutcomeUncertain,
+    CaptureEvidenceRequired,
+    TrendHistoryUnavailable,
 }

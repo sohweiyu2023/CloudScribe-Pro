@@ -251,6 +251,7 @@ public sealed class DatabaseRecoveryTests
                 ChirpArticleSuccessors.MigrationId,
                 ChirpReservationCatalogMappings.MigrationId,
                 ChirpWholeArticleJobs.MigrationId,
+                ChirpBoundedSentenceRecovery.MigrationId,
             ],
             currentMigrations);
     }
