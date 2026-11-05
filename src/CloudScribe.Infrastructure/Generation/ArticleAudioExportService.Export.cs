@@ -15,7 +15,7 @@ public sealed partial class ArticleAudioExportService
         string? temporary = null;
         try
         {
-            var resolved = ResolveExportPaths(destination, ffmpegPath);
+            var resolved = PreflightExport(destination, ffmpegPath);
             destination = resolved.Destination;
             ffmpegPath = resolved.Ffmpeg;
             string ffprobePath = resolved.Ffprobe;
@@ -25,12 +25,10 @@ public sealed partial class ArticleAudioExportService
             Directory.CreateDirectory(temporary);
             var segments = await SnapshotInputsAsync(ordered, ffprobePath, temporary, cancellationToken).ConfigureAwait(false);
             TimeSpan total = TimeSpan.FromTicks(segments.Sum(x => x.MeasuredDuration.Ticks));
-            var assembly = new AudioAssemblyPlan(segments, new GenerationMasteringProfile("article-continuous", 0, null, 0, 0),
+            var validated = new AudioAssemblyPlan(segments, new GenerationMasteringProfile("article-continuous", 0, null, 0, 0),
                 ReleaseAudioFormat.Mp3, total + TimeSpan.FromTicks(1), temporary, "article");
-            if (assembly.Parts.Count != 1) throw new InvalidOperationException("Article export must produce one continuous file.");
-            await new AudioAssemblyNativeExecutor(native).ExecuteAsync(assembly, ffmpegPath, TimeSpan.FromMinutes(30),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            string resultPath = assembly.OutputPaths[0];
+            if (validated.Parts.Count != 1) throw new InvalidOperationException("Article export must produce one continuous file.");
+            string resultPath = await AssembleSnapshotsAsync(validated.Segments.Count, temporary, ffmpegPath, cancellationToken).ConfigureAwait(false);
             var finalProbe = await ProbeAsync(ffprobePath, resultPath, temporary, cancellationToken).ConfigureAwait(false);
             if (Math.Abs((finalProbe.Duration - total).TotalSeconds) > 1 + segments.Count * 0.1)
                 throw new InvalidOperationException("Continuous output duration does not match its complete ordered inputs.");
@@ -59,7 +57,28 @@ public sealed partial class ArticleAudioExportService
         }
     }
 
-    private static (string Destination, string Ffmpeg, string Ffprobe) ResolveExportPaths(string destination, string ffmpegPath)
+    private async Task<string> AssembleSnapshotsAsync(int count, string temporary, string ffmpegPath, CancellationToken token)
+    {
+        var assembly = AudioAssemblyNativePlanner.PlanArticleSnapshots(count, temporary, ffmpegPath);
+        await File.WriteAllTextAsync(Path.Combine(temporary, "article-inputs.ffconcat"), assembly.Manifest,
+            new System.Text.UTF8Encoding(false), token).ConfigureAwait(false);
+        var assembled = await native.RunAsync(assembly.Invocation, token).ConfigureAwait(false);
+        if (!assembled.Succeeded) throw new InvalidOperationException("Continuous MP3 assembly failed.");
+        string resultPath = assembly.Invocation.Arguments[^1];
+        if (!File.Exists(resultPath) || new FileInfo(resultPath).Length is < 12 or > 512L * 1024 * 1024)
+            throw new InvalidDataException("Continuous MP3 is missing or outside its supported size bound.");
+        byte[] prefix = new byte[12];
+        using (var output = new FileStream(resultPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            4096, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await output.ReadExactlyAsync(prefix, token).ConfigureAwait(false);
+        if (!(prefix[0] == 'I' && prefix[1] == 'D' && prefix[2] == '3')
+            && !(prefix[0] == 0xFF && (prefix[1] & 0xE0) == 0xE0))
+            throw new InvalidDataException("Continuous media does not have an MP3 container signature.");
+        return resultPath;
+    }
+
+    /// <summary>Read-only local path checks. Repeated by export because preflight cannot prevent later filesystem changes.</summary>
+    public static (string Destination, string Ffmpeg, string Ffprobe) PreflightExport(string destination, string ffmpegPath)
     {
         destination = Path.GetFullPath(destination);
         RejectLinks(destination);

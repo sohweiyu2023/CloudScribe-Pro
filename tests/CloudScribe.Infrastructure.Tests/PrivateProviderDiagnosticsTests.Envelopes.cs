@@ -7,6 +7,22 @@ namespace CloudScribe.Infrastructure.Tests;
 
 public sealed partial class PrivateProviderDiagnosticsTests
 {
+    [Theory]
+    [InlineData("INVALID_ARGUMENT", true)]
+    [InlineData("PERMISSION_DENIED", true)]
+    [InlineData("PRIVATE_CANARY_TOKEN", false)]
+    public async Task CanonicalStatusSurvivesPrivateEnvelopeWithoutAllowingUnknownEncodedStrings(string status, bool canonical)
+    {
+        using var f = new Fixture(); ArmEnvelope(f);
+        f.Handler.Body = JsonSerializer.Serialize(new { error = new { code = 400, status, message = "Unique safe explanation." } });
+        _ = await f.Provider.SubmitAsync(f.Request, TestContext.Current.CancellationToken);
+        await f.Store.WaitForPendingWriteAsync(TestContext.Current.CancellationToken);
+        var response = Assert.IsType<PrivateProviderResponseEnvelope>(Assert.Single(f.Store.ReadRecords()).Response);
+        using var json = JsonDocument.Parse(response.RedactedBody);
+        Assert.Equal(canonical ? status : "[content omitted]", json.RootElement.GetProperty("error").GetProperty("status").GetString());
+        Assert.DoesNotContain("PRIVATE_CANARY_TOKEN", response.RedactedBody, StringComparison.Ordinal);
+    }
+
     private static readonly int[] SyntheticAudioLookingArray = [82, 73, 70, 70];
     [Theory]
     [InlineData(400)]

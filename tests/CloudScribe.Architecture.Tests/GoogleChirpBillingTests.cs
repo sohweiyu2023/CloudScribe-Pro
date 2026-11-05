@@ -1,12 +1,31 @@
 using System.Text;
 using System.Text.Json;
 using CloudScribe.App.Composition;
+using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Pricing;
 
 namespace CloudScribe.Architecture.Tests;
 
 public sealed class GoogleChirpBillingTests
 {
+    [Fact]
+    public void TypedSentenceFormatBillsAllMarkupAndRequiresExactCompiledBytes()
+    {
+        var controls = new V222ControlSet(new StrictJsonObjectReader());
+        var options = new GoogleSpeechCompilationOptions("cmn-CN", "cmn-CN-Chirp3-HD-Alnilam", "MP3", 5000)
+        { SentenceMarkers = new(1, [4, 6]) };
+        var wire = GoogleSpeechPlanCompiler.Compile(new("cmn-CN", [new SpeechText("One.T?")], "test"), options);
+        using var json = JsonDocument.Parse(wire.Payload);
+        string ssml = json.RootElement.GetProperty("input").GetProperty("ssml").GetString()!;
+        var estimate = GoogleTtsStudioCostEstimator.Estimate(controls, options.VoiceName, wire.Payload, "global", options);
+        Assert.Equal(ssml.EnumerateRunes().LongCount(), estimate.EstimatedBillableCharacters);
+        Assert.Equal(Encoding.UTF8.GetByteCount(ssml), estimate.InputUtf8Bytes);
+        Assert.Equal(1, estimate.MaximumMinorUnits);
+        Assert.Throws<InvalidOperationException>(() => GoogleTtsStudioCostEstimator.Estimate(controls, options.VoiceName, wire.Payload, "global"));
+        Assert.Throws<InvalidOperationException>(() => GoogleTtsStudioCostEstimator.Estimate(controls, options.VoiceName, wire.Payload,
+            "global", options with { SentenceMarkers = new(1, [6]) }));
+    }
     private static GoogleTtsStudioCostEstimator.EstimateResult Estimate(string text)
     {
         var controls = new V222ControlSet(new StrictJsonObjectReader());

@@ -182,7 +182,7 @@ class SourceCliTests(unittest.TestCase):
         self.old = copy.deepcopy(self.b.config)
         self.source = self.b.f.root / "source-repair"
         self.source.mkdir()
-        for name in ("gate_cli.py", "completion_register.py"):
+        for name in ("gate_cli.py", "completion_register.py", "successor_register.py", "maintenance_register.py"):
             # Inert extra comment gives a distinct reviewed source SHA.
             (self.source / name).write_bytes(Path(__file__).with_name(name).read_bytes() + b"\n# synthetic source revision\n")
         self.config = dict(self.old, ScriptPath=str(self.source / "gate_cli.py"),
@@ -249,7 +249,7 @@ class SourceCliTests(unittest.TestCase):
 
     def test_source_only_unchanged_source_relocation_is_not_repair(self):
         # Same source SHA with only a location change cannot claim a repair.
-        for name in ("gate_cli.py", "completion_register.py"):
+        for name in ("gate_cli.py", "completion_register.py", "successor_register.py", "maintenance_register.py"):
             (self.source / name).write_bytes((self.b.new_source / name).read_bytes())
         self.save_changed_config(ScriptSha256=self.old["ScriptSha256"], ModuleSha256=self.old["ModuleSha256"])
         self.assertEqual(1, self.command("inspect-build")[0])

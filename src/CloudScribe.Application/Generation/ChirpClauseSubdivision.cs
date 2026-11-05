@@ -42,8 +42,8 @@ public static class ChirpClauseSubdivision
             }
             else ranges.Add(Range(start, runes.Length));
         }
-        if (ranges.Count is < 2 or > 200 || ranges.Any(x => x.EndScalarExclusive - x.StartScalar > ChirpNarrationPlanner.MaximumRequestScalars))
-            throw new InvalidOperationException("Existing punctuation does not provide a bounded smaller-request subdivision. No request was created.");
+        if (ranges.Count < 2)
+            throw new InvalidOperationException("Existing punctuation does not provide two smaller source ranges. No request was created.");
         RequireCoverage(source, parent, text, ranges);
         return ranges.AsReadOnly();
 

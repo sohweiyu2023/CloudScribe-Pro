@@ -56,13 +56,17 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
             () => expired, token =>
             {
                 token.ThrowIfCancellationRequested(); expired = false; f.ChirpCompiler.Capability = "fresh-synthetic-capability";
-                return Task.FromResult(f.Selection with { CapabilityEvidenceId = f.ChirpCompiler.Capability });
+                return Task.FromResult(f.Selection with
+                {
+                    CapabilityEvidenceId = f.ChirpCompiler.Capability,
+                    CapturedAtUtc = f.Selection.CapturedAtUtc.AddSeconds(1),
+                });
             });
         var review = await articles.PrepareWholeArticleAsync(f.Selection.DocumentId, TestContext.Current.CancellationToken);
         var job = await articles.StartWholeArticleAsync(new(review.PreviewId, review.ReviewSha256, review.MaximumAdditionalMinorUnits, true, true), TestContext.Current.CancellationToken);
         if (disposition != SubmissionDisposition.Accepted)
         {
-            await Assert.ThrowsAsync<InvalidOperationException>(() => articles.RunWholeArticleAsync(job.JobId, runtime, token: TestContext.Current.CancellationToken));
+            await AssertWholeProviderReasonAsync(articles, job, runtime, disposition);
             Assert.Single(sent); Assert.False(File.Exists(destination));
             Assert.Equal(ChirpWholeArticleState.Stopped, (await articles.ReadWholeArticleJobAsync(job.JobId, TestContext.Current.CancellationToken)).State);
         }
@@ -72,6 +76,15 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         }
         using var db = f.CreateDbContext();
         Assert.Equal(sent.Count, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM chirp_article_attempts").SingleAsync(TestContext.Current.CancellationToken));
+    }
+
+    private static async Task AssertWholeProviderReasonAsync(ChirpArticleService articles, ChirpWholeArticleJob job,
+        ChirpWholeArticleRuntime runtime, SubmissionDisposition disposition)
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => articles.RunWholeArticleAsync(job.JobId, runtime, token: TestContext.Current.CancellationToken)).ConfigureAwait(false);
+        Assert.Equal(disposition == SubmissionDisposition.UnknownRequiresReconciliation ? CloudScribe.Application.Logging.LocalRequestReason.ProviderOutcomeUncertain
+            : CloudScribe.Application.Logging.LocalRequestReason.ProviderRejected,
+            CloudScribe.Application.Logging.LocalRequestDiagnostics.Describe(error, DateTimeOffset.UtcNow).Reason);
     }
 
     [Theory]
@@ -120,8 +133,18 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         Assert.Equal(f.Selection.ExactText, string.Concat(sent));
         Assert.Equal(review.RemainingRequests, sent.Count); Assert.True(native.FullDecode);
         Assert.True(File.Exists(destination));
+        Assert.Equal(job.JobId, await articles.FindCompletedWholeArticleAsync(job.DocumentId, TestContext.Current.CancellationToken).ConfigureAwait(false));
+        var verified = await articles.InspectCompletedWholeArticleOutputAsync(job.JobId, TestContext.Current.CancellationToken).ConfigureAwait(false);
+        Assert.Equal(job.Output, verified);
         _ = await f.CreateArticles().RunWholeArticleAsync(job.JobId, runtime, token: TestContext.Current.CancellationToken).ConfigureAwait(false);
         Assert.Equal(review.RemainingRequests, sent.Count);
+        var library = new EfDocumentLibrary(f, new DocumentContentStore(f.WholePaths), TimeProvider.System);
+        var original = (await library.OpenAsync(job.DocumentId, TestContext.Current.CancellationToken).ConfigureAwait(false))!;
+        await library.SaveAsync(new(job.DocumentId, original.Title, original.Text + " Edited revision.", original.ConcurrencyVersion,
+            CloudScribe.Domain.Documents.DocumentRevisionKind.Checkpoint), TestContext.Current.CancellationToken).ConfigureAwait(false);
+        Assert.Null(await articles.FindCompletedWholeArticleAsync(job.DocumentId, TestContext.Current.CancellationToken).ConfigureAwait(false));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => articles.InspectCompletedWholeArticleOutputAsync(job.JobId, TestContext.Current.CancellationToken)).ConfigureAwait(false);
+        Assert.True(File.Exists(destination)); Assert.Equal(review.RemainingRequests, sent.Count);
     }
 
     private sealed partial class Fixture
@@ -148,9 +171,10 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
             string output = string.Empty;
             if (invocation.Arguments.Contains("-show_entries", StringComparer.Ordinal))
                 output = JsonSerializer.Serialize(new { streams = new[] { new { codec_name = "mp3", sample_rate = "24000", channels = 1 } }, format = new { duration = Math.Max(1, _inputs).ToString(System.Globalization.CultureInfo.InvariantCulture) } });
-            else if (invocation.Arguments.Contains("-filter_complex", StringComparer.Ordinal))
+            else if (invocation.Arguments.Contains("concat", StringComparer.Ordinal))
             {
-                _inputs = invocation.Arguments.Count(x => string.Equals(x, "-i", StringComparison.Ordinal));
+                string manifest = await File.ReadAllTextAsync(Path.Combine(invocation.WorkingDirectory, "article-inputs.ffconcat"), cancellationToken).ConfigureAwait(false);
+                _inputs = manifest.Split('\n').Count(line => line.StartsWith("file '", StringComparison.Ordinal));
                 byte[] bytes = new byte[128]; Encoding.ASCII.GetBytes("ID3").CopyTo(bytes, 0);
                 await File.WriteAllBytesAsync(invocation.Arguments[^1], bytes, cancellationToken).ConfigureAwait(false);
             }

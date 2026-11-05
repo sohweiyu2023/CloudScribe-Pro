@@ -77,11 +77,18 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }, dialog);
         TextBlock document = Text(string.Empty);
         body.Children.Add(document);
+        bool IsLongArticle() => Encoding.UTF8.GetByteCount(model.DocumentText) >= 4_000;
+        WrapPanel actionRow = new() { Orientation = Orientation.Horizontal };
+        Button articleAction = AddWholeArticleControl(dialog, actionRow, model);
+        StackPanel articleReview = new() { Spacing = 8 };
+        articleReview.Children.Add(Text("Use the complete-article review for this text. It shows saved audio, remaining requests and maximum cost before you approve anything. Internal parts are joined into one MP3; review does not generate speech."));
+        TextBlock articleStatus = Text(model.StatusMessage);
+        articleReview.Children.Add(articleStatus);
         void UpdateDocument() => document.Text = string.IsNullOrWhiteSpace(model.DocumentText)
             ? "No text in the current document. Close this window and type or import text in Studio."
             : $"Current document: {model.DocumentText.Length} characters. Editing it will clear any prepared cost or approval." +
-                (Encoding.UTF8.GetByteCount(model.DocumentText) >= 4_000
-                    ? " Long text may need parts: close this window, expand Advanced tools, then choose Preview local narration parts (no generation). The compiled short request must fit 5,000 bytes, including request fields."
+                (IsLongArticle()
+                    ? " This is a complete article: use Review full article and cost below. The single-request controls do not apply to this long text."
                     : string.Empty);
         UpdateDocument();
         model.PropertyChanged += OnDocumentChanged;
@@ -140,9 +147,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
         TextBlock estimate = Text("Prepare the exact current request to see its cost. No provider generation occurs during review.");
         TextBlock nextStep = Text(string.Empty);
-        Button review = NewButton("Review current text, voice and cost");
+        Button review = NewButton("Review cost (no audio)");
         CheckBox consent = NewConfirmation("I approve this exact request and its displayed maximum cost.");
-        Button create = NewButton("Create MP3 — approve and send to Google");
+        Button create = NewButton("Generate MP3");
         create.Classes.Add("primary");
         create.Name = "GuideGenerateButton";
         ShellViewModel.GoogleGenerationSpendReview? displayed = null;
@@ -150,6 +157,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         bool reviewing = false;
         void Refresh()
         {
+            bool longArticle = IsLongArticle();
+            articleReview.IsVisible = longArticle;
+            articleAction.IsVisible = longArticle;
+            review.IsVisible = estimate.IsVisible = nextStep.IsVisible = consent.IsVisible = create.IsVisible = !longArticle;
             var current = model.PreparedGoogleGenerationSpendReview;
             if (!ReferenceEquals(displayed, current))
             {
@@ -157,7 +168,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 consent.IsChecked = false;
             }
             estimate.Text = current is null
-                ? "No current cost review. Refresh the voice, check pricing, then review again."
+                ? "First click Review cost (no audio). Approval becomes available after this exact text and voice have a current estimate."
                 : $"Exact request: {FormatEstimate(current)} maximum list estimate before taxes, credits and conversion. Voice: {current.VoiceName}. Each request needs new approval.";
             review.IsEnabled = !busy && !reviewing && !model.IsConnectedVoiceCatalogLoading && model.CanPrepareGoogleGenerationSpend
                 && model.SelectedVoiceLabVoice is not null && !string.IsNullOrWhiteSpace(model.DocumentText);
@@ -168,6 +179,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             nextStep.Text = CreateMp3NextStep.Describe(busy, reviewing, !string.IsNullOrWhiteSpace(model.DocumentText),
                 model.IsConnectedVoiceCatalogLoading, model.SelectedVoiceLabVoice is not null,
                 model.CanPrepareGoogleGenerationSpend, current is not null, consent.IsChecked == true, model.CanApproveGoogleGenerationSpend);
+            if (!longArticle && current is null && model.SelectedVoiceLabVoice is not null && model.CanPrepareGoogleGenerationSpend)
+                nextStep.Text = "Next: click Review cost (no audio), then approve the displayed maximum. Selecting a voice alone does not prepare a cost review.";
         }
         review.Click += async (_, _) =>
         {
@@ -209,9 +222,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             { model.StatusMessage = "MP3 creation stopped; a dispatched request may still be charged. " + ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.GenerationDispatch, e); }
             finally { busy = false; consent.IsChecked = false; Refresh(); }
         };
-        body.Children.Add(review);
         TextBlock status = Text(model.StatusMessage);
-        StackPanel output = AddSection(body, "Listen, save and find audio", expanded: true);
+        StackPanel output = AddSection(body, "Saved output: listen, export or find audio", expanded: model.CanPlayLastGeneratedGoogleMp3);
         AddVerifiedOutputControls(owner, output, model, dialog);
         Button folder = NewButton("Open saved MP3 folder");
         folder.Click += (_, _) => OpenLocalFolder(Path.Combine(
@@ -221,22 +233,29 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         model.PropertyChanged += OnStatusChanged;
         void OnStatusChanged(object? sender, PropertyChangedEventArgs args)
         {
-            if (string.Equals(args.PropertyName, nameof(ShellViewModel.StatusMessage), StringComparison.Ordinal)) status.Text = model.StatusMessage;
+            if (string.Equals(args.PropertyName, nameof(ShellViewModel.StatusMessage), StringComparison.Ordinal))
+                status.Text = articleStatus.Text = model.StatusMessage;
         }
         Button close = NewButton("Close Create MP3");
         close.Click += (_, _) => dialog.Close();
-        body.Children.Add(nextStep);
-        body.Children.Add(estimate);
-        body.Children.Add(consent);
-        body.Children.Add(create);
-        AddWholeArticleControl(dialog, body, model);
         AddStopWaitingControl(body, model, dialog);
         body.Children.Add(status);
         Grid layout = new() { RowDefinitions = new RowDefinitions("*,Auto") };
         ScrollViewer bodyScroll = new() { Content = body };
         layout.Children.Add(bodyScroll);
         StackPanel footer = new() { Spacing = 10, Margin = new Thickness(20, 8, 20, 16) };
-        footer.Children.Add(close);
+        AutomationProperties.SetName(footer, "MP3 cost review and generation actions");
+        StackPanel readiness = new() { Spacing = 8 };
+        foreach (Control control in new Control[] { articleReview, nextStep, estimate, consent }) readiness.Children.Add(control);
+        footer.Children.Add(new ScrollViewer
+        {
+            Content = readiness,
+            MaxHeight = 160,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+        });
+        foreach (Button button in new[] { review, create, close }) actionRow.Children.Add(button);
+        foreach (Control control in actionRow.Children) control.Margin = new Thickness(0, 0, 8, 4);
+        footer.Children.Add(actionRow);
         Grid.SetRow(footer, 1);
         layout.Children.Add(footer);
         if (guided)

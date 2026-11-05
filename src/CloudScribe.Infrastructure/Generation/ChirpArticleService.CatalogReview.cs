@@ -56,9 +56,7 @@ public sealed partial class ChirpArticleService
             throw RevalidationRejected(LocalRequestReason.ReservedSourceChanged);
         var current = await _evidence.ResolveSnapshotAsync(connection, transaction, stored.Article, stored.AccountId, stored.ProjectId, old, cancellationToken).ConfigureAwait(false);
         var part = stored.Article.Proposal.Parts.Single(x => x.CoverageOrdinal == candidate.CoverageOrdinal);
-        var payload = GoogleSpeechPlanCompiler.Compile(new SpeechPlan(stored.Article.Proposal.LanguageCode,
-            [new SpeechText(ChirpNarrationPlanner.Slice(current.Document.Text, part.Range))], ChirpNarrationPlanner.Version),
-            new(stored.Article.Proposal.LanguageCode, stored.Article.Proposal.VoiceName, "MP3", 5_000)).Payload;
+        var payload = ChirpArticlePlanCompiler.CompilePart(current.Document.Text, stored.Article.Proposal, part).Payload;
         if (!candidate.CompiledPayload.Span.SequenceEqual(payload.Span)
             || !string.Equals(ChirpPolicyFiles.Hash(payload.Span), original.CompiledPayloadSha256, StringComparison.Ordinal)
             || payload.Length != original.CompiledPayloadBytes)

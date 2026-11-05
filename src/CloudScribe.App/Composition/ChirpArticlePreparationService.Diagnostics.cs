@@ -25,7 +25,7 @@ public sealed partial class ChirpArticlePreparationService
         var source = await ResolveSelectionAsync(selection, ordinal, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(source.Proposal.PlanSha256, parts[1], StringComparison.Ordinal))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The selected saved article differs from the reserved internal request."), LocalRequestReason.ReservedSourceChanged);
-        var current = await compilation.CompileReadonlyAsync(selection with { ExactText = source.ExactText }, cancellationToken).ConfigureAwait(false);
+        var current = await compilation.CompileArticleReadonlyAsync(selection, source, cancellationToken).ConfigureAwait(false);
         if (!current.Snapshot.ProviderRequest.CompiledPayload.Span.SequenceEqual(active.Snapshot.ProviderRequest.CompiledPayload.Span))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Private diagnostics cannot observe changed request bytes."), LocalRequestReason.ReservedPayloadChanged);
         if ((current.Envelope with { ChirpAuthorizationId = active.SubmissionEnvelope.ChirpAuthorizationId }) != active.SubmissionEnvelope)

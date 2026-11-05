@@ -1,3 +1,3 @@
 namespace CloudScribe.Domain.Generation;
 
-public enum CompletionProtocolFailureComponent { Unavailable, Bridge, Register }
+public enum CompletionProtocolFailureComponent { Unavailable, Bridge, Register, Successor, Preparation }

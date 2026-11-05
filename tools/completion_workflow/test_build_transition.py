@@ -194,7 +194,7 @@ class BuildCliTests(unittest.TestCase):
             (self.candidate / name).write_bytes(("new inert " + name).encode())
         self.new_source = self.f.root / "new-source"
         self.new_source.mkdir()
-        for name in ("gate_cli.py", "completion_register.py"):
+        for name in ("gate_cli.py", "completion_register.py", "successor_register.py", "maintenance_register.py"):
             (self.new_source / name).write_bytes(Path(__file__).with_name(name).read_bytes())
         self.config = dict(self.old, CandidateApplicationDirectory=str(self.candidate),
                            AppSha256=cli_fixtures.sha((self.candidate / "CloudScribe.dll").read_bytes()),

@@ -15,4 +15,5 @@ public sealed record CompletionGateConfiguration(int SchemaVersion, string Pytho
 {
     [System.Text.Json.Serialization.JsonIgnore] public string Pin { get; init; } = "";
     [System.Text.Json.Serialization.JsonIgnore] public string ConfigPath { get; init; } = "";
+    [System.Text.Json.Serialization.JsonIgnore] public string? PreparationSha256 { get; init; }
 }

@@ -4,13 +4,19 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public static class GoogleSpeechPlanCompiler
+public static partial class GoogleSpeechPlanCompiler
 {
     public static GoogleSpeechCompilation Compile(SpeechPlan plan, GoogleSpeechCompilationOptions options)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(options);
-        options.Validate();
+        options = options.Validate();
+        if (options.SentenceMarkers is { } markers)
+        {
+            if (plan.Nodes.Count != 1 || plan.Nodes[0] is not SpeechText exact)
+                throw new InvalidOperationException("Sentence-marked compilation requires one exact text source without other directives.");
+            return CompileSentenceMarkedDiagnostic(exact.Text, options with { SentenceMarkers = null }, markers.EndScalars);
+        }
         if (options.VoiceName.Contains("-Chirp3-HD-", StringComparison.OrdinalIgnoreCase)
             && plan.Nodes.OfType<SpeechProsody>().Any(value => value.Rate != 1m || value.PitchSemitones != 0m || value.VolumeDb != 0m))
             throw new InvalidOperationException("Chirp 3 HD nondefault prosody is not supported by this request path.");

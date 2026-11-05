@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-public sealed class GoogleGenerationPersistedQueueStateStore(
+public sealed partial class GoogleGenerationPersistedQueueStateStore(
     IDbContextFactory<CloudScribeDbContext> contextFactory, IChirpArticleAdmissionStore? articleAdmission = null) : IGoogleGenerationPersistedQueueStateStore
 {
     public async Task<GoogleGenerationPersistedQueueState?> LoadAsync(
@@ -41,7 +41,7 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             return null;
 
-        return new GoogleGenerationPersistedQueueState(
+        var state = new GoogleGenerationPersistedQueueState(
             reader.GetString(0),
             reader.GetString(1),
             reader.GetString(2),
@@ -54,6 +54,8 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
             reader.IsDBNull(9) ? null : reader.GetInt32(9),
             reader.IsDBNull(10) ? null : reader.GetInt64(10),
             (GoogleErrorStatus)reader.GetInt32(11)).Validate();
+        await reader.DisposeAsync().ConfigureAwait(false);
+        return state with { ValidationHint = await ReadSentenceHintAsync(connection, state, cancellationToken).ConfigureAwait(false) };
     }
 
     // Initialization is insert-only. A stale UI context cannot erase a dispatch barrier.
@@ -132,6 +134,8 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
         SqliteConnection connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using SqliteCommand command = connection.CreateCommand();
+        using var outcomeTransaction = connection.BeginTransaction(deferred: false);
+        command.Transaction = outcomeTransaction;
         command.CommandText = """
             UPDATE google_generation_queue_states SET
                 UnresolvedSubmission = $unresolved, ProviderRequestId = COALESCE($provider, ProviderRequestId),
@@ -147,6 +151,8 @@ public sealed class GoogleGenerationPersistedQueueStateStore(
         command.Parameters.AddWithValue("$provider", (object?)outcome.ProviderRequestId ?? DBNull.Value);
         if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
             throw new InvalidOperationException("Outcome does not own a current unresolved dispatch claim; state retained.");
+        await SaveSentenceHintAsync(connection, outcomeTransaction, outcome, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested(); outcomeTransaction.Commit();
     }
 
     private static void AddIdentity(SqliteCommand command, GoogleGenerationPersistedQueueState state)

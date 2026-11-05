@@ -18,7 +18,7 @@ public sealed partial class ChirpArticlePreparationService
             || !string.Equals(selection.ProjectStableId, historicalPolicy.ProjectId, StringComparison.Ordinal)
             || !string.Equals(selection.VoiceStableId, inspected.Source.Proposal.VoiceName, StringComparison.Ordinal)
             || !string.Equals(selection.LanguageCode, inspected.Source.Proposal.LanguageCode, StringComparison.Ordinal)) throw new InvalidOperationException("The exact retained request selection changed.");
-        var current = await compilation.CompileReadonlyAsync(selection with { ExactText = inspected.Source.ExactText }, token).ConfigureAwait(false);
+        var current = await compilation.CompileArticleReadonlyAsync(selection, inspected.Source, token).ConfigureAwait(false);
         Guid catalog = Guid.Parse(selection.CapabilityEvidenceId);
         var expires = await articles.InspectResumeCatalogExpiryAsync(selection.AccountStableId, catalog, token).ConfigureAwait(false);
         var retained = await articles.InspectReservedResumeAdmissionAsync(inspected.AuthorizationId, historicalPolicy, catalog, expires, token).ConfigureAwait(false);

@@ -17,6 +17,24 @@ GATE=m.digest({'synthetic':'renewal gate'})
 
 
 class UnusedDiagnosticRenewalTests(unittest.TestCase):
+    def test_retired_run_rejects_before_new_claim_and_replay(self):
+        self.prepare(); self.activate()
+        with self.old._open() as db:
+            before = self.old._read(db)
+        self.assertTrue(before['retired'])
+        with self.assertRaisesRegex(m.Rejected, '^RunRetired$'):
+            self.old.claim_successor(self.new, self.scope, self.h, m.digest(self.h))
+        with self.old._open() as db:
+            state = self.old._read(db)
+            self.assertEqual(before['head'], state['head'])
+            self.assertIsNone(state['pending'])
+            event = dict(type='retire-claim', utc=self.clock.now, mono=state['lastMono'],
+                observedMono=self.clock.now, id=self.h['TransitionId'], identity=m.digest(self.h),
+                handoff=self.h, clockCondition='expired', clockDriftMicros=0)
+            self.old._append(db, event, state['head']); db.commit(); self.old._seal(db)
+            with self.assertRaisesRegex(m.Rejected, '^RunRetired$'):
+                self.old._read(db)
+
     def setUp(self):
         self.base=prior.DiagnosticRegisterTests();self.base.setUp();self.addCleanup(self.base.doCleanups)
         self.base.activate();self.old=self.base.new;self.clock=self.base.clock

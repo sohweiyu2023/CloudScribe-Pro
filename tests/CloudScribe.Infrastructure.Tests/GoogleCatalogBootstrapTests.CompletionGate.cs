@@ -160,7 +160,7 @@ public sealed partial class GoogleCatalogBootstrapTests
         public ProviderHandler Handler { get; } = new();
         public CompletionRunner Runner { get; } = new();
         public ResumeEvidenceStore Resume { get; } = new();
-        public CompletionGateConfiguration Configuration { get; } = new(1, "synthetic", "", "synthetic", "", "", "synthetic", "",
+        public CompletionGateConfiguration Configuration { get; set; } = new(1, "synthetic", "", "synthetic", "", "", "synthetic", "",
             "synthetic", "synthetic", "", "", "", "synthetic-account", "synthetic-project", "synthetic-credential",
             "https://texttospeech.googleapis.com/v1/voices", "https://texttospeech.googleapis.com/v1/text:synthesize", "synthetic", "", "en-US-Standard-C", "en-US")
         { Pin = new string('a', 64), ConfigPath = "synthetic" };
@@ -269,8 +269,22 @@ public sealed partial class GoogleCatalogBootstrapTests
         public bool Stopped { get; private set; }
         public bool ExpireAfterClaim { get; set; }
         public List<IReadOnlyDictionary<string, object?>> Receipts { get; } = [];
+        public List<string> Commands { get; } = [];
         public void Run(CompletionGateConfiguration configuration, string command, Guid id, string identity, IReadOnlyDictionary<string, object?>? receipt)
         {
+            Commands.Add(command);
+            if (configuration.PreparationSha256 is not null)
+            {
+                if (!string.Equals(identity, configuration.PreparationSha256, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Synthetic preparation pin mismatch.");
+                command = command switch
+                {
+                    "claim-preparation" => "claim-refresh",
+                    "check-preparation" => "check",
+                    "complete-preparation" => "complete",
+                    _ => throw new InvalidOperationException("Synthetic paid run remains stopped."),
+                };
+            }
             if (string.Equals(command, "complete", StringComparison.Ordinal))
             {
                 Receipts.Add(receipt!);
@@ -295,8 +309,33 @@ public sealed partial class GoogleCatalogBootstrapTests
         public Task<ChirpReservationResumePolicy?> LoadVerifiedAsync(CancellationToken cancellationToken = default) => Task.FromResult(Policy);
     }
 
-    [Fact]
-    public async Task ReopenedUiRetainsExactAdmittedSnapshotWithoutExtendingItsExpiry()
+    [Theory]
+    [InlineData("absent")]
+    [InlineData("snapshot")]
+    [InlineData("expiry")]
+    public async Task OrdinaryResumeCannotRetainAbsentOrMismatchedAdmission(string change)
+    {
+        using var fixture = new CompletionFixture();
+        await fixture.InitializeAsync().ConfigureAwait(true);
+        var prior = fixture.Stores.Capability!;
+        if (!string.Equals(change, "absent", StringComparison.Ordinal))
+            fixture.Resume.Policy = JsonSerializer.Deserialize<ChirpReservationResumePolicy>(JsonSerializer.Serialize(new
+            {
+                CatalogSnapshotId = string.Equals(change, "snapshot", StringComparison.Ordinal) ? Guid.NewGuid() : prior.Id,
+                CatalogExpiresAtUtc = string.Equals(change, "expiry", StringComparison.Ordinal) ? prior.ExpiresAtUtc.AddSeconds(1) : prior.ExpiresAtUtc,
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10),
+                ExecutionEnvelope = new { CapabilityProvenanceId = prior.Snapshot.ProvenanceId }
+            }));
+        var service = fixture.CreateService(new CompletionWorkflowGate(() => null, fixture.Runner));
+        var result = await service.RefreshConfiguredAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        Assert.NotEqual(prior.Id, result.CapabilityEvidence.Id);
+        Assert.Equal(0, fixture.Runner.Refreshes);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ReopenedUiRetainsExactAdmittedSnapshotWithoutExtendingItsExpiry(bool diagnosticRequired)
     {
         using var fixture = new CompletionFixture();
         await fixture.InitializeAsync().ConfigureAwait(true);
@@ -308,32 +347,37 @@ public sealed partial class GoogleCatalogBootstrapTests
             ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(10),
             ExecutionEnvelope = new { CapabilityProvenanceId = prior.Snapshot.ProvenanceId }
         }));
-        var restartedGate = new CompletionWorkflowGate(() => fixture.Configuration, fixture.Runner);
+        var restartedGate = new CompletionWorkflowGate(() => diagnosticRequired ? fixture.Configuration : null, fixture.Runner);
         var restartedService = fixture.CreateService(restartedGate);
         var result = await restartedService.RefreshConfiguredAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         Assert.Same(prior, fixture.Stores.Capability);
         Assert.Equal(prior.Id, result.CapabilityEvidence.Id);
         Assert.Equal(prior.ExpiresAtUtc, result.ExpiresAtUtc);
-        Assert.Equal(1, fixture.Runner.Refreshes);
+        Assert.Equal(diagnosticRequired ? 1 : 0, fixture.Runner.Refreshes);
     }
 
-    [Fact]
-    public async Task ExpiredResumeDoesNotRenewOldCatalogIdentity()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ExpiredResumeDoesNotRenewOldCatalogIdentity(bool diagnosticRequired)
     {
         using var fixture = new CompletionFixture();
         await fixture.InitializeAsync().ConfigureAwait(true);
         var prior = fixture.Stores.Capability!;
         fixture.Resume.Policy = JsonSerializer.Deserialize<ChirpReservationResumePolicy>(JsonSerializer.Serialize(new
         { CatalogSnapshotId = prior.Id, CatalogExpiresAtUtc = prior.ExpiresAtUtc, ExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1) }));
-        var result = await fixture.Service.RefreshConfiguredAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        var service = fixture.CreateService(new CompletionWorkflowGate(() => diagnosticRequired ? fixture.Configuration : null, fixture.Runner));
+        var result = await service.RefreshConfiguredAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         Assert.NotEqual(prior.Id, result.CapabilityEvidence.Id);
         Assert.Null(fixture.Runner.Pending);
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task ChangedObservedCatalogOrProbeCannotRetainAdmittedIdentity(bool catalog)
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public async Task ChangedObservedCatalogOrProbeCannotRetainAdmittedIdentity(bool catalog, bool diagnosticRequired)
     {
         using var fixture = new CompletionFixture();
         await fixture.InitializeAsync().ConfigureAwait(true);
@@ -347,7 +391,8 @@ public sealed partial class GoogleCatalogBootstrapTests
         }));
         fixture.Handler.DifferentCatalogMetadata = catalog;
         fixture.Handler.DifferentProbeBody = !catalog;
-        var result = await fixture.Service.RefreshConfiguredAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        var service = fixture.CreateService(new CompletionWorkflowGate(() => diagnosticRequired ? fixture.Configuration : null, fixture.Runner));
+        var result = await service.RefreshConfiguredAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         Assert.NotEqual(prior.Id, result.CapabilityEvidence.Id);
         Assert.NotEqual(prior.Snapshot.ProvenanceId, result.CapabilityEvidence.Snapshot.ProvenanceId, StringComparer.Ordinal);
     }

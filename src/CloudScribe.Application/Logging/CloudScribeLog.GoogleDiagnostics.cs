@@ -6,6 +6,16 @@ namespace CloudScribe.Application.Logging;
 
 public static partial class CloudScribeLog
 {
+    [LoggerMessage(EventId = 1613, Level = LogLevel.Information, Message = "Article request identity: job {JobId}, internal ordinal {Ordinal}, request key SHA256 {IdempotencyKeySha256}, payload SHA256 {PayloadSha256}. Identity only; no provider acceptance or spending settlement is implied.")]
+    public static partial void ArticleRequestIdentity(ILogger logger, Guid jobId, int ordinal, string idempotencyKeySha256, string payloadSha256);
+
+    [LoggerMessage(EventId = 1614, Level = LogLevel.Information, Message = "Google transport request link {Correlation}: request key SHA256 {IdempotencyKeySha256}. A missing key means durable attempt mapping is unavailable, not a safe retry.")]
+    public static partial void GoogleTransportRequestLink(ILogger logger, string correlation, string? idempotencyKeySha256);
+
+    [LoggerMessage(EventId = 1615, Level = LogLevel.Information, Message = "Article operation: job {JobId}, internal ordinal {Ordinal}, stage {Stage}, outcome {Outcome}, provider outcome observed {ProviderOutcomeObserved}, provider accepted {ProviderAccepted}, error status {ErrorStatus}. Local save or delivery failure never authorizes regeneration of accepted speech.")]
+    public static partial void ArticleOperation(ILogger logger, Guid jobId, int ordinal, ArticleExecutionStage stage,
+        ArticleExecutionOutcome outcome, bool providerOutcomeObserved, bool providerAccepted, GoogleErrorStatus errorStatus);
+
     [LoggerMessage(EventId = 1605, Level = LogLevel.Information, Message = "Google dispatch content {Correlation}: SHA256 {PayloadSha256}, UTF8 bytes {PayloadBytes}, endpoint {Endpoint}, origin SHA256 {OriginSha256}, query present {HasQuery}. Exact owned content snapshot; no URI, query, credentials or request contents are retained.")]
     public static partial void GoogleSynthesisWireContent(ILogger logger, string correlation, string payloadSha256, int payloadBytes,
         GoogleSynthesisEndpointIdentity endpoint, string originSha256, bool hasQuery);
@@ -23,9 +33,9 @@ public static partial class CloudScribeLog
     public static partial void GoogleExplanationEvidence(ILogger logger, string correlation, int httpStatus,
         int bodyBytes, GoogleExplanationRetentionState retention);
 
-    [LoggerMessage(EventId = 1609, Level = LogLevel.Information, Message = "Private explanation persistence {Correlation}: payload SHA256 {PayloadSha256}, retention {Retention}, redacted UTF8 bytes {RedactedBytes}, truncated {Truncated}, other provider details omitted {DetailsOmitted}. No private message or path retained in routine logs.")]
+    [LoggerMessage(EventId = 1609, Level = LogLevel.Information, Message = "Private explanation persistence {Correlation}: payload SHA256 {PayloadSha256}, retention {Retention}, protected envelope {ProtectedEnvelope}, redacted body UTF8 bytes {RedactedBytes}, serialized private record UTF8 bytes {RecordBytes}, truncated {Truncated}, other provider details omitted {DetailsOmitted}. Counts are not private body contents. No private message or path retained in routine logs.")]
     public static partial void GooglePrivateExplanationPersistence(ILogger logger, string correlation, string payloadSha256,
-        GoogleExplanationRetentionState retention, int redactedBytes, bool truncated, bool? detailsOmitted);
+        GoogleExplanationRetentionState retention, bool protectedEnvelope, int redactedBytes, int recordBytes, bool truncated, bool? detailsOmitted);
 
     [LoggerMessage(EventId = 1610, Level = LogLevel.Information, Message = "Google request-ID evidence {Correlation}: header kind {HeaderKind}, state {RequestIdState}, identifier SHA256 {RequestIdSha256}. Header values are not retained; this hash is not a provider lookup ID or billing outcome.")]
     public static partial void GoogleRequestIdEvidence(ILogger logger, string correlation, GoogleProviderRequestIdHeader headerKind,

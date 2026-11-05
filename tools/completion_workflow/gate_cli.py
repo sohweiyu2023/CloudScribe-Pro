@@ -30,8 +30,8 @@ def safe_failure_evidence(error):
     for _ in range(128):
         if frame is None:break
         name=os.path.basename(frame.tb_frame.f_code.co_filename)
-        if name in ("gate_cli.py","completion_register.py") and 1 <= frame.tb_lineno <= 10000:
-            component="bridge" if name=="gate_cli.py" else "register";line=frame.tb_lineno
+        if name in ("gate_cli.py","completion_register.py","successor_register.py","preparation_register.py") and 1 <= frame.tb_lineno <= 10000:
+            component="bridge" if name=="gate_cli.py" else "successor" if name=="successor_register.py" else "preparation" if name=="preparation_register.py" else "register";line=frame.tb_lineno
         frame=frame.tb_next
     else:component="unavailable";line=None
     return {"failureExceptionType":safe_exception_name(error),"failureComponent":component,"failureSourceLine":line}
@@ -54,10 +54,14 @@ def bounded(path, limit):
         if part.is_symlink() or part.is_junction():
             raise ValueError("LinkedPath")
     with path.open("rb") as stream:
-        data = stream.read(limit + 1)
-    if len(data) > limit:
-        raise ValueError("Oversized")
-    return data
+        data = bytearray()
+        while True:
+            block = stream.read(min(65536, limit + 1 - len(data)))
+            if not block:
+                return bytes(data)
+            data.extend(block)
+            if len(data) > limit:
+                raise ValueError("Oversized")
 
 
 def unique(pairs):
@@ -123,6 +127,28 @@ def installed_readback(config, pin, allow_financial=False):
     if required != {"GateSha256": pin, "ScopeSha256": config["ScopeSha256"]}:
         raise ValueError("RequiredGatePin")
     return sha(marker_bytes + b"\n" + required_bytes + b"\n" + pin.encode())
+
+
+def preparation_command(request, config, manifest, scope, module, register, app):
+    """Pinned installed preparation only; all ordinary paid commands retain their old guard."""
+    if os.path.normcase(str(app)) != os.path.normcase(os.path.abspath(config['ApplicationDirectory'])):
+        raise ValueError('InstalledReadbackRequired')
+    installed_readback(config, request['configSha256'], allow_financial=True)
+    marker = json.loads(bounded(app.parent / 'cloudscribe-install.json', 32768), object_pairs_hook=unique)
+    raw = bounded(app.parent / 'completion-preparation.json', 16384)
+    pin = sha(raw)
+    if marker.get('CompletionPreparationSha256') != pin or request['identitySha256'] != pin:
+        raise ValueError('PreparationPin')
+    plan = json.loads(raw, object_pairs_hook=unique)
+    child = diagnostic_acceptance(config, manifest, scope, module, live_readonly=True)
+    retained = manifest['diagnostic'].get('reservedResume', {})
+    if (child is None or module.uuid_identity(plan['HeldAuthorizationId']) != child['AuthorizationId']
+            or plan['HeldLedgerSha256'] != retained.get('ledgerEvidenceSha256')
+            or plan['HeldQueueSha256'] != retained.get('queueEvidenceSha256')
+            or plan['FinancialRowsSha256'] != manifest['diagnostic']['financialRowsSha256']):
+        raise ValueError('PreparationState')
+    phase = {'claim-preparation': 'claim', 'check-preparation': 'check', 'complete-preparation': 'complete'}[request['command']]
+    return module._preparation('operate', register, plan, pin, request['id'], phase, request.get('receipt'))
 
 
 def profile_database(config):
@@ -539,8 +565,13 @@ def continuation_acceptance(config, manifest, scope, module, database_sha=None, 
 
 def diagnostic_policy_bytes(raw, manifest, scope, module):
     policy = json.loads(raw, object_pairs_hook=unique)
-    module.verify_diagnostic_policy(manifest, scope, policy, "diagnostic-admission")
+    module.verify_diagnostic_policy(manifest, scope, policy, "resume-admission" if scope["diagnosticPurpose"] == "reserved-provider-evidence" else "diagnostic-admission")
     text = raw.decode("utf-8")
+    if scope["diagnosticPurpose"] == "reserved-provider-evidence":
+        r = manifest["diagnostic"]["reservedResume"]
+        historical = exact_object_property(text, "HistoricalPolicy")
+        if sha(historical) != r["historicalPolicySha256"]:raise ValueError("DiagnosticHistory")
+        return policy
     grant = exact_object_property(text, "SuccessorGrant")
     articles = exact_object_property(text, "Articles").decode("utf-8")
     decoder = json.JSONDecoder(object_pairs_hook=unique)
@@ -552,6 +583,19 @@ def diagnostic_policy_bytes(raw, manifest, scope, module):
     return policy
 
 
+def verify_reserved_diagnostic_provenance(before,manifest):
+    retained=manifest["diagnostic"]["reservedResume"]
+    if (before["diagnosticPolicySha256"]!=retained["historicalPolicySha256"]
+            or before["scope"]["approvalSha256"]!=retained["originalApprovalSha256"]):
+        raise ValueError("DiagnosticHistory")
+
+
+def diagnostic_policy_location(app, scope):
+    return ((app.parent / "chirp-reservation-resume-admission.json", "ChirpReservationResumePolicySha256")
+        if scope["diagnosticPurpose"] == "reserved-provider-evidence" else
+        (app.parent / "chirp-article-admission-policy.json", "ChirpArticlePolicySha256"))
+
+
 def diagnostic_admission_check(register, config, config_pin, manifest, scope, module, app, identity):
     if scope["schema"]!=6:raise ValueError("DiagnosticScope")
     if os.path.normcase(str(app))!=os.path.normcase(os.path.abspath(config["ApplicationDirectory"])):raise ValueError("InstalledReadbackRequired")
@@ -560,8 +604,9 @@ def diagnostic_admission_check(register, config, config_pin, manifest, scope, mo
     with register._open() as db:state=register._read(db)
     installed_readback(config,config_pin,allow_financial=True)
     marker=json.loads(bounded(app.parent/"cloudscribe-install.json",32768),object_pairs_hook=unique)
-    raw=bounded(app.parent/"chirp-article-admission-policy.json",8*1024*1024);pin=sha(raw)
-    if identity!=pin or marker.get("ChirpArticlePolicySha256")!=pin or state["diagnosticPolicySha256"]!=pin:raise ValueError("DiagnosticInstalledPolicy")
+    policy_path, marker_key = diagnostic_policy_location(app,scope)
+    raw=bounded(policy_path,8*1024*1024);pin=sha(raw)
+    if identity!=pin or marker.get(marker_key)!=pin or state["diagnosticPolicySha256"]!=pin:raise ValueError("DiagnosticInstalledPolicy")
     diagnostic_policy_bytes(raw,manifest,scope,module)
     module.require_epoch_policy_deadline(state,json.loads(raw,object_pairs_hook=unique)["ExpiresAtUtc"])
     return {"valid":True,"policySha256":pin,"authority":False}
@@ -571,6 +616,16 @@ def diagnostic_acceptance(config, manifest, scope, module, *, database_sha=None,
     """Read actual native ledger. No provider, reservation, writes or caller-success assertions."""
     parts, plans, accepted, _ = module.validate_diagnostic_manifest(manifest, scope)
     d = manifest["diagnostic"]
+    reserved = scope["diagnosticPurpose"] == "reserved-provider-evidence"
+    r = d.get("reservedResume") if reserved else None
+    historical = None
+    if reserved:
+        for root in (config["ApplicationDirectory"],config["CandidateApplicationDirectory"]):
+            immutable_predecessor_location(r["historicalPolicyPath"],root)
+        raw_history = bounded(Path(r["historicalPolicyPath"]),8*1024*1024)
+        if sha(raw_history) != r["historicalPolicySha256"]:raise ValueError("DiagnosticHistory")
+        historical = json.loads(raw_history,object_pairs_hook=unique)
+        if module.digest(historical) != r["historicalPolicyCanonicalSha256"]:raise ValueError("DiagnosticHistory")
     if live_readonly and (dispatch or database_sha is not None):
         raise ValueError("DiagnosticOperation")
     if dispatch or live_readonly:
@@ -605,20 +660,29 @@ def diagnostic_acceptance(config, manifest, scope, module, *, database_sha=None,
             raise ValueError("DiagnosticAcceptedCoverage")
         children=connection.execute("SELECT * FROM chirp_article_successor_attempts WHERE ParentAuthorizationId=?",(parent["AuthorizationId"],)).fetchall()
         child=None
-        if dispatch:
-            if len(children)!=1 or policy is None or policy_sha is None:raise ValueError("DiagnosticChild")
-            child=children[0];grant=policy["SuccessorGrant"]
-            if (child["PolicySha256"]!=policy_sha or child["SourceApprovalSha256"]!=scope["approvalSha256"]
+        if dispatch or reserved:
+            if len(children)!=1 or (dispatch and (policy is None or policy_sha is None)):raise ValueError("DiagnosticChild")
+            child=children[0];grant=(historical if reserved else policy)["SuccessorGrant"]
+            if reserved and policy is not None and (
+                    int(datetime.fromisoformat(policy["OriginalApprovedAtUtc"].replace("Z","+00:00")).timestamp()*1000)!=child["ApprovedAtUnixMilliseconds"]
+                    or policy["OriginalEnvelope"]!=json.loads(child["EnvelopeJson"],object_pairs_hook=unique)):
+                raise ValueError("DiagnosticHistory")
+            expected_policy = r["historicalPolicySha256"] if reserved else policy_sha
+            expected_approval = r["originalApprovalSha256"] if reserved else scope["approvalSha256"]
+            if (child["PolicySha256"]!=expected_policy or child["SourceApprovalSha256"]!=expected_approval
                     or child["PlanSha256"]!=d["planSha256"] or child["CoverageOrdinal"]!=d["coverageOrdinal"]
                     or child["RootAuthorizationId"]!=module.uuid_identity(grant["RootAuthorizationId"])
                     or child["GrantId"]!=module.uuid_identity(grant["GrantId"]) or child["GrantSha256"]!=d["successorGrantSha256"]
-                    or child["ParentStateSha256"]!=grant["ParentQueueRowSha256"] or child["Consumed"]!=1
+                    or child["ParentStateSha256"]!=grant["ParentQueueRowSha256"] or child["Consumed"]!=(1 if dispatch else 0)
                     or child["AccountId"]!=config["AccountId"] or child["ProjectId"]!=config["ProjectId"]
                     or child["Currency"]!='USD' or child["Scale"]!=2 or child["EstimateMinorUnits"]!=1 or child["ReservedMinorUnits"]!=1):
                 raise ValueError("DiagnosticChild")
-            module.uuid_identity(child["ClaimedLocalAttemptId"])
+            if dispatch:module.uuid_identity(child["ClaimedLocalAttemptId"])
+            elif child["ClaimedLocalAttemptId"] is not None:raise ValueError("DiagnosticOwnedClaim")
             q=connection.execute("SELECT * FROM google_generation_queue_states WHERE AccountId=? AND OperationStableId='synthesize-speech' AND IdempotencyKey=?",(config["AccountId"],child["ChildKey"])).fetchone()
-            if (q is None or q["SubmissionAttempted"]!=1 or q["UnresolvedSubmission"]!=1 or q["ProviderRequestId"] is not None
+            if reserved:
+                verify_reserved_diagnostic_rows(connection, module, r, child, q, dispatch, policy, policy_sha, config, manifest, scope)
+            if dispatch and (q is None or q["SubmissionAttempted"]!=1 or q["UnresolvedSubmission"]!=1 or q["ProviderRequestId"] is not None
                     or q["DiagnosticCode"]!='google-dispatch-claimed' or q["LocalAttemptId"]!=child["ClaimedLocalAttemptId"]
                     or q["PayloadSha256"]!=d["payloadSha256"] or q["PayloadBytes"]!=d["payloadBytes"]):raise ValueError("DiagnosticOwnedClaim")
             envelope=json.loads(child["EnvelopeJson"],object_pairs_hook=unique)
@@ -628,13 +692,59 @@ def diagnostic_acceptance(config, manifest, scope, module, *, database_sha=None,
                     or envelope["CompiledPayloadSha256"]!=d["payloadSha256"] or envelope["CompiledPayloadBytes"]!=d["payloadBytes"]):raise ValueError("DiagnosticOwnedClaim")
         elif children:raise ValueError("DiagnosticChildExists")
         for a in connection.execute("SELECT * FROM chirp_article_owned_attempts WHERE AccountId=? AND ProjectId=?",(config["AccountId"],config["ProjectId"])):
-            if a["Consumed"]==0:raise ValueError("PendingOrUncertainWork")
+            if a["Consumed"]==0 and (not reserved or a["AuthorizationId"]!=r["authorizationId"]):raise ValueError("PendingOrUncertainWork")
         for q in connection.execute("SELECT * FROM google_generation_queue_states WHERE AccountId=? AND UnresolvedSubmission<>0",(config["AccountId"],)):
             if child is None or q["IdempotencyKey"]!=child["ChildKey"] or q["OperationStableId"]!='synthesize-speech':raise ValueError("PendingOrUncertainWork")
         if continuation_financial_projection(connection,module,() if child is None else (child["AuthorizationId"],))!=d["financialRowsSha256"]:
             raise ValueError("DiagnosticFinancialChanged")
     if not dispatch and not live_readonly and sha(bounded(db,512*1024*1024))!=before:raise ValueError("ContinuationDatabaseChanged")
     return child
+
+
+def verify_reserved_diagnostic_rows(connection, module, retained, child, queue, dispatch, policy, policy_sha, config, manifest, scope):
+    """Cross-check actual clean/claimed rows, never a caller's 'not sent' flag."""
+    if child["AuthorizationId"] != module.uuid_identity(retained["authorizationId"]) or queue is None:
+        raise ValueError("DiagnosticChild")
+    normalized = dict(child); normalized["Consumed"] = 0; normalized["ClaimedLocalAttemptId"] = None
+    if module.digest(normalized) != retained["ledgerEvidenceSha256"]:raise ValueError("DiagnosticChild")
+    clean = dict(queue)
+    if "OutcomeObservedAtUnixMilliseconds" not in clean:raise ValueError("DiagnosticOwnedClaim")
+    if dispatch:
+        clean.update(SubmissionAttempted=0,UnresolvedSubmission=0,LocalAttemptId=None,DiagnosticCode=None,PayloadSha256=None,PayloadBytes=None,
+            OutcomeObservedAtUnixMilliseconds=retained["cleanQueueObservedAtUnixMilliseconds"])
+    if (module.digest(clean) != retained["queueEvidenceSha256"] or queue["ProviderRequestId"] is not None
+            or (not dispatch and (queue["OutcomeObservedAtUnixMilliseconds"] != retained["cleanQueueObservedAtUnixMilliseconds"]
+                or queue["SubmissionAttempted"] != 0 or queue["UnresolvedSubmission"] != 0
+                or child["ClaimedLocalAttemptId"] is not None))):raise ValueError("DiagnosticOwnedClaim")
+    mappings = connection.execute("SELECT * FROM chirp_reserved_catalog_mappings WHERE AuthorizationId=?",(child["AuthorizationId"],)).fetchall()
+    claims = connection.execute("SELECT * FROM chirp_reserved_dispatch_mappings WHERE AuthorizationId=?",(child["AuthorizationId"],)).fetchall()
+    if not dispatch:
+        if claims:raise ValueError("DiagnosticDispatchReplay")
+        if not mappings:return
+        if len(mappings)!=1:raise ValueError("DiagnosticHistory")
+    if policy is None:
+        app=Path(config["ApplicationDirectory"])
+        path,key=diagnostic_policy_location(app,scope)
+        raw=bounded(path,8*1024*1024);policy_sha=sha(raw)
+        marker=json.loads(bounded(app.parent/"cloudscribe-install.json",32768),object_pairs_hook=unique)
+        if marker.get(key)!=policy_sha:raise ValueError("DiagnosticInstalledPolicy")
+        policy=diagnostic_policy_bytes(raw,manifest,scope,module)
+    if len(mappings)!=1 or (dispatch and len(claims)!=1):raise ValueError("DiagnosticHistory")
+    mapping=mappings[0]; claim=claims[0] if dispatch else None
+    if (mapping["PolicySha256"]!=policy_sha or sha(mapping["PolicyJson"].encode())!=policy_sha
+            or json.loads(mapping["PolicyJson"],object_pairs_hook=unique)!=policy
+            or mapping["PriorMappingSha256"] is not None or policy.get("PriorMappingSha256") is not None
+            or module.uuid_identity(policy["MappingId"])!=mapping["MappingId"]
+            or (dispatch and (claim["MappingId"]!=mapping["MappingId"] or claim["PolicySha256"]!=policy_sha
+            or claim["ClaimedLocalAttemptId"]!=child["ClaimedLocalAttemptId"]
+            or type(queue["OutcomeObservedAtUnixMilliseconds"]) is not int
+            or not mapping["CreatedAtUnixMilliseconds"]<=queue["OutcomeObservedAtUnixMilliseconds"]<=claim["ClaimedAtUnixMilliseconds"]<min(
+                datetime.fromisoformat(policy["ExpiresAtUtc"].replace("Z","+00:00")).timestamp()*1000,
+                datetime.fromisoformat(policy["CatalogExpiresAtUtc"].replace("Z","+00:00")).timestamp()*1000)))):
+        raise ValueError("DiagnosticHistory")
+    if (int(datetime.fromisoformat(policy["OriginalApprovedAtUtc"].replace("Z","+00:00")).timestamp()*1000)!=child["ApprovedAtUnixMilliseconds"]
+            or policy["OriginalEnvelope"]!=json.loads(child["EnvelopeJson"],object_pairs_hook=unique)):
+        raise ValueError("DiagnosticHistory")
 
 
 def interpreter_identity(transition, old, config, module):
@@ -841,6 +951,55 @@ def freeze_predecessor_config(path, expected_sha, output, application_directory)
     return {"Path": str(target.absolute()), "Sha256": expected_sha}
 
 
+def released_manual_readback(config, handoff, predecessor, module, *, installing=False):
+    """H8 alone accepts a released manual installation, never an absent active gate."""
+    with predecessor._open() as db:
+        state = predecessor._read(db)
+    if not module.released_diagnostic_handoff(handoff): raise ValueError("ReleasedDiagnosticBinding")
+    module._successor("released_baseline", state, handoff)
+    app = Path(config["ApplicationDirectory"])
+    marker_path = app.parent / "cloudscribe-install.json"
+    marker_bytes = bounded(marker_path, 32768)
+    marker = json.loads(marker_bytes, object_pairs_hook=unique)
+    profile = Path(marker["Profile"])
+    if (marker.get("Product") != "CloudScribe Pro" or ('CompletionGateProtocolVersion' in marker and (type(marker['CompletionGateProtocolVersion']) is not int or marker['CompletionGateProtocolVersion'] != 1))
+            or str(marker.get("AppSha256", "")).lower() != config["AppSha256"]
+            or sha(str(profile).rstrip("/\\").upper().encode()) != config["ProfileRootSha256"]):
+        raise ValueError("ReleasedManualProfile")
+    release = state["maintenanceRelease"]["record"]
+    archive = profile / (".completion-workflow-required.json." + release["ReleaseId"] + ".retired")
+    if (module.path_digest(archive) != release["RequiredArchivePathSha256"]
+            or sha(bounded(archive, 4096)) != handoff["RequiredArchiveSha256"]):
+        raise ValueError("ReleasedRequiredArchive")
+    if installing:
+        return
+    required_path = profile / ".completion-workflow-required.json"
+    if required_path.exists():
+        required = json.loads(bounded(required_path, 4096), object_pairs_hook=unique)
+        if (not state['pending'] or state['pending'].get('type') != 'released-diagnostic-claim'
+                or state['pending']['handoff'] != handoff
+                or required != {'GateSha256': handoff['NewGateSha256'], 'ScopeSha256': handoff['NewScopeSha256']}):
+            raise ValueError("ReleasedManualRequirement")
+    if (sha(marker_bytes) != handoff["ManualMarkerSha256"]
+            or any(key in marker for key in ("CompletionWorkflowGateSha256", "RecoveryPolicySha256", "ChirpArticlePolicySha256", "ChirpReservationResumePolicySha256"))
+            or (app.parent / "completion-workflow-gate.json").exists()):
+        raise ValueError("ReleasedManualMarker")
+    for name, key in (("CloudScribe.dll", "AppSha256"), ("CloudScribe.Infrastructure.dll", "InfrastructureSha256")):
+        if sha(bounded(app / name, 512 * 1024 * 1024)) != config[key]: raise ValueError("ReleasedManualBuild")
+    inventory = {}; total = 0
+    for count, path in enumerate(app.parent.rglob("*")):
+        if count >= 16384: raise ValueError("ReleasedInventoryBounds")
+        physical = module.physical(path)
+        if physical.is_dir(): continue
+        if not physical.is_file(): raise ValueError("ReleasedInventory")
+        name = physical.relative_to(app.parent).as_posix()
+        if len(inventory) >= 8192 or name.casefold() in {key.casefold() for key in inventory}: raise ValueError("ReleasedInventoryBounds")
+        data = bounded(physical, 512 * 1024 * 1024); total += len(data)
+        if total > 1024 * 1024 * 1024: raise ValueError("ReleasedInventoryBounds")
+        inventory[name] = sha(data)
+    if module.digest(inventory) != handoff["ManualInventorySha256"]: raise ValueError("ReleasedManualInventory")
+
+
 def successor_materials(request, config, config_keys, module):
     raw = bounded(request["handoffPath"], 32768); pin = sha(raw)
     if pin != request["handoffSha256"] or pin != request["identitySha256"]:
@@ -893,14 +1052,22 @@ def successor_materials(request, config, config_keys, module):
         module.validate_diagnostic_manifest(manifest, new_scope)
         original = {k:v for k,v in manifest.items() if k != "diagnostic"}
         old_manifest = json.loads(bounded(old["PlanManifestPath"],1024*1024),object_pairs_hook=unique)
-        old_original = {k:v for k,v in old_manifest.items() if k != "diagnostic"} if module.diagnostic_renewal_handoff(h) else old_manifest
+        old_original = {k:v for k,v in old_manifest.items() if k != "diagnostic"} if module.diagnostic_renewal_handoff(h) or module.released_diagnostic_handoff(h) or module.reserved_diagnostic_handoff(h) else old_manifest
         d=manifest["diagnostic"]
-        if module.diagnostic_renewal_handoff(h):
+        if module.diagnostic_renewal_handoff(h) or module.released_diagnostic_handoff(h):
             prior=old_manifest.get("diagnostic",{})
             renewed={"successorGrantSha256","privateCaptureConsentSha256"}
             if (set(prior)!=set(d) or any(prior[k]!=d[k] for k in d.keys()-renewed)
                     or any(prior[k]==d[k] for k in renewed)):
                 raise ValueError("DiagnosticUnusedRenewal")
+        if module.reserved_diagnostic_handoff(h):
+            prior=old_manifest["diagnostic"]
+            changed={"reservedResume","privateCaptureConsentSha256","projectCommittedMinorUnits","allocationCommittedMinorUnits"}
+            if (set(d)!=set(prior)|{"reservedResume"} or any(d[k]!=prior[k] for k in prior.keys()-changed)
+                    or d["projectCommittedMinorUnits"]!=prior["projectCommittedMinorUnits"]+1
+                    or d["allocationCommittedMinorUnits"]!=prior["allocationCommittedMinorUnits"]+1
+):
+                raise ValueError("DiagnosticHistory")
         pins={"FailedAuthorizationId":d["failedAuthorizationId"],"FailedLocalAttemptId":d["failedLocalAttemptId"],"FailedPlanSha256":d["planSha256"],"FailedCoverageOrdinal":d["coverageOrdinal"],"FailedPayloadSha256":d["payloadSha256"],"FailedPayloadBytes":d["payloadBytes"]}
         if (sha(bounded(old["PlanManifestPath"],1024*1024))!=old["PlanManifestSha256"] or module.digest(old_manifest)!=h["OriginalManifestSha256"]
                 or module.canonical(original)!=module.canonical(old_original) or any(h[k]!=v for k,v in pins.items())
@@ -943,8 +1110,13 @@ def successor_command(request, config, config_keys, module, app):
     expected_app = config["ApplicationDirectory"] if command == "complete-successor" else config["CandidateApplicationDirectory"]
     if os.path.normcase(str(app)) != os.path.normcase(os.path.abspath(expected_app)):
         raise ValueError("HandoffApplicationLocation")
+    if module.reserved_diagnostic_handoff(h):
+        with old_r._open() as db:before=old_r._read(db)
+        verify_reserved_diagnostic_provenance(before,manifest)
     if command == "complete-successor":
         evidence = installed_readback(config, request["configSha256"])
+        if module.released_diagnostic_handoff(h):
+            released_manual_readback(config, h, old_r, module, installing=True)
         if module.diagnostic_handoff(h):
             diagnostic_acceptance(config,manifest,new_scope,module,database_sha=h["DatabaseSha256"])
         elif continuation:
@@ -953,9 +1125,12 @@ def successor_command(request, config, config_keys, module, app):
         else:
             terminal_failure(config, h)
         return old_r.complete_successor(new_r, new_scope, h, pin, evidence)
-    installed_readback(old, h["PreviousGateSha256"], allow_financial=not typed_interpreter)
+    if module.released_diagnostic_handoff(h):
+        released_manual_readback(config, h, old_r, module)
+    else:
+        installed_readback(old, h["PreviousGateSha256"], allow_financial=not typed_interpreter)
     if module.diagnostic_handoff(h):
-        diagnostic_acceptance(old,manifest,new_scope,module,database_sha=h["DatabaseSha256"])
+        diagnostic_acceptance(config if module.released_diagnostic_handoff(h) else old,manifest,new_scope,module,database_sha=h["DatabaseSha256"])
     elif continuation:
         continuation_acceptance(old, manifest, new_scope, module, h["DatabaseSha256"])
         if module.sentence_handoff(h): terminal_failure(old,h)
@@ -1044,7 +1219,9 @@ def main():
     if not manifest["parts"] or any(part["voiceName"] != config["VoiceName"] or part["languageCode"] != config["LanguageCode"] for part in manifest["parts"]):
         raise ValueError("VoiceManifestBinding")
     command = request["command"]
-    if command == "check-diagnostic-admission":
+    if command in ('claim-preparation', 'check-preparation', 'complete-preparation'):
+        result = preparation_command(request, config, manifest, scope, module, register, app)
+    elif command == "check-diagnostic-admission":
         if uuid.UUID(request["id"]).int!=0 or request.get("receipt") is not None:raise ValueError("DiagnosticPolicy")
         module.hash_value(request["identitySha256"])
         result=diagnostic_admission_check(register,config,request["configSha256"],manifest,scope,module,app,request["identitySha256"])
@@ -1057,8 +1234,9 @@ def main():
             if os.path.normcase(str(app))!=os.path.normcase(os.path.abspath(config["ApplicationDirectory"])):raise ValueError("InstalledReadbackRequired")
             installed_readback(config,request["configSha256"],allow_financial=True)
             marker=json.loads(bounded(app.parent/"cloudscribe-install.json",32768),object_pairs_hook=unique)
-            raw=bounded(app.parent/"chirp-article-admission-policy.json",8*1024*1024);pin=sha(raw)
-            if marker.get("ChirpArticlePolicySha256")!=pin or state["diagnosticPolicySha256"]!=pin:raise ValueError("DiagnosticInstalledPolicy")
+            policy_path, marker_key = diagnostic_policy_location(app,scope)
+            raw=bounded(policy_path,8*1024*1024);pin=sha(raw)
+            if marker.get(marker_key)!=pin or state["diagnosticPolicySha256"]!=pin:raise ValueError("DiagnosticInstalledPolicy")
             policy=diagnostic_policy_bytes(raw,manifest,scope,module);module.require_epoch_policy_deadline(state,policy["ExpiresAtUtc"])
             if request["payloadSha256"]!=manifest["diagnostic"]["payloadSha256"]:raise ValueError("DiagnosticPayload")
             child=diagnostic_acceptance(config,manifest,scope,module,policy=policy,policy_sha=pin,dispatch=True)
@@ -1109,7 +1287,7 @@ def main():
             module.verify_plan_policy(manifest, scope, policy, kind)
             if scope["schema"]==6:
                 diagnostic_policy_bytes(policy_bytes,manifest,scope,module)
-                diagnostic_acceptance(config,manifest,scope,module)
+                diagnostic_acceptance(config,manifest,scope,module,policy=policy,policy_sha=request["identitySha256"])
             module.require_epoch_policy_deadline(state, policy["ExpiresAtUtc"])
         pilot_proof = pilot_acceptance(config, manifest, state, module) if scope["schema"] == 2 and kind == "completion-admission" else None
         if scope["schema"] == 5 and kind == "completion-admission":
@@ -1166,7 +1344,7 @@ def main():
             module.verify_plan_policy(manifest, scope, policy, pending["kind"])
             if scope["schema"]==6:
                 diagnostic_policy_bytes(policy_bytes,manifest,scope,module)
-                diagnostic_acceptance(config,manifest,scope,module)
+                diagnostic_acceptance(config,manifest,scope,module,policy=policy,policy_sha=pending["identity"])
             module.require_epoch_policy_deadline(current, policy["ExpiresAtUtc"])
             if scope["schema"] in (3, 4, 5):
                 retained = None; target = None
@@ -1206,6 +1384,7 @@ if __name__ == "__main__":
                    "OperationLimit": "Limit", "RunStopped": "Stopped", "InspectionNotReady": "Stopped",
                    "ScopePinMismatch": "PinMismatch", "GatePin": "PinMismatch", "BuildBinding": "PinMismatch",
                    "ModuleHash": "PinMismatch", "ScriptHash": "PinMismatch", "InterpreterHash": "PinMismatch",
+                   "ScriptLocation": "PinMismatch", "InterpreterLocation": "PinMismatch",
                    "AnchorDatabaseMismatch": "Storage", "AnchorUnavailable": "Storage", "RegisterUnavailableOrOversized": "Storage",
                    "Oversized": "Storage"}
         reasons.update({"ReceiptSchema": "Protocol", "ReceiptMismatchOrReplay": "Protocol", "PlanManifestPin": "PinMismatch",
@@ -1275,9 +1454,17 @@ if __name__ == "__main__":
             reasons[code]="SuccessorScopeMismatch"
         reasons["DiagnosticDatabasePin"]="SuccessorDatabaseMismatch"
         reasons["DiagnosticUnusedRenewal"]="SuccessorPending"
+        reasons.update({'PreparationSchema':'Protocol', 'PreparationPin':'PinMismatch', 'PreparationClock':'ClockRollback',
+            'PreparationExpired':'Expired', 'PreparationState':'Stopped', 'PreparationPending':'PendingOutcome',
+            'PreparationReplayOrLimit':'Limit', 'PreparationReceipt':'Protocol'})
         reasons["MutablePreviousGatePath"]="SuccessorScopeMismatch"
         reasons["PredecessorSnapshotChanged"]="SuccessorScopeMismatch"
         reasons["PredecessorSnapshotLocation"]="SuccessorScopeMismatch"
         reasons["TransitionFinancialAdmissionExists"]="SuccessorScopeMismatch"
+        for code in ("ReleasedDiagnosticState", "FreshReleasedDiagnosticApprovalRequired", "ReleasedDiagnosticWindow",
+                     "ReleasedDiagnosticBinding", "ReleasedDiagnosticPending", "ReleasedDiagnosticAlreadyClaimed",
+                     "ReleasedManualProfile", "ReleasedRequiredArchive", "ReleasedManualRequirement", "ReleasedManualMarker",
+                     "ReleasedManualBuild", "ReleasedInventoryBounds", "ReleasedInventory", "ReleasedManualInventory"):
+            reasons[code]="SuccessorScopeMismatch"
         print(json.dumps(rejection_packet(error,reasons)))
         sys.exit(1)

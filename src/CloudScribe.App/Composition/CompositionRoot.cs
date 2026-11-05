@@ -40,13 +40,19 @@ public static class CompositionRoot
         return builder.Build();
     }
 
+    private static void RegisterGoogleExecutionResolver(IServiceCollection services)
+    {
+        services.AddSingleton<GoogleGenerationProductionExecutionContextResolver>();
+        services.AddSingleton<IGoogleGenerationExecutionContextResolver>(provider => provider.GetRequiredService<GoogleGenerationProductionExecutionContextResolver>());
+    }
+
     private static void RegisterProductionServices(IServiceCollection services)
     {
         services.AddSingleton<HttpClient>();
         RegisterPrivateProviderDiagnostics(services);
         services.AddSingleton<GoogleGenerationProductionTransportFactory>();
         services.AddSingleton<GoogleGenerationProductionRuntimeEvidenceResolver>();
-        services.AddSingleton<GoogleGenerationProductionExecutionContextResolver>();
+        RegisterGoogleExecutionResolver(services);
         services.AddSingleton<GoogleGenerationProductionRequestIntentStateOwner>();
         services.AddSingleton<GoogleGenerationProductionAuthorizationSnapshotStateOwner>();
         services.AddSingleton<GoogleGenerationProductionIntentEvidenceResolver>();

@@ -91,8 +91,8 @@ public sealed partial class CompletionWorkflowGate
             existing.Require(this, configuration, id);
             return new(existing, false, null);
         }
-        string identity = Hash(Encoding.UTF8.GetBytes(configuration.Pin + "|refresh|" + id.ToString("D")));
-        RunObserved(configuration, "claim-refresh", id, identity, null);
+        string identity = configuration.PreparationSha256 ?? Hash(Encoding.UTF8.GetBytes(configuration.Pin + "|refresh|" + id.ToString("D")));
+        RunObserved(configuration, configuration.PreparationSha256 is null ? "claim-refresh" : "claim-preparation", id, identity, null);
         var lease = new CompletionRefreshLease(this, configuration, id, identity);
         _current.Value = lease;
         return new(lease, true, () => _current.Value = null);
@@ -156,7 +156,7 @@ public sealed partial class CompletionWorkflowGate
     {
         var current = Load() ?? throw new InvalidOperationException("Required completion gate disappeared.");
         lease.Require(this, current, null);
-        RunObserved(current, "check", lease.Id, lease.Identity, null);
+        RunObserved(current, current.PreparationSha256 is null ? "check" : "check-preparation", lease.Id, lease.Identity, null);
     }
 
     internal void Finish(CompletionRefreshLease lease, bool succeeded)
@@ -177,7 +177,7 @@ public sealed partial class CompletionWorkflowGate
                 ["probeStatus"] = succeeded ? "INVALID_ARGUMENT" : "",
                 ["audioAbsent"] = succeeded,
             };
-            RunObserved(current, "complete", lease.Id, lease.Identity, receipt);
+            RunObserved(current, current.PreparationSha256 is null ? "complete" : "complete-preparation", lease.Id, lease.Identity, receipt);
         }
         catch (Exception error) when (!succeeded && GoogleCatalogRefreshDiagnostics.IsNonFatal(error))
         {
@@ -217,6 +217,14 @@ public sealed partial class CompletionWorkflowGate
             byte[] bytes = Read(path, 32768);
             if (!string.Equals(Hash(bytes), pin, StringComparison.Ordinal)) throw new InvalidDataException("Completion gate bytes changed.");
             var configuration = ChirpPolicyFiles.Parse<CompletionGateConfiguration>(bytes) with { Pin = pin, ConfigPath = path };
+            if (marker.RootElement.TryGetProperty("CompletionPreparationSha256", out var preparation))
+            {
+                string preparationPin = preparation.GetString() ?? "";
+                if (!ChirpPolicyValidation.IsHash(preparationPin)
+                    || !string.Equals(Hash(Read(Path.Combine(install, "completion-preparation.json"), 16384)), preparationPin, StringComparison.Ordinal))
+                    throw new InvalidDataException("Completion preparation identity changed.");
+                configuration = configuration with { PreparationSha256 = preparationPin };
+            }
             if (!string.Equals(requirement.RootElement.GetProperty("ScopeSha256").GetString(), configuration.ScopeSha256, StringComparison.Ordinal))
                 throw new InvalidDataException("Completion gate parent scope changed.");
             if (configuration.SchemaVersion != 1 || !string.Equals(configuration.ProfileRootSha256, InstalledRecoveryAdmissionStore.ProfileHash(profile), StringComparison.Ordinal)

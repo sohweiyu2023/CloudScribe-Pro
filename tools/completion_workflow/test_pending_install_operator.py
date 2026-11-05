@@ -64,7 +64,7 @@ class PendingInstallOperatorTests(unittest.TestCase):
         plan=dict(SchemaVersion=1,AdministrativeOnly=True,PaidAuthority=False,Withdrawal=ref(record_path),OriginalHandoff=ref(f.h_path),
             ImmutableOldGate=ref(old_gate),ImmutableNewGate=ref(f.config_path),
             SourceSha256={name:files.sha(Path(__file__).with_name(name)) for name in
-                ('completion_register.py','gate_cli.py','pending_install_files.py','pending_install_operator.py')},
+                ('completion_register.py','successor_register.py','gate_cli.py','pending_install_files.py','pending_install_operator.py')},
             OldInventory=files.inventory(backup),NewInventory=files.inventory(target),SavedRequired=ref(saved),
             NewRequiredSha256=files.sha(required),StageRoot=str(target.with_name('reviewed-restore-stage')),
             DisplacedRoot=str(target.with_name('retained-incomplete-installation')),OperatorPath=str(Path(operator.__file__).resolve()))

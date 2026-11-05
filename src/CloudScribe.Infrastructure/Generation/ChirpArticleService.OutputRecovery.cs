@@ -24,7 +24,7 @@ public sealed partial class ChirpArticleService
             envelope = ParseStored<GoogleGenerationSubmissionEnvelope>(row.GetString(7)); account = row.GetString(8); project = row.GetString(9);
         }
         var stored = await StoredAsync(connection, transaction, plan, token).ConfigureAwait(false);
-        var part = stored.Article.Proposal.Parts.Single(x => x.CoverageOrdinal == ordinal && x.Range.ReusedReceiptSha256 is null);
+        var part = await OutputPartAsync(connection, transaction, stored.Article.Proposal, authorization, ordinal, token).ConfigureAwait(false);
         var audio = receipt.Audio;
         if (receipt.CoverageOrdinal != ordinal || receipt.Range != part.Range || !string.Equals(receipt.PlanSha256, plan, StringComparison.Ordinal)
             || audio.DocumentId != stored.Article.Proposal.DocumentId || audio.RevisionId != stored.Article.Proposal.RevisionId
@@ -56,6 +56,11 @@ public sealed partial class ChirpArticleService
         var current = await ReadJournalAsync(connection, transaction, expected.AuthorizationId.ToString("N"), token).ConfigureAwait(false);
         if (current != expected) throw new InvalidOperationException("Output journal changed before durable receipt publication.");
         string json = JsonSerializer.Serialize(current.Receipt), hash = ChirpPolicyValidation.Hash(current.Receipt);
+        if (await ReadRecoveryChildAsync(connection, transaction, current.AuthorizationId, token).ConfigureAwait(false) is not null)
+        {
+            await FinishRecoveryReceiptAsync(connection, transaction, current, json, hash, token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested(); transaction.Commit(); return;
+        }
         using (var insert = ChirpArticleSql.Command(connection, transaction, """
             INSERT INTO chirp_article_receipts VALUES($plan,$ordinal,$id,$json,$sha)
             ON CONFLICT(PlanSha256,CoverageOrdinal) DO NOTHING;
@@ -87,7 +92,9 @@ public sealed partial class ChirpArticleService
                 using var transaction = connection.BeginTransaction(deferred: true);
                 using var command = ChirpArticleSql.Command(connection, transaction, """
                     SELECT j.AuthorizationId FROM chirp_article_output_journals j
-                    LEFT JOIN chirp_article_receipts r ON r.AuthorizationId=j.AuthorizationId WHERE r.AuthorizationId IS NULL LIMIT 10001;
+                    LEFT JOIN chirp_article_receipts r ON r.AuthorizationId=j.AuthorizationId
+                    LEFT JOIN chirp_article_split_receipts c ON c.AuthorizationId=j.AuthorizationId
+                    WHERE r.AuthorizationId IS NULL AND c.AuthorizationId IS NULL LIMIT 10001;
                     """);
                 List<string> ids = [];
                 using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))

@@ -24,6 +24,11 @@ public sealed partial class SupportBundleServiceTests
     [InlineData(CompletionProtocolCode.MutablePreviousGatePath)]
     [InlineData(CompletionProtocolCode.PredecessorSnapshotChanged)]
     [InlineData(CompletionProtocolCode.PredecessorSnapshotLocation)]
+    [InlineData(CompletionProtocolCode.ReleasedDiagnosticState)]
+    [InlineData(CompletionProtocolCode.ReleasedManualInventory)]
+    [InlineData(CompletionProtocolCode.ClockRollback)]
+    [InlineData(CompletionProtocolCode.ClockDiscontinuity)]
+    [InlineData(CompletionProtocolCode.WindowExpired)]
     public async Task CompletionProtocolCodeSurvivesActualFileAndExportWithoutExceptionProse(CompletionProtocolCode code)
     {
         await using TemporaryDirectory temporary = new();
@@ -33,7 +38,9 @@ public sealed partial class SupportBundleServiceTests
         using (var factory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Information).AddProvider(provider)))
         {
             logPath = provider.CurrentLogPath;
-            var expected = new CompletionGateException(CompletionGateFailure.PinMismatch, code, CompletionProtocolExceptionType.TypeError, CompletionProtocolFailureComponent.Register, 431);
+            var component = code is CompletionProtocolCode.ReleasedDiagnosticState or CompletionProtocolCode.ReleasedManualInventory
+                ? CompletionProtocolFailureComponent.Successor : CompletionProtocolFailureComponent.Register;
+            var expected = new CompletionGateException(CompletionGateFailure.PinMismatch, code, CompletionProtocolExceptionType.TypeError, component, 431);
             var gate = new CompletionWorkflowGate(CompletionGatePayloadTests.Configuration, new CompletionFailureRunner(expected), factory.CreateLogger<CompletionWorkflowGate>());
             Assert.Same(expected, Assert.Throws<CompletionGateException>(gate.RequireReady));
             GoogleCatalogRefreshDiagnostics.Failure(factory.CreateLogger("synthetic-refresh"), Guid.NewGuid(), GoogleCatalogRefreshPhase.AccountLookup, expected);
@@ -52,6 +59,8 @@ public sealed partial class SupportBundleServiceTests
         string exported = string.Join('\n', text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(line => System.Text.Encoding.UTF8.GetString(SafeDiagnosticExportEncoder.Encode(System.Text.Encoding.UTF8.GetBytes(line)))));
         Assert.Contains(code.ToString(), exported, StringComparison.Ordinal);
+        if (code is CompletionProtocolCode.ReleasedDiagnosticState or CompletionProtocolCode.ReleasedManualInventory)
+            Assert.Contains("Successor", exported, StringComparison.Ordinal);
         Assert.Contains("AccountLookup", exported, StringComparison.Ordinal);
         Assert.DoesNotContain("UiBootstrap", exported, StringComparison.Ordinal);
         Assert.Contains("TypeError", exported, StringComparison.Ordinal);

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-/// <summary>Explicit one-segment-at-a-time durable approval. No provider or credential dependency and no automatic retry/batch loop.</summary>
+/// <summary>Durable request authorization and ordered whole-article execution. Provider access stays in the supplied runtime; accepted or uncertain submissions are never blindly repeated.</summary>
 public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbContext> factory,
     IChirpArticleAdmissionStore admission, AppPaths paths, TimeProvider clock, IChirpReservationResumeAdmissionStore? resumeAdmission = null,
     CompletionWorkflowGate? completionGate = null)
@@ -85,7 +85,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
     }
 
     private async Task<ChirpArticleCurrentEvidence> CurrentAsync(SqliteConnection connection, SqliteTransaction transaction,
-        ChirpArticleAdmissionPolicy policy, ChirpRequestIntent intent, CancellationToken token)
+        ChirpArticleAdmissionPolicy policy, ChirpRequestIntent intent, CancellationToken token, ChirpArticlePlanPart? recoveryPart = null)
     {
         if (!string.Equals(intent.Envelope.AccountId, policy.AccountId, StringComparison.Ordinal)
             || !string.Equals(intent.ProjectId, policy.ProjectId, StringComparison.Ordinal) || !string.Equals(intent.Currency, policy.Currency, StringComparison.Ordinal)
@@ -99,7 +99,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
         if (policy.SuccessorGrant is { } successor && !string.Equals(intent.Envelope.CredentialReferenceId, successor.CredentialReferenceId, StringComparison.Ordinal))
             throw new InvalidOperationException("The successor's independently admitted credential binding changed.");
         var current = await _evidence.ResolveAsync(connection, transaction, policy, intent.DocumentId, financial.Old, token).ConfigureAwait(false);
-        var part = current.Article.Proposal.Parts.SingleOrDefault(x => x.CoverageOrdinal == intent.CoverageOrdinal);
+        var part = recoveryPart ?? current.Article.Proposal.Parts.SingleOrDefault(x => x.CoverageOrdinal == intent.CoverageOrdinal);
         var allowance = current.Article.AllowedSegments.SingleOrDefault(x => x.CoverageOrdinal == intent.CoverageOrdinal);
         if (part is null || allowance is null || part.Range.ReusedReceiptSha256 is not null || intent.EstimateMinorUnits > allowance.MaximumMinorUnits
             || !string.Equals(intent.Envelope.CompiledPayloadSha256, part.PayloadSha256, StringComparison.Ordinal) || intent.Envelope.CompiledPayloadBytes != part.PayloadBytes

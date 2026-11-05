@@ -83,7 +83,7 @@ public sealed class CompletionGateCommandRunner : ICompletionGateCommandRunner
                 || !string.Equals(result.GetProperty("scopeSha256").GetString(), configuration.ScopeSha256, StringComparison.Ordinal)))
             throw new CompletionGateException(CompletionGateFailure.Protocol);
         if ((string.Equals(command, "status", StringComparison.Ordinal) && result.GetProperty("requiresReconciliation").GetBoolean())
-            || (string.Equals(command, "check", StringComparison.Ordinal) && !result.GetProperty("valid").GetBoolean()))
+            || ((string.Equals(command, "check", StringComparison.Ordinal) || string.Equals(command, "check-preparation", StringComparison.Ordinal)) && !result.GetProperty("valid").GetBoolean()))
             throw new CompletionGateException(CompletionGateFailure.PendingOutcome);
         if (string.Equals(command, "check-diagnostic-dispatch", StringComparison.Ordinal)
             && (!result.GetProperty("valid").GetBoolean()
@@ -94,7 +94,7 @@ public sealed class CompletionGateCommandRunner : ICompletionGateCommandRunner
             && (!result.GetProperty("valid").GetBoolean()
                 || !string.Equals(result.GetProperty("policySha256").GetString(), identity, StringComparison.Ordinal)))
             throw new CompletionGateException(CompletionGateFailure.PinMismatch);
-        if (string.Equals(command, "complete", StringComparison.Ordinal) && !string.Equals(result.GetProperty("outcome").GetString(), "Succeeded", StringComparison.Ordinal))
+        if ((string.Equals(command, "complete", StringComparison.Ordinal) || string.Equals(command, "complete-preparation", StringComparison.Ordinal)) && !string.Equals(result.GetProperty("outcome").GetString(), "Succeeded", StringComparison.Ordinal))
             throw new CompletionGateException(result.TryGetProperty("reason", out var detail) && Enum.TryParse<CompletionGateFailure>(detail.GetString(), out var completionReason)
                 && Enum.IsDefined(completionReason) ? completionReason : CompletionGateFailure.Stopped);
     }

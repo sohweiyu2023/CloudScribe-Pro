@@ -68,7 +68,9 @@ internal sealed partial class ChirpArticleEvidenceResolver
             if (string.Equals(q.DiagnosticCode, "google-accepted", StringComparison.Ordinal))
                 await RequireFinalizedParentOutputAsync(connection, transaction, attempt, token).ConfigureAwait(false);
         }
-        await RequireAllAcceptedParentReuseAsync(connection, transaction, admitted, refinement.Parent.PlanSha256, token).ConfigureAwait(false);
+        if (refinement.SentenceMarkers is null)
+            await RequireAllAcceptedParentReuseAsync(connection, transaction, admitted, refinement.Parent.PlanSha256, token).ConfigureAwait(false);
+        else await RequireFormatParentReuseAsync(connection, transaction, admitted, parent, token).ConfigureAwait(false);
     }
 
     private static async Task RequireAllAcceptedParentReuseAsync(SqliteConnection connection, SqliteTransaction transaction,
@@ -119,6 +121,16 @@ internal sealed partial class ChirpArticleEvidenceResolver
     {
         var parent = admitted.Proposal.SentenceSuccessor?.Parent ?? admitted.Proposal.Refinement?.Parent;
         if (parent is null) throw new InvalidOperationException("Internal reuse lacks its exact predecessor.");
+        if (admitted.Proposal.Refinement?.SentenceMarkers is not null && !string.Equals(retained.SourcePlanSha256, parent.PlanSha256, StringComparison.Ordinal))
+        {
+            using var inherited = ChirpArticleSql.Command(connection, transaction,
+                "SELECT ReusedAudioJson FROM chirp_article_plans WHERE PlanSha256=$plan AND AccountId=$account;",
+                ("$plan", parent.PlanSha256), ("$account", retained.Audio.AccountId));
+            var json = await inherited.ExecuteScalarAsync(token).ConfigureAwait(false) as string;
+            if (json is null || !ChirpPolicyFiles.Parse<ChirpReusedArticleAudio[]>(System.Text.Encoding.UTF8.GetBytes(json)).Contains(retained))
+                throw new InvalidOperationException("Inherited format predecessor audio changed.");
+            return;
+        }
         if (admitted.Proposal.SentenceSuccessor is not null && !string.Equals(retained.SourcePlanSha256, parent.PlanSha256, StringComparison.Ordinal))
         {
             // RequireSentenceSuccessorAsync already independently resolved this exact immutable parent and every inherited receipt/media file.

@@ -88,11 +88,11 @@ public sealed partial class PrivateProviderDiagnosticsTests
     }
 
     [Fact]
-    public async Task RotationAndExpiryBoundActivePrivateStorage()
+    public async Task LegacyErrorsRemainUntilAgeExpiryWithoutCountBasedRotation()
     {
         using var f = new Fixture();
         for (int i = 0; i < 10; i++) { f.Clock.Now += TimeSpan.FromSeconds(1); f.Arm(); await f.SendAsync("Unknown message " + i); }
-        Assert.Equal(8, f.Store.ReadRecords().Count);
+        Assert.Equal(10, f.Store.ReadRecords().Count);
         Assert.All(Directory.GetFiles(f.Root), path => Assert.True(new FileInfo(path).Length <= 4096));
         f.Clock.Now += TimeSpan.FromHours(24); Assert.Empty(f.Store.ReadRecords()); Assert.Empty(Directory.GetFiles(f.Root));
     }

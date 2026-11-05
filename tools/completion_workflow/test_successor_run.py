@@ -236,7 +236,7 @@ class SuccessorCliTests(unittest.TestCase):
         self.new_app = self.new_folder / "candidate"; self.new_app.mkdir()
         for name in ("CloudScribe.dll", "CloudScribe.Infrastructure.dll"): (self.new_app / name).write_bytes(("inert successor " + name).encode())
         self.source = self.new_folder / "source"; self.source.mkdir()
-        for name in ("gate_cli.py", "completion_register.py"): (self.source / name).write_bytes(Path(__file__).with_name(name).read_bytes())
+        for name in ("gate_cli.py", "completion_register.py", "successor_register.py", "maintenance_register.py"): (self.source / name).write_bytes(Path(__file__).with_name(name).read_bytes())
         self.scope = dict(self.b.f.scope, schema=2, approvalSha256=sha(b"NEW APPROVAL"), maxAdmissions=24,
                           predecessorRegisterPath=self.old["RegisterPath"], predecessorScopeSha256=self.old["ScopeSha256"],
                           transitionId=str(uuid.uuid4()), plansSha256=digest(self.manifest),

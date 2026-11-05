@@ -43,13 +43,13 @@ def document(reference,limit=32768):
 
 
 def load_sources(pins):
-    names=('completion_register.py','gate_cli.py','pending_install_files.py','pending_install_operator.py')
+    names=('completion_register.py','successor_register.py','gate_cli.py','pending_install_files.py','pending_install_operator.py')
     if not isinstance(pins,dict) or set(pins)!=set(names):raise ValueError('RecoverySourcePins')
     result={}
     for name in names:
         path=Path(__file__).resolve().with_name(name);data=raw(path)
         if sha(data)!=pins[name]:raise ValueError('RecoverySourcePins')
-        if name=='pending_install_operator.py':continue
+        if name in ('pending_install_operator.py','successor_register.py'):continue
         module=types.ModuleType(name[:-3]);module.__file__=str(path)
         exec(compile(data,str(path),'exec'),module.__dict__);result[name]=module
     return result
@@ -177,7 +177,7 @@ def safe_failure(error):
     for _ in range(128):
         if frame is None:break
         name=Path(frame.tb_frame.f_code.co_filename).name
-        if name in ('pending_install_operator.py','pending_install_files.py','gate_cli.py','completion_register.py') and 1<=frame.tb_lineno<=10000:
+        if name in ('pending_install_operator.py','pending_install_files.py','gate_cli.py','completion_register.py','successor_register.py') and 1<=frame.tb_lineno<=10000:
             result['sourceComponent']=name;result['sourceLine']=frame.tb_lineno
         frame=frame.tb_next
     else:result['sourceComponent']='unavailable';result['sourceLine']=None

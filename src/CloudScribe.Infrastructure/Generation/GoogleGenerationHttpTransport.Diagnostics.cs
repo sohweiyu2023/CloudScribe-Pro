@@ -12,6 +12,17 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed partial class GoogleGenerationHttpTransport
 {
+    private void ObserveInputStructure(string correlation, string payloadHash, byte[] payload) => Observe(() =>
+    {
+        var metrics = GoogleRequestStructureEvidence.Measure(payload);
+        string histogram = string.Join(",", new[] { metrics.UpTo32, metrics.From33To64, metrics.From65To128, metrics.From129To256, metrics.Over256 }
+            .Select(x => x.ToString(CultureInfo.InvariantCulture)));
+        CloudScribeLog.GoogleInputStructure(_logger, correlation, payloadHash, metrics.VoiceName, metrics.InputMode,
+            metrics.InputUtf8Bytes, metrics.SourceScalars, metrics.Sentences, metrics.MaximumSentenceScalars,
+            metrics.MaximumSentenceUtf8Bytes, metrics.MedianSentenceScalars, metrics.P95SentenceScalars, histogram,
+            metrics.ExplicitSentenceMarkers, metrics.Complete, -1);
+    });
+
     private void RequireCompletionSynthesis(GoogleHttpTransportRequest request, byte[] payload, Guid correlation)
     {
         bool required = _completionGate?.BeforeSynthesis(request.CredentialReferenceId, request.Endpoint, payload,
@@ -21,9 +32,11 @@ public sealed partial class GoogleGenerationHttpTransport
     }
     private void ObserveMissingResponse(GoogleHttpTransportRequest request, string correlation, int status, byte[] input)
     {
-        CloudScribeLog.Observe(() => _privateDiagnostics?.Observe(request.PrivateDiagnosticTicket,
+        var retention = GoogleExplanationRetentionState.PreparationFailed;
+        CloudScribeLog.Observe(() => retention = _privateDiagnostics?.Observe(request.PrivateDiagnosticTicket,
             status, ReadOnlyMemory<byte>.Empty, input, string.Empty, correlation, false,
-            status == 0 ? "NoResponseHeaders" : "HeadersWithoutBody", 0));
+            status == 0 ? "NoResponseHeaders" : "HeadersWithoutBody", 0) ?? GoogleExplanationRetentionState.NoActivePrivateTicket);
+        ObserveExplanationEvidence(correlation, status, [], retention);
     }
     private void ObserveProviderResponse(Guid? ticket, string correlation, int status, byte[] bytes, byte[] input, string token)
     {
@@ -87,7 +100,7 @@ public sealed partial class GoogleGenerationHttpTransport
     });
 
     private async Task<byte[]> ReadObservedResponseAsync(HttpResponseMessage response, int maximum, string correlation,
-        Guid? privateTicket, byte[] input, string credential, CancellationToken token)
+        Guid? privateTicket, byte[] input, string credential, Action responseObserved, CancellationToken token)
     {
         var observation = new ResponseReadObservation();
         var headers = CaptureHeaders(response.Content.Headers);
@@ -95,8 +108,15 @@ public sealed partial class GoogleGenerationHttpTransport
         finally
         {
             if (observation.State != GoogleResponseReadState.Complete)
-                CloudScribeLog.Observe(() => _privateDiagnostics?.Observe(privateTicket, (int)response.StatusCode,
-                    observation.Prefix.ToArray(), input, credential, correlation, false, observation.State.ToString(), observation.Bytes));
+            {
+                responseObserved(); // Outer catch must not replace already-observed partial evidence with an empty response.
+                byte[] prefix = observation.Prefix.ToArray();
+                var retention = GoogleExplanationRetentionState.PreparationFailed;
+                CloudScribeLog.Observe(() => retention = _privateDiagnostics?.Observe(privateTicket, (int)response.StatusCode,
+                    prefix, input, credential, correlation, false, observation.State.ToString(), observation.Bytes)
+                    ?? GoogleExplanationRetentionState.NoActivePrivateTicket);
+                ObserveExplanationEvidence(correlation, (int)response.StatusCode, prefix, retention);
+            }
             Observe(() =>
             {
                 var length = LengthState(headers, observation);

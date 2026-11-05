@@ -13,7 +13,7 @@ internal sealed partial class ChirpArticleEvidenceResolver
         AdmittedChirpArticle admitted, string account, CancellationToken token)
     {
         var parent = admitted.Proposal.SentenceSuccessor?.Parent ?? throw new InvalidOperationException("Sentence predecessor is absent.");
-        if (parent.SentenceSuccessor is not null || admitted.Proposal.Refinement is not null)
+        if (parent.InputFormat is not null || parent.SentenceSuccessor is not null || admitted.Proposal.Refinement is not null)
             throw new InvalidOperationException("Competing or nested sentence successors are not supported.");
         using var cmd = ChirpArticleSql.Command(connection, transaction,
             "SELECT ProposalJson,LineageJson,ReusedAudioJson,AccountId FROM chirp_article_plans WHERE PlanSha256=$plan;", ("$plan", parent.PlanSha256));

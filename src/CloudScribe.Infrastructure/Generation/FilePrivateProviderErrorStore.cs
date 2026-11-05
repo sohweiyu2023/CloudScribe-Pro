@@ -20,21 +20,24 @@ internal sealed partial class FilePrivateProviderErrorStore(string directory, Ti
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(record);
         bool protectedEnvelope = record.Response is not null;
         if (bytes.Length > (protectedEnvelope ? PrivateRecordProtection.MaximumPlaintextBytes : 4096)
+            || record.ArticleJobId is null != (record.ArticleOrdinal is null) || record.ArticleJobId == Guid.Empty || record.ArticleOrdinal is < 1 or > 10_000
+            || record.ArticleJobId is not null && record.Response is null
             || Encoding.UTF8.GetByteCount(record.Message) > 2048
             || record.Response is { } response && (response.Version != 1 || Encoding.UTF8.GetByteCount(response.RedactedBody) > 16384))
             throw new InvalidDataException("Private record is not bounded.");
         if (protectedEnvelope) bytes = PrivateRecordProtection.Protect(bytes);
-        var records = ReadRecordsCore();
+        var records = ReadLegacyRecords();
         string temp = Path.Combine(_directory, record.Id.ToString("N") + ".tmp");
         try
         {
             using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { file.Write(bytes); file.Flush(flushToDisk: true); }
-            ValidateDirectory(); File.Move(temp, RecordPath(record.Id, protectedEnvelope), overwrite: false);
+            ValidateDirectory(); File.Move(temp, RecordPath(record), overwrite: false);
             // Preserve older evidence until the replacement is durably written and published.
-            if (records.Count >= 8)
+            var samePool = records.Where(IsSuccessMetadata).ToArray();
+            if (IsSuccessMetadata(record) && samePool.Length >= 8)
             {
-                var oldest = records.OrderBy(x => x.CreatedUtc).First();
-                File.Delete(RecordPath(oldest.Id, oldest.Response is not null));
+                var oldest = samePool.OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id).First();
+                File.Delete(ExistingRecordPath(oldest));
             }
         }
         finally { if (File.Exists(temp)) { ValidateDirectory(); RejectLink(new FileInfo(temp)); File.Delete(temp); } }
@@ -43,51 +46,78 @@ internal sealed partial class FilePrivateProviderErrorStore(string directory, Ti
 
     /// <summary>Explicit private-view read. Expired records are unavailable and removed on store access.
     /// No normal export or logger uses this store. External copies/backups are not automatically purged.</summary>
-    public IReadOnlyList<PrivateProviderErrorRecord> Read()
+    public IReadOnlyList<PrivateProviderErrorRecord> Read() => ReadWithStatus().Records;
+
+    public PrivateProviderErrorReadResult ReadWithStatus()
     {
         lock (_gate)
         {
-            try { return ReadRecordsCore(); }
-            catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException) { return []; }
+            try { return new(PrivateProviderErrorReadStatus.Success, ReadRecordsCore()); }
+            catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+            {
+                var status = error switch
+                {
+                    InvalidDataException or JsonException or System.Security.Cryptography.CryptographicException => PrivateProviderErrorReadStatus.CorruptOrUnprotectable,
+                    UnauthorizedAccessException => PrivateProviderErrorReadStatus.AccessDenied,
+                    IOException => PrivateProviderErrorReadStatus.Unavailable,
+                    _ => PrivateProviderErrorReadStatus.Failed
+                };
+                return new(status, []);
+            }
         }
     }
 
-    private List<PrivateProviderErrorRecord> ReadRecordsCore()
+    private List<PrivateProviderErrorRecord> ReadLegacyRecords() => ReadRecordsCore(legacyOnly: true);
+
+    private List<PrivateProviderErrorRecord> ReadRecordsCore(bool legacyOnly = false)
     {
         ValidateDirectory(); List<PrivateProviderErrorRecord> records = [];
-        var files = new DirectoryInfo(_directory).GetFiles();
-        if (files.Length > 9) throw new InvalidDataException("Private diagnostic directory exceeds its bound.");
-        foreach (var file in files)
+        foreach (var file in new DirectoryInfo(_directory).EnumerateFiles())
         {
             RejectLink(file);
-            if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(file.Name), "N", out var id)
-                || file.Length is < 0 or > PrivateRecordProtection.MaximumProtectedBytes) throw new InvalidDataException("Unexpected private diagnostic file.");
+            if (!TryRecordIdentity(file, out _, out var archivedAt)
+                || file.Length is < 0 or > PrivateRecordProtection.MaximumProtectedBytes
+                || archivedAt is not null && file.Length == 0) throw new InvalidDataException("Unexpected private diagnostic file.");
             if (string.Equals(file.Extension, ".tmp", StringComparison.Ordinal)) { File.Delete(file.FullName); continue; }
-            bool protectedEnvelope = string.Equals(file.Extension, ".pdiag", StringComparison.Ordinal);
-            if (!protectedEnvelope && !string.Equals(file.Extension, ".json", StringComparison.Ordinal)) throw new InvalidDataException("Unexpected private diagnostic file.");
-            using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
-            if (stream.Length <= 0 || stream.Length > (protectedEnvelope ? PrivateRecordProtection.MaximumProtectedBytes : 4096))
-                throw new InvalidDataException("Private diagnostic file changed its bound.");
-            var bytes = new byte[(int)stream.Length]; stream.ReadExactly(bytes);
-            if (protectedEnvelope) bytes = PrivateRecordProtection.Unprotect(bytes);
-            var record = JsonSerializer.Deserialize<PrivateProviderErrorRecord>(bytes) ?? throw new InvalidDataException("Invalid private diagnostic record.");
-            if (record.Id != id || record.CreatedUtc > clock.GetUtcNow() || Encoding.UTF8.GetByteCount(record.Message) > 2048
-                || record.PayloadSha256.Length != 64 || !record.PayloadSha256.All(char.IsAsciiHexDigit)
-                || !Guid.TryParseExact(record.TransportCorrelation, "N", out _)
-                || protectedEnvelope != (record.Response is not null)
-                || record.Response is { } response && (response.Version != 1 || Encoding.UTF8.GetByteCount(response.RedactedBody) > 16384))
-                throw new InvalidDataException("Private diagnostic record identity or bound changed.");
-            if (clock.GetUtcNow() - record.CreatedUtc >= Retention) { stream.Dispose(); File.Delete(file.FullName); }
+            if (archivedAt is { } created && clock.GetUtcNow() - created >= Retention) { File.Delete(file.FullName); continue; }
+            if (legacyOnly && archivedAt is not null) continue; // Enumerate metadata, never decrypt article history on each response.
+            var record = ReadRecord(file);
+            if (clock.GetUtcNow() - record.CreatedUtc >= Retention) File.Delete(file.FullName);
             else records.Add(record);
         }
-        // A crash between publishing and rotation may leave nine valid committed records.
-        // Validate every record first; only then complete the bounded retention operation.
-        if (records.Count == 9)
+        // Error history is age-retained. Only body-free successes have a rotating display-metadata pool.
+        foreach (bool success in new[] { true })
         {
-            var oldest = records.OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id).First();
-            File.Delete(RecordPath(oldest.Id, oldest.Response is not null)); records.Remove(oldest);
+            var pool = records.Where(x => IsSuccessMetadata(x) == success).ToArray();
+            pool = pool.Where(x => !IsArticleError(x)).ToArray();
+            if (pool.Length > 9) throw new InvalidDataException("Private diagnostic pool exceeds its bound.");
+            if (pool.Length == 9)
+            {
+                var oldest = pool.OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id).First();
+                File.Delete(ExistingRecordPath(oldest)); records.Remove(oldest);
+            }
         }
         return records.OrderByDescending(x => x.CreatedUtc).ToList();
+    }
+
+    private static bool IsSuccessMetadata(PrivateProviderErrorRecord record) => record.Response is
+    {
+        HttpStatus: >= 200 and < 300, ParseState: "SuccessBodyExcluded", RedactedBody.Length: 0, DetailsOmitted: true,
+        ErrorStatus: CloudScribe.Domain.Generation.GoogleErrorStatus.NotProvided
+    };
+
+    private static bool IsArticleError(PrivateProviderErrorRecord record) => record.ArticleJobId is not null && !IsSuccessMetadata(record);
+
+    private string RecordPath(PrivateProviderErrorRecord record) => !IsSuccessMetadata(record)
+        ? Path.Combine(_directory, (IsArticleError(record) ? "article-" : "error-")
+            + record.CreatedUtc.UtcTicks.ToString("D19", System.Globalization.CultureInfo.InvariantCulture) + "-" + record.Id.ToString("N")
+            + (record.Response is not null ? ".pdiag" : ".json"))
+        : RecordPath(record.Id, record.Response is not null);
+
+    private string ExistingRecordPath(PrivateProviderErrorRecord record)
+    {
+        string modern = RecordPath(record);
+        return File.Exists(modern) ? modern : RecordPath(record.Id, record.Response is not null);
     }
 
     private string RecordPath(Guid id, bool protectedEnvelope = false) { ValidateDirectory(); return Path.Combine(_directory, id.ToString("N") + (protectedEnvelope ? ".pdiag" : ".json")); }

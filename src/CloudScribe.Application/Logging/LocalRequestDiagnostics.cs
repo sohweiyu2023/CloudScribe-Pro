@@ -50,6 +50,11 @@ public static partial class LocalRequestDiagnostics
 
     public static string UserMessage(LocalRequestFailure failure) => failure.Reason switch
     {
+        LocalRequestReason.TrendHistoryUnavailable => "Durable request trend history is unavailable. Saved audio and holds are preserved; inspect history storage health before another reservation. No automatic paid retry was made.",
+        LocalRequestReason.CaptureEvidenceRequired => "Required private error evidence is not ready or its bounded capture scope has ended. Saved audio and holds are preserved. Check private diagnostics, then review the remaining job before enabling a fresh capture scope. No automatic paid retry was made.",
+        LocalRequestReason.ProviderRejected => "Google rejected this article request. The exact internal part and safe HTTP/error metadata are in local diagnostics. Keep its hold and all accepted audio; do not repeat the request automatically. Full provider wording is available only if private capture was active.",
+        LocalRequestReason.ProviderOutcomeUncertain => "The provider outcome for this article request is uncertain. Keep the hold and reconcile its saved request status before any further generation; do not resend it.",
+        LocalRequestReason.VerifiedVoiceMissing => "No verified Google voice is selected. Load the verified voice catalog for the existing account, then select the intended voice before preparing this review. Existing reservations and holds are unchanged; no synthesis was sent.",
         LocalRequestReason.RefinementEvidenceChanged => "The failed-range subdivision no longer matches its original plan, failed attempt or accepted audio. Preserve all files and holds; review the exact evidence before continuing. No automatic request was made.",
         LocalRequestReason.RefinementOutputRecoveryRequired => "Google already accepted predecessor audio whose local receipt is incomplete. Use Recover saved local outputs and verify the existing file before subdivision. Do not generate that accepted range again.",
         LocalRequestReason.RefinementPlanAmbiguous => "The saved article has ambiguous or missing plan lineage. Keep every plan and receipt; resolve the exact predecessor and refined plan before exporting or generating.",

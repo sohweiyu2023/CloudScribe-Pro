@@ -6,9 +6,16 @@ public sealed record GoogleSpeechCompilationOptions(
     string AudioEncoding,
     int MaximumPayloadBytes)
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public GoogleSentenceMarkers? SentenceMarkers { get; init; }
+
     public GoogleSpeechCompilationOptions Validate()
     {
-        return Validate(LanguageCode, VoiceName, AudioEncoding, MaximumPayloadBytes);
+        var value = Validate(LanguageCode, VoiceName, AudioEncoding, MaximumPayloadBytes);
+        if (SentenceMarkers is not { } markers) return value;
+        if (markers.Version != 1 || markers.EndScalars is not { Count: >= 1 and <= 32 })
+            throw new InvalidOperationException("Sentence marker format is absent, unknown or unbounded.");
+        return value with { SentenceMarkers = markers with { EndScalars = markers.EndScalars.ToArray() } };
     }
 
     private static GoogleSpeechCompilationOptions Validate(

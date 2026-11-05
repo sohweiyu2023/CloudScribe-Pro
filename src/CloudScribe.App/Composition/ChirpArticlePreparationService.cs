@@ -21,7 +21,7 @@ public sealed partial class ChirpArticlePreparationService(ChirpArticleService a
         var source = resumed ?? await ResolveSelectionAsync(selection, ordinal, cancellationToken).ConfigureAwait(false);
         if (resumed is not null) ChirpResumeSelectionBinding.RequireFresh(selection, clock.GetUtcNow());
         RequireSourceSelection(source, selection);
-        var pending = await compilation.CompileReadonlyAsync(selection with { ExactText = source.ExactText }, cancellationToken).ConfigureAwait(false);
+        var pending = await compilation.CompileArticleReadonlyAsync(selection, source, cancellationToken).ConfigureAwait(false);
         var intent = new ChirpRequestIntent(selection.DocumentId, ordinal, selection.ProjectStableId, pending.Envelope,
             pending.Snapshot.ProviderRequest.CompiledPayload, pending.Currency, pending.Scale, pending.CurrentEstimateMinorUnits);
         var review = resumed is null ? await articles.PrepareAsync(intent, cancellationToken).ConfigureAwait(false)
@@ -57,7 +57,7 @@ public sealed partial class ChirpArticlePreparationService(ChirpArticleService a
         var source = await ResolveSelectionAsync(selection, prepared.Ordinal, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(source.Proposal.SourceSha256, prepared.SourceSha256, StringComparison.Ordinal))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("The saved original article changed after request review."), LocalRequestReason.SourceChanged, prepared.CreatedAt, prepared.Review.ExpiresAtUtc);
-        var current = await compilation.CompileReadonlyAsync(selection with { ExactText = source.ExactText }, cancellationToken).ConfigureAwait(false);
+        var current = await compilation.CompileArticleReadonlyAsync(selection, source, cancellationToken).ConfigureAwait(false);
         if (current.Envelope != prepared.Pending.Envelope || current.CurrentEstimateMinorUnits != prepared.Pending.CurrentEstimateMinorUnits
             || !Equals(current.Snapshot.UiSelection, prepared.Pending.Snapshot.UiSelection)
             || !current.Snapshot.ProviderRequest.CompiledPayload.Span.SequenceEqual(prepared.Pending.Snapshot.ProviderRequest.CompiledPayload.Span))

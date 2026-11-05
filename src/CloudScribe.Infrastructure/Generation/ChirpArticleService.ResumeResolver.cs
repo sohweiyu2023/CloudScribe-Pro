@@ -55,9 +55,7 @@ public sealed partial class ChirpArticleService
         var article = policy.HistoricalPolicy.Articles.Single(x => Equals(x.Proposal.PlanSha256, row[1]));
         var part = article.Proposal.Parts.Single(x => x.CoverageOrdinal == (int)(long)row[2]!);
         var source = await _evidence.ResolveAsync(connection, transaction, policy.HistoricalPolicy, article.Proposal.DocumentId, financial.Old, token, requirePersistedLegacy: true).ConfigureAwait(false);
-        var compiled = GoogleSpeechPlanCompiler.Compile(new CloudScribe.Domain.Generation.SpeechPlan(article.Proposal.LanguageCode,
-            [new CloudScribe.Domain.Generation.SpeechText(ChirpNarrationPlanner.Slice(source.Document.Text, part.Range))], ChirpNarrationPlanner.Version),
-            new(article.Proposal.LanguageCode, article.Proposal.VoiceName, "MP3", 5000));
+        var compiled = ChirpArticlePlanCompiler.CompilePart(source.Document.Text, article.Proposal, part);
         _ = await CurrentAsync(connection, transaction, policy.HistoricalPolicy, new(article.Proposal.DocumentId, part.CoverageOrdinal,
             policy.HistoricalPolicy.ProjectId, policy.OriginalEnvelope with { ChirpAuthorizationId = null }, compiled.Payload,
             (string)row[10]!, (int)(long)row[11]!, (long)row[12]!), token).ConfigureAwait(false);

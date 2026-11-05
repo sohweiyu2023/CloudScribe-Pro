@@ -24,7 +24,9 @@ public sealed partial class ChirpArticleService
         if (!await row.ReadAsync(token).ConfigureAwait(false) || row.GetString(2).Length > 8192)
             throw new InvalidDataException("The durable article job is missing or exceeds its bound.");
         var job = JsonSerializer.Deserialize<ChirpWholeArticleJob>(row.GetString(2)) ?? throw new InvalidDataException("The article job is unreadable.");
-        if (job.JobId != jobId || !Enum.IsDefined(job.State) || job.MaximumAdditionalMinorUnits < 0 || job.CatalogRefreshes is < 0 or > 24
+        if (job.JobId != jobId || !Enum.IsDefined(job.State) || job.MaximumAdditionalMinorUnits < 0 || job.CatalogRefreshes < 0
+            || job.MaximumRecoveryRequests < 0 || job.MaximumRecoveryMinorUnits < 0
+            || job.MaximumRecoveryMinorUnits > job.MaximumAdditionalMinorUnits
             || !string.Equals(job.PolicySha256, row.GetString(0), StringComparison.Ordinal)
             || !string.Equals(job.PlanSha256, row.GetString(1), StringComparison.Ordinal)
             || !string.Equals(ChirpPolicyValidation.Hash(job), row.GetString(3), StringComparison.Ordinal))

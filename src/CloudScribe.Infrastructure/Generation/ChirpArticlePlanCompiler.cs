@@ -41,12 +41,13 @@ public static partial class ChirpArticlePlanCompiler
         IReadOnlyList<ChirpNarrationReuse>? verifiedReuse = null)
     {
         ArgumentNullException.ThrowIfNull(proposal);
-        if (proposal.Refinement is not null && proposal.SentenceSuccessor is not null)
+        if (proposal.Refinement is not null && (proposal.SentenceSuccessor is not null || proposal.InputFormat is not null))
             throw new InvalidOperationException("An article cannot have competing successor mechanisms.");
         var compiled = proposal.SentenceSuccessor is { } successor
-            ? CompileSentenceSuccessor(current, successor.Parent, verifiedReuse ?? [])
-            : string.Equals(proposal.PlannerVersion, ChirpSentencePlanner.Version, StringComparison.Ordinal) && proposal.Refinement is null
-                ? CompileSentences(current, proposal.LanguageCode, proposal.VoiceName, verifiedReuse)
+            ? CompileSentenceSuccessor(current, successor.Parent, verifiedReuse ?? [], proposal.InputFormat)
+            : (string.Equals(proposal.PlannerVersion, ChirpSentencePlanner.Version, StringComparison.Ordinal)
+                || string.Equals(proposal.PlannerVersion, SentenceMarkedArticleVersion, StringComparison.Ordinal)) && proposal.Refinement is null
+                ? CompileSentences(current, proposal.LanguageCode, proposal.VoiceName, verifiedReuse, proposal.InputFormat)
             : proposal.Refinement is { } refinement
             ? CompileRefined(current, refinement, verifiedReuse ?? [])
             : Compile(current, proposal.LanguageCode, proposal.VoiceName, verifiedReuse);

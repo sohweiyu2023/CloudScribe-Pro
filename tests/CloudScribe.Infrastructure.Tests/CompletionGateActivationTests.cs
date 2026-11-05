@@ -48,6 +48,29 @@ public sealed class CompletionGateActivationTests
         Assert.Null(fixture.ReadActualInstalledParser());
     }
 
+    [Fact]
+    public void AdministrativeRetirementKeepsStartupBlockedUntilRequiredMarkerIsArchived()
+    {
+        using var fixture = new ActivationFixture();
+        byte[] original = File.ReadAllBytes(fixture.Required);
+        // The offline administrative operator first verifies and durably retires
+        // the old journal; this test exercises the actual native startup parser.
+        fixture.WriteMarker(false, 1);
+        Assert.Throws<TargetInvocationException>(fixture.ReadActualInstalledParser);
+        string retained = fixture.Required + ".synthetic-retirement.retired";
+        File.Move(fixture.Required, retained);
+        Assert.Null(fixture.ReadActualInstalledParser());
+        var restarted = new CompletionWorkflowGate(() => (CompletionGateConfiguration?)fixture.ReadActualInstalledParser(), new CompletionGateCommandRunner());
+        Assert.False(restarted.IsRequired);
+        restarted.RequireReady(); // Ordinary readiness needs no retired-run helper.
+        Assert.Throws<CompletionGateException>(() => restarted.RequireDiagnosticAdmission(new string('d', 64)));
+        Assert.Equal(original, File.ReadAllBytes(retained));
+        Assert.True(File.Exists(fixture.GatePath)); // Retained history is not deleted.
+        // An interrupted/accidental marker restoration must fail closed again.
+        fixture.WriteMarker(true, 1);
+        Assert.Throws<TargetInvocationException>(fixture.ReadActualInstalledParser);
+    }
+
     private sealed class ActivationFixture : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "cloudscribe-completion-parser-" + Guid.NewGuid().ToString("N"));

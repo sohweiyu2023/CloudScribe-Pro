@@ -26,6 +26,7 @@ internal static partial class SafeDiagnosticMetadata
         ["LayoutMode"] = new(StringComparer.Ordinal) { "Narrow", "Compact", "Standard", "Full" },
         ["LocationMode"] = new(StringComparer.Ordinal) { "configured-application-data", "executable-folder", "local-app-data-fallback" },
         ["FallbackReason"] = new(StringComparer.Ordinal) { "none", "UnauthorizedAccessException", "IOException", "SecurityException", "NotSupportedException", "ArgumentException" },
+        ["InputMode"] = new(StringComparer.Ordinal) { "Text", "Ssml", "Unavailable" },
     };
 
     internal static SafeDiagnosticMetadataSnapshot Capture<TState>(EventId id, TState state)
@@ -120,6 +121,10 @@ internal static partial class SafeDiagnosticMetadata
         safe = null;
         if (text.Length > 128) return false;
         if (SafeNames.TryGetValue(key, out var names) && names.Contains(text)) { safe = text; return true; }
+        if (string.Equals(key, "VoiceName", StringComparison.OrdinalIgnoreCase) && GoogleRequestStructureEvidence.IsPublicVoiceIdentity(text))
+        { safe = text; return true; }
+        if (string.Equals(key, "Histogram", StringComparison.OrdinalIgnoreCase) && IsBoundedHistogram(text))
+        { safe = text; return true; }
         if (key.EndsWith("Sha256", StringComparison.OrdinalIgnoreCase) && text.Length == 64 && text.All(char.IsAsciiHexDigit))
         { safe = text.ToLowerInvariant(); return true; }
         if (string.Equals(key, "Correlation", StringComparison.OrdinalIgnoreCase) && Guid.TryParse(text, out var id))
@@ -133,6 +138,15 @@ internal static partial class SafeDiagnosticMetadata
         { safe = text; return true; }
         return false;
     }
+
+    private static bool IsBoundedHistogram(string text)
+    {
+        if (string.Equals(text, "-1,-1,-1,-1,-1", StringComparison.Ordinal)) return true;
+        var fields = text.Split(',');
+        return fields.Length == 5 && fields.All(x => int.TryParse(x, NumberStyles.None, CultureInfo.InvariantCulture, out int value)
+            && value is >= 0 and <= 1000);
+    }
+
 
     private static bool TryText(string key, Type expected, string? text, out string? safe)
     {

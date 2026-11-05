@@ -13,8 +13,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     private async Task<ShellViewModel.GoogleTtsStudioRequestSelection> RefreshWholeArticleSelectionAsync(
         ShellViewModel model, ShellViewModel.GoogleTtsStudioRequestSelection original, CancellationToken token)
     {
+        var previousExpiry = model.VoiceLanguageCatalogExpiresAtUtc;
         if (!await RefreshConnectedVoicesAsync(model, token).ConfigureAwait(true))
             throw new InvalidOperationException("The bounded catalog refresh failed. No speech request was reserved or retried.");
+        if (!model.HasCurrentVoiceLanguageCatalog || model.VoiceLanguageCatalogExpiresAtUtc <= previousExpiry)
+            throw new InvalidOperationException("Catalog verification did not advance current provider evidence. No speech request was reserved.");
         var matching = model.VoiceLabCatalogResults.Where(v =>
             string.Equals(v.ProviderStableId, original.ProviderStableId, StringComparison.Ordinal)
             && string.Equals(v.AccountStableId, original.AccountStableId, StringComparison.Ordinal)

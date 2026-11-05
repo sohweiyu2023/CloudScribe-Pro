@@ -17,4 +17,12 @@ public sealed record ChirpArticleAdmissionPolicy(int SchemaVersion, string AppSh
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     ChirpWholeArticleGrant? WholeArticleGeneration = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    ChirpSentenceDiagnosticAdmission? DiagnosticEvidence = null);
+    ChirpSentenceDiagnosticAdmission? DiagnosticEvidence = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ChirpWholeArticleRecoveryGrant? SentenceRecovery = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ChirpWholeArticleContinuation? RecoveryContinuation = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ChirpRecoveryLimitRevision? RecoveryLimitRevision = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ChirpWholeArticleCompletionContinuity? CompletionContinuity = null);

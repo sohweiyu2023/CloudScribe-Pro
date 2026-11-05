@@ -11,9 +11,14 @@ internal sealed partial class FilePrivateProviderErrorStore
             {
                 ValidateDirectory();
                 // Save must be able to read the existing store, not merely create a new probe.
-                var existing = ReadRecordsCore();
-                if (existing.Count >= 8 && new FileInfo(RecordPath(existing.OrderBy(x => x.CreatedUtc).First().Id,
-                    existing.OrderBy(x => x.CreatedUtc).First().Response is not null)).IsReadOnly) return false;
+                var existing = ReadLegacyRecords();
+                foreach (bool success in new[] { true })
+                {
+                    var pool = existing.Where(x => !IsArticleError(x) && IsSuccessMetadata(x) == success).ToArray();
+                    if (pool.Length < 8) continue;
+                    var oldest = pool.OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id).First();
+                    if (new FileInfo(ExistingRecordPath(oldest)).IsReadOnly) return false;
+                }
                 byte[] marker = "Synthetic private capture readiness; no customer content"u8.ToArray();
                 byte[] protectedBytes = PrivateRecordProtection.Protect(marker);
                 probe = Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".tmp");

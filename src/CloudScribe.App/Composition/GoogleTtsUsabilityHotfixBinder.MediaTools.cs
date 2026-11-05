@@ -1,0 +1,91 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Platform.Storage;
+using CloudScribe.Application.Logging;
+using CloudScribe.Infrastructure.Generation;
+
+namespace CloudScribe.App.Composition;
+
+public sealed partial class GoogleTtsUsabilityHotfixBinder
+{
+    private string? _sessionFfmpeg;
+
+    private async Task<string?> ChooseExistingMediaToolsAsync(Window owner, TextBlock status)
+    {
+        string? found = ExistingMediaTools.Find(new[]
+        {
+            _sessionFfmpeg is null ? null : Path.GetDirectoryName(_sessionFfmpeg),
+            Path.Combine(AppContext.BaseDirectory, "tools"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ffmpeg", "bin"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "ffmpeg", "bin")
+        }.Concat((Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator)));
+        if (found is not null)
+        {
+            int decision = string.Equals(found, _sessionFfmpeg, StringComparison.OrdinalIgnoreCase)
+                ? 1 : await ConfirmExistingMediaToolAsync(owner, found).ConfigureAwait(true);
+            if (decision == 0) { status.Text = "Audio setup cancelled; no article job or paid request started."; return null; }
+            if (decision == 1)
+            {
+                status.Text = "Audio setup is ready. Choose where to save your MP3; no software was downloaded or installed.";
+                return _sessionFfmpeg = found;
+            }
+        }
+        status.Text = "One-time audio setup: choose ffmpeg.exe from an existing FFmpeg folder with ffprobe.exe beside it. Official download guide: https://ffmpeg.org/download.html. Nothing is downloaded or installed automatically.";
+        if (!await ShowMediaSetupGuideAsync(owner).ConfigureAwait(true)) return null;
+        var tools = await owner.StorageProvider.OpenFilePickerAsync(new()
+        {
+            Title = "One-time audio setup: locate FFmpeg (ffprobe must be beside it)",
+            AllowMultiple = false,
+            FileTypeFilter = [new FilePickerFileType("FFmpeg audio tool") { Patterns = ["ffmpeg.exe"] }]
+        }).ConfigureAwait(true);
+        if (tools.Count != 1 || !tools[0].Path.IsFile) return null;
+        string selected = tools[0].Path.LocalPath;
+        if (!string.Equals(Path.GetFileName(selected), "ffmpeg.exe", StringComparison.OrdinalIgnoreCase)
+            || ExistingMediaTools.Find([Path.GetDirectoryName(selected)]) is not { } verified)
+        {
+            status.Text = "The folder needs both ffmpeg.exe and ffprobe.exe as ordinary local files. Nothing was started. Choose the extracted FFmpeg bin folder and try again.";
+            return null;
+        }
+        return _sessionFfmpeg = verified;
+    }
+
+    private async Task<bool> ShowMediaSetupGuideAsync(Window owner)
+    {
+        var dialog = new Window { Title = "One-time audio setup", Width = 600, Height = 340 };
+        var body = new StackPanel { Margin = new Thickness(20), Spacing = 14 };
+        var explanation = NewDescription("To join a complete article into one MP3, CloudScribe needs the free FFmpeg audio tools. Choose the installation you want to use.\n\nIf you already have FFmpeg, choose Locate audio tools and select ffmpeg.exe in its bin folder; ffprobe.exe must be beside it. Otherwise open the official download guide and choose a Windows build. Nothing is downloaded or installed automatically, and no narration starts during setup.");
+        body.Children.Add(explanation);
+        var actions = new WrapPanel { Orientation = Orientation.Horizontal };
+        var guide = NewButton("Open official download guide");
+        guide.Click += (_, _) =>
+        {
+            try { _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://ffmpeg.org/download.html") { UseShellExecute = true }); }
+            catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+            { _ = ReportLocalFailure(LocalRequestStage.Export, error); explanation.Text = "The browser could not open. Visit https://ffmpeg.org/download.html. No download or narration was started."; }
+        };
+        var locate = NewButton("Locate audio tools"); locate.Click += (_, _) => dialog.Close(true);
+        var cancel = NewButton("Cancel"); cancel.Click += (_, _) => dialog.Close(false);
+        foreach (var button in new[] { guide, locate, cancel }) { button.Margin = new Thickness(0, 0, 8, 4); actions.Children.Add(button); }
+        body.Children.Add(actions); dialog.Content = new ScrollViewer { Content = body };
+        DialogBounds.Fit(dialog, owner);
+        return await dialog.ShowDialog<bool>(owner).ConfigureAwait(true);
+    }
+
+    private static async Task<int> ConfirmExistingMediaToolAsync(Window owner, string path)
+    {
+        var dialog = new Window { Title = "Audio setup: existing FFmpeg found", Width = 600, Height = 300 };
+        var body = new StackPanel { Margin = new Thickness(20), Spacing = 14 };
+        body.Children.Add(NewDescription("CloudScribe found an existing audio-joining tool. Use it only if you recognize this installation. Finding these filenames does not verify their publisher. Nothing is downloaded or installed."));
+        body.Children.Add(NewDescription(path));
+        var actions = new WrapPanel { Orientation = Orientation.Horizontal };
+        foreach (var item in new[] { ("Use this installation", 1), ("Choose another", 2), ("Cancel", 0) })
+        {
+            var button = NewButton(item.Item1); button.Margin = new Thickness(0, 0, 8, 4);
+            button.Click += (_, _) => dialog.Close(item.Item2); actions.Children.Add(button);
+        }
+        body.Children.Add(actions); dialog.Content = new ScrollViewer { Content = body };
+        DialogBounds.Fit(dialog, owner);
+        return await dialog.ShowDialog<int>(owner).ConfigureAwait(true);
+    }
+}

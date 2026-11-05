@@ -81,12 +81,17 @@ public sealed partial class ChirpArticleService
             await RequireWholeArticleRuntimeJobAsync(connection, transaction, policy, plan, ordinal, token).ConfigureAwait(false);
         var current = await _evidence.ResolveAsync(connection, transaction, policy, article.Proposal.DocumentId, financial.Old, token,
             requirePersistedLegacy: true).ConfigureAwait(false);
-        var part = article.Proposal.Parts.Single(x => x.CoverageOrdinal == ordinal);
-        string text = ChirpNarrationPlanner.Slice(current.Document.Text, part.Range);
-        var compiled = GoogleSpeechPlanCompiler.Compile(new SpeechPlan(article.Proposal.LanguageCode, [new SpeechText(text)], ChirpNarrationPlanner.Version),
-            new(article.Proposal.LanguageCode, article.Proposal.VoiceName, "MP3", 5_000));
+        var recoveryChild = await ReadRecoveryChildAsync(connection, transaction, envelope.ChirpAuthorizationId!.Value, token).ConfigureAwait(false);
+        if (recoveryChild is not null)
+        {
+            var job = await ReadWholeArticleJobAsync(connection, transaction, recoveryChild.JobId, token).ConfigureAwait(false);
+            RequireRecoveryJob(policy, job); RequireRecoveryChildJob(job, recoveryChild);
+        }
+        var part = recoveryChild is null ? article.Proposal.Parts.Single(x => x.CoverageOrdinal == ordinal)
+            : await RecoveryPartAsync(connection, transaction, policy, recoveryChild, token).ConfigureAwait(false);
+        var compiled = ChirpArticlePlanCompiler.CompilePart(current.Document.Text, article.Proposal, part);
         _ = await CurrentAsync(connection, transaction, policy, new(article.Proposal.DocumentId, ordinal, policy.ProjectId,
-            envelope with { ChirpAuthorizationId = null }, compiled.Payload, currency, scale, estimate), token).ConfigureAwait(false);
+            envelope with { ChirpAuthorizationId = null }, compiled.Payload, currency, scale, estimate), token, recoveryChild is null ? null : part).ConfigureAwait(false);
         return new(key, GoogleGenerationSpendAuthorization.Create(envelope, currency, scale, estimate, reserved));
     }
 

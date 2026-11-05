@@ -28,7 +28,7 @@ def main():
     # Preserve the immutable predecessor source/config independently of successor.
     old_source = root / "old-source"
     old_source.mkdir()
-    for name in ("gate_cli.py", "completion_register.py"):
+    for name in ("gate_cli.py", "completion_register.py", "successor_register.py", "maintenance_register.py"):
         (old_source / name).write_bytes((tools / name).read_bytes())
     old["ScriptPath"] = str(old_source / "gate_cli.py")
     old_path.write_text(json.dumps(old), encoding="utf-8")
@@ -92,7 +92,7 @@ def main():
         invoke("complete-build")
         helper_source = root / "helper-successor-source"
         helper_source.mkdir()
-        for name in ("gate_cli.py", "completion_register.py"):
+        for name in ("gate_cli.py", "completion_register.py", "successor_register.py", "maintenance_register.py"):
             (helper_source / name).write_bytes((tools / name).read_bytes() + b"\n# Synthetic reviewed helper-source successor.\n")
         helper = dict(new, ScriptPath=str(helper_source / "gate_cli.py"),
                       ScriptSha256=sha((helper_source / "gate_cli.py").read_bytes()),

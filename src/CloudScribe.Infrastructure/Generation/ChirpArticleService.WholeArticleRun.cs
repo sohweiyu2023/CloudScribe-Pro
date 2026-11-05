@@ -19,6 +19,7 @@ public sealed partial class ChirpArticleService
                 await VerifyWholeArticleOutputAsync(job.Output, token).ConfigureAwait(false);
                 return job;
             }
+            RequireWholeJobLifetime(job);
             if (job.State == ChirpWholeArticleState.Assembling)
                 return await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Stopped, null, "article.export-interrupted-reconcile-local-output", token).ConfigureAwait(false);
             if (job.State == ChirpWholeArticleState.RefreshingCatalog)
@@ -26,9 +27,9 @@ public sealed partial class ChirpArticleService
             var coverage = await ProgressAsync(job.DocumentId, token).ConfigureAwait(false);
             if (job.State == ChirpWholeArticleState.Executing)
             {
-                var prior = coverage.Parts.Single(x => x.CoverageOrdinal == job.ActiveOrdinal);
-                if (!IsAccepted(prior))
+                if (job.MaximumRecoveryRequests < 2 && !IsAccepted(coverage.Parts.Single(x => x.CoverageOrdinal == job.ActiveOrdinal)))
                     return await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Stopped, job.ActiveOrdinal, "article.interrupted-reconcile-no-retry", token).ConfigureAwait(false);
+                coverage = await ReconcileExecutingRecoveryAsync(job, runtime, coverage, token).ConfigureAwait(false);
                 job = await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Ready, null, "article.accepted-reconciled", token).ConfigureAwait(false);
             }
             job = await GenerateWholeArticleRemainingAsync(job, runtime, coverage, progress, token).ConfigureAwait(false);
@@ -41,15 +42,7 @@ public sealed partial class ChirpArticleService
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
             // No raw provider, document, path or exception text is persisted. If this checkpoint fails, Executing remains fail-closed.
-            string reason = error switch
-            {
-                OperationCanceledException => "article.cancelled-reconcile",
-                InvalidDataException => "article.invalid-evidence-reconcile",
-                UnauthorizedAccessException => "article.storage-denied-reconcile",
-                IOException or Microsoft.Data.Sqlite.SqliteException => "article.storage-failed-reconcile",
-                InvalidOperationException => "article.guard-rejected-reconcile",
-                _ => "article.unexpected-failure-reconcile",
-            };
+            string reason = WholeArticleStopReason(error);
             try
             {
                 job = await ReadWholeArticleJobAsync(jobId, CancellationToken.None).ConfigureAwait(false);
@@ -60,6 +53,25 @@ public sealed partial class ChirpArticleService
             throw;
         }
     }
+    private string WholeArticleStopReason(Exception error)
+    {
+        var typedReason = CloudScribe.Application.Logging.LocalRequestDiagnostics.Describe(error, clock.GetUtcNow()).Reason;
+        return typedReason switch
+        {
+            CloudScribe.Application.Logging.LocalRequestReason.ProviderRejected => "article.provider-rejected-no-retry",
+            CloudScribe.Application.Logging.LocalRequestReason.ProviderOutcomeUncertain => "article.provider-outcome-uncertain-no-retry",
+            _ => error switch
+            {
+                OperationCanceledException => "article.cancelled-reconcile",
+                PrivateDiagnosticNotReadyException => "article.private-capture-required",
+                InvalidDataException => "article.invalid-evidence-reconcile",
+                UnauthorizedAccessException => "article.storage-denied-reconcile",
+                IOException or Microsoft.Data.Sqlite.SqliteException => "article.storage-failed-reconcile",
+                InvalidOperationException => "article.guard-rejected-reconcile",
+                _ => "article.unexpected-failure-reconcile",
+            }
+        };
+    }
 
     private async Task<ChirpWholeArticleJob> GenerateWholeArticleRemainingAsync(ChirpWholeArticleJob job,
         IChirpWholeArticleRuntime runtime, ChirpArticleProgress coverage, IProgress<ChirpArticleProgress>? progress, CancellationToken token)
@@ -67,22 +79,37 @@ public sealed partial class ChirpArticleService
         while (!coverage.Complete)
         {
             token.ThrowIfCancellationRequested();
+            RequireWholeJobLifetime(job);
             var policy = await PolicyAsync(token).ConfigureAwait(false);
             RequireWholeArticleGrant(policy, job.PlanSha256);
             if (!string.Equals(job.PolicySha256, ChirpPolicyValidation.Hash(policy), StringComparison.Ordinal)
-                || !string.Equals(job.PlanSha256, coverage.PlanSha256, StringComparison.Ordinal) || clock.GetUtcNow() >= job.ExpiresAtUtc)
+                || !string.Equals(job.PlanSha256, coverage.PlanSha256, StringComparison.Ordinal) || ChirpPolicyValidation.IsJobExpired(job, clock.GetUtcNow())
+                || job.CompletionBound != ChirpPolicyValidation.IsCompletionBound(policy))
                 throw new InvalidOperationException("Article admission expired or exact plan changed. No automatic renewal.");
             var next = coverage.Parts.First(x => !IsAccepted(x));
-            if (!next.CurrentlyAdmitted || !string.Equals(next.Status, "Not requested", StringComparison.Ordinal))
+            if (!next.CurrentlyAdmitted || job.MaximumRecoveryRequests < 2 && !string.Equals(next.Status, "Not requested", StringComparison.Ordinal))
                 throw new InvalidOperationException("An existing request requires reconciliation. No automatic retry.");
             job = await RefreshWholeArticleCatalogIfNeededAsync(job, policy, runtime, token).ConfigureAwait(false);
             job = await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Executing, next.CoverageOrdinal, "article.request-starting", token).ConfigureAwait(false);
-            await runtime.GenerateAsync(job, next.CoverageOrdinal, token).ConfigureAwait(false);
-            coverage = await ProgressAsync(job.DocumentId, token).ConfigureAwait(false);
+            if (!string.Equals(next.Status, "Not requested", StringComparison.Ordinal))
+                await RecoverWholeArticleRangeAsync(job, await RecoveryRootForJobAsync(job, next.CoverageOrdinal, token).ConfigureAwait(false), runtime, token).ConfigureAwait(false);
+            else
+            {
+                try { await runtime.GenerateAsync(job, next.CoverageOrdinal, token).ConfigureAwait(false); }
+                catch (Exception error) when (job.MaximumRecoveryRequests >= 2
+                    && error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException and not OperationCanceledException)
+                {
+                    var root = await TryRecoveryRootForJobAsync(job, next.CoverageOrdinal, token).ConfigureAwait(false);
+                    if (root is not { } qualified) throw;
+                    await RecoverWholeArticleRangeAsync(job, qualified, runtime, token).ConfigureAwait(false);
+                }
+            }
+            coverage = await ProgressAsync(job.DocumentId, CancellationToken.None).ConfigureAwait(false);
             if (!IsAccepted(coverage.Parts.Single(x => x.CoverageOrdinal == next.CoverageOrdinal)))
                 throw new InvalidOperationException("The request has no verified saved receipt. Stop and reconcile, retaining its hold.");
-            job = await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Ready, null, "article.request-saved", token).ConfigureAwait(false);
+            job = await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Ready, null, "article.request-saved", CancellationToken.None).ConfigureAwait(false);
             progress?.Report(coverage);
+            token.ThrowIfCancellationRequested();
         }
         return job;
     }
@@ -93,10 +120,11 @@ public sealed partial class ChirpArticleService
         ChirpArticleAdmissionPolicy policy, IChirpWholeArticleRuntime runtime, CancellationToken token)
     {
         if (!runtime.RequiresCatalogRefresh) return job;
-        if (job.CatalogRefreshes >= policy.WholeArticleGeneration!.MaximumCatalogRefreshes)
+        if (!job.CompletionBound && job.CatalogRefreshes >= policy.WholeArticleGeneration!.MaximumCatalogRefreshes)
             throw new InvalidOperationException("The independently admitted catalog-refresh limit is exhausted.");
         job = await TransitionWholeArticleAsync(job, ChirpWholeArticleState.RefreshingCatalog, null, "article.catalog-refresh-starting", token, countRefresh: true).ConfigureAwait(false);
         await runtime.RefreshCatalogAsync(token).ConfigureAwait(false);
+        if (runtime.RequiresCatalogRefresh) throw new InvalidOperationException("Catalog verification made no forward freshness progress; no speech request may start.");
         await RequirePolicyCurrentAsync(policy, token).ConfigureAwait(false);
         return await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Ready, null, "article.catalog-refreshed", token).ConfigureAwait(false);
     }

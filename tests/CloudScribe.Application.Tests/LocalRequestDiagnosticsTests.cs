@@ -6,7 +6,35 @@ namespace CloudScribe.Application.Tests;
 
 public sealed class LocalRequestDiagnosticsTests
 {
+    [Fact]
+    public void RequiredCaptureHasActionableSafeMessageWithoutPrivateExceptionText()
+    {
+        var error = LocalRequestDiagnostics.Mark(new InvalidOperationException("PRIVATE_ARTICLE credential=secret"), LocalRequestReason.CaptureEvidenceRequired);
+        var report = LocalRequestDiagnostics.Describe(error, Now);
+        Assert.Equal(LocalRequestReason.CaptureEvidenceRequired, report.Reason);
+        string message = LocalRequestDiagnostics.UserMessage(report);
+        Assert.Contains("bounded capture scope has ended", message, StringComparison.Ordinal);
+        Assert.Contains("review the remaining job", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("PRIVATE", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", message, StringComparison.Ordinal);
+    }
+
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-01-02T03:04:05Z", System.Globalization.CultureInfo.InvariantCulture);
+
+    [Fact]
+    public void MissingVerifiedVoiceRetainsActionableReasonWithoutPrivateExceptionText()
+    {
+        var logger = new CaptureLogger();
+        var error = LocalRequestDiagnostics.Mark(new InvalidOperationException("synthetic private article token=secret"), LocalRequestReason.VerifiedVoiceMissing);
+        var failure = LocalRequestDiagnostics.Failure(logger, Guid.NewGuid(), LocalRequestStage.RecoveryReview, error, Now);
+        Assert.Equal(LocalRequestReason.VerifiedVoiceMissing, failure.Reason);
+        Assert.True(failure.EvidenceComplete);
+        Assert.Contains("VerifiedVoiceMissing", logger.Text, StringComparison.Ordinal);
+        Assert.Contains("No verified Google voice is selected", LocalRequestDiagnostics.UserMessage(failure), StringComparison.Ordinal);
+        Assert.DoesNotContain("token=secret", logger.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("synthetic private article", LocalRequestDiagnostics.UserMessage(failure), StringComparison.Ordinal);
+        Assert.Null(logger.Exception);
+    }
 
     [Theory]
     [InlineData(LocalRequestReason.ReservedRequestIneligible)]

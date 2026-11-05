@@ -252,6 +252,10 @@ public sealed class GoogleGenerationBoundQueueCoordinator
             ProviderRequestId = providerRequestId,
             DiagnosticCode = GoogleGenerationOutcomeDiagnostic.Sanitize(response.DiagnosticCode),
             ErrorStatus = Enum.IsDefined(response.ErrorStatus) ? response.ErrorStatus : GoogleErrorStatus.Unknown,
+            ValidationHint = !unresolved && response.ErrorStatus == GoogleErrorStatus.InvalidArgument
+                && string.Equals(response.DiagnosticCode, "google-http-400", StringComparison.Ordinal)
+                && response.ValidationHint == GoogleValidationMessageHint.SentenceLengthReported
+                    ? GoogleValidationMessageHint.SentenceLengthReported : GoogleValidationMessageHint.NotProvided,
             OutcomeObservedAtUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         };
     }

@@ -50,9 +50,9 @@ public sealed partial class CompletionWorkflowGate
     private static CompletionProtocolOperation Operation(string command) => command switch
     {
         "status" => CompletionProtocolOperation.Status,
-        "claim-refresh" => CompletionProtocolOperation.RefreshClaim,
-        "check" => CompletionProtocolOperation.AdmissionCheck,
-        "complete" => CompletionProtocolOperation.Complete,
+        "claim-refresh" or "claim-preparation" => CompletionProtocolOperation.RefreshClaim,
+        "check" or "check-preparation" => CompletionProtocolOperation.AdmissionCheck,
+        "complete" or "complete-preparation" => CompletionProtocolOperation.Complete,
         "check-diagnostic-dispatch" => CompletionProtocolOperation.SynthesisDispatch,
         "check-diagnostic-admission" => CompletionProtocolOperation.AdmissionCheck,
         _ => CompletionProtocolOperation.Other,

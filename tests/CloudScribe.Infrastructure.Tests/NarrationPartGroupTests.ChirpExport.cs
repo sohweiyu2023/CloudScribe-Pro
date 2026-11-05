@@ -59,10 +59,14 @@ public sealed partial class NarrationPartGroupTests
                     streams = new[] { new { codec_name = "mp3", sample_rate = "24000", channels = 1 } },
                     format = new { duration = Path.GetFileName(invocation.Arguments[^1]).StartsWith("input-", StringComparison.Ordinal) ? "1" : Math.Max(InputMarkers.Count, 1).ToString(CultureInfo.InvariantCulture) }
                 });
-            else if (invocation.Arguments.Contains("-filter_complex", StringComparer.Ordinal))
+            else if (invocation.Arguments.Contains("concat", StringComparer.Ordinal))
             {
-                for (int i = 0; i < invocation.Arguments.Count; i++)
-                    if (string.Equals(invocation.Arguments[i], "-i", StringComparison.Ordinal)) InputMarkers.Add((await File.ReadAllBytesAsync(invocation.Arguments[i + 1], cancellationToken).ConfigureAwait(false))[10]);
+                string manifest = await File.ReadAllTextAsync(Path.Combine(invocation.WorkingDirectory, "article-inputs.ffconcat"), cancellationToken).ConfigureAwait(false);
+                foreach (string line in manifest.Split('\n').Where(line => line.StartsWith("file '", StringComparison.Ordinal)))
+                {
+                    string path = Path.Combine(invocation.WorkingDirectory, line[6..^1]);
+                    InputMarkers.Add((await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false))[10]);
+                }
                 byte[] bytes = new byte[128]; Encoding.ASCII.GetBytes("ID3").CopyTo(bytes, 0);
                 await File.WriteAllBytesAsync(invocation.Arguments[^1], bytes, cancellationToken).ConfigureAwait(false);
             }

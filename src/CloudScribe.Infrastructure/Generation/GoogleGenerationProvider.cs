@@ -28,8 +28,8 @@ public sealed class GoogleGenerationProvider : IGenerationProvider
 
     public string ProviderStableId => StableProviderId;
 
-    private static bool RequiresPrivateCapture(GenerationProviderRequest request) =>
-        request.IdempotencyKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal) && request.IdempotencyKey.Split(':').Length > 3;
+    private bool RequiresPrivateCapture(GenerationProviderRequest request) => _transport.RequiresArticleCapture(request)
+        || request.IdempotencyKey.StartsWith(ChirpArticleService.KeyPrefix, StringComparison.Ordinal) && request.IdempotencyKey.Split(':').Length > 3;
 
     public void RequirePrivateDiagnosticsReady(GenerationProviderRequest request)
     {

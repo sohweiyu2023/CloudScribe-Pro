@@ -16,6 +16,9 @@ public sealed record GoogleGenerationPersistedQueueState(
     long? OutcomeObservedAtUnixMilliseconds = null,
     GoogleErrorStatus ErrorStatus = GoogleErrorStatus.NotProvided)
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public GoogleValidationMessageHint ValidationHint { get; init; }
+
     public GoogleGenerationPersistedQueueState Validate()
     {
         RequireCanonical(AccountId, nameof(AccountId));
@@ -24,6 +27,11 @@ public sealed record GoogleGenerationPersistedQueueState(
         if (ProviderRequestId is not null)
             RequireCanonical(ProviderRequestId, nameof(ProviderRequestId));
         if (!Enum.IsDefined(ErrorStatus)) throw new InvalidOperationException("Unknown error status metadata.");
+        if (!Enum.IsDefined(ValidationHint) || ValidationHint != GoogleValidationMessageHint.NotProvided
+            && (ValidationHint != GoogleValidationMessageHint.SentenceLengthReported || UnresolvedSubmission
+                || !SubmissionAttempted || ErrorStatus != GoogleErrorStatus.InvalidArgument
+                || !string.Equals(DiagnosticCode, "google-http-400", StringComparison.Ordinal)))
+            throw new InvalidOperationException("Sentence rejection metadata requires a confirmed terminal owned outcome.");
         // A dispatched synchronous request may never yield a provider ID. Its exact local
         // identity must remain blocked without inventing a provider reconciliation receipt.
         if (LocalAttemptId is not null && (!SubmissionAttempted || !Guid.TryParseExact(LocalAttemptId, "N", out _)))

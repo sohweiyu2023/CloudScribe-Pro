@@ -66,7 +66,7 @@ public sealed partial class ChirpArticleService
             envelope = ParseStored<GoogleGenerationSubmissionEnvelope>(row.GetString(4));
         }
         var stored = await StoredAsync(connection, transaction, plan, token).ConfigureAwait(false);
-        var part = stored.Article.Proposal.Parts.Single(x => x.CoverageOrdinal == ordinal && x.Range.ReusedReceiptSha256 is null);
+        var part = await OutputPartAsync(connection, transaction, stored.Article.Proposal, Guid.ParseExact(id, "N"), ordinal, token).ConfigureAwait(false);
         if (!string.Equals(request.ProviderStableId, GoogleGenerationProvider.StableProviderId, StringComparison.Ordinal)
             || !string.Equals(request.OperationStableId, GoogleGenerationProvider.SynthesizeOperationStableId, StringComparison.Ordinal)
             || !string.Equals(request.AccountId, stored.AccountId, StringComparison.Ordinal)

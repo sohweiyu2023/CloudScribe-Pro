@@ -30,16 +30,19 @@ public sealed partial class ChirpArticleService
             && (!Equals(x[21], ChirpPolicyValidation.Hash(grant)) || !Equals(x[4], policy.SourceApprovalSha256))))
             throw new InvalidOperationException("A durable grant identity cannot be reused with another approval or parent.");
         var part = article.Proposal.Parts.Single(x => x.CoverageOrdinal == grant.CoverageOrdinal);
+        var format = article.Proposal.Refinement is { SentenceMarkers: not null } marked ? marked : null;
+        var parentPart = format is null ? part : format.Parent.Parts.Single(x => x.CoverageOrdinal == format.FailedCoverageOrdinal);
+        string parentPlan = format?.Parent.PlanSha256 ?? grant.PlanSha256;
         if (!string.Equals(RecoveryFinancialSnapshot.Hash(parent), grant.ParentAttemptRowSha256, StringComparison.Ordinal)
             || queue is null || queue.Length != 12 || !string.Equals(RecoveryFinancialSnapshot.Hash(queue), grant.ParentQueueRowSha256, StringComparison.Ordinal)
-            || !Equals(parent[1], grant.PlanSha256) || !Equals(parent[2], (long)grant.CoverageOrdinal)
-            || !Equals(root[1], grant.PlanSha256) || !Equals(root[2], (long)grant.CoverageOrdinal)
+            || !Equals(parent[1], parentPlan) || !Equals(parent[2], (long)grant.CoverageOrdinal)
+            || !Equals(root[1], parentPlan) || !Equals(root[2], (long)grant.CoverageOrdinal)
             || !Equals(parent[5], policy.AccountId) || !Equals(parent[6], policy.ProjectId) || !Equals(parent[7], grant.ParentKey)
             || !Equals(parent[16], 1L) || !Equals(parent[17], grant.ParentLocalAttemptId)
             || state is null || state.Unresolved != 0 || state.ProviderId is not null || state.Attempted != 1
             || !string.Equals(state.LocalAttempt, grant.ParentLocalAttemptId, StringComparison.Ordinal)
             || !string.Equals(state.DiagnosticCode, "google-http-400", StringComparison.Ordinal)
-            || !string.Equals(state.PayloadSha256, part.PayloadSha256, StringComparison.Ordinal) || state.PayloadBytes != part.PayloadBytes
+            || !string.Equals(state.PayloadSha256, parentPart.PayloadSha256, StringComparison.Ordinal) || state.PayloadBytes != parentPart.PayloadBytes
             || !await HasConfirmedInvalidArgumentAsync(connection, transaction, policy.AccountId, grant.ParentKey, token).ConfigureAwait(false))
             throw new InvalidOperationException("Only the exact consumed, resolved HTTP400 invalid-argument parent can have this diagnostic successor.");
         if (grant.ParentAuthorizationId != grant.RootAuthorizationId
@@ -47,15 +50,15 @@ public sealed partial class ChirpArticleService
             throw new InvalidOperationException("The admitted parent is not in the retained original attempt lineage.");
         var envelope = ChirpPolicyFiles.Parse<GoogleGenerationSubmissionEnvelope>(System.Text.Encoding.UTF8.GetBytes((string)parent[9]!));
         if (envelope.ChirpAuthorizationId != grant.ParentAuthorizationId || envelope.RecoveryAuthorizationId is not null
-            || !string.Equals(envelope.CompiledPayloadSha256, part.PayloadSha256, StringComparison.Ordinal)
-            || envelope.CompiledPayloadBytes != part.PayloadBytes || !string.Equals(envelope.VoiceName, article.Proposal.VoiceName, StringComparison.Ordinal)
+            || !string.Equals(envelope.CompiledPayloadSha256, parentPart.PayloadSha256, StringComparison.Ordinal)
+            || envelope.CompiledPayloadBytes != parentPart.PayloadBytes || !string.Equals(envelope.VoiceName, article.Proposal.VoiceName, StringComparison.Ordinal)
             || !string.Equals(envelope.AccountId, policy.AccountId, StringComparison.Ordinal))
             throw new InvalidOperationException("The successor cannot change the failed payload, voice or account.");
         using var accepted = ChirpArticleSql.Command(connection, transaction, """
             SELECT (SELECT COUNT(*) FROM chirp_article_receipts WHERE PlanSha256=$plan AND CoverageOrdinal=$ordinal)
                 + (SELECT COUNT(*) FROM chirp_article_output_journals j JOIN chirp_article_owned_attempts a
                    ON a.AuthorizationId=j.AuthorizationId WHERE a.PlanSha256=$plan AND a.CoverageOrdinal=$ordinal);
-            """, ("$plan", grant.PlanSha256), ("$ordinal", grant.CoverageOrdinal));
+            """, ("$plan", parentPlan), ("$ordinal", grant.CoverageOrdinal));
         if (Convert.ToInt64(await accepted.ExecuteScalarAsync(token).ConfigureAwait(false), System.Globalization.CultureInfo.InvariantCulture) != 0)
             throw new InvalidOperationException("Accepted coverage or a pending accepted-output journal must be reused, never regenerated.");
     }
@@ -98,6 +101,10 @@ public sealed partial class ChirpArticleService
 
     private static async Task<string> AttemptTableAsync(SqliteConnection connection, SqliteTransaction transaction, string id, CancellationToken token)
     {
+        using var split = ChirpArticleSql.Command(connection, transaction,
+            "SELECT COUNT(*) FROM chirp_article_split_attempts WHERE AuthorizationId=$id;", ("$id", id));
+        if (Convert.ToInt64(await split.ExecuteScalarAsync(token).ConfigureAwait(false), System.Globalization.CultureInfo.InvariantCulture) == 1)
+            return "chirp_article_split_attempts";
         using var command = ChirpArticleSql.Command(connection, transaction,
             "SELECT COUNT(*) FROM chirp_article_successor_attempts WHERE AuthorizationId=$id;", ("$id", id));
         return Convert.ToInt64(await command.ExecuteScalarAsync(token).ConfigureAwait(false), System.Globalization.CultureInfo.InvariantCulture) == 1
