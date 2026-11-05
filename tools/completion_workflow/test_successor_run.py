@@ -1,6 +1,7 @@
 """Inert two-register handoff and actual local pilot-evidence fixtures; no providers."""
 import concurrent.futures
 import copy
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -266,7 +267,7 @@ class SuccessorCliTests(unittest.TestCase):
         self.h_path = self.new_folder / "handoff.json"; self.h_path.write_text(json.dumps(self.h)); self.h_pin = sha(self.h_path.read_bytes())
 
     def create_database(self):
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.executescript("""
                 CREATE TABLE chirp_article_attempts(AuthorizationId TEXT,PlanSha256 TEXT,CoverageOrdinal INTEGER,
                   PolicySha256 TEXT,SourceApprovalSha256 TEXT,AccountId TEXT,ProjectId TEXT,ChildKey TEXT,ReviewSha256 TEXT,
@@ -343,7 +344,7 @@ class SuccessorCliTests(unittest.TestCase):
                  "VoiceName": self.config["VoiceName"], "LanguageCode": self.config["LanguageCode"]}
         receipt = {"PlanSha256": self.proposal["PlanSha256"], "CoverageOrdinal": 1, "Range": part["Range"], "Audio": audio, "ExecutionMappingSha256": None}
         raw = json.dumps(receipt)
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.execute("INSERT INTO chirp_article_attempts(AuthorizationId,PlanSha256,CoverageOrdinal,AccountId,ProjectId,Consumed,ClaimedLocalAttemptId,ChildKey,PolicySha256,SourceApprovalSha256,ReservedMinorUnits,EnvelopeJson) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (auth, self.proposal["PlanSha256"], 1, self.config["AccountId"], self.config["ProjectId"], 1, local, key, sha(pilot.read_bytes()), self.scope["approvalSha256"], 1, json.dumps(envelope)))
             db.execute("INSERT INTO google_generation_queue_states VALUES(?,?,?,?,?,?,?,?,?,?,?)", (self.config["AccountId"], "synthesize-speech", key, 1, 0, None, "google-accepted", 0, local, part["PayloadSha256"], part["PayloadBytes"]))
             db.execute("INSERT INTO chirp_article_plans VALUES(?,?,?,?)", (self.proposal["PlanSha256"], json.dumps(self.proposal), self.config["AccountId"], self.config["ProjectId"]))

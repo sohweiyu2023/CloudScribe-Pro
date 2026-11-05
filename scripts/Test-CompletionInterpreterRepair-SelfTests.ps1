@@ -4,7 +4,7 @@ $ErrorActionPreference='Stop'
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-CloudScribe.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Installer parse failure.'}
-foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Get-ReviewedCompletionSuccessorRun','Assert-CompletionInterpreterIdentity','Set-CompletionInterpreterPins','Restore-CompletionInterpreterPins','Invoke-CompletionGate','Get-ReviewedCompletionGate','Complete-CompletionBuildInstall')){
+foreach($name in @('Assert-NoLinks','Assert-UniqueRecoveryJson','Assert-RecoveryRecord','Get-ReviewedCompletionSuccessorRun','Assert-CompletionInterpreterIdentity','Set-CompletionInterpreterPins','Restore-CompletionInterpreterPins','Wait-CompletionBridgeProcess','Invoke-CompletionGate','Get-ReviewedCompletionGate','Complete-CompletionBuildInstall')){
     $functions=@($ast.FindAll({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if($functions.Count -ne 1){throw 'Missing production function.'};Invoke-Expression $functions[0].Extent.Text
 }
