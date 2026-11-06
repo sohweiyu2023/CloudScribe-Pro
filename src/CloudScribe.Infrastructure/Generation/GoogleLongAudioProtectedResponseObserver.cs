@@ -4,15 +4,15 @@ using CloudScribe.Domain.Generation;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-/// <summary>Inactive exact-object opt-in adapter over the existing protected private store and redactor.</summary>
+/// <summary>Exact-object job opt-in adapter over the existing protected private store and redactor.</summary>
 public sealed class GoogleLongAudioProtectedResponseObserver(IPrivateProviderErrorPersistence persistence, TimeProvider clock)
     : IGoogleLongAudioResponseObserver
 {
     private readonly System.Threading.Lock _gate = new();
     private GoogleLongAudioRequest? _request;
-    private DateTimeOffset _notAfter;
+    private DateTimeOffset? _notAfter;
     private long _started;
-    private TimeSpan _lifetime;
+    private TimeSpan? _lifetime;
     private Guid? _ticket;
     private int _writerBusy;
 
@@ -20,13 +20,27 @@ public sealed class GoogleLongAudioProtectedResponseObserver(IPrivateProviderErr
     {
         ArgumentNullException.ThrowIfNull(request);
         DateTimeOffset now = clock.GetUtcNow();
-        if (!explicitlyConfirmed || request.PayloadBytes > 16_384 || captureNotAfter <= now || captureNotAfter - now > TimeSpan.FromHours(6))
+        if (!explicitlyConfirmed || captureNotAfter <= now)
             throw new InvalidOperationException("Exact bounded Long Audio capture consent and its existing expiry are required.");
+        Prepare(request, captureNotAfter, captureNotAfter - now);
+    }
+
+    /// <summary>One exact response in an explicitly confirmed job scope, without an arbitrary run timer.
+    /// This does not change private-record retention or authorize synthesis; each later response needs preparation again.</summary>
+    public void ArmForJob(GoogleLongAudioRequest request, bool explicitlyConfirmed)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!explicitlyConfirmed) throw new InvalidOperationException("Exact Long Audio job capture consent is required.");
+        Prepare(request, null, null);
+    }
+
+    private void Prepare(GoogleLongAudioRequest request, DateTimeOffset? notAfter, TimeSpan? lifetime)
+    {
         lock (_gate)
         {
             if (_ticket.HasValue || Volatile.Read(ref _writerBusy) != 0 || !persistence.PrepareProtectedCapture())
                 throw new InvalidOperationException("Protected Long Audio response storage is not ready.");
-            _request = request; _ticket = null; _notAfter = captureNotAfter; _started = clock.GetTimestamp(); _lifetime = captureNotAfter - now;
+            _request = request; _ticket = null; _notAfter = notAfter; _started = clock.GetTimestamp(); _lifetime = lifetime;
         }
     }
 
@@ -42,11 +56,20 @@ public sealed class GoogleLongAudioProtectedResponseObserver(IPrivateProviderErr
     }
     public bool IsActiveFor(Guid ticket, GoogleLongAudioRequest request) { lock (_gate) return _ticket == ticket && Current(request); }
     public void FinishResponse(Guid ticket) { lock (_gate) { if (_ticket == ticket) { _ticket = null; _request = null; } } }
-    private bool Current(GoogleLongAudioRequest request) => ReferenceEquals(_request, request) && request.PayloadBytes <= 16_384
-        && clock.GetUtcNow() < _notAfter && clock.GetElapsedTime(_started) < _lifetime && Volatile.Read(ref _writerBusy) == 0;
+    private bool Current(GoogleLongAudioRequest request) => ReferenceEquals(_request, request)
+        && (!_notAfter.HasValue || clock.GetUtcNow() < _notAfter.Value)
+        && (!_lifetime.HasValue || clock.GetElapsedTime(_started) < _lifetime.Value) && Volatile.Read(ref _writerBusy) == 0;
 
-    public async Task<GoogleLongAudioObservation> ObserveAsync(Guid ticket, GoogleLongAudioRequest request, int httpStatus,
-        ReadOnlyMemory<byte> boundedBody, GoogleResponseReadState readState, string transientAccessToken, bool operationError)
+    public Task<GoogleLongAudioObservation> ObserveAsync(Guid ticket, GoogleLongAudioRequest request, int httpStatus,
+        ReadOnlyMemory<byte> boundedBody, GoogleResponseReadState readState, string transientAccessToken, bool operationError) =>
+        ObserveCoreAsync(ticket, request, httpStatus, boundedBody, readState, transientAccessToken, operationError, false);
+
+    public Task<GoogleLongAudioObservation> ObserveStorageMetadataAsync(Guid ticket, GoogleLongAudioRequest request, int httpStatus,
+        ReadOnlyMemory<byte> boundedBody, GoogleResponseReadState readState, string transientAccessToken) =>
+        ObserveCoreAsync(ticket, request, httpStatus, boundedBody, readState, transientAccessToken, false, true);
+
+    private async Task<GoogleLongAudioObservation> ObserveCoreAsync(Guid ticket, GoogleLongAudioRequest request, int httpStatus,
+        ReadOnlyMemory<byte> boundedBody, GoogleResponseReadState readState, string transientAccessToken, bool operationError, bool metadata)
     {
         lock (_gate)
         {
@@ -57,7 +80,7 @@ public sealed class GoogleLongAudioProtectedResponseObserver(IPrivateProviderErr
         try
         {
             var envelope = PrivateProviderEnvelopeRedactor.Create(httpStatus, boundedBody.Length, readState == GoogleResponseReadState.Complete,
-                readState.ToString(), boundedBody, request.CopyPayload(), transientAccessToken, operationError);
+                readState.ToString(), boundedBody, request.CopyPayload(), transientAccessToken, operationError, maximumInputBytes: GoogleLongAudioRequest.MaximumWireBytes, storageMetadata: metadata);
             record = new(Guid.NewGuid(), clock.GetUtcNow(), "Private Long Audio response evidence; inspect completeness and redaction flags.",
                 envelope.Truncated, request.PayloadSha256, request.AttemptId.ToString("N"), envelope.DetailsOmitted, envelope);
             if (JsonSerializer.SerializeToUtf8Bytes(record).Length > PrivateRecordProtection.MaximumPlaintextBytes)
@@ -72,7 +95,7 @@ public sealed class GoogleLongAudioProtectedResponseObserver(IPrivateProviderErr
         }
         catch (Exception error) when (NonFatal(error)) { Volatile.Write(ref _writerBusy, 0); return Missing(readState, boundedBody.Length, GoogleExplanationRetentionState.StorageFailed); }
         bool saved;
-        try { saved = await write.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
+        try { saved = await write.ConfigureAwait(false); }
         catch (Exception error) when (NonFatal(error)) { saved = false; }
         var response = record.Response!;
         return new(saved ? record.Id : null, readState, Parse(response.ParseState), response.ErrorStatus, boundedBody.Length,

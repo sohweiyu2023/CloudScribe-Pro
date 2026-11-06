@@ -8,7 +8,7 @@ using CloudScribe.Providers.Abstractions;
 
 namespace CloudScribe.Infrastructure.Tests;
 
-public sealed class GoogleServiceAccountCredentialOnboardingTests
+public sealed partial class GoogleServiceAccountCredentialOnboardingTests
 {
     private static readonly Uri CatalogEndpoint = new("https://texttospeech.googleapis.com/v1/voices");
     private static readonly Uri SynthesisEndpoint = new("https://texttospeech.googleapis.com/v1/text:synthesize");

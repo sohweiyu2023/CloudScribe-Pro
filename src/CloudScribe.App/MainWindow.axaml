@@ -770,7 +770,7 @@
 
         <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center" MinWidth="0">
           <TextBlock Text="PLAYER &amp; QUEUE" Foreground="{DynamicResource Brush.SecondaryBright}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
-          <TextBlock Text="No local audio yet · playback controls remain hidden until verified output exists." Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" TextTrimming="WordEllipsis" MaxLines="2" />
+          <TextBlock Text="No audio selected for this player. Open Create MP3 to find saved article audio." Foreground="{DynamicResource Brush.TextOnDark}" FontWeight="SemiBold" TextWrapping="Wrap" TextTrimming="WordEllipsis" MaxLines="2" />
         </StackPanel>
 
         <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="7" Margin="0,0,2,0" VerticalAlignment="Center">

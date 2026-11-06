@@ -80,6 +80,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         bool IsLongArticle() => Encoding.UTF8.GetByteCount(model.DocumentText) >= 4_000;
         WrapPanel actionRow = new() { Orientation = Orientation.Horizontal };
         Button articleAction = AddWholeArticleControl(dialog, actionRow, model);
+        await AddLongAudioControlAsync(dialog, actionRow, model).ConfigureAwait(true);
         StackPanel articleReview = new() { Spacing = 8 };
         articleReview.Children.Add(Text("Use the complete-article review for this text. It shows saved audio, remaining requests and maximum cost before you approve anything. Internal parts are joined into one MP3; review does not generate speech."));
         TextBlock articleStatus = Text(model.StatusMessage);

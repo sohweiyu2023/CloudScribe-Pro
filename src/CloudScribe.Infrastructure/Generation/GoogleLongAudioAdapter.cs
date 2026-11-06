@@ -1,11 +1,12 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>
 /// Inactive Long Audio transport boundary. One durable POST claim, then explicit bounded GET-only resume.
-/// Completion is never accepted media. No production admission implementation or DI route is supplied.
+/// Completion is never accepted media. Production admission independently binds the installed scope and cumulative budget.
 /// </summary>
 public sealed partial class GoogleLongAudioAdapter : IDisposable
 {
@@ -14,19 +15,22 @@ public sealed partial class GoogleLongAudioAdapter : IDisposable
     private readonly IGoogleLongAudioAdmission _admission;
     private readonly GoogleLongAudioFileJournal _journal;
     private readonly IGoogleLongAudioResponseObserver _observer;
+    private readonly ILogger? logger;
 
     /// <param name="credentials">Existing transient resolver; no new credential storage or API is supplied.</param>
     /// <param name="admission">Trusted independent exact-request authority and readiness boundary.</param>
     /// <param name="journal">Private durable POST-claim journal.</param>
     /// <param name="observer">Mandatory exact-request protected response capture and readback boundary.</param>
     /// <param name="handler">Trusted transport, without retry/redirect/auth-forwarding handlers. Null uses a redirect-free handler.</param>
+    /// <param name="logger">Optional privacy-safe transport observations; never raw provider text or credentials.</param>
     public GoogleLongAudioAdapter(ITransientCredentialResolver credentials, IGoogleLongAudioAdmission admission,
-        GoogleLongAudioFileJournal journal, IGoogleLongAudioResponseObserver observer, HttpMessageHandler? handler = null)
+        GoogleLongAudioFileJournal journal, IGoogleLongAudioResponseObserver observer, HttpMessageHandler? handler = null, ILogger? logger = null)
     {
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
         _admission = admission ?? throw new ArgumentNullException(nameof(admission));
         _journal = journal ?? throw new ArgumentNullException(nameof(journal));
         _observer = observer ?? throw new ArgumentNullException(nameof(observer));
+        this.logger = logger;
         _http = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false })
         { Timeout = TimeSpan.FromSeconds(12) };
     }
@@ -49,7 +53,7 @@ public sealed partial class GoogleLongAudioAdapter : IDisposable
             await _admission.RequireSubmissionAuthorizedAsync(request, cancellationToken).ConfigureAwait(false);
             using var bound = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             bound.CancelAfter(TimeSpan.FromSeconds(25));
-            return await ExchangeAsync(initial, request, ticket, true, bound.Token).ConfigureAwait(false);
+            return await ExchangeAsync(initial, request, ticket, true, bound.Token, cancellationToken).ConfigureAwait(false);
         }
         finally { EndObservation(ticket, request.AttemptId); }
     }
@@ -69,34 +73,76 @@ public sealed partial class GoogleLongAudioAdapter : IDisposable
         {
             using var bound = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             bound.CancelAfter(TimeSpan.FromSeconds(25));
-            return await ExchangeAsync(current, request, ticket, false, bound.Token).ConfigureAwait(false);
+            return await ExchangeAsync(current, request, ticket, false, bound.Token, cancellationToken).ConfigureAwait(false);
         }
         finally { EndObservation(ticket, request.AttemptId); }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One owned exchange preserves the original exception, private response, journal and secondary diagnostic failures without a retry or exception replacement.")]
     private async Task<GoogleLongAudioCheckpoint> ExchangeAsync(GoogleLongAudioCheckpoint current, GoogleLongAudioRequest request,
-        Guid ticket, bool post, CancellationToken token)
+        Guid ticket, bool post, CancellationToken token, CancellationToken callerToken)
     {
         byte[]? payload = post ? request.CopyPayload() : null;
-        string path = payload is null ? current.OperationName!
-            : $"projects/{current.ProjectNumber}/locations/{current.Location}:synthesizeLongAudio";
-        string accessToken = await _credentials.ResolveAccessTokenAsync(current.CredentialReferenceId, token).AsTask().WaitAsync(token).ConfigureAwait(false);
-        GoogleLongAudioValidation.RequireAccessToken(accessToken);
-        if (!_observer.IsActiveFor(ticket, request)) throw new InvalidOperationException("Exact protected response capture expired or changed before dispatch.");
-        using var message = new HttpRequestMessage(payload is null ? HttpMethod.Get : HttpMethod.Post,
-            new Uri("https://texttospeech.googleapis.com/v1/" + path));
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        if (payload is not null)
+        string path = payload is null ? current.OperationName! : $"projects/{current.ProjectNumber}/locations/{current.Location}:synthesizeLongAudio";
+        string accessToken = string.Empty, correlation = Guid.NewGuid().ToString("N");
+        long started = System.Diagnostics.Stopwatch.GetTimestamp(); int status = 0; bool sendStarted = false;
+        HttpResponseMessage? response = null; BodyRead? body = null; Exception? failure = null, diagnosticsFailure = null;
+        GoogleLongAudioCheckpoint? saved = null;
+        try
         {
-            message.Content = new ByteArrayContent(payload);
-            message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            accessToken = await _credentials.ResolveAccessTokenAsync(current.CredentialReferenceId, token).AsTask().WaitAsync(token).ConfigureAwait(false);
+            GoogleLongAudioValidation.RequireAccessToken(accessToken);
+            if (!_observer.IsActiveFor(ticket, request)) throw new InvalidOperationException("Exact protected response capture expired or changed before dispatch.");
+            using var message = new HttpRequestMessage(payload is null ? HttpMethod.Get : HttpMethod.Post,
+                new Uri("https://texttospeech.googleapis.com/v1/" + path));
+            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            if (payload is not null) { message.Content = new ByteArrayContent(payload); message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json"); }
+            sendStarted = true;
+            response = await _http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+            status = (int)response.StatusCode; body = await ReadBoundedAsync(response.Content, token).ConfigureAwait(false);
+            saved = await CompleteObservedResponseAsync(current, request, ticket, post, status, body, accessToken).ConfigureAwait(false);
         }
-        using var response = await _http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-        int status = (int)response.StatusCode;
-        var body = await ReadBoundedAsync(response.Content, token).ConfigureAwait(false);
-        return await CompleteObservedResponseAsync(current, request, ticket, post, status, body, accessToken).ConfigureAwait(false);
+        catch (Exception error) when (NonFatal(error))
+        {
+            failure = error;
+            if (status == 0)
+            {
+                var missing = new BodyRead([], error is OperationCanceledException ? CloudScribe.Domain.Generation.GoogleResponseReadState.Cancelled : CloudScribe.Domain.Generation.GoogleResponseReadState.Failed, error);
+                var observation = await ObserveAsync(ticket, request, 0, missing, accessToken, false).ConfigureAwait(false);
+                try { saved = _journal.Save(current, current with { Observation = observation, Revision = current.Revision + 1 }); }
+                catch (Exception journalError) when (NonFatal(journalError)) { GoogleLongAudioJournalFailure.Attach(error, 0, observation); }
+            }
+        }
+        try
+        {
+            var observed = saved?.Observation ?? (failure is null ? null : GoogleLongAudioJournalFailure.Inspect(failure)?.Observation);
+            if (observed is null)
+            {
+                try { observed = _journal.Load(request.AttemptId).Observation; }
+                catch (Exception readError) when (NonFatal(readError)) { diagnosticsFailure = readError; }
+            }
+            GoogleLongAudioTransportLog.Write(logger, request, correlation,
+                post ? CloudScribe.Application.Generation.LongAudioEndpoint.SynthesizeV1 : CloudScribe.Application.Generation.LongAudioEndpoint.OperationV1,
+                status, body?.State ?? observed?.ReadState, body?.Bytes.Length ?? observed?.ObservedBytes ?? 0,
+                checked((long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds), observed?.PrivateRecordId,
+                failure?.HResult ?? diagnosticsFailure?.HResult, response?.Headers, sendStarted, callerToken.IsCancellationRequested);
+        }
+        catch (Exception loggingError) when (NonFatal(loggingError))
+        {
+            diagnosticsFailure = diagnosticsFailure is null ? loggingError : new AggregateException(diagnosticsFailure, loggingError);
+            try { _journal.MarkObservationPending(request.AttemptId); }
+            catch (Exception journalError) when (NonFatal(journalError)) { diagnosticsFailure = new AggregateException(diagnosticsFailure, journalError); }
+        }
+        finally
+        {
+            try { response?.Dispose(); }
+            catch (Exception cleanupError) when (NonFatal(cleanupError)) { diagnosticsFailure = diagnosticsFailure is null ? cleanupError : new AggregateException(diagnosticsFailure, cleanupError); }
+        }
+        if (failure is not null && diagnosticsFailure is null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        if (failure is not null) throw new AggregateException("Original Long Audio failure and local evidence failure; saved outcomes remain authoritative.", failure, diagnosticsFailure!);
+        if (diagnosticsFailure is not null) throw new InvalidOperationException("Long Audio outcome was recorded but local evidence failed; reconcile before continuing.", diagnosticsFailure);
+        return saved ?? throw new InvalidOperationException("No durable Long Audio outcome is available; never resubmit this claimed request.");
     }
-
     private static GoogleLongAudioCheckpoint ParseOperation(GoogleLongAudioCheckpoint current, byte[] bytes)
     {
         using var json = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = 8 });

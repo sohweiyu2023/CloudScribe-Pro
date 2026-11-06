@@ -42,8 +42,7 @@ public sealed partial class GoogleLongAudioAdapter
     {
         try
         {
-            var result = await _observer.ObserveAsync(ticket, request, status, body.Bytes, body.State, accessToken, operationError)
-                .WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            var result = await _observer.ObserveAsync(ticket, request, status, body.Bytes, body.State, accessToken, operationError).ConfigureAwait(false);
             if (result.ObservedBytes == body.Bytes.Length && result.ReadState == body.State && Enum.IsDefined(result.ParseState)
                 && Enum.IsDefined(result.ErrorStatus) && Enum.IsDefined(result.Retention)) return result;
         }
@@ -56,6 +55,7 @@ public sealed partial class GoogleLongAudioAdapter
         GoogleLongAudioRequest request, Guid ticket, bool post, int status, BodyRead body, string accessToken)
     {
         var outcome = ResolveOutcome(current, body, post, status, out var parseFailure);
+        outcome = outcome with { FailureKind = GoogleLongAudioFailureClassifier.Classify(status, outcome.RpcCode, body.Bytes, body.State) };
         bool operationError = ContainsOperationError(status, body);
         GoogleLongAudioCheckpoint saved;
         try

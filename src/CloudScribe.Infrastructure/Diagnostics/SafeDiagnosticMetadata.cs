@@ -144,7 +144,7 @@ internal static partial class SafeDiagnosticMetadata
         if (string.Equals(text, "-1,-1,-1,-1,-1", StringComparison.Ordinal)) return true;
         var fields = text.Split(',');
         return fields.Length == 5 && fields.All(x => int.TryParse(x, NumberStyles.None, CultureInfo.InvariantCulture, out int value)
-            && value is >= 0 and <= 1000);
+            && value >= 0);
     }
 
 

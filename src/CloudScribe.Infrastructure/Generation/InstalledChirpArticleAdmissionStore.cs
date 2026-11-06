@@ -16,6 +16,7 @@ public sealed class InstalledChirpArticleAdmissionStore(string applicationDirect
             byte[] markerBytes = await ChirpPolicyFiles.ReadAsync(Path.Combine(install, "cloudscribe-install.json"), 16384, cancellationToken).ConfigureAwait(false);
             using var marker = JsonDocument.Parse(markerBytes);
             ChirpPolicyFiles.RequireUnique(marker.RootElement);
+            if (marker.RootElement.TryGetProperty("LongAudioBuildRebindPending", out _)) return null;
             if (!string.Equals(marker.RootElement.GetProperty("Product").GetString(), "CloudScribe Pro", StringComparison.Ordinal)
                 || !marker.RootElement.TryGetProperty("ChirpArticlePolicySha256", out var pin) || !ChirpPolicyValidation.IsHash(pin.GetString())) return null;
             byte[] bytes = await ChirpPolicyFiles.ReadAsync(Path.Combine(install, "chirp-article-admission-policy.json"), 8 * 1024 * 1024, cancellationToken).ConfigureAwait(false);

@@ -60,22 +60,25 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 throw new InvalidDataException("Linked output locations are not supported.");
     }
 
-    private async Task CopyCompleteOutputAsync(ChirpWholeArticleOutput output, string destination)
+    private Task CopyCompleteOutputAsync(ChirpWholeArticleOutput output, string destination) =>
+        CopyVerifiedOutputAsync(output.Path, output.Sha256, output.Bytes, destination, ".mp3");
+
+    private async Task CopyVerifiedOutputAsync(string source, string sha256, long bytes, string destination, string extension)
     {
-        if (File.Exists(destination) || !string.Equals(Path.GetExtension(destination), ".mp3", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Choose a new MP3 filename; existing files are preserved.");
-        RequirePhysicalOutputPath(destination); RequirePhysicalOutputPath(output.Path);
+        if (File.Exists(destination) || !string.Equals(Path.GetExtension(destination), extension, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Choose a new audio filename; existing files are preserved.");
+        RequirePhysicalOutputPath(destination); RequirePhysicalOutputPath(source);
         string temporary = destination + ".copy-" + Guid.NewGuid().ToString("N") + ".pending";
         try
         {
-            using (var input = new FileStream(output.Path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read))
             using (var copy = new FileStream(temporary, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
             {
-                if (input.Length != output.Bytes || !string.Equals(Convert.ToHexStringLower(SHA256.HashData(input)), output.Sha256, StringComparison.Ordinal))
+                if (input.Length != bytes || !string.Equals(Convert.ToHexStringLower(SHA256.HashData(input)), sha256, StringComparison.Ordinal))
                     throw new InvalidDataException("The completed output changed. Keep it for local recovery; do not regenerate speech.");
                 input.Position = 0;
                 await input.CopyToAsync(copy).ConfigureAwait(true); copy.Flush(flushToDisk: true); copy.Position = 0;
-                if (copy.Length != output.Bytes || !string.Equals(Convert.ToHexStringLower(SHA256.HashData(copy)), output.Sha256, StringComparison.Ordinal))
+                if (copy.Length != bytes || !string.Equals(Convert.ToHexStringLower(SHA256.HashData(copy)), sha256, StringComparison.Ordinal))
                     throw new IOException("The local copy could not be verified. Preserve the original complete MP3.");
             }
             RequirePhysicalOutputPath(destination); File.Move(temporary, destination, overwrite: false);
