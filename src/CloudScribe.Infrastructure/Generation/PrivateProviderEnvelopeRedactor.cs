@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Diagnostics;
 
 namespace CloudScribe.Infrastructure.Generation;
 
@@ -11,19 +12,24 @@ internal static class PrivateProviderEnvelopeRedactor
     private static readonly string[] SensitiveNames = ["authorization", "cookie", "token", "password", "secret", "privatekey", "apikey", "audiocontent", "audio", "base64"];
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One bounded recursive transform owns per-response completeness state; no persistence or provider effects.")]
     internal static PrivateProviderResponseEnvelope Create(int status, int observedBytes, bool complete, string readState,
-        ReadOnlyMemory<byte> body, ReadOnlyMemory<byte> input, string token, bool operationError = false)
+        ReadOnlyMemory<byte> body, ReadOnlyMemory<byte> input, string token, bool operationError = false, int maximumInputBytes = 16384, bool storageMetadata = false)
     {
         bool omitted = !complete || body.Length > 16384;
         bool truncated = omitted;
         bool redactionApplied = false;
         string parse = "Unavailable", text = string.Empty;
-        if (status == 200 && !operationError) parse = "SuccessBodyExcluded";
+        if (status == 200 && !operationError && !storageMetadata) parse = "SuccessBodyExcluded";
         else
         {
             try
             {
                 var bounded = body[..Math.Min(body.Length, 16384)];
+                if (input.Length > maximumInputBytes || token.Length > 16384)
+                    throw new InvalidDataException("Private response redaction preparation exceeds its declared input extent.");
                 string decoded = new UTF8Encoding(false, true).GetString(bounded.Span);
+                var longInput = maximumInputBytes > 16384 ? new PrivateProviderLongInputRedactor(input, bounded, token) : null;
+                DiagnosticRedactionResult Redact(string value) => longInput?.Redact(value)
+                    ?? PrivateProviderMessageRedactor.RedactText(value, input, token);
                 if (operationError && (status != 200 || decoded.Length == 0))
                     throw new InvalidDataException("Operation error capture requires a valid error object.");
                 if (decoded.Length == 0) parse = "Empty";
@@ -50,7 +56,7 @@ internal static class PrivateProviderEnvelopeRedactor
                         if (ContainsExcludedData(decoded)) { omitted = true; redactionApplied = true; parse = "UnstructuredContentExcluded"; }
                         else
                         {
-                            var redacted = PrivateProviderMessageRedactor.RedactText(decoded, input, token);
+                            var redacted = Redact(decoded);
                             text = redacted.Text; truncated |= redacted.WasTruncated;
                             redactionApplied |= !string.Equals(text, decoded, StringComparison.Ordinal);
                         }
@@ -71,7 +77,7 @@ internal static class PrivateProviderEnvelopeRedactor
                                 if (++count > 64) { omitted = true; break; }
                                 if (!names.Add(property.Name)) throw new InvalidDataException("Duplicate response members are ambiguous.");
                                 if (Sensitive(property.Name)) { omitted = true; redactionApplied = true; continue; }
-                                var name = PrivateProviderMessageRedactor.RedactText(property.Name, input, token);
+                                var name = Redact(property.Name);
                                 string safeName = name.Text.Length > 128 ? "[name omitted]" : name.Text;
                                 if (!writtenNames.Add(safeName)) { omitted = true; continue; }
                                 writer.WritePropertyName(safeName);
@@ -94,7 +100,7 @@ internal static class PrivateProviderEnvelopeRedactor
                         case JsonValueKind.String:
                             string value = element.GetString()!;
                             if (value.Length > 16384 || ContainsExcludedData(value)) { writer.WriteStringValue("[content omitted]"); omitted = true; redactionApplied = true; break; }
-                            var result = PrivateProviderMessageRedactor.RedactText(value, input, token);
+                            var result = Redact(value);
                             redactionApplied |= !string.Equals(result.Text, value, StringComparison.Ordinal);
                             writer.WriteStringValue(result.Text); truncated |= result.WasTruncated; break;
                         case JsonValueKind.Number:

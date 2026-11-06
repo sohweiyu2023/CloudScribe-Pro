@@ -59,7 +59,12 @@ Official setup: https://cloud.google.com/text-to-speech/docs/before-you-begin
 Official pricing: https://cloud.google.com/text-to-speech/pricing
 '@ | Set-Content -LiteralPath (Join-Path $target 'README-FIRST.txt') -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-CloudScribe.ps1') -Destination (Join-Path $target 'INSTALL-CLOUDSCRIBE.ps1')
-foreach ($guide in @('USER_GUIDE.md','SHARING_WINDOWS.md','SAVED_SETUPS_AND_LOCAL_RECOVERY.md','VISUAL_WALKTHROUGH.md','ABOUT_REFERENCE.md','WINDOWS_INSTALLATION.md','VOICE_RECOMMENDATIONS.md','ARTICLE_MP3_EXPORT.md','STARTUP_DIAGNOSTICS.md','GOOGLE_FAILURE_DIAGNOSTICS.md','CHIRP_ARTICLE_NARRATION.md','COMPLETION_WORKFLOW_GATE.md')) {
+$longAudioTools=Join-Path $target 'app/tools/long-audio'
+New-Item -ItemType Directory -Path $longAudioTools -Force|Out-Null
+foreach($helper in @('Provisioning.Files.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1','BuildRebind.Validation.ps1','BuildRebind.Transaction.ps1')){
+    Copy-Item -LiteralPath (Join-Path $repo ('tools/long-audio/'+$helper)) -Destination (Join-Path $longAudioTools $helper)
+}
+foreach ($guide in @('USER_GUIDE.md','SHARING_WINDOWS.md','SAVED_SETUPS_AND_LOCAL_RECOVERY.md','VISUAL_WALKTHROUGH.md','ABOUT_REFERENCE.md','WINDOWS_INSTALLATION.md','VOICE_RECOMMENDATIONS.md','ARTICLE_MP3_EXPORT.md','STARTUP_DIAGNOSTICS.md','GOOGLE_FAILURE_DIAGNOSTICS.md','CHIRP_ARTICLE_NARRATION.md','COMPLETION_WORKFLOW_GATE.md','GOOGLE_LONG_AUDIO.md')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "..\docs\$guide") -Destination (Join-Path $target $guide)
 }
 $files = Get-ChildItem -LiteralPath $target -Recurse -File

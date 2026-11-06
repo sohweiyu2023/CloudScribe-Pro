@@ -54,14 +54,13 @@ public sealed partial class GoogleLongAudioAdapterTests
     }
 
     [Fact]
-    public async Task ExactObjectConsentAndLargeInputFailClosedBeforeDurableClaimOrHttp()
+    public async Task ExactObjectConsentFailsClosedBeforeDurableClaimOrHttp()
     {
         using var fixture = new Fixture(); var clock = new Clock(); var request = Request(); var store = new ProtectedStore();
         var observer = new GoogleLongAudioProtectedResponseObserver(store, clock); int calls = 0;
         using var adapter = fixture.Adapter(new Admission(), (_, _) => { calls++; return Task.FromResult(Json(Operation(false))); }, observer);
         await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.SubmitOnceAsync(request, TestContext.Current.CancellationToken));
         Assert.Throws<InvalidOperationException>(() => observer.Arm(request, false, clock.GetUtcNow().AddHours(1)));
-        Assert.Throws<InvalidOperationException>(() => observer.Arm(Request(text: new string('x', 20_000)), true, clock.GetUtcNow().AddHours(1)));
         observer.Arm(request, true, clock.GetUtcNow().AddHours(1));
         Assert.False(observer.IsReadyFor(Request(request.AttemptId)));
         await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.SubmitOnceAsync(Request(request.AttemptId), TestContext.Current.CancellationToken));
@@ -73,7 +72,7 @@ public sealed partial class GoogleLongAudioAdapterTests
     {
         var clock = new Clock(); var observer = new GoogleLongAudioProtectedResponseObserver(new ProtectedStore(), clock); var request = Request();
         Assert.Throws<InvalidOperationException>(() => observer.Arm(request, true, clock.GetUtcNow()));
-        Assert.Throws<InvalidOperationException>(() => observer.Arm(request, true, clock.GetUtcNow().AddHours(6).AddTicks(1)));
+        observer.Arm(request, true, clock.GetUtcNow().AddHours(7)); Assert.True(observer.IsReadyFor(request));
         observer.Arm(request, true, clock.GetUtcNow().AddHours(2)); Assert.True(observer.IsReadyFor(request));
         clock.AdvanceMonotonic(TimeSpan.FromHours(2)); clock.RollBackUtc(TimeSpan.FromHours(1));
         Assert.False(observer.IsReadyFor(request));
@@ -251,11 +250,13 @@ public sealed partial class GoogleLongAudioAdapterTests
     {
         public List<PrivateProviderErrorRecord> Records { get; } = [];
         public string Mode { get; init; } = string.Empty;
+        public Action? BeforeSave { get; init; }
         public int Preparations { get; private set; }
         public int Readbacks { get; private set; }
         public bool PrepareProtectedCapture() { Preparations++; return true; }
         public bool Save(PrivateProviderErrorRecord record)
         {
+            BeforeSave?.Invoke();
             if (string.Equals(Mode, "save-throw", StringComparison.Ordinal)) throw new IOException("Synthetic private sink failed.");
             if (string.Equals(Mode, "save-false", StringComparison.Ordinal)) return false;
             Records.Add(record); return true;

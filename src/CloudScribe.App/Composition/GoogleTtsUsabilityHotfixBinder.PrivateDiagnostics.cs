@@ -43,7 +43,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One private modal owns its consent controls, cancellation and awaited tasks; redaction/persistence are separately tested services.")]
-    private async Task OpenPrivateDiagnosticsAsync(MainWindow owner, ShellViewModel model)
+    private async Task OpenPrivateDiagnosticsAsync(Window owner, ShellViewModel model, bool readOnly = false)
     {
         if (_privateDialogOpen) return;
         _privateDialogOpen = true;
@@ -70,7 +70,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 refresh.IsEnabled = false;
                 try
                 {
-                    status.Text = (privateDiagnostics.IsArmed ? "Enabled for one exact request; no paid permission is granted. " : "Capture is off. ") + privateDiagnostics.PersistenceStatus + TrendHistoryStatus();
+                    status.Text = (readOnly ? "Viewing saved evidence; this viewer does not change job capture. " : privateDiagnostics.IsArmed ? "Enabled for one exact request; no paid permission is granted. " : "Capture is off. ") + privateDiagnostics.PersistenceStatus + TrendHistoryStatus();
                     var records = await privateDiagnostics.ReadRecordsAsync(lifetime.Token).ConfigureAwait(true);
                     lifetime.Token.ThrowIfCancellationRequested();
                     status.Text += privateDiagnostics.ReadStatus == PrivateProviderErrorReadStatus.Success
@@ -101,6 +101,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             cancel.Click += (_, _) => { _privateCaptureUiBinding = null; privateDiagnostics.Disarm(); consent.IsChecked = false; activeRead = RefreshAsync(); };
             refresh.Click += (_, _) => { if (activeRead is not { IsCompleted: false }) activeRead = RefreshAsync(); };
             foreach (Control c in new Control[] { status, detailed, consent, arm, cancel, refresh, view, CreateHistoricalCloseButton(dialog) }) body.Children.Add(c);
+            if (readOnly) foreach (Control c in new Control[] { detailed, consent, arm, cancel }) c.IsVisible = false;
             dialog.Content = new ScrollViewer { Content = body }; activeRead = RefreshAsync();
             await dialog.ShowDialog(owner).ConfigureAwait(true);
             if (active is not null) await active.ConfigureAwait(true);

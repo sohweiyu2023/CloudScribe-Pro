@@ -7,5 +7,6 @@ public sealed record GoogleLongAudioCheckpoint(Guid AttemptId, string BindingSha
 {
     public GoogleLongAudioObservation? Observation { get; init; }
     public bool OperationParseFailed { get; init; }
+    public GoogleLongAudioFailureKind FailureKind { get; init; }
     public override string ToString() => $"Long Audio {State}; private fields omitted; output unverified.";
 }

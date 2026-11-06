@@ -35,6 +35,7 @@ public static class CompositionRoot
         builder.Services.AddCloudScribeInfrastructure(builder.Configuration);
         RegisterCredentialRepair(builder.Services);
         RegisterProductionServices(builder.Services);
+        RegisterLongAudio(builder.Services);
         RegisterShell(builder.Services);
 
         return builder.Build();
@@ -125,16 +126,26 @@ public static class CompositionRoot
 
     private static void RegisterPrivateProviderDiagnostics(IServiceCollection services)
     {
-        services.AddSingleton(serviceProvider =>
+        services.AddSingleton<IPrivateProviderErrorPersistence>(serviceProvider =>
         {
             var paths = serviceProvider.GetRequiredService<AppPaths>();
             // A sibling of the exact configured profile, never a real-user fallback for isolated QA profiles.
             string root = Path.Combine(Path.GetDirectoryName(paths.RootDirectory)!, ".cloudscribe-private-diagnostics",
                 InstalledRecoveryAdmissionStore.ProfileHash(paths.RootDirectory));
-            return new GooglePrivateErrorDiagnostics(root, serviceProvider.GetRequiredService<TimeProvider>(),
-                serviceProvider.GetRequiredService<CompletionWorkflowGate>(),
-                serviceProvider.GetRequiredService<ILogger<GooglePrivateErrorDiagnostics>>());
+            return GooglePrivateErrorDiagnostics.OpenPrivateStore(root, serviceProvider.GetRequiredService<TimeProvider>());
         });
+        services.AddSingleton(provider => new GooglePrivateErrorDiagnostics(provider.GetRequiredService<IPrivateProviderErrorPersistence>(),
+            provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<CompletionWorkflowGate>(),
+            provider.GetRequiredService<ILogger<GooglePrivateErrorDiagnostics>>()));
+    }
+
+    private static void RegisterLongAudio(IServiceCollection services)
+    {
+        services.AddSingleton(provider => new InstalledGoogleLongAudioStore(AppContext.BaseDirectory,
+            provider.GetRequiredService<AppPaths>(), provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<GoogleLongAudioAccountReadiness>();
+        services.AddSingleton<GoogleLongAudioRuntimeFactory>();
+        services.AddSingleton<GoogleLongAudioDocumentService>();
     }
 
     private static void RegisterShell(IServiceCollection services)

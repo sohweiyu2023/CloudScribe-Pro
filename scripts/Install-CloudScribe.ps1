@@ -8,6 +8,12 @@ param(
     [string]$ReviewedChirpArticlePolicySha256,
     [string]$ReviewedChirpResumePolicyPath,
     [string]$ReviewedChirpResumePolicySha256,
+    [string]$ReviewedLongAudioScopePath,
+    [string]$ReviewedLongAudioScopeSha256,
+    [ValidateSet('Install','Resume','Rollback')][string]$LongAudioProvisioningPhase='Install',
+    [string]$ReviewedLongAudioBuildPlanPath,
+    [string]$ReviewedLongAudioBuildPlanSha256,
+    [ValidateSet('Install','Resume','Rollback')][string]$LongAudioBuildPhase='Install',
     [string]$ReviewedCompletionGatePath,
     [string]$ReviewedCompletionGateSha256,
     [string]$ReviewedCompletionBuildTransitionPath,
@@ -27,6 +33,15 @@ param(
     [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
+if([bool]$ReviewedLongAudioBuildPlanPath -ne [bool]$ReviewedLongAudioBuildPlanSha256){throw 'Long Audio build replacement requires its exact independently reviewed plan.'}
+if($PSBoundParameters.ContainsKey('LongAudioBuildPhase') -and -not $ReviewedLongAudioBuildPlanPath){throw 'Long Audio build resume/rollback requires the same reviewed plan.'}
+if($ReviewedLongAudioBuildPlanPath -and @($PSBoundParameters.Keys|Where-Object {$_ -cnotin @('PackageRoot','ReviewedLongAudioBuildPlanPath','ReviewedLongAudioBuildPlanSha256','LongAudioBuildPhase','ValidateOnly')}).Count){throw 'Long Audio build-only replacement cannot combine migration, admission, grant changes or another installation mode.'}
+if([bool]$ReviewedLongAudioScopePath -ne [bool]$ReviewedLongAudioScopeSha256){throw 'Long Audio setup requires separately reviewed scope bytes and their exact approved SHA256.'}
+if($PSBoundParameters.ContainsKey('LongAudioProvisioningPhase') -and -not $ReviewedLongAudioScopePath){throw 'Long Audio resume/rollback requires the same reviewed scope.'}
+if($ReviewedLongAudioScopePath){
+    if($ValidatePackageOnly -or $MigrateProfileFrom -or $CompletePendingCompletionSuccessor -or $CompletePendingCompletionInterpreterRepair -or $ResumePendingInstallWithdrawal){throw 'Long Audio setup is a separate no-provider installation phase.'}
+    foreach($key in $PSBoundParameters.Keys){if($key.StartsWith('Reviewed',[StringComparison]::Ordinal) -and $key -cnotin @('ReviewedLongAudioScopePath','ReviewedLongAudioScopeSha256')){throw 'Do not combine Long Audio setup with another authority or build transition.'}}
+}
 if([bool]$ReviewedStoppedMaintenancePlanPath -ne [bool]$ReviewedStoppedMaintenancePlanSha256){throw 'Stopped maintenance requires its separately reviewed plan and exact hash.'}
 if($PSBoundParameters.ContainsKey('StoppedMaintenancePhase') -and -not $ReviewedStoppedMaintenancePlanPath){throw 'Stopped maintenance phase requires its original reviewed plan.'}
 if($ReviewedStoppedMaintenancePlanPath -and @($PSBoundParameters.Keys|Where-Object {$_ -notin @('PackageRoot','ReviewedStoppedMaintenancePlanPath','ReviewedStoppedMaintenancePlanSha256','StoppedMaintenancePhase','ValidateOnly')}).Count){throw 'Stopped maintenance cannot be combined with migration, narration admission, gate activation or other installation modes.'}
@@ -1328,6 +1343,27 @@ function Invoke-StoppedMaintenance([string]$PlanPath,[string]$PlanSha256,[string
         ($Phase -cnotin @('inspect','inspect-release') -and ($result.restored -isnot [bool] -or -not $result.restored))){throw 'Maintenance did not confirm its expected non-activating result.'}
     return $result
 }
+function Invoke-ReviewedLongAudioProvisioning([string]$InstallRoot,[string]$ProfileRoot,[string]$ScopePath,[string]$ScopeSha,[string]$Phase){
+    $moduleRoot=Join-Path $package 'app/tools/long-audio'
+    foreach($name in @('Provisioning.Files.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1')){
+        $module=Join-Path $moduleRoot $name;Assert-NoLinks $module
+        if(-not (Test-Path -LiteralPath $module -PathType Leaf)){throw 'The tested Long Audio installer helpers are absent from this package.'}
+        . $module
+    }
+    foreach($name in @('CloudScribe.dll','CloudScribe.Infrastructure.dll')){
+        if((Get-FileHash -LiteralPath (Join-Path $package ('app/'+$name))).Hash -cne (Get-FileHash -LiteralPath (Join-Path $InstallRoot ('app/'+$name))).Hash){throw 'Install the exact tested application build first; Long Audio setup does not replace binaries.'}
+    }
+    Invoke-LAProvisioning $InstallRoot $ProfileRoot $ScopePath $ScopeSha $Phase
+}
+function Invoke-ReviewedLongAudioBuild([string]$InstallRoot,[string]$ProfileRoot,[string]$PlanPath,[string]$PlanSha,[string]$Phase){
+    $moduleRoot=Join-Path $package 'app/tools/long-audio'
+    foreach($name in @('Provisioning.Files.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1','BuildRebind.Validation.ps1','BuildRebind.Transaction.ps1')){
+        $module=Join-Path $moduleRoot $name;Assert-NoLinks $module
+        if(-not (Test-Path -LiteralPath $module -PathType Leaf)){throw 'The tested build-only Long Audio updater is absent from this package.'}
+        . $module
+    }
+    Invoke-LABuildRebind $InstallRoot $ProfileRoot $package $PlanPath $PlanSha $Phase
+}
 if($CompletionFunctionsOnly){return}
 foreach($required in @('app/CloudScribe.exe','app/CloudScribe.dll','app/appsettings.json','runtime/dotnet.exe','LICENSE','THIRD-PARTY-NOTICES.md','licenses/third-party/components.json')){
     if(-not (Test-Path -LiteralPath (Join-Path $package $required) -PathType Leaf)){throw "Incomplete clean package: $required"}
@@ -1382,6 +1418,21 @@ if(Test-Path -LiteralPath $target){
     if($identity.Product -ne 'CloudScribe Pro'){throw 'Install identity mismatch.'}
     $oldSettings=Get-Content -LiteralPath (Join-Path $target 'app/appsettings.json') -Raw | ConvertFrom-Json
     $profile=$oldSettings.CloudScribe.AppDataDirectoryOverride
+}
+if($ReviewedLongAudioBuildPlanPath){
+    if(-not $profile){throw 'Build-only Long Audio replacement requires the managed existing profile.'}
+    $phase=if($ValidateOnly){'Inspect'}else{$LongAudioBuildPhase}
+    Invoke-ReviewedLongAudioBuild $target $profile $ReviewedLongAudioBuildPlanPath $ReviewedLongAudioBuildPlanSha256 $phase
+    return
+}
+if($ReviewedLongAudioScopePath){
+    if(-not $profile){throw 'Long Audio setup requires the existing managed profile override; no new or empty profile is substituted.'}
+    $phase=if($ValidateOnly){'Inspect'}else{$LongAudioProvisioningPhase}
+    Invoke-ReviewedLongAudioProvisioning $target $profile $ReviewedLongAudioScopePath $ReviewedLongAudioScopeSha256 $phase
+    return
+}
+if($identity -and $identity.PSObject.Properties['GoogleLongAudioScopeSha256']){
+    throw 'Long Audio authority/history is installed. Ordinary replacement needs a reviewed Long Audio rebind or verified pre-effect rollback; it will not silently discard the scope.'
 }
 $migration=$null
 if($MigrateProfileFrom){

@@ -36,7 +36,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     ILogger<GoogleTtsUsabilityHotfixBinder>? catalogLogger = null, GoogleCredentialRepairService? credentialRepair = null,
     GoogleGenerationProductionRuntimeRequestSource? wholeArticleRequests = null,
     IGoogleGenerationExecutionContextResolver? wholeArticleResolver = null,
-    CloudScribe.Application.Diagnostics.IGoogleTrendHistoryHealth? trendHistory = null)
+    CloudScribe.Application.Diagnostics.IGoogleTrendHistoryHealth? trendHistory = null,
+    GoogleLongAudioDocumentService? longAudioDocuments = null, InstalledGoogleLongAudioStore? longAudioInstalled = null)
 {
     private static readonly string[] ProviderControlHostNames =
     [

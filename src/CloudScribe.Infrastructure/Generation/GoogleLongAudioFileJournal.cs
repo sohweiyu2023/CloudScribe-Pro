@@ -45,7 +45,8 @@ public sealed partial class GoogleLongAudioFileJournal
             RpcCode = expected.RpcCode,
             Revision = expected.Revision,
             Observation = expected.Observation,
-            OperationParseFailed = expected.OperationParseFailed
+            OperationParseFailed = expected.OperationParseFailed,
+            FailureKind = expected.FailureKind
         } != expected || updated.Revision != expected.Revision + 1)
             throw new InvalidOperationException("Long Audio journal binding cannot change.");
         string path = PathFor(expected.AttemptId), pending = path + "." + Guid.NewGuid().ToString("N") + ".pending";
@@ -68,10 +69,10 @@ public sealed partial class GoogleLongAudioFileJournal
         GoogleLongAudioValidation.RequireUnique(json.RootElement);
         var item = JsonSerializer.Deserialize<GoogleLongAudioCheckpoint>(bytes) ?? throw new InvalidDataException("Missing Long Audio journal.");
         GoogleLongAudioValidation.RequireScope(item.AttemptId, item.ProjectNumber, item.Location, item.CredentialReferenceId, item.OutputGcsUri);
-        if (item.AttemptId != id || !Hash(item.BindingSha256) || !Hash(item.PayloadSha256) || item.PayloadBytes is < 1 or > 1_000_000
+        if (item.AttemptId != id || !Hash(item.BindingSha256) || !Hash(item.PayloadSha256) || item.PayloadBytes is < 1 or > GoogleLongAudioRequest.MaximumWireBytes
             || !string.Equals(item.BindingSha256, GoogleLongAudioValidation.BindingDigest(item.AttemptId, item.ProjectNumber,
                 item.Location, item.CredentialReferenceId, item.OutputGcsUri, item.PayloadSha256), StringComparison.Ordinal)
-            || !Enum.IsDefined(item.State) || item.Revision < 0 || item.HttpStatus is < 0 or > 599 || item.RpcCode is < 0 or > 16
+            || !Enum.IsDefined(item.State) || !Enum.IsDefined(item.FailureKind) || item.Revision < 0 || item.HttpStatus is < 0 or > 599 || item.RpcCode is < 0 or > 16
             || item.State is GoogleLongAudioState.Pollable or GoogleLongAudioState.CompletedUnverified
                 && !GoogleLongAudioValidation.IsOperation(item.OperationName, item.ProjectNumber, item.Location)
             || item.OperationName is not null && !GoogleLongAudioValidation.IsOperation(item.OperationName, item.ProjectNumber, item.Location))
