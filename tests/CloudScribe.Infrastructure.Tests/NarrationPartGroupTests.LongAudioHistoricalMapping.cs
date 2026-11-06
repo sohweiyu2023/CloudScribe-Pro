@@ -53,8 +53,10 @@ public sealed partial class NarrationPartGroupTests
         byte[] previousBytes = JsonSerializer.SerializeToUtf8Bytes(previous);
         var plan = JsonSerializer.Deserialize<GoogleLongAudioProvisioningPlan>(File.ReadAllBytes(Path.Combine(directory, "plan.json")))! with
         {
-            ScopeSha256 = scopeSha, PreviousMarkerSha256 = Convert.ToHexStringLower(SHA256.HashData(previousBytes)),
-            NewMarkerSha256 = Convert.ToHexStringLower(SHA256.HashData(markerBytes)), InitialLedgerSha256 = Convert.ToHexStringLower(SHA256.HashData(ledgerBytes))
+            ScopeSha256 = scopeSha,
+            PreviousMarkerSha256 = Convert.ToHexStringLower(SHA256.HashData(previousBytes)),
+            NewMarkerSha256 = Convert.ToHexStringLower(SHA256.HashData(markerBytes)),
+            InitialLedgerSha256 = Convert.ToHexStringLower(SHA256.HashData(ledgerBytes))
         };
         byte[] planBytes = JsonSerializer.SerializeToUtf8Bytes(plan);
         File.WriteAllBytes(Path.Combine(directory, "plan.json"), planBytes);

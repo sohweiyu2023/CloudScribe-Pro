@@ -54,7 +54,10 @@ public sealed partial class NarrationPartGroupTests
         string operations = Path.Combine(p.Root, "operations"); Directory.CreateDirectory(operations);
         File.WriteAllBytes(Path.Combine(operations, p.Request.AttemptId.ToString("N") + ".json"), JsonSerializer.SerializeToUtf8Bytes(new
         {
-            p.Request.AttemptId, p.Request.BindingSha256, State = 3, OperationParseFailed = false,
+            p.Request.AttemptId,
+            p.Request.BindingSha256,
+            State = 3,
+            OperationParseFailed = false,
             Observation = new { ReadbackVerified = true, ReadState = 1, Truncated = false }
         }));
         string? repository = AppContext.BaseDirectory;

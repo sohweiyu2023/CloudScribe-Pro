@@ -32,9 +32,15 @@ public sealed partial class GoogleLongAudioAdapterTests
         var request = Request(text: article);
         var observer = new GoogleLongAudioProtectedResponseObserver(store, clock);
         observer.Arm(request, true, clock.GetUtcNow().AddHours(1)); Guid ticket = observer.Begin(request);
-        byte[] body = JsonSerializer.SerializeToUtf8Bytes(new { error = new { status = "INVALID_ARGUMENT",
-            message = "Provider confirmed sample failure. Echo: PRIVATE-ARTICLE-CANARY-ALPHA-END; credential=synthetic-token",
-            details = new[] { new { reason = "Synthetic reason.", description = "Distinct nested explanation retained." } } } });
+        byte[] body = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            error = new
+            {
+                status = "INVALID_ARGUMENT",
+                message = "Provider confirmed sample failure. Echo: PRIVATE-ARTICLE-CANARY-ALPHA-END; credential=synthetic-token",
+                details = new[] { new { reason = "Synthetic reason.", description = "Distinct nested explanation retained." } }
+            }
+        });
         var observed = await observer.ObserveAsync(ticket, request, 400, body, GoogleResponseReadState.Complete, "synthetic-token", false);
         Assert.True(observed.ReadbackVerified); Assert.False(observed.Truncated); Assert.False(observed.DetailsOmitted);
         var saved = Assert.Single(store.Records).Response!;
@@ -54,8 +60,14 @@ public sealed partial class GoogleLongAudioAdapterTests
         observer.Arm(request, true, clock.GetUtcNow().AddHours(1)); Guid ticket = observer.Begin(request);
         string encoded = JsonSerializer.Serialize(fragment)[1..^1]; string url = Uri.EscapeDataString(fragment);
         string base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(fragment));
-        byte[] body = JsonSerializer.SerializeToUtf8Bytes(new { error = new { status = "INVALID_ARGUMENT",
-            message = "Provider detail. " + fragment + " " + encoded + " " + url + " " + base64 } });
+        byte[] body = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            error = new
+            {
+                status = "INVALID_ARGUMENT",
+                message = "Provider detail. " + fragment + " " + encoded + " " + url + " " + base64
+            }
+        });
         var observed = await observer.ObserveAsync(ticket, request, 400, body, GoogleResponseReadState.Complete, "synthetic-token", false);
         Assert.True(observed.ReadbackVerified);
         string saved = Assert.Single(store.Records).Response!.RedactedBody;

@@ -1,6 +1,6 @@
 using CloudScribe.Application.Generation;
-using Microsoft.Extensions.Logging;
 using CloudScribe.Domain.Generation;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Application.Logging;
 

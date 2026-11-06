@@ -64,8 +64,10 @@ public sealed partial class NarrationPartGroupTests
         string parentSha = Hash(File.ReadAllText(parentPath)), scopeSha = Hash(File.ReadAllText(scopePath));
         var marker = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["Product"] = "CloudScribe Pro", ["AppSha256"] = parent.AppSha256,
-            ["ChirpArticlePolicySha256"] = parentSha, ["GoogleLongAudioScopeSha256"] = scopeSha
+            ["Product"] = "CloudScribe Pro",
+            ["AppSha256"] = parent.AppSha256,
+            ["ChirpArticlePolicySha256"] = parentSha,
+            ["GoogleLongAudioScopeSha256"] = scopeSha
         };
         if (fault is "missing-pin") marker.Remove("GoogleLongAudioScopeSha256");
         await File.WriteAllTextAsync(Path.Combine(install, "cloudscribe-install.json"), JsonSerializer.Serialize(marker), TestContext.Current.CancellationToken).ConfigureAwait(false);

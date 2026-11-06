@@ -34,17 +34,28 @@ public sealed partial class NarrationPartGroupTests
         File.WriteAllBytes(p.LedgerPath, JsonSerializer.SerializeToUtf8Bytes(new GoogleLongAudioBudgetLedger(1, p.ScopeSha, [claim])));
         string operations = Path.Combine(Path.GetDirectoryName(p.LedgerPath)!, "operations"); Directory.CreateDirectory(operations);
         string priorPath = Path.Combine(operations, p.Request.AttemptId.ToString("N") + ".json");
-        File.WriteAllBytes(priorPath, JsonSerializer.SerializeToUtf8Bytes(new { p.Request.AttemptId, p.Request.BindingSha256,
-            State = string.Equals(stopAt, "reject-uncertain", StringComparison.Ordinal) ? 0 : 3, OperationName = (string?)null, HttpStatus = 400, OperationParseFailed = false,
-            Observation = new { ReadbackVerified = true, Truncated = false, DetailsOmitted = false } }));
+        File.WriteAllBytes(priorPath, JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            p.Request.AttemptId,
+            p.Request.BindingSha256,
+            State = string.Equals(stopAt, "reject-uncertain", StringComparison.Ordinal) ? 0 : 3,
+            OperationName = (string?)null,
+            HttpStatus = 400,
+            OperationParseFailed = false,
+            Observation = new { ReadbackVerified = true, Truncated = false, DetailsOmitted = false }
+        }));
         var job = Assert.Single(oldScope.DocumentJobs!);
         string text = File.ReadAllText(Path.Combine(f.Root, "documents", job.DocumentId.ToString("N"), "content", job.RevisionId.ToString("N") + ".utf8"));
         Guid id = Guid.NewGuid(); string uri = "gs://" + oldScope.OutputBucket + "/comparison/" + id.ToString("N") + ".wav";
         var nextRequest = GoogleLongAudioRequest.Create(id, oldScope.ProjectNumber, "global", oldScope.CredentialReferenceId, uri, text,
             oldScope.LanguageCode, oldScope.VoiceName, "LINEAR16");
-        var next = oldScope with { SourceApprovalSha256 = new string('e', 64), AudioEncoding = "LINEAR16",
+        var next = oldScope with
+        {
+            SourceApprovalSha256 = new string('e', 64),
+            AudioEncoding = "LINEAR16",
             ApprovedRequestCeilingsUsdCents = new Dictionary<string, long>(StringComparer.Ordinal) { [p.Request.BindingSha256] = 1, [nextRequest.BindingSha256] = 1 },
-            DocumentJobs = [job with { AttemptId = id, OutputGcsUri = uri }] };
+            DocumentJobs = [job with { AttemptId = id, OutputGcsUri = uri }]
+        };
         next = stopAt switch
         {
             "reject-prior-approval" => next with { SourceApprovalSha256 = oldScope.SourceApprovalSha256 },
@@ -55,10 +66,20 @@ public sealed partial class NarrationPartGroupTests
         };
         string scopePath = Path.Combine(f.Root, "reviewed-linear16-scope.json"); File.WriteAllBytes(scopePath, JsonSerializer.SerializeToUtf8Bytes(next));
         string HashFile(string path) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
-        var plan = new { Version = 1, next.SourceApprovalSha256, PreviousScopeSha256 = p.ScopeSha, PreviousLedgerSha256 = HashFile(p.LedgerPath),
-            PreviousMarkerSha256 = HashFile(markerPath), PreviousProvisioningPlanSha256 = HashFile(Path.Combine(install, "long-audio-provisioning", "plan.json")),
+        var plan = new
+        {
+            Version = 1,
+            next.SourceApprovalSha256,
+            PreviousScopeSha256 = p.ScopeSha,
+            PreviousLedgerSha256 = HashFile(p.LedgerPath),
+            PreviousMarkerSha256 = HashFile(markerPath),
+            PreviousProvisioningPlanSha256 = HashFile(Path.Combine(install, "long-audio-provisioning", "plan.json")),
             PreviousProvisioningReceiptSha256 = HashFile(Path.Combine(install, "long-audio-provisioning", "receipt.json")),
-            PreviousOperationSha256 = HashFile(priorPath), PreviousAttemptId = p.Request.AttemptId, NewScopePath = scopePath, NewScopeSha256 = HashFile(scopePath) };
+            PreviousOperationSha256 = HashFile(priorPath),
+            PreviousAttemptId = p.Request.AttemptId,
+            NewScopePath = scopePath,
+            NewScopeSha256 = HashFile(scopePath)
+        };
         string planPath = Path.Combine(f.Root, "reviewed-format-transition.json"); File.WriteAllBytes(planPath, JsonSerializer.SerializeToUtf8Bytes(plan));
         byte[] parent = File.ReadAllBytes(p.ParentPath), prior = File.ReadAllBytes(priorPath);
         byte[] markerBefore = File.ReadAllBytes(markerPath), ledgerBefore = File.ReadAllBytes(p.LedgerPath);
@@ -105,8 +126,14 @@ public sealed partial class NarrationPartGroupTests
             $hook={param($stage)if($StopAt -and $stage -ceq $StopAt){throw 'SyntheticInterruption'}}.GetNewClosure()
             & (Join-Path $Repository ('scripts/'+$ScriptName)) -InstallRoot $Install -ProfileRoot $Profile -ReviewedPlanPath $Plan -ReviewedPlanSha256 $Sha -ValidateOnly:($Validate -ceq 'true') -Resume:($Resume -ceq 'true') -AfterCheckpoint $hook
             """);
-        var start = new ProcessStartInfo { FileName = OperatingSystem.IsWindows() ? "pwsh.exe" : "pwsh", UseShellExecute = false,
-            RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        var start = new ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsWindows() ? "pwsh.exe" : "pwsh",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
         foreach (string item in new[] { "-NoLogo", "-NoProfile", "-File", wrapper, root, install, f.Root, plan, sha, stopAt, validate ? "true" : "false", resume ? "true" : "false", scriptName }) start.ArgumentList.Add(item);
         using var process = Process.Start(start) ?? throw new IOException("Synthetic successor process unavailable.");
         var output = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken); var error = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);

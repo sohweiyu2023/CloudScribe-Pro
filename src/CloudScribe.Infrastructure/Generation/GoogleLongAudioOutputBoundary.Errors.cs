@@ -30,7 +30,9 @@ public sealed partial class GoogleLongAudioOutputBoundary
             return new(bytes, await observer.ObserveStorageMetadataAsync(ticket, request, (int)response.StatusCode, bytes, state, bearer).ConfigureAwait(false), failure);
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { return new(captured.ToArray(), new(null, state, GoogleLongAudioParseState.Unavailable, GoogleErrorStatus.Unknown, (int)captured.Length,
-            GoogleExplanationRetentionState.StorageFailed, false, captured.Length > 16_384, true), failure is null ? error : new AggregateException(failure, error)); }
+        {
+            return new(captured.ToArray(), new(null, state, GoogleLongAudioParseState.Unavailable, GoogleErrorStatus.Unknown, (int)captured.Length,
+            GoogleExplanationRetentionState.StorageFailed, false, captured.Length > 16_384, true), failure is null ? error : new AggregateException(failure, error));
+        }
     }
 }

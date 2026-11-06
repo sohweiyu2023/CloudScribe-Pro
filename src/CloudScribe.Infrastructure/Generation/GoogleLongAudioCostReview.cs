@@ -24,6 +24,7 @@ public sealed record GoogleLongAudioCostReview(string RequestBindingSha256, stri
         long total = checked(retainedCommitmentsUsdCents + taxFxProvisionUsdCents + estimate);
         return new(request.BindingSha256, request.VoiceName, request.LanguageCode, request.InputUtf8Bytes, request.PayloadBytes,
             request.ConservativeCharacterUnits, estimate, retainedCommitmentsUsdCents, taxFxProvisionUsdCents, totalCapUsdCents,
-            total, pricingProvenance) { AdditionalCommitmentUsdCents = estimate };
+            total, pricingProvenance)
+        { AdditionalCommitmentUsdCents = estimate };
     }
 }

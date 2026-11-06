@@ -35,9 +35,13 @@ public sealed partial class NarrationPartGroupTests
         Guid wavId = Guid.NewGuid(); string wavUri = "gs://" + originalScope.OutputBucket + "/comparison/" + wavId.ToString("N") + ".wav";
         var wav = GoogleLongAudioRequest.Create(wavId, originalScope.ProjectNumber, "global", originalScope.CredentialReferenceId, wavUri,
             original.Text, originalScope.LanguageCode, originalScope.VoiceName, "LINEAR16");
-        var previousScope = originalScope with { AudioEncoding = "LINEAR16", SourceApprovalSha256 = new string('e', 64),
+        var previousScope = originalScope with
+        {
+            AudioEncoding = "LINEAR16",
+            SourceApprovalSha256 = new string('e', 64),
             ApprovedRequestCeilingsUsdCents = new Dictionary<string, long>(StringComparer.Ordinal) { [p.Request.BindingSha256] = 1, [wav.BindingSha256] = 1 },
-            DocumentJobs = [originalJob with { AttemptId = wavId, OutputGcsUri = wavUri }] };
+            DocumentJobs = [originalJob with { AttemptId = wavId, OutputGcsUri = wavUri }]
+        };
         File.WriteAllBytes(p.ScopePath, JsonSerializer.SerializeToUtf8Bytes(previousScope)); string previousSha = HashFile(p.ScopePath);
         GoogleLongAudioBudgetClaim[] claims = [new(p.Request.AttemptId, p.Request.BindingSha256, 1), new(wavId, wav.BindingSha256, 1)];
         File.WriteAllBytes(p.LedgerPath, JsonSerializer.SerializeToUtf8Bytes(new GoogleLongAudioBudgetLedger(1, previousSha, claims)));
@@ -54,18 +58,33 @@ public sealed partial class NarrationPartGroupTests
         if (completed)
         {
             File.WriteAllText(syntheticAudio, "Synthetic verified bytes; this fixture does not claim codec validation.");
-            var identity = new { BindingSha256 = wav.BindingSha256, Bucket = previousScope.OutputBucket,
-                ObjectName = "comparison/" + wavId.ToString("N") + ".wav", Generation = "123", Bytes = new FileInfo(syntheticAudio).Length,
-                Md5Base64 = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(File.ReadAllBytes(syntheticAudio))) };
+            var identity = new
+            {
+                BindingSha256 = wav.BindingSha256,
+                Bucket = previousScope.OutputBucket,
+                ObjectName = "comparison/" + wavId.ToString("N") + ".wav",
+                Generation = "123",
+                Bytes = new FileInfo(syntheticAudio).Length,
+                Md5Base64 = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(File.ReadAllBytes(syntheticAudio)))
+            };
             File.WriteAllBytes(Path.Combine(output, wavId.ToString("N") + ".object.json"), JsonSerializer.SerializeToUtf8Bytes(identity));
             var receiptSource = string.Equals(stopAt, "reject-completed-source-changed", StringComparison.Ordinal)
                 ? await f.Library.CreateAsync("Another saved source", "A different source.", TestContext.Current.CancellationToken) : original;
             if (!string.Equals(stopAt, "reject-completed-receipt-missing", StringComparison.Ordinal))
                 File.WriteAllBytes(Path.Combine(output, wavId.ToString("N") + ".verified.json"), JsonSerializer.SerializeToUtf8Bytes(new
                 {
-                    Version = 1, DocumentId = receiptSource.Id, RevisionId = receiptSource.CurrentRevisionId, SourceSha256 = Hash(receiptSource.Text),
-                    RequestBindingSha256 = wav.BindingSha256, Artifact = new { AudioSha256 = HashFile(syntheticAudio), LocalPath = syntheticAudio,
-                        Bytes = new FileInfo(syntheticAudio).Length, Identity = identity },
+                    Version = 1,
+                    DocumentId = receiptSource.Id,
+                    RevisionId = receiptSource.CurrentRevisionId,
+                    SourceSha256 = Hash(receiptSource.Text),
+                    RequestBindingSha256 = wav.BindingSha256,
+                    Artifact = new
+                    {
+                        AudioSha256 = HashFile(syntheticAudio),
+                        LocalPath = syntheticAudio,
+                        Bytes = new FileInfo(syntheticAudio).Length,
+                        Identity = identity
+                    },
                 }));
             if (string.Equals(stopAt, "reject-completed-generation-changed", StringComparison.Ordinal))
                 File.WriteAllBytes(Path.Combine(output, wavId.ToString("N") + ".object.json"), JsonSerializer.SerializeToUtf8Bytes(identity with { Generation = "0123" }));
@@ -76,11 +95,14 @@ public sealed partial class NarrationPartGroupTests
             bool first = claim.AttemptId == p.Request.AttemptId;
             File.WriteAllBytes(Path.Combine(operations, claim.AttemptId.ToString("N") + ".json"), JsonSerializer.SerializeToUtf8Bytes(new
             {
-                claim.AttemptId, BindingSha256 = claim.RequestBindingSha256,
+                claim.AttemptId,
+                BindingSha256 = claim.RequestBindingSha256,
                 State = string.Equals(stopAt, "reject-uncertain", StringComparison.Ordinal) && !first ? 0 : completed && !first ? 2 : 3,
                 OutputGcsUri = first ? p.Request.OutputGcsUri : wavUri,
                 OperationName = first ? null : "projects/" + previousScope.ProjectNumber + "/locations/global/operations/synthetic",
-                HttpStatus = first ? 400 : 200, RpcCode = first || completed ? (int?)null : 3, OperationParseFailed = false,
+                HttpStatus = first ? 400 : 200,
+                RpcCode = first || completed ? (int?)null : 3,
+                OperationParseFailed = false,
                 Observation = new { ReadbackVerified = true, Truncated = false, DetailsOmitted = !first },
             }));
         }
@@ -88,24 +110,47 @@ public sealed partial class NarrationPartGroupTests
         Guid nextId = Guid.NewGuid(); string nextUri = "gs://" + previousScope.OutputBucket + "/comparison/" + nextId.ToString("N") + ".wav";
         var nextRequest = GoogleLongAudioRequest.Create(nextId, previousScope.ProjectNumber, "global", previousScope.CredentialReferenceId,
             nextUri, paragraph, previousScope.LanguageCode, previousScope.VoiceName, "LINEAR16");
-        var nextScope = previousScope with { SourceApprovalSha256 = new string('f', 64),
+        var nextScope = previousScope with
+        {
+            SourceApprovalSha256 = new string('f', 64),
             ApprovedRequestCeilingsUsdCents = new Dictionary<string, long>(previousScope.ApprovedRequestCeilingsUsdCents, StringComparer.Ordinal) { [nextRequest.BindingSha256] = 1 },
-            DocumentJobs = [new(excerpt.Id, excerpt.CurrentRevisionId!.Value, Hash(paragraph), nextId, nextUri, "text", 4096, 24000, 1)] };
+            DocumentJobs = [new(excerpt.Id, excerpt.CurrentRevisionId!.Value, Hash(paragraph), nextId, nextUri, "text", 4096, 24000, 1)]
+        };
         string reviewed = Path.Combine(f.Root, "reviewed-excerpt-scope.json"); File.WriteAllBytes(reviewed, JsonSerializer.SerializeToUtf8Bytes(nextScope));
-        var pins = claims.Select(c => new { c.AttemptId, Sha256 = HashFile(Path.Combine(operations, c.AttemptId.ToString("N") + ".json")),
+        var pins = claims.Select(c => new
+        {
+            c.AttemptId,
+            Sha256 = HashFile(Path.Combine(operations, c.AttemptId.ToString("N") + ".json")),
             CompletedReceiptSha256 = completed && c.AttemptId == wavId && File.Exists(Path.Combine(output, wavId.ToString("N") + ".verified.json"))
                 ? HashFile(Path.Combine(output, wavId.ToString("N") + ".verified.json")) : null,
-            CompletedObjectSha256 = completed && c.AttemptId == wavId ? HashFile(Path.Combine(output, wavId.ToString("N") + ".object.json")) : null }).ToArray();
+            CompletedObjectSha256 = completed && c.AttemptId == wavId ? HashFile(Path.Combine(output, wavId.ToString("N") + ".object.json")) : null
+        }).ToArray();
         // A separately pinned source revision may be larger than the successful current comparison.
         var sourceParent = completed ? await f.Library.CreateAsync("Separate reviewed original", original.Text, TestContext.Current.CancellationToken) : original;
-        var plan = new { Version = completed ? 3 : 2, nextScope.SourceApprovalSha256, PreviousScopeSha256 = previousSha, PreviousLedgerSha256 = HashFile(p.LedgerPath),
-            PreviousMarkerSha256 = HashFile(markerPath), PreviousProvisioningPlanSha256 = HashFile(Path.Combine(install, "long-audio-provisioning/plan.json")),
+        var plan = new
+        {
+            Version = completed ? 3 : 2,
+            nextScope.SourceApprovalSha256,
+            PreviousScopeSha256 = previousSha,
+            PreviousLedgerSha256 = HashFile(p.LedgerPath),
+            PreviousMarkerSha256 = HashFile(markerPath),
+            PreviousProvisioningPlanSha256 = HashFile(Path.Combine(install, "long-audio-provisioning/plan.json")),
             PreviousProvisioningReceiptSha256 = HashFile(Path.Combine(install, "long-audio-provisioning/receipt.json")),
-            PreviousOperationSha256 = pins.Single(x => x.AttemptId == wavId).Sha256, PreviousAttemptId = wavId,
-            NewScopePath = reviewed, NewScopeSha256 = HashFile(reviewed), RetainedOperationPins = pins,
-            SourceExcerpt = new { ParentDocumentId = sourceParent.Id, ParentRevisionId = sourceParent.CurrentRevisionId!.Value, ParentSourceSha256 = Hash(sourceParent.Text),
+            PreviousOperationSha256 = pins.Single(x => x.AttemptId == wavId).Sha256,
+            PreviousAttemptId = wavId,
+            NewScopePath = reviewed,
+            NewScopeSha256 = HashFile(reviewed),
+            RetainedOperationPins = pins,
+            SourceExcerpt = new
+            {
+                ParentDocumentId = sourceParent.Id,
+                ParentRevisionId = sourceParent.CurrentRevisionId!.Value,
+                ParentSourceSha256 = Hash(sourceParent.Text),
                 StartUtf16 = string.Equals(stopAt, "reject-excerpt-changed", StringComparison.Ordinal) ? prefix.Length + 1 : prefix.Length,
-                EndUtf16Exclusive = original.Text.Length, ExcerptSha256 = Hash(paragraph) } };
+                EndUtf16Exclusive = original.Text.Length,
+                ExcerptSha256 = Hash(paragraph)
+            }
+        };
         string planPath = Path.Combine(f.Root, "reviewed-excerpt-plan.json"); File.WriteAllBytes(planPath, JsonSerializer.SerializeToUtf8Bytes(plan, ExcerptPlanJson));
         byte[] before = File.ReadAllBytes(p.LedgerPath), parentBefore = File.ReadAllBytes(p.ParentPath);
         var check = await RunLongFormatSuccessorAsync(f, install, planPath, HashFile(planPath), "", true, false, "Update-LongAudioExcerpt.ps1");
