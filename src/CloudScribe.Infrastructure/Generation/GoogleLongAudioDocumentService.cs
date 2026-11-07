@@ -37,12 +37,17 @@ public sealed partial class GoogleLongAudioDocumentService(InstalledGoogleLongAu
         var admission = new GoogleLongAudioLedgerAdmission(context.ParentPolicyPath, context.ParentPolicySha256,
             context.ScopePath, context.ScopeSha256, context.LedgerPath, (_, _, _) => ValueTask.CompletedTask, clock);
         var cost = await admission.ReviewAsync(request, token).ConfigureAwait(false);
+        var replacements = await ReviewReplacementsAsync(context, request, text, token).ConfigureAwait(false);
+        cost = cost with { ProjectedProvisionUsdCents = checked(cost.ProjectedProvisionUsdCents + replacements.Additional) };
+        if (!cost.WithinProvidedCap) throw new InvalidOperationException("The exact failed-range replacement exceeds the cumulative cap.");
         bool historical = document.CurrentRevisionId != job.RevisionId;
         if (historical && !cost.IsAlreadyCommitted)
             throw new InvalidOperationException("The document changed before this job started. Review its current revision instead of generating older text.");
         return new(documentId, job.RevisionId, document.Title, job.SourceSha256, historical, context.ScopeSha256,
             job, request, cost, GoogleLongAudioDocumentCompiler.OutputAllowance(context.Scope, job),
-            context.Scope.AdaptiveRecoveryRootBindings?.Contains(request.BindingSha256, StringComparer.Ordinal) == true);
+            context.Scope.AdaptiveRecoveryRootBindings?.Contains(request.BindingSha256, StringComparer.Ordinal) == true,
+            replacements.Count, replacements.Additional,
+            context.Scope.DeferredUnknownRanges?.Where(x => string.Equals(x.RootBindingSha256, request.BindingSha256, StringComparison.Ordinal)).ToArray());
     }
 
     public async Task<GoogleLongAudioRuntimeSession> OpenAsync(GoogleLongAudioDocumentReview review, GoogleLongAudioMediaTools tools,

@@ -31,9 +31,13 @@ public sealed partial class GoogleLongAudioAdapter : IDisposable
         _journal = journal ?? throw new ArgumentNullException(nameof(journal));
         _observer = observer ?? throw new ArgumentNullException(nameof(observer));
         this.logger = logger;
-        _http = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false })
-        { Timeout = TimeSpan.FromSeconds(12) };
+        _http = new HttpClient(handler ?? GoogleLongAudioTransport.CreateHandler())
+        { Timeout = Timeout.InfiniteTimeSpan };
     }
+
+    /// <summary>Deadline for one idempotent status GET. When it passes, the saved operation stays pollable and the
+    /// next status check runs; nothing is resubmitted. POSTs never receive this deadline.</summary>
+    public TimeSpan PollDeadline { get; init; } = GoogleLongAudioTransport.PollResponseDeadline;
 
     public async Task<GoogleLongAudioCheckpoint> SubmitOnceAsync(GoogleLongAudioRequest request, CancellationToken cancellationToken = default)
     {
@@ -43,6 +47,10 @@ public sealed partial class GoogleLongAudioAdapter : IDisposable
         { RequireBinding(existing, request); return existing; }
         if (!_observer.IsReadyFor(request)) throw new InvalidOperationException("Exact protected Long Audio response capture is not ready.");
         using var responseLease = _journal.AcquireResponseLease();
+        // A failed funding review must not manufacture an uncertain POST journal. Admission below still
+        // revalidates and durably commits the exact request before ExchangeAsync can touch the network.
+        if (_admission is IGoogleLongAudioSubmissionPreflight preflight)
+            await preflight.RequireBeforeJournalAsync(request, cancellationToken).ConfigureAwait(false);
         bool claimed = _journal.TryClaim(request);
         var initial = _journal.Load(request.AttemptId);
         RequireBinding(initial, request);
@@ -51,9 +59,9 @@ public sealed partial class GoogleLongAudioAdapter : IDisposable
         try
         {
             await _admission.RequireSubmissionAuthorizedAsync(request, cancellationToken).ConfigureAwait(false);
-            using var bound = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            bound.CancelAfter(TimeSpan.FromSeconds(25));
-            return await ExchangeAsync(initial, request, ticket, true, bound.Token, cancellationToken).ConfigureAwait(false);
+            // An arbitrary local deadline can lose the operation name after Google has accepted a POST.
+            // Keep caller cancellation and the durable unknown-outcome/no-resend rules instead.
+            return await ExchangeAsync(initial, request, ticket, true, cancellationToken, cancellationToken).ConfigureAwait(false);
         }
         finally { EndObservation(ticket, request.AttemptId); }
     }
@@ -69,13 +77,35 @@ public sealed partial class GoogleLongAudioAdapter : IDisposable
         using var responseLease = _journal.AcquireResponseLease();
         _journal.MarkObservationPending(request.AttemptId);
         Guid ticket = _observer.Begin(request);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (PollDeadline > TimeSpan.Zero && PollDeadline != Timeout.InfiniteTimeSpan) deadline.CancelAfter(PollDeadline);
         try
         {
-            using var bound = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            bound.CancelAfter(TimeSpan.FromSeconds(25));
-            return await ExchangeAsync(current, request, ticket, false, bound.Token, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await ExchangeAsync(current, request, ticket, false, deadline.Token, cancellationToken).ConfigureAwait(false);
+            }
+            finally { EndObservation(ticket, request.AttemptId); }
         }
-        finally { EndObservation(ticket, request.AttemptId); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+        {
+            // A status GET is idempotent: an unanswered one is replaced by the next check. The journal stays pollable.
+            var after = _journal.Load(request.AttemptId);
+            RequireBinding(after, request);
+            if (after.State == GoogleLongAudioState.Pollable && after.HttpStatus == 200 && !after.OperationParseFailed
+                && after.Observation is
+                {
+                    ReadbackVerified: true, Truncated: true,
+                    ReadState: CloudScribe.Domain.Generation.GoogleResponseReadState.Cancelled,
+                    Retention: CloudScribe.Domain.Generation.GoogleExplanationRetentionState.SavedPrivately
+                })
+            {
+                after = _journal.Save(after, after with { PollWaitDeadlineElapsed = true, Revision = after.Revision + 1 });
+                _journal.FinishObservation(after);
+            }
+            if (logger is not null) CloudScribe.Application.Logging.CloudScribeLog.LongAudioPollDeadline(logger, request.AttemptId, (long)PollDeadline.TotalSeconds, after.HasVerifiedPollDeadline);
+            return after;
+        }
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One owned exchange preserves the original exception, private response, journal and secondary diagnostic failures without a retry or exception replacement.")]
@@ -109,7 +139,7 @@ public sealed partial class GoogleLongAudioAdapter : IDisposable
             {
                 var missing = new BodyRead([], error is OperationCanceledException ? CloudScribe.Domain.Generation.GoogleResponseReadState.Cancelled : CloudScribe.Domain.Generation.GoogleResponseReadState.Failed, error);
                 var observation = await ObserveAsync(ticket, request, 0, missing, accessToken, false).ConfigureAwait(false);
-                try { saved = _journal.Save(current, current with { Observation = observation, Revision = current.Revision + 1 }); }
+                try { saved = _journal.Save(current, current with { Observation = observation, PollWaitDeadlineElapsed = false, Revision = current.Revision + 1 }); }
                 catch (Exception journalError) when (NonFatal(journalError)) { GoogleLongAudioJournalFailure.Attach(error, 0, observation); }
             }
         }

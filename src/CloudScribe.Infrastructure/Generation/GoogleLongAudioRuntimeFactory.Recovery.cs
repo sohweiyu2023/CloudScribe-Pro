@@ -8,6 +8,7 @@ public sealed partial class GoogleLongAudioRuntimeFactory
 {
     /// <summary>Uses the normal exact-request admission, POST-once journal, capture and verified download path.
     /// Unadmitted children stop before submission; this method never expands installed authority.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One composition binds exact deferred evidence to serialized admission, capture and deterministic recovery without a second submission route.")]
     public async Task<GoogleLongAudioRecoveryRunner> CreateRecoveryRunnerAsync(GoogleLongAudioRequest root,
         GoogleLongAudioMediaTools tools, GoogleLongAudioOutputAllowance outputAllowance, bool captureConfirmed,
         IGoogleTrendHistoryHealth trendHealth, CancellationToken token = default)
@@ -23,6 +24,9 @@ public sealed partial class GoogleLongAudioRuntimeFactory
         trendHealth.RequireReady();
         var artifacts = new GoogleLongAudioRecoveryArtifactStore(context.OutputDirectory, new GoogleLongAudioFileJournal(context.OperationsDirectory));
         var recovery = new GoogleLongAudioRecoveryAuthority(root, context.OperationsDirectory, context.OutputDirectory);
+        if (context.Scope.DeferredUnknownRanges is { Count: > 0 })
+            recovery.Deferred = new(root, context.Scope, context.OperationsDirectory, context.OutputDirectory, context.LedgerPath, context.ScopeSha256, recovery);
+        var replacements = new GoogleLongAudioFailedRangeReplacementResolver(root, context.Scope, context.OperationsDirectory, context.OutputDirectory);
         async Task<GoogleLongAudioJobProgress> Execute(GoogleLongAudioRequest request, bool pollOnly, CancellationToken cancel)
         {
             await RequireContextAsync(context, cancel).ConfigureAwait(false);
@@ -36,19 +40,19 @@ public sealed partial class GoogleLongAudioRuntimeFactory
         {
             await RequireContextAsync(context, cancel).ConfigureAwait(false); trendHealth.RequireReady();
             long remaining = await RemainingRecoveryHoldAsync(context, cancel).ConfigureAwait(false);
-            bool pending = File.Exists(Path.Combine(context.OperationsDirectory, "observation-pending.guard"));
+            recovery.Deferred?.RequireReady(parentRequest, newPost: false);
+            bool pending = recovery.Deferred is null && File.Exists(Path.Combine(context.OperationsDirectory, "observation-pending.guard"));
             var journal = new GoogleLongAudioFileJournal(context.OperationsDirectory);
             foreach (string path in Directory.EnumerateFiles(context.OperationsDirectory, "*.json"))
             {
                 if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out Guid id))
                     throw new InvalidDataException("Unexpected operation evidence requires reconciliation.");
                 var saved = journal.Load(id);
+                if (context.Scope.DeferredUnknownRanges?.Any(x => x.AttemptId == id) == true && recovery.Deferred is not null) continue;
                 pending |= saved.State == GoogleLongAudioState.PostClaimed
                     || saved.OperationParseFailed || saved.Observation is not { ReadbackVerified: true, ReadState: CloudScribe.Domain.Generation.GoogleResponseReadState.Complete, Truncated: false };
-                // A known completed operation with an interrupted local receipt write is not an uncertain POST.
-                // Rebuilding the deterministic tree reaches that same child and repairs/verifies its local output, never resubmitting it.
-                if (saved.State == GoogleLongAudioState.CompletedUnverified)
-                    _ = await artifacts.HasVerifiedAsync(id, saved.BindingSha256, cancel).ConfigureAwait(false);
+                // Scan every operation for uncertainty, without rehashing unrelated audio on every split.
+                // Execute verifies each reused child's own output, and final assembly verifies every included part.
             }
             bool accepted = File.Exists(Path.Combine(context.OutputDirectory, parentRequest.AttemptId.ToString("N") + ".verified.json"))
                 || await artifacts.HasVerifiedAsync(parentRequest.AttemptId, parentRequest.BindingSha256, cancel).ConfigureAwait(false);
@@ -61,7 +65,8 @@ public sealed partial class GoogleLongAudioRuntimeFactory
                 trace.EndScalarExclusive, trace.SplitDepth, trace.PayloadSha256, trace.Stage, trace.FailureKind is { } kind ? (int)kind : null);
             trendHealth.RequireReady();
         }
-        return new(Execute, Allowance, context.Scope.UsdPerMillionCharacters, clock, Observe);
+        return new(Execute, Allowance, context.Scope.UsdPerMillionCharacters, clock, Observe,
+            replacements.Resolve, replacements.IsReplacement, recovery.Deferred is { } deferred ? deferred.InspectDeferred : null);
     }
 
     private static async Task<long> RemainingRecoveryHoldAsync(InstalledGoogleLongAudioContext context, CancellationToken token)

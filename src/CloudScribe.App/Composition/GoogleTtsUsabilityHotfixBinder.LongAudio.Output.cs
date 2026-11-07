@@ -21,7 +21,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             artifact = await InspectLongAudioPlayableAsync(review).ConfigureAwait(true);
             label.Text = artifact is null ? "No verified Long Audio file is available for this saved revision yet."
-                : $"Verified saved audio for {review.Title}, revision {review.RevisionId:N}, voice {review.Request.VoiceName}.";
+                : $"Verified saved audio for {review.Title}, revision {review.RevisionId:N}, voice {review.Request.VoiceName}.\nSaved file: {artifact.Value.LocalPath}\nSize: {LongAudioDialogPresentation.ReadableSize(artifact.Value.Bytes)}.";
             Update(); return artifact is not null;
         }
         async Task UseAsync(int action)
@@ -33,24 +33,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 if (artifact is not { } audio) return;
                 if (action == 0) _ = Process.Start(new ProcessStartInfo(audio.LocalPath) { UseShellExecute = true })
                     ?? throw new InvalidOperationException("Windows could not open the verified audio file.");
-                else if (action == 1)
-                {
-                    string extension = Path.GetExtension(audio.LocalPath);
-                    var target = await dialog.StorageProvider.SaveFilePickerAsync(new()
-                    {
-                        Title = "Save a copy of verified Long Audio",
-                        SuggestedFileName = "long-audio" + extension,
-                        FileTypeChoices = [new FilePickerFileType("Verified audio") { Patterns = ["*" + extension] }],
-                        ShowOverwritePrompt = true
-                    }).ConfigureAwait(true);
-                    if (target?.Path.IsFile != true) return;
-                    await CopyVerifiedOutputAsync(audio.LocalPath, audio.AudioSha256, audio.Bytes,
-                        Path.GetFullPath(target.Path.LocalPath), extension).ConfigureAwait(true);
-                    status.Text = "Saved copy hash-verified. No provider request or additional synthesis hold.";
-                }
+                else if (action == 1) await SaveLongAudioCopyAsync(dialog, review.Title, audio, status).ConfigureAwait(true);
                 else OpenLocalFolder(Path.GetDirectoryName(audio.LocalPath)!, status);
             }
-            catch (Exception error) when (NonFatalLongAudio(error)) { status.Text = ReportLocalFailure(LocalRequestStage.Export, error); }
+            catch (Exception error) when (NonFatalLongAudio(error)) { status.Text = AudioOutputPresentation.RecoveryAdvice(error) + "\n" + ReportLocalFailure(LocalRequestStage.Export, error); }
             finally { busy = false; Update(); }
         }
         play.Click += async (_, _) => await UseAsync(0).ConfigureAwait(true);
@@ -61,6 +47,22 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         Update(); return RefreshAsync;
     }
 
+    private async Task SaveLongAudioCopyAsync(Window dialog, string title,
+        (string LocalPath, string AudioSha256, long Bytes) audio, TextBlock status)
+    {
+        string extension = Path.GetExtension(audio.LocalPath);
+        var target = await dialog.StorageProvider.SaveFilePickerAsync(new()
+        {
+            Title = "Save a copy of verified Long Audio",
+            SuggestedFileName = AudioOutputPresentation.SuggestedFileName(title, extension),
+            FileTypeChoices = [new FilePickerFileType("Verified audio") { Patterns = ["*" + extension] }],
+            ShowOverwritePrompt = true
+        }).ConfigureAwait(true);
+        if (target?.Path.IsFile != true) { status.Text = "Save copy cancelled; the verified original is unchanged."; return; }
+        await CopyVerifiedOutputAsync(audio.LocalPath, audio.AudioSha256, audio.Bytes,
+            Path.GetFullPath(target.Path.LocalPath), extension).ConfigureAwait(true);
+        status.Text = $"Saved copy hash-verified.\nSaved file: {target.Path.LocalPath}\nNo provider request or additional synthesis hold.";
+    }
     private async Task<(string LocalPath, string AudioSha256, long Bytes)?> InspectLongAudioPlayableAsync(GoogleLongAudioDocumentReview review)
     {
         var article = await longAudioDocuments!.InspectArticleOutputAsync(review).ConfigureAwait(true);

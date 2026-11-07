@@ -52,7 +52,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             MinHeight = 500,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             RequestedThemeVariant = ThemeVariant.Dark,
-            Background = new SolidColorBrush(Color.Parse("#111C2B")),
+            Background = CosmicDialogTheme.CreateDialogBackground(),
         };
         StackPanel content = new() { Spacing = 8, Margin = new Thickness(18) };
         TextBlock Title(string value) => new() { Text = value, FontSize = 22, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };

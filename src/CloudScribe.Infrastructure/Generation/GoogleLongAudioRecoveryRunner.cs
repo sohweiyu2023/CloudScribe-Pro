@@ -9,7 +9,10 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed class GoogleLongAudioRecoveryRunner(
     Func<GoogleLongAudioRequest, bool, CancellationToken, Task<GoogleLongAudioJobProgress>> execute,
     Func<GoogleLongAudioRequest, CancellationToken, Task<GoogleLongAudioRecoveryAllowance>> allowance,
-    decimal usdPerMillionCharacters, TimeProvider clock, Action<GoogleLongAudioRecoveryTrace>? observe = null)
+    decimal usdPerMillionCharacters, TimeProvider clock, Action<GoogleLongAudioRecoveryTrace>? observe = null,
+    Func<string, ChirpNarrationRange, GoogleLongAudioRequest, GoogleLongAudioCheckpoint, GoogleLongAudioRequest?>? replaceFailedRange = null,
+    Func<GoogleLongAudioRequest, bool>? isExplicitReplacement = null,
+    Func<GoogleLongAudioRequest, GoogleLongAudioCheckpoint?>? inspectDeferred = null)
 {
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One serialized iterative owner preserves exact source order, safe progress, stop and durable provider outcomes without recursive retry or a split-depth cap.")]
     public async Task<GoogleLongAudioRecoveryRun> RunAsync(GoogleLongAudioRequest root, GoogleLongAudioRunControl control,
@@ -22,16 +25,33 @@ public sealed class GoogleLongAudioRecoveryRunner(
         var first = new ChirpNarrationRange(0, source.EnumerateRunes().Count(), ArticleAudioManifest.HashText(source), null);
         Stack<(ChirpNarrationRange Range, GoogleLongAudioRequest Request, Guid? Parent, int Depth)> pending = new(); pending.Push((first, root, null, 0));
         List<GoogleLongAudioRecoveryOutput> outputs = [];
+        GoogleLongAudioCheckpoint? deferredOutcome = null;
         while (pending.TryPop(out var node))
         {
             token.ThrowIfCancellationRequested();
             if (control.IsStopRequested) return new(false, outputs.AsReadOnly(), null);
+            if (inspectDeferred?.Invoke(node.Request) is { } unknown)
+            {
+                if (unknown.AttemptId != node.Request.AttemptId || !string.Equals(unknown.BindingSha256, node.Request.BindingSha256, StringComparison.Ordinal)
+                    || unknown.State != GoogleLongAudioState.PostClaimed || unknown.OperationName is not null)
+                    throw new InvalidDataException("Deferred evidence does not match this exact unknown request.");
+                var regenerated = replaceFailedRange?.Invoke(source, node.Range, node.Request, unknown);
+                if (regenerated is not null)
+                {
+                    pending.Push((node.Range, regenerated, node.Request.AttemptId, node.Depth));
+                    continue;
+                }
+                deferredOutcome ??= unknown;
+                progress?.Report(new(LongAudioWorkflowStage.DeferredGap, unknown, outputs.Count, SavedScalars(), first.EndScalarExclusive));
+                continue;
+            }
             Trace(LongAudioRecoveryStage.InspectOrSubmit, null);
-            progress?.Report(new(LongAudioWorkflowStage.SubmittingOrResuming, null, outputs.Count, node.Range.StartScalar, first.EndScalarExclusive));
+            progress?.Report(new(LongAudioWorkflowStage.SubmittingOrResuming, null, outputs.Count, SavedScalars(), first.EndScalarExclusive));
             var result = await execute(node.Request, false, token).ConfigureAwait(false);
             while (result.Checkpoint.State == GoogleLongAudioState.Pollable)
             {
-                if (result.Checkpoint.HttpStatus is < 200 or >= 300 || result.Checkpoint.Observation is not { ReadbackVerified: true, Truncated: false })
+                if (!result.Checkpoint.HasVerifiedPollDeadline
+                    && (result.Checkpoint.HttpStatus is < 200 or >= 300 || result.Checkpoint.Observation is not { ReadbackVerified: true, Truncated: false }))
                     return new(false, outputs.AsReadOnly(), result.Checkpoint);
                 progress?.Report(new(LongAudioWorkflowStage.WaitingForGoogle, result.Checkpoint));
                 await control.WaitBeforePollAsync(clock, token).ConfigureAwait(false);
@@ -43,9 +63,18 @@ public sealed class GoogleLongAudioRecoveryRunner(
                 if (result.Checkpoint.State != GoogleLongAudioState.CompletedUnverified || !string.Equals(audio.Identity.BindingSha256, node.Request.BindingSha256, StringComparison.Ordinal))
                     throw new InvalidDataException("Verified recovery output belongs to another request.");
                 outputs.Add(new(node.Range, audio)); Trace(LongAudioRecoveryStage.VerifiedRange, null);
-                progress?.Report(new(LongAudioWorkflowStage.CheckingGoogleAndOutput, result.Checkpoint, outputs.Count, node.Range.EndScalarExclusive, first.EndScalarExclusive)); continue;
+                progress?.Report(new(LongAudioWorkflowStage.CheckingGoogleAndOutput, result.Checkpoint, outputs.Count, SavedScalars(), first.EndScalarExclusive)); continue;
             }
             progress?.Report(new(LongAudioWorkflowStage.Failed, result.Checkpoint));
+            if (isExplicitReplacement?.Invoke(node.Request) == true
+                && result.Checkpoint.FailureKind != GoogleLongAudioFailureKind.SentenceLengthReported)
+            { Trace(LongAudioRecoveryStage.NeedsAttention, result.Checkpoint.FailureKind); return new(false, outputs.AsReadOnly(), result.Checkpoint); }
+            var replacement = replaceFailedRange?.Invoke(source, node.Range, node.Request, result.Checkpoint);
+            if (replacement is not null)
+            {
+                pending.Push((node.Range, replacement, node.Request.AttemptId, node.Depth));
+                continue;
+            }
             if (result.Checkpoint.State != GoogleLongAudioState.Failed || result.Checkpoint.FailureKind != GoogleLongAudioFailureKind.SentenceLengthReported)
             { Trace(LongAudioRecoveryStage.NeedsAttention, result.Checkpoint.FailureKind); return new(false, outputs.AsReadOnly(), result.Checkpoint); }
             var current = await allowance(node.Request, token).ConfigureAwait(false);
@@ -59,8 +88,10 @@ public sealed class GoogleLongAudioRecoveryRunner(
             void Trace(LongAudioRecoveryStage stage, GoogleLongAudioFailureKind? kind) => observe?.Invoke(new(root.AttemptId, node.Request.AttemptId, node.Parent,
                 node.Range.StartScalar, node.Range.EndScalarExclusive, node.Depth, node.Request.PayloadSha256, stage, kind));
         }
+        if (deferredOutcome is not null) return new(false, outputs.AsReadOnly(), deferredOutcome);
         RequireCoverage(source, first.EndScalarExclusive, outputs);
         return new(true, outputs.AsReadOnly(), null);
+        int SavedScalars() => outputs.Sum(x => x.Range.EndScalarExclusive - x.Range.StartScalar);
     }
 
     private static void RequireCoverage(string source, int end, List<GoogleLongAudioRecoveryOutput> outputs)

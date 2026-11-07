@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -55,6 +56,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             AutomationProperties.SetName(estimate, "Article estimate and spending limit");
             var status = NewDescription("Choose where to save the complete MP3. No article job or paid request has started.");
             AutomationProperties.SetName(status, "Article setup and generation progress");
+            var coverage = new ProgressBar { Minimum = 0, Maximum = 100, Height = 12, IsIndeterminate = false };
+            AutomationProperties.SetName(coverage, "Verified article parts, not time remaining");
+            var coverageText = NewDescription("Saved audio will be checked before progress is reported. Recovery splits can change the number of parts.");
+            var elapsedText = NewDescription("This-run elapsed: not started. Earlier runs and pauses are not included; whole-job duration is unavailable for this workflow.");
+            AutomationProperties.SetName(elapsedText, "Elapsed time for this run including provider waits");
             var details = new Expander
             {
                 Header = "Budget and recovery details",
@@ -69,6 +75,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             var choose = NewButton("Choose where to save the complete MP3");
             var generate = NewButton("Generate complete article MP3"); generate.IsEnabled = false;
             string? destination = null, ffmpeg = null;
+            TrustedMediaToolSelection? approvedMediaTools = null;
             bool selecting = false, startAttempted = false;
             bool ReviewExpired() => !review.CompletionBound && (DateTimeOffset.UtcNow >= review.ConfirmByUtc || DateTimeOffset.UtcNow >= review.ExpiresAtUtc);
             void Update() => generate.IsEnabled = !startAttempted && !selecting && !ReviewExpired()
@@ -83,20 +90,20 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 try
                 {
                     var tool = await ChooseExistingMediaToolsAsync(dialog, status).ConfigureAwait(true);
-                    if (tool is null) return;
+                    if (tool is null) { if (destination is not null) status.Text += $"\nPrevious output selection retained: {destination}"; return; }
                     var file = await dialog.StorageProvider.SaveFilePickerAsync(new()
                     {
                         Title = "Save complete article MP3",
-                        SuggestedFileName = "complete-article.mp3",
+                        SuggestedFileName = AudioOutputPresentation.SuggestedFileName(model.DocumentTitle, ".mp3"),
                         DefaultExtension = "mp3",
                         FileTypeChoices = [Mp3FileType],
                         ShowOverwritePrompt = true
                     }).ConfigureAwait(true);
-                    if (file is null || !file.Path.IsFile) { status.Text = "Output selection cancelled; no article job or paid request started."; return; }
-                    ffmpeg = tool; destination = file.Path.LocalPath; Update();
+                    if (file is null || !file.Path.IsFile) { status.Text = "Output selection cancelled; no article job or paid request started." + (destination is null ? string.Empty : $"\nPrevious output selection retained: {destination}"); return; }
+                    approvedMediaTools = tool; ffmpeg = tool.EncoderPath; destination = file.Path.LocalPath; status.Text = $"MP3 destination: {destination}\nReview the cost and choose Generate when ready. No paid request has started."; Update();
                 }
                 catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-                { status.Text = ReportLocalFailure(LocalRequestStage.Export, error); }
+                { status.Text = AudioOutputPresentation.RecoveryAdvice(error) + "\n" + ReportLocalFailure(LocalRequestStage.Export, error); }
                 finally { selecting = false; choose.IsEnabled = !startAttempted; Update(); }
             };
             var close = NewButton("Close"); close.Click += (_, _) => dialog.Close();
@@ -113,10 +120,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 { status.Text = "The reviewed voice is not selected or its connection check is still running. Close this review, refresh voices and select the displayed voice, then review again. No article job or paid request was started."; return; }
                 if (model.IsDocumentDirty || model.IsDocumentSaving)
                 { status.Text = "Save the article, close this review and review the saved text again. No article job or paid request was started."; return; }
-                if (destination is null || ffmpeg is null)
+                if (destination is null || ffmpeg is null || approvedMediaTools is null)
                 { status.Text = "Before Generate, choose a new MP3 filename and an installed ffmpeg.exe with ffprobe.exe beside it. No article job or paid request was started."; return; }
                 (string Destination, string Ffmpeg, string Ffprobe) exportPaths;
-                try { exportPaths = ArticleAudioExportService.PreflightExport(destination, ffmpeg); }
+                try { await TrustedMediaToolsStore.RequireUnchangedAsync(approvedMediaTools).ConfigureAwait(true); exportPaths = ArticleAudioExportService.PreflightExport(destination, ffmpeg); }
                 catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
                 {
                     status.Text = ReportLocalFailure(LocalRequestStage.Export, error)
@@ -124,7 +131,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     return;
                 }
                 generate.IsEnabled = choose.IsEnabled = captureConsent.IsEnabled = close.IsEnabled = false; stop.IsEnabled = true;
-                bool jobStartAttempted = false;
+                bool jobStartAttempted = false, runCompleted = false;
+                Guid runJobId = Guid.Empty;
+                var runClock = Stopwatch.StartNew();
+                var elapsedTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                void RefreshElapsed() => elapsedText.Text = WholeArticleRunPresentation.ElapsedText(runClock.Elapsed);
+                elapsedTimer.Tick += (_, _) => RefreshElapsed();
+                RefreshElapsed(); elapsedTimer.Start(); coverage.IsIndeterminate = true;
                 var failureStage = LocalRequestStage.ArticleOpen; int failedOrdinal = 0; bool showingProgress = true;
                 try
                 {
@@ -138,6 +151,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                         // The unchanged article grant still bounds all internal reservations.
                         var job = await chirpArticles.StartWholeArticleAsync(new(review.PreviewId, review.ReviewSha256,
                             review.MaximumAdditionalMinorUnits, true, true), token).ConfigureAwait(true);
+                        runJobId = job.JobId;
                         failureStage = LocalRequestStage.CaptureArm;
                         using var capture = captureConsent.IsChecked == true && review.RemainingRequests > 0
                             ? new PrivateArticleErrorCaptureScope(privateDiagnostics, TimeProvider.System, job,
@@ -173,10 +187,21 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                                         _ => $"Checking {stage} for internal request {ordinal}; no duplicate paid retry."
                                     };
                                 });
-                            }, trendHistory);
-                        var progress = new Progress<ChirpArticleProgress>(p => status.Text = $"{p.SavedCoverageParts}/{p.TotalCoverageParts} parts verified and saved. Internal requests are processed in order; accepted audio is never regenerated.");
+                            }, trendHistory, approvedMediaTools: approvedMediaTools);
+                        var progress = new Progress<ChirpArticleProgress>(p =>
+                        {
+                            if (!showingProgress) return;
+                            double? percentage = WholeArticleRunPresentation.CoveragePercentage(p.SavedCoverageParts, p.TotalCoverageParts);
+                            coverage.IsIndeterminate = percentage is null;
+                            if (percentage is { } value) coverage.Value = value;
+                            coverageText.Text = $"{p.SavedCoverageParts}/{p.TotalCoverageParts} parts verified and saved. This is verified-part coverage, not a time estimate. Recovery splits can change the total; accepted audio is reused.";
+                        });
                         var result = await chirpArticles.RunWholeArticleAsync(job.JobId, runtime, progress, token).ConfigureAwait(true);
-                        completedJob = result.State == ChirpWholeArticleState.Complete ? result.JobId : null;
+                        showingProgress = false;
+                        runCompleted = result.State == ChirpWholeArticleState.Complete;
+                        completedJob = runCompleted ? result.JobId : null;
+                        coverage.IsIndeterminate = false;
+                        if (runCompleted) { coverage.Value = 100; coverageText.Text = "All required source parts and the final MP3 are verified."; }
                         outputControls.IsVisible = completedJob is not null; refreshOutput();
                         status.Text = result.State == ChirpWholeArticleState.Complete ? $"Complete article MP3 verified: {result.Output?.Path}. Original text, accepted audio and historical holds preserved."
                             : $"Article job stopped ({result.ReasonCode}). Reconcile existing evidence before any new paid attempt.";
@@ -191,18 +216,28 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 finally
                 {
                     showingProgress = false; stop.IsEnabled = false; close.IsEnabled = true;
+                    runClock.Stop(); elapsedTimer.Stop(); RefreshElapsed(); coverage.IsIndeterminate = false;
+                    long elapsedMilliseconds = runClock.ElapsedMilliseconds;
+                    bool timingRecorded = false;
+                    if (catalogLogger is { } timingLogger)
+                        timingRecorded = await GoogleLongAudioRunMetrics.TryRecordAsync(() =>
+                        {
+                            CloudScribeLog.WholeArticleRunTiming(timingLogger, runJobId, elapsedMilliseconds, runCompleted, jobStartAttempted);
+                            return Task.CompletedTask;
+                        }, static _ => { }).ConfigureAwait(true);
+                    if (!timingRecorded) elapsedText.Text += " Optional timing log is unavailable; the audio outcome above is unchanged.";
                     if (!jobStartAttempted && !lifetime.IsCancellationRequested) { choose.IsEnabled = captureConsent.IsEnabled = true; Update(); }
                 }
             }
             generate.Click += (_, _) => { if (generate.IsEnabled && active is not { IsCompleted: false }) active = GenerateAsync(); };
-            foreach (Control control in new Control[] { estimate, details, status, choose, captureConsent, captureWarning }) body.Children.Add(control);
+            foreach (Control control in new Control[] { estimate, details, status, coverage, coverageText, elapsedText, choose, captureConsent, captureWarning }) body.Children.Add(control);
             body.Children.Add(outputControls);
             var layout = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
             layout.Children.Add(new ScrollViewer { Content = body, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled });
             var actions = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 8, 20, 16) };
             foreach (Control control in new Control[] { generate, stop, close }) { control.Margin = new Thickness(0, 0, 8, 4); actions.Children.Add(control); }
             Grid.SetRow(actions, 1); layout.Children.Add(actions); dialog.Content = layout;
-            dialog.Closing += (_, e) => { if (active is { IsCompleted: false }) e.Cancel = true; };
+            dialog.Closing += (_, e) => { if (active is { IsCompleted: false } || selecting) e.Cancel = true; };
             var reviewTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             reviewTimer.Tick += (_, _) =>
             {

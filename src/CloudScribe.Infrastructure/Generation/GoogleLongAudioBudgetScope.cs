@@ -7,4 +7,8 @@ public sealed record GoogleLongAudioBudgetScope(int Version, string ParentPolicy
     string PricingProvenance, IReadOnlyDictionary<string, long> ApprovedRequestCeilingsUsdCents,
     IReadOnlyList<GoogleLongAudioDocumentJob>? DocumentJobs = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<string>? AdaptiveRecoveryRootBindings = null);
+    IReadOnlyList<string>? AdaptiveRecoveryRootBindings = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<GoogleLongAudioFailedRangeReplacement>? FailedRangeReplacements = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<GoogleLongAudioDeferredRange>? DeferredUnknownRanges = null);

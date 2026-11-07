@@ -44,7 +44,9 @@ public sealed partial class GoogleLongAudioDocumentService
         var state = run.StoppedOutcome ?? journal.Load(current.Request.AttemptId);
         if (!run.CoverageComplete || control.IsStopRequested)
         {
-            var stage = control.IsStopRequested ? LongAudioWorkflowStage.Stopped : LongAudioWorkflowStage.Failed;
+            var stage = control.IsStopRequested ? LongAudioWorkflowStage.Stopped
+                : current.DeferredUnknownRanges?.Any(x => x.AttemptId == state.AttemptId) == true
+                    ? LongAudioWorkflowStage.DeferredGap : LongAudioWorkflowStage.Failed;
             Observe(stage, state); return new(stage, new(state, null));
         }
         Observe(LongAudioWorkflowStage.JoiningArticle, state);

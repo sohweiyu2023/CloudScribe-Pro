@@ -1,6 +1,6 @@
 # CloudScribe Pro
 
-CloudScribe Pro 1.0.1 is a Windows text-to-speech workspace for Google Cloud voices. Write or import a document, review the exact request and its estimated maximum cost, approve it, then create, play and export a verified MP3.
+CloudScribe Pro 1.0.2 is a Windows text-to-speech workspace for Google Cloud voices. Write or import a document, review the exact request and its estimated maximum cost, approve it, then create, play and export a verified MP3.
 
 **[Download for Windows x64](https://files.awakeningtoreality.com/CloudScribe-Windows-x64.zip)** · **[Setup and user guide](docs/USER_GUIDE.md)** · **[Source code](https://github.com/sohweiyu2023/CloudScribe-Pro)**
 
@@ -24,7 +24,7 @@ Google bills your own Cloud account. A ChatGPT subscription does not include Goo
 - Local narration-part preparation for longer text. Each part still requires its own review and approval.
 - [One continuous article MP3](docs/ARTICLE_MP3_EXPORT.md) from complete, verified local part outputs, using an existing FFmpeg installation. Missing or uncertain parts block export; this action never synthesizes audio.
 
-The current generation path is for short requests within a conservative **5,000-byte compiled-envelope limit**, including JSON escaping and request fields. It sends plain text; automatic long-audio batches, multi-speaker script production and custom SSML lexicons are not supplied by this interface. Prices require current admitted evidence and user source review; the app does not promise live billing-account tracking. See [saved setups and recovery](docs/SAVED_SETUPS_AND_LOCAL_RECOVERY.md) and [voice comparison](docs/VOICE_COMPARISON.md).
+A single **Create MP3** request is limited to Google's synchronous **5,000-byte** input (the app counts JSON escaping and request fields too). Longer text uses **Review full article and cost**, which narrates the article in parts after one cost review and joins them into one MP3. An optional, separately provisioned [Google Long Audio](docs/GOOGLE_LONG_AUDIO.md) path sends a whole saved article as one asynchronous job; if Google reports over-long sentences, it splits only that section at existing punctuation and assembles one MP3. Multi-speaker scripts and custom SSML lexicons are not supplied. Prices require current admitted evidence and user source review; the app does not promise live billing-account tracking. See [saved setups and recovery](docs/SAVED_SETUPS_AND_LOCAL_RECOVERY.md) and [voice comparison](docs/VOICE_COMPARISON.md).
 
 ## Your data and provider access
 
@@ -32,11 +32,19 @@ Documents and preferences are stored locally. Google access checks contact Googl
 
 Cancellation or a lost response does not prove a dispatched request was uncharged. Inspect persisted request status before retrying. Existing saved MP3s remain on disk; trusted in-app Play/Export state is session-only.
 
+## What changed
+
+See the [changelog](CHANGELOG.md).
+
+## Uninstall
+
+See [Uninstall and remove your data](docs/USER_GUIDE.md#uninstall-and-remove-your-data). Removing the app does not delete your documents, audio or Google key unless you choose to.
+
 ## Build and validation
 
 Building requires the exact SDK in `global.json`, currently **.NET SDK 10.0.402**. See [Windows build and validation](BUILDING-WINDOWS.txt), [installation and updates](docs/WINDOWS_INSTALLATION.md), and [verified release uploads](docs/R2_RELEASE_UPLOADS.md).
 
-As of 21 October 2026, source CI passes 718 compiled mocked/local tests plus strict Release build and formatting. These are separate from the historical 19 October live check: two short Google Standard MP3 requests passed decoding/export checks, with the first user-confirmed audible; that repair had 662 compiled tests. Neither result is a claim that every voice or long-document workflow has been live-tested. Historical stage certification details remain in the development records.
+The source has 1,300+ compiled mocked/local test methods (2,100+ test cases including theories) plus strict Release build and formatting gates; check results on the exact commit you build. Earlier, as of 21 October 2026, CI passed 718 tests. These are separate from the historical 19 October live check: two short Google Standard MP3 requests passed decoding/export checks, with the first user-confirmed audible; that repair had 662 compiled tests. Neither result is a claim that every voice or long-document workflow has been live-tested. Historical stage certification details remain in the development records.
 
 ## License
 

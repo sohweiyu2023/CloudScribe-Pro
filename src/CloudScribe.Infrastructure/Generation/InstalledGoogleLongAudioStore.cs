@@ -51,6 +51,8 @@ public sealed class InstalledGoogleLongAudioStore(string applicationDirectory, A
         if (!Same(scopeSha, marker.GetProperty("GoogleLongAudioScopeSha256").GetString())) return null;
         var scope = ChirpPolicyFiles.Parse<GoogleLongAudioBudgetScope>(scopeBytes);
         if (scope.Version != 1 || !Same(scope.ParentPolicySha256, parentSha)) return null;
+        GoogleLongAudioFailedRangeReplacementPlanner.RequireScopeShape(scope);
+        GoogleLongAudioDeferredRange.RequireScope(scope);
         observe(GoogleLongAudioInstallationStatus.PendingProvisioning);
         if (!await RequireProofAsync(install, markerBytes, scopeSha, parentSha, parent, token).ConfigureAwait(false)) return null;
         observe(GoogleLongAudioInstallationStatus.LedgerUnavailable);

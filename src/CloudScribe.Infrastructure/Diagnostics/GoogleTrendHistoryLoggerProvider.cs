@@ -59,7 +59,7 @@ public sealed partial class GoogleTrendHistoryLoggerProvider : ILoggerProvider, 
 
     private void Capture<TState>(EventId id, TState state)
     {
-        if (id.Id is not (>= 1600 and <= 1620) and not 6300) return;
+        if (id.Id is not (>= 1600 and <= 1626) and not 6300) return;
         lock (gate)
         {
             if (!available || disposed) return;

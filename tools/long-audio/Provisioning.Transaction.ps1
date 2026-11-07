@@ -61,6 +61,7 @@ function Assert-LACompleted($Context,$Sealed) {
         $provision += [decimal]$claim.MaximumUsdCents
     }
     if($provision -gt [decimal]$Context.Scope.TotalGoogleCapUsdCents){throw 'LongAudioCumulativeBudget'}
+    if($Context.Scope.Contains('DeferredUnknownRanges') -and $null -ne $Context.Scope.DeferredUnknownRanges){Assert-LADeferredEvidence $Context $ledger}
 }
 
 # Readback only: this validates retained native admission provenance and never grants a new request.
@@ -69,13 +70,18 @@ function Assert-LARecoveryClaim($Context,$Ledger,$Claim) {
     Assert-LARecord $proof @('RootBindingSha256','ParentBindingSha256','StartScalar','EndScalarExclusive','PlannerVersion','ParentCheckpointSha256')
     foreach($key in @('RootBindingSha256','ParentBindingSha256','ParentCheckpointSha256')){Assert-LAHash $proof[$key]}
     Assert-LAInteger $proof.StartScalar;Assert-LAInteger $proof.EndScalarExclusive 1
-    if($proof.EndScalarExclusive -le $proof.StartScalar -or $proof.PlannerVersion -cne 'long-audio-natural-recovery-v1' -or
+    if($proof.EndScalarExclusive -le $proof.StartScalar -or $proof.PlannerVersion -cnotin @('long-audio-natural-recovery-v1','long-audio-explicit-unknown-regeneration-v1') -or
         -not $Context.Scope.Contains('AdaptiveRecoveryRootBindings') -or $proof.RootBindingSha256 -cnotin $Context.Scope.AdaptiveRecoveryRootBindings -or
         $Context.Scope.AudioEncoding -cne 'LINEAR16'){throw 'LongAudioRecoveryClaimShape'}
     $parents=@($Ledger.Claims|Where-Object {$_.RequestBindingSha256 -ceq $proof.ParentBindingSha256})
     if($parents.Count -ne 1 -or [Guid]$parents[0].AttemptId -eq [Guid]$Claim.AttemptId){throw 'LongAudioRecoveryParentClaim'}
     $parent=$parents[0];$journal=Join-Path $Context.Data ('operations/'+([Guid]$parent.AttemptId).ToString('N')+'.json')
     $bytes=Read-LABytes $journal 8192;$state=ConvertFrom-LAJson $bytes
+    if($proof.PlannerVersion -ceq 'long-audio-explicit-unknown-regeneration-v1'){
+        Assert-LAExplicitRegenerationClaim $Context $Ledger $Claim $parent $proof $state $bytes;return
+    }
+    $exact=@();if($Context.Scope.Contains('FailedRangeReplacements')){$exact=@($Context.Scope.FailedRangeReplacements|Where-Object {[Guid]$_.ReplacementAttemptId -eq [Guid]$Claim.AttemptId})}
+    if($exact.Count -gt 0){Assert-LAExactReplacementClaim $Context $Claim $parent $proof $state $bytes $exact;return}
     if((Get-LAHash $bytes) -cne $proof.ParentCheckpointSha256 -or $state.BindingSha256 -cne $proof.ParentBindingSha256 -or
         $state.State -ne 3 -or -not $state.Contains('FailureKind') -or $state.FailureKind -ne 1 -or $state.OperationParseFailed -or
         -not $state.Observation.ReadbackVerified -or $state.Observation.ReadState -ne 1 -or $state.Observation.Truncated -or $state.Observation.Retention -ne 2 -or

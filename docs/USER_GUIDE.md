@@ -1,4 +1,4 @@
-# CloudScribe Pro 1.0.1: setup and everyday use
+# CloudScribe Pro 1.0.2: setup and everyday use
 
 The local usability update adds saved voice setups, remembered choices, offline request inspection and local narration-part preparation. See [Saved setups and local recovery](SAVED_SETUPS_AND_LOCAL_RECOVERY.md) for the updated workflow and persistence details.
 
@@ -113,3 +113,16 @@ Before dispatch, CloudScribe atomically records a local attempt and durable unce
 The first previously recorded attempt without retained HTTP metadata remains unknown: the update cannot reconstruct its status, recover a provider ID or settle its charge. Do not retry it under a new identity to bypass this hold.
 
 For lossless smaller Chirp requests, retained accepted audio and one continuous export per original, see [Chirp 3 internal article narration](CHIRP_ARTICLE_NARRATION.md). Its local sentence-boundary heuristic is not a Google acceptance guarantee, and preparation/reservation never starts synthesis automatically.
+
+## Uninstall and remove your data
+
+Uninstalling is manual and takes a few minutes. Each step is optional after the first, so you can keep your audio and documents.
+
+1. **Close CloudScribe** normally (File menu or window close). Do not end it from Task Manager while a job is running.
+2. **Save anything you want to keep.** Finished MP3s and documents live under `%LOCALAPPDATA%\CloudScribe Pro` (for example `Profiles\Studio\data\google-long-audio\output` and `accepted-article-audio`). Use **Save a copy** in the app, or copy the files elsewhere.
+3. **Remove the app:** delete the Start Menu shortcut **CloudScribe Pro**, unpin it from the taskbar if pinned, then delete the folder `%LOCALAPPDATA%\Programs\CloudScribe Pro`. For the portable ZIP, delete the extracted folder.
+4. **Remove your documents, audio, settings and logs (optional):** delete `%LOCALAPPDATA%\CloudScribe Pro`. This cannot be undone and also removes spending records and saved job history.
+5. **Remove the saved Google key from this PC (optional):** open **Credential Manager → Windows Credentials** and remove entries whose name starts with `CloudScribePro/`.
+6. **Revoke the key at Google (recommended if you will not use CloudScribe again):** in Google Cloud Console, open **IAM & Admin → Service accounts**, choose the CloudScribe service account, open **Keys** and delete the key. Deleting the key stops any copy of it from working; it does not delete your project or billing account.
+
+FFmpeg is a separate program; CloudScribe never installs it, so uninstall it separately if you no longer need it.

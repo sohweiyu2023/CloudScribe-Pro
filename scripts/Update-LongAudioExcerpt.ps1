@@ -12,8 +12,9 @@ Assert-LAHash $ReviewedPlanSha256
 $planBytes=Read-LABytes $ReviewedPlanPath
 if((Get-LAHash $planBytes) -cne $ReviewedPlanSha256){throw 'LongAudioSuccessorPlanPin'}
 $plan=ConvertFrom-LAJson $planBytes
-Assert-LARecord $plan @('Version','SourceApprovalSha256','PreviousScopeSha256','PreviousLedgerSha256','PreviousMarkerSha256','PreviousProvisioningPlanSha256','PreviousProvisioningReceiptSha256','PreviousOperationSha256','PreviousAttemptId','NewScopePath','NewScopeSha256','RetainedOperationPins','SourceExcerpt')
-if($plan.Version -notin @(2,3)){throw 'LongAudioSuccessorVersion'}
+$sourceField=if($plan.Version -eq 6){'FundingAdjustment'}elseif($plan.Version -eq 4){'SourceRevisions'}elseif($plan.Version -eq 5){'FailedRangeReplacement'}else{'SourceExcerpt'}
+Assert-LARecord $plan (@('Version','SourceApprovalSha256','PreviousScopeSha256','PreviousLedgerSha256','PreviousMarkerSha256','PreviousProvisioningPlanSha256','PreviousProvisioningReceiptSha256','PreviousOperationSha256','PreviousAttemptId','NewScopePath','NewScopeSha256','RetainedOperationPins')+@($sourceField))
+if($plan.Version -notin @(2,3,4,5,6)){throw 'LongAudioSuccessorVersion'}
 foreach($key in $plan.Keys|Where-Object {$_ -like '*Sha256'}){Assert-LAHash $plan[$key]}
 Assert-LAPhysical $InstallRoot;Assert-LAPhysical $ProfileRoot
 $install=[IO.Path]::GetFullPath($InstallRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -21,7 +22,10 @@ $profile=[IO.Path]::GetFullPath($ProfileRoot).TrimEnd([IO.Path]::DirectorySepara
 $history=Join-Path $install ('long-audio-scope-history/'+$plan.NewScopeSha256)
 Assert-LAPhysical $history
 function Exact([string]$Path,[string]$Hash){$bytes=Read-LABytes $Path;if((Get-LAHash $bytes) -cne $Hash){throw 'LongAudioSuccessorEvidenceChanged'};return ,$bytes}
+. (Join-Path $helpers 'Replacement.Transition.ps1')
+. (Join-Path $helpers 'Funding.Transition.ps1')
 function Inspect-Transition {
+ if($plan.Version -in @(5,6)){return Inspect-LAReplacementTransition}
  $sealed=Test-Path -LiteralPath (Join-Path $history 'transition-plan.json')
  if($sealed){$null=Exact (Join-Path $history 'transition-plan.json') $ReviewedPlanSha256}
  $oldRoot=if($sealed){$history}else{$install}
@@ -75,7 +79,7 @@ function Inspect-Transition {
   $terminal=($op.HttpStatus -eq 400 -and $null -eq $op.OperationName) -or ($op.HttpStatus -eq 200 -and $op.RpcCode -eq 3 -and
    $op.OperationName -like ('projects/'+$oldScope.ProjectNumber+'/locations/global/operations/*'))
   $rejected=$op.State -eq 3 -and $terminal
-  $completed=$plan.Version -eq 3 -and $op.State -eq 2 -and $op.HttpStatus -eq 200 -and $null -eq $op.RpcCode -and
+  $completed=$plan.Version -in @(3,4) -and $op.State -eq 2 -and $op.HttpStatus -eq 200 -and $null -eq $op.RpcCode -and
    $op.OperationName -like ('projects/'+$oldScope.ProjectNumber+'/locations/global/operations/*')
   if([Guid]$op.AttemptId -ne [Guid]$retained.AttemptId -or $op.BindingSha256 -cne $retained.RequestBindingSha256 -or
    (-not $rejected -and -not $completed) -or $op.OperationParseFailed -or -not $op.Observation.ReadbackVerified -or $op.Observation.Truncated){throw 'LongAudioSuccessorNotDefinitivelyTerminal'}
@@ -116,8 +120,27 @@ function Inspect-Transition {
   $scope.VoiceName -cne $oldScope.VoiceName -or $scope.LanguageCode -cne $oldScope.LanguageCode -or $scope.OutputBucket -cne $oldScope.OutputBucket -or
   $oldScope.AudioEncoding -cne 'LINEAR16' -or $scope.AudioEncoding -cne 'LINEAR16' -or $scope.TotalGoogleCapUsdCents -ne $oldScope.TotalGoogleCapUsdCents -or
   $scope.TaxFxProvisionUsdCents -ne $oldScope.TaxFxProvisionUsdCents -or $scope.UsdPerMillionCharacters -ne $oldScope.UsdPerMillionCharacters -or
-  $scope.ApprovedRequestCeilingsUsdCents.Count -ne ($oldLedger.Claims.Count+1) -or $scope.DocumentJobs.Count -ne 1){throw 'LongAudioSuccessorScopeChange'}
+  $scope.DocumentJobs -isnot [array] -or $scope.DocumentJobs.Count -eq 0 -or
+  $scope.ApprovedRequestCeilingsUsdCents.Count -ne ($oldLedger.Claims.Count+$scope.DocumentJobs.Count) -or
+  ($plan.Version -ne 4 -and $scope.DocumentJobs.Count -ne 1)){throw 'LongAudioSuccessorScopeChange'}
  foreach($retained in $oldLedger.Claims){if(-not $scope.ApprovedRequestCeilingsUsdCents.Contains($retained.RequestBindingSha256) -or $scope.ApprovedRequestCeilingsUsdCents[$retained.RequestBindingSha256] -ne $retained.MaximumUsdCents){throw 'LongAudioSuccessorHistoryOmitted'}}
+ if($plan.Version -eq 4){
+  if($plan.SourceRevisions -isnot [array] -or $plan.SourceRevisions.Count -ne $scope.DocumentJobs.Count){throw 'LongAudioSuccessorSourceMapping'}
+  $sources=[Collections.Generic.HashSet[Guid]]::new();$targets=[Collections.Generic.HashSet[Guid]]::new()
+  foreach($source in $plan.SourceRevisions){
+   Assert-LARecord $source @('ParentDocumentId','ParentRevisionId','ParentSourceSha256','TargetDocumentId','TargetRevisionId')
+   Assert-LAHash $source.ParentSourceSha256
+   if([Guid]$source.ParentDocumentId -eq [Guid]::Empty -or [Guid]$source.ParentRevisionId -eq [Guid]::Empty -or
+    [Guid]$source.TargetDocumentId -eq [Guid]::Empty -or [Guid]$source.TargetRevisionId -eq [Guid]::Empty -or
+    -not $sources.Add([Guid]$source.ParentDocumentId) -or -not $targets.Add([Guid]$source.TargetDocumentId)){throw 'LongAudioSuccessorSourceMapping'}
+   $matched=@($scope.DocumentJobs|Where-Object {[Guid]$_.DocumentId -eq [Guid]$source.TargetDocumentId -and [Guid]$_.RevisionId -eq [Guid]$source.TargetRevisionId})
+   if($matched.Count -ne 1 -or $matched[0].SourceSha256 -cne $source.ParentSourceSha256 -or
+    [Guid]$matched[0].DocumentId -eq [Guid]$oldScope.DocumentJobs[0].DocumentId -or $matched[0].InputMode -cne 'text'){throw 'LongAudioSuccessorSourceMapping'}
+   $saved=Join-Path $profile ('documents/'+([Guid]$source.ParentDocumentId).ToString('N')+'/content/'+([Guid]$source.ParentRevisionId).ToString('N')+'.utf8')
+   $null=Exact $saved $source.ParentSourceSha256
+  }
+  foreach($job in $scope.DocumentJobs){if($ids.Contains([Guid]$job.AttemptId) -or (Test-Path -LiteralPath (Join-Path $operations (([Guid]$job.AttemptId).ToString('N')+'.json')))){throw 'LongAudioSuccessorAttemptReplay'}}
+ }else{
  $newJob=$scope.DocumentJobs[0];$oldJob=$oldScope.DocumentJobs[0]
  Assert-LARecord $plan.SourceExcerpt @('ParentDocumentId','ParentRevisionId','ParentSourceSha256','StartUtf16','EndUtf16Exclusive','ExcerptSha256')
  $excerpt=$plan.SourceExcerpt;Assert-LAHash $excerpt.ParentSourceSha256;Assert-LAHash $excerpt.ExcerptSha256;Assert-LAInteger $excerpt.StartUtf16;Assert-LAInteger $excerpt.EndUtf16Exclusive 1
@@ -131,6 +154,7 @@ function Inspect-Transition {
   ($excerpt.EndUtf16Exclusive -lt $parentText.Length -and [char]::IsLowSurrogate($parentText[$excerpt.EndUtf16Exclusive]))){throw 'LongAudioSuccessorExcerptBoundary'}
  if((Get-LAHash ([Text.Encoding]::UTF8.GetBytes($parentText.Substring($excerpt.StartUtf16,$excerpt.EndUtf16Exclusive-$excerpt.StartUtf16)))) -cne $excerpt.ExcerptSha256){throw 'LongAudioSuccessorExcerptChanged'}
  if($ids.Contains([Guid]$newJob.AttemptId) -or (Test-Path -LiteralPath (Join-Path $operations (([Guid]$newJob.AttemptId).ToString('N')+'.json')))){throw 'LongAudioSuccessorAttemptReplay'}
+ }
  $currentOnly=ConvertFrom-LAJson $newBytes;foreach($retained in $oldLedger.Claims){[void]$currentOnly.ApprovedRequestCeilingsUsdCents.Remove($retained.RequestBindingSha256)}
  Assert-LAScope $currentOnly $parent $scope.ParentPolicySha256
  $context=@{Scope=$currentOnly;Profile=$profile};Assert-LASavedInputs $context
@@ -151,7 +175,7 @@ function Inspect-LiveOrSealed {
  return Inspect-Transition
 }
 $context=Inspect-LiveOrSealed
-if($ValidateOnly){[pscustomobject]@{Valid=$true;RetainedClaims=$context.RetainedCount;AdditionalApprovedClaims=1;TotalProvisionCents=$context.Provision;ProviderCalls=0};return}
+if($ValidateOnly){$additional=if($plan.Version -eq 6){0}elseif($plan.Version -eq 5){1}else{(ConvertFrom-LAJson $context.ScopeBytes).DocumentJobs.Count};[pscustomobject]@{Valid=$true;RetainedClaims=$context.RetainedCount;AdditionalApprovedClaims=$additional;TotalProvisionCents=$context.Provision;ProviderCalls=0};return}
 Assert-LAClosed $install
 $instancePath=Join-Path $profile '.instance.lock';Assert-LAPhysical $instancePath
 $instance=[IO.FileStream]::new($instancePath,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)

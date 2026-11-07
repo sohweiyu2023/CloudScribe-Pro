@@ -1,5 +1,5 @@
 # Inert fixture only: no credentials, HTTP, real profile, installation or synthesis.
-param($Repository,$Install,$Profile,$Checkpoint,$Rollback)
+param($Repository,$Install,$Profile,$Checkpoint,$Rollback,$DeferredDescriptorPath)
 $ErrorActionPreference='Stop'
 . (Join-Path $Repository 'scripts/Install-CloudScribe.ps1') -CompletionFunctionsOnly
 foreach($name in @('Provisioning.Files.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1','BuildRebind.Validation.ps1','BuildRebind.Transaction.ps1')){. (Join-Path $Repository ('tools/long-audio/'+$name))}
@@ -14,16 +14,17 @@ $parentPath=Join-Path $Install 'chirp-article-admission-policy.json';$scopePath=
 $ledgerPath=Join-Path $Profile 'data/google-long-audio/budget-ledger.json'
 $oldParent=Read-LABytes $parentPath;$oldScope=Read-LABytes $scopePath;$oldLedger=Read-LABytes $ledgerPath
 $parent=ConvertFrom-LAJson $oldParent;$scope=ConvertFrom-LAJson $oldScope;$ledger=ConvertFrom-LAJson $oldLedger
-$approval=Get-LAHash ([Text.Encoding]::UTF8.GetBytes('EXPLICITLY SYNTHETIC APPROVAL, NOT LIVE AUTHORITY'))
+$approval=Get-LAHash ([Text.Encoding]::UTF8.GetBytes('EXPLICITLY SYNTHETIC APPROVAL, NOT LIVE AUTHORITY '+[Guid]::NewGuid().ToString('N')))
 $parent.SourceApprovalSha256=$approval
 $parent.AppSha256=Get-LAHash (Read-LABytes (Join-Path $package 'app/CloudScribe.dll'))
 $parent.InfrastructureSha256=Get-LAHash (Read-LABytes (Join-Path $package 'app/CloudScribe.Infrastructure.dll'))
 $nextParent=Join-Path $reviewInput 'parent.json';[IO.File]::WriteAllBytes($nextParent,(ConvertTo-LABytes $parent));$parentSha=Get-LAHash (Read-LABytes $nextParent)
 $scope.ParentPolicySha256=$parentSha;$scope.SourceApprovalSha256=$approval
+if($DeferredDescriptorPath){$scope.DeferredUnknownRanges=@((ConvertFrom-LAJson (Read-LABytes $DeferredDescriptorPath 8192)))}
 $nextScope=Join-Path $reviewInput 'scope.json';[IO.File]::WriteAllBytes($nextScope,(ConvertTo-LABytes $scope))
 $profileSha=Get-LABuildTreeHash $Profile;$packageSha=Get-LABuildTreeHash (Join-Path $package 'app')
 $native=[ordered]@{Version=1;Passed=$true;PreviousParentSha256=(Get-LAHash $oldParent);NewParentSha256=$parentSha;
-    PackageAppTreeSha256=$packageSha;ProfileTreeSha256=$profileSha;LongClaimCount=1;LongHeldCents=1;
+    PackageAppTreeSha256=$packageSha;ProfileTreeSha256=$profileSha;LongClaimCount=$ledger.Claims.Count;LongHeldCents=(@($ledger.Claims|Measure-Object MaximumUsdCents -Sum)[0].Sum);
     ChirpCommittedCents=$parent.Budget.ProjectCommittedMinorUnits;ChirpCeilingCents=$parent.Budget.ProjectCeilingMinorUnits;ProviderCalls=0;LiveWrites=0}
 $nativePath=Join-Path $reviewInput 'EXPLICITLY-SYNTHETIC-native-proof.json';[IO.File]::WriteAllBytes($nativePath,(ConvertTo-LABytes $native))
 $plan=[ordered]@{Version=1;TransactionId=[Guid]::NewGuid().ToString();SourceApprovalSha256=$approval;
@@ -32,7 +33,30 @@ $plan=[ordered]@{Version=1;TransactionId=[Guid]::NewGuid().ToString();SourceAppr
     PreviousAppTreeSha256=(Get-LABuildTreeHash (Join-Path $Install 'app'));PreviousProvisioningTreeSha256=(Get-LABuildTreeHash (Join-Path $Install 'long-audio-provisioning'));
     ProfileTreeSha256=$profileSha;PackageAppTreeSha256=$packageSha;NewParentPath=$nextParent;NewParentSha256=$parentSha;
     NewScopePath=$nextScope;NewScopeSha256=(Get-LAHash (Read-LABytes $nextScope));NativeProofPath=$nativePath;NativeProofSha256=(Get-LAHash (Read-LABytes $nativePath))}
+if($DeferredDescriptorPath){
+    $plan.Version=2;$plan.DeferredEvidenceSha256=Get-LAHash (ConvertTo-LABytes $scope.DeferredUnknownRanges)
+    $native.DeferredEvidenceSha256=$plan.DeferredEvidenceSha256
+    [IO.File]::WriteAllBytes($nativePath,(ConvertTo-LABytes $native));$plan.NativeProofSha256=Get-LAHash (Read-LABytes $nativePath)
+}
 $path=Join-Path $reviewInput 'plan.json';[IO.File]::WriteAllBytes($path,(ConvertTo-LABytes $plan));$sha=Get-LAHash (Read-LABytes $path)
+if($DeferredDescriptorPath){
+    foreach($bad in @('2',[double]2.0)){
+        $invalid=ConvertFrom-LAJson (ConvertTo-LABytes $plan);$invalid.Version=$bad
+        $invalidPath=Join-Path $reviewInput 'invalid-plan.json';[IO.File]::WriteAllBytes($invalidPath,(ConvertTo-LABytes $invalid))
+        $failed=$false;try{Invoke-LABuildRebind $Install $Profile $package $invalidPath (Get-LAHash (Read-LABytes $invalidPath)) 'Inspect'|Out-Null}catch{$failed=$true}
+        if(-not $failed){throw 'SyntheticCoercedDeferredPlanVersionAccepted'}
+    }
+    $nativeBytes=Read-LABytes $nativePath
+    foreach($bad in @('1',[double]1.0)){
+        $invalidNative=ConvertFrom-LAJson $nativeBytes;$invalidNative.Version=$bad
+        [IO.File]::WriteAllBytes($nativePath,(ConvertTo-LABytes $invalidNative))
+        $invalid=ConvertFrom-LAJson (ConvertTo-LABytes $plan);$invalid.NativeProofSha256=Get-LAHash (Read-LABytes $nativePath)
+        $invalidPath=Join-Path $reviewInput 'invalid-native-plan.json';[IO.File]::WriteAllBytes($invalidPath,(ConvertTo-LABytes $invalid))
+        $failed=$false;try{Invoke-LABuildRebind $Install $Profile $package $invalidPath (Get-LAHash (Read-LABytes $invalidPath)) 'Inspect'|Out-Null}catch{$failed=$true}
+        if(-not $failed){throw 'SyntheticCoercedDeferredProofVersionAccepted'}
+    }
+    [IO.File]::WriteAllBytes($nativePath,$nativeBytes)
+}
 $stop={param($stage) if($stage -ceq $Checkpoint){throw 'SyntheticInterruption'}}.GetNewClosure()
 try{Invoke-LABuildRebind $Install $Profile $package $path $sha 'Install' $stop;throw 'SyntheticExpectedInterruption'}
 catch{if($_.Exception.Message -notlike '*SyntheticInterruption*'){throw}}
@@ -44,11 +68,15 @@ $receipt=Join-Path $history 'receipt.json';$receiptTime=(Get-Item -LiteralPath $
 Invoke-LABuildRebind $Install $Profile $package $path $sha $phase|Out-Null
 if((Get-Item -LiteralPath $receipt).LastWriteTimeUtc -ne $receiptTime){throw 'SyntheticTerminalReplayWrote'}
 $after=ConvertFrom-LAJson (Read-LABytes $ledgerPath)
-if($after.Claims.Count -ne 1 -or (ConvertTo-Json -InputObject $after.Claims -Depth 64 -Compress) -cne
+if($after.Claims.Count -ne $ledger.Claims.Count -or (ConvertTo-Json -InputObject $after.Claims -Depth 64 -Compress) -cne
     (ConvertTo-Json -InputObject $ledger.Claims -Depth 64 -Compress)){throw 'SyntheticClaimsChanged'}
 $nowParent=ConvertFrom-LAJson (Read-LABytes $parentPath);$nowScope=ConvertFrom-LAJson (Read-LABytes $scopePath)
 Assert-LABuildOnlyFields $oldParent (Read-LABytes $parentPath) @('AppSha256','InfrastructureSha256','SourceApprovalSha256')
-Assert-LABuildOnlyFields $oldScope (Read-LABytes $scopePath) @('ParentPolicySha256','SourceApprovalSha256')
+if($DeferredDescriptorPath -and $Rollback -cne 'True'){
+    $oldScopeView=ConvertFrom-LAJson $oldScope
+    if(-not $oldScopeView.Contains('DeferredUnknownRanges')){$oldScopeView.DeferredUnknownRanges=$null}
+    Assert-LABuildOnlyFields (ConvertTo-LABytes $oldScopeView) (Read-LABytes $scopePath) @('ParentPolicySha256','SourceApprovalSha256','DeferredUnknownRanges')
+}else{Assert-LABuildOnlyFields $oldScope (Read-LABytes $scopePath) @('ParentPolicySha256','SourceApprovalSha256')}
 if($Rollback -ceq 'True'){
     if((Get-LAHash (Read-LABytes $ledgerPath)) -cne $plan.PreviousLedgerSha256 -or
         (Get-LABuildTreeHash (Join-Path $Install 'long-audio-provisioning')) -cne $plan.PreviousProvisioningTreeSha256){throw 'SyntheticRollbackChangedHistory'}
@@ -76,5 +104,10 @@ if($Checkpoint -ceq 'Complete' -and $Rollback -ceq 'False'){
     $failed=$false;try{Invoke-LABuildRebind $Install $Profile $package $path $sha 'Rollback'|Out-Null}catch{$failed=$true}
     if(-not $failed -or (Get-LAHash (Read-LABytes $ledgerPath)) -cne (Get-LAHash $changedBytes)){throw 'SyntheticChangedFinancialHistoryOverwritten'}
     [IO.File]::WriteAllBytes($ledgerPath,$retained)
+}
+if($DeferredDescriptorPath -and $Rollback -cne 'True'){
+    Invoke-LABuildRebind $Install $Profile $package $path $sha 'Rollback'|Out-Null
+    if((Get-LAHash (Read-LABytes $ledgerPath)) -cne $plan.PreviousLedgerSha256 -or
+        (Get-LAHash (Read-LABytes $scopePath)) -cne $plan.PreviousScopeSha256){throw 'SyntheticDeferredRollbackChangedHistory'}
 }
 'SyntheticBuildRebindVerified: 0 provider calls, 0 new commitments, exact retained claim and authority.'

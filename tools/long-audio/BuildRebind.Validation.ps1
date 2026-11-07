@@ -28,10 +28,13 @@ function Assert-LABuildOnlyFields([byte[]]$Old,[byte[]]$New,[string[]]$Allowed) 
 }
 function Get-LABuildRebind([string]$Install,[string]$Profile,[string]$Package,[string]$PlanPath,[string]$PlanSha) {
     $planBytes=Read-LABuildPin $PlanPath $PlanSha;$plan=ConvertFrom-LAJson $planBytes
-    Assert-LARecord $plan @('Version','TransactionId','SourceApprovalSha256','PreviousMarkerSha256','PreviousParentSha256','PreviousScopeSha256',
+    Assert-LAInteger $plan.Version 1
+    $planFields=@('Version','TransactionId','SourceApprovalSha256','PreviousMarkerSha256','PreviousParentSha256','PreviousScopeSha256',
         'PreviousLedgerSha256','PreviousAppTreeSha256','PreviousProvisioningTreeSha256','ProfileTreeSha256','PackageAppTreeSha256','NewParentPath','NewParentSha256','NewScopePath','NewScopeSha256',
         'NativeProofPath','NativeProofSha256')
-    if($plan.Version -ne 1 -or [Guid]$plan.TransactionId -eq [Guid]::Empty){throw 'LongAudioBuildPlanShape'}
+    if($plan.Version -eq 2){$planFields+='DeferredEvidenceSha256'}
+    Assert-LARecord $plan $planFields
+    if($plan.Version -notin @(1,2) -or [Guid]$plan.TransactionId -eq [Guid]::Empty){throw 'LongAudioBuildPlanShape'}
     foreach($key in $plan.Keys|Where-Object {$_ -like '*Sha256'}){Assert-LAHash $plan[$key]}
     foreach($path in @($Install,$Profile,$Package,$plan.NewParentPath,$plan.NewScopePath,$plan.NativeProofPath)){Assert-LAPhysical $path}
     $install=[IO.Path]::GetFullPath($Install).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -61,7 +64,18 @@ function Get-LABuildRebind([string]$Install,[string]$Profile,[string]$Package,[s
         $ledger.Version -ne 1 -or $ledger.ScopeSha256 -cne $plan.PreviousScopeSha256){throw 'LongAudioBuildPredecessorIdentity'}
     $newParent=Read-LABuildPin $plan.NewParentPath $plan.NewParentSha256;$newScope=Read-LABuildPin $plan.NewScopePath $plan.NewScopeSha256
     Assert-LABuildOnlyFields $parentBytes $newParent @('AppSha256','InfrastructureSha256','SourceApprovalSha256')
-    Assert-LABuildOnlyFields $scopeBytes $newScope @('ParentPolicySha256','SourceApprovalSha256')
+    if($plan.Version -eq 1){Assert-LABuildOnlyFields $scopeBytes $newScope @('ParentPolicySha256','SourceApprovalSha256')}
+    else{
+        $oldView=ConvertFrom-LAJson $scopeBytes;$newView=ConvertFrom-LAJson $newScope
+        if(-not $oldView.Contains('DeferredUnknownRanges')){$oldView.DeferredUnknownRanges=$null}
+        if(-not $newView.Contains('DeferredUnknownRanges')){throw 'LongAudioDeferredApprovalMissing'}
+        Assert-LABuildOnlyFields (ConvertTo-LABytes $oldView) (ConvertTo-LABytes $newView) @('ParentPolicySha256','SourceApprovalSha256','DeferredUnknownRanges')
+        Assert-LADeferredScope $newView
+        Assert-LAExplicitRegenerationTransition $oldView $newView $ledger $profile
+        if((Get-LAHash (ConvertTo-LABytes $newView.DeferredUnknownRanges)) -cne $plan.DeferredEvidenceSha256){throw 'LongAudioDeferredApprovalPin'}
+        $evidence=@{Scope=$newView;Profile=$profile;Data=(Join-Path $profile 'data/google-long-audio')}
+        Assert-LADeferredEvidence $evidence $ledger
+    }
     $nextParent=ConvertFrom-LAJson $newParent;$nextScope=ConvertFrom-LAJson $newScope
     if($nextParent.SourceApprovalSha256 -cne $plan.SourceApprovalSha256 -or $nextScope.SourceApprovalSha256 -cne $plan.SourceApprovalSha256 -or
         $plan.SourceApprovalSha256 -ceq $parent.SourceApprovalSha256 -or $plan.SourceApprovalSha256 -ceq $scope.SourceApprovalSha256 -or
@@ -70,7 +84,11 @@ function Get-LABuildRebind([string]$Install,[string]$Profile,[string]$Package,[s
         (Get-LAHash (Read-LABytes (Join-Path $Package 'app/CloudScribe.dll') 536870912)) -cne $nextParent.AppSha256 -or
         (Get-LAHash (Read-LABytes (Join-Path $Package 'app/CloudScribe.Infrastructure.dll') 536870912)) -cne $nextParent.InfrastructureSha256){throw 'LongAudioBuildPackageChanged'}
     $native=ConvertFrom-LAJson (Read-LABuildPin $plan.NativeProofPath $plan.NativeProofSha256)
-    Assert-LARecord $native @('Version','Passed','PreviousParentSha256','NewParentSha256','PackageAppTreeSha256','ProfileTreeSha256','LongClaimCount','LongHeldCents','ChirpCommittedCents','ChirpCeilingCents','ProviderCalls','LiveWrites')
+    Assert-LAInteger $native.Version 1
+    $nativeFields=@('Version','Passed','PreviousParentSha256','NewParentSha256','PackageAppTreeSha256','ProfileTreeSha256','LongClaimCount','LongHeldCents','ChirpCommittedCents','ChirpCeilingCents','ProviderCalls','LiveWrites')
+    if($plan.Version -eq 2){$nativeFields+='DeferredEvidenceSha256'}
+    Assert-LARecord $native $nativeFields
+    if($plan.Version -eq 2 -and $native.DeferredEvidenceSha256 -cne $plan.DeferredEvidenceSha256){throw 'LongAudioDeferredNativeProofPin'}
     [long]$held=0;foreach($claim in $ledger.Claims){Assert-LAInteger $claim.MaximumUsdCents 1;$held += [long]$claim.MaximumUsdCents}
     if($native.Version -ne 1 -or $native.Passed -isnot [bool] -or -not $native.Passed -or $native.ProviderCalls -ne 0 -or $native.LiveWrites -ne 0 -or
         $native.PreviousParentSha256 -cne $plan.PreviousParentSha256 -or $native.NewParentSha256 -cne $plan.NewParentSha256 -or

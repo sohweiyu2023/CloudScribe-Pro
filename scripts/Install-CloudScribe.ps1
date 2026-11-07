@@ -1345,7 +1345,7 @@ function Invoke-StoppedMaintenance([string]$PlanPath,[string]$PlanSha256,[string
 }
 function Invoke-ReviewedLongAudioProvisioning([string]$InstallRoot,[string]$ProfileRoot,[string]$ScopePath,[string]$ScopeSha,[string]$Phase){
     $moduleRoot=Join-Path $package 'app/tools/long-audio'
-    foreach($name in @('Provisioning.Files.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1')){
+    foreach($name in @('Provisioning.Files.ps1','Replacement.Scope.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1')){
         $module=Join-Path $moduleRoot $name;Assert-NoLinks $module
         if(-not (Test-Path -LiteralPath $module -PathType Leaf)){throw 'The tested Long Audio installer helpers are absent from this package.'}
         . $module
@@ -1357,7 +1357,7 @@ function Invoke-ReviewedLongAudioProvisioning([string]$InstallRoot,[string]$Prof
 }
 function Invoke-ReviewedLongAudioBuild([string]$InstallRoot,[string]$ProfileRoot,[string]$PlanPath,[string]$PlanSha,[string]$Phase){
     $moduleRoot=Join-Path $package 'app/tools/long-audio'
-    foreach($name in @('Provisioning.Files.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1','BuildRebind.Validation.ps1','BuildRebind.Transaction.ps1')){
+    foreach($name in @('Provisioning.Files.ps1','Replacement.Scope.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1','BuildRebind.Validation.ps1','BuildRebind.Transaction.ps1')){
         $module=Join-Path $moduleRoot $name;Assert-NoLinks $module
         if(-not (Test-Path -LiteralPath $module -PathType Leaf)){throw 'The tested build-only Long Audio updater is absent from this package.'}
         . $module

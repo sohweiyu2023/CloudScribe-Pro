@@ -54,7 +54,7 @@ public sealed partial class GoogleLongAudioAdapter
     private async Task<GoogleLongAudioCheckpoint> CompleteObservedResponseAsync(GoogleLongAudioCheckpoint current,
         GoogleLongAudioRequest request, Guid ticket, bool post, int status, BodyRead body, string accessToken)
     {
-        var outcome = ResolveOutcome(current, body, post, status, out var parseFailure);
+        var outcome = ResolveOutcome(current, body, post, status, out var parseFailure) with { PollWaitDeadlineElapsed = false };
         outcome = outcome with { FailureKind = GoogleLongAudioFailureClassifier.Classify(status, outcome.RpcCode, body.Bytes, body.State) };
         bool operationError = ContainsOperationError(status, body);
         GoogleLongAudioCheckpoint saved;
