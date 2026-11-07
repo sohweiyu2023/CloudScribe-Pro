@@ -4,7 +4,7 @@ namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Inactive until installed with exact reviewed scope/parent pins and real account/storage readiness.
 /// This supplements, never retires or consumes, the synchronous grant. Its entire ceiling remains provisioned.</summary>
-public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdmission
+public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdmission, IGoogleLongAudioSubmissionPreflight
 {
     private readonly string parentPath, parentSha, scopePath, scopeSha, ledgerPath;
     private readonly Func<GoogleLongAudioRequest, ChirpArticleAdmissionPolicy, CancellationToken, ValueTask> requireReadiness;
@@ -32,7 +32,7 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
     public async ValueTask RequireSubmissionAuthorizedAsync(GoogleLongAudioRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var (scope, parent) = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        var (scope, parent, amount, proof) = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
         recoveryAuthority?.RequireNoOtherPending(request);
         ChirpPolicyFiles.RejectLinks(ledgerPath + ".lock");
         using var lease = new FileStream(ledgerPath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
@@ -41,8 +41,6 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         ValidateLedger(ledger);
         long previous = 0;
         foreach (var claim in ledger.Claims) previous = checked(previous + claim.MaximumUsdCents);
-        long amount = ResolveCeiling(request, scope);
-        var proof = RecoveryProof(request, scope);
         var prior = ledger.Claims.SingleOrDefault(x => x.AttemptId == request.AttemptId);
         if (prior is not null)
         {
@@ -53,7 +51,9 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         RequireBudget(scope, parent, checked(previous + amount));
         // Only structurally valid, unconsumed financial authority may reach credential/storage readiness.
         await requireReadiness(request, parent, cancellationToken).ConfigureAwait(false);
-        _ = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        var revalidated = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        if (revalidated.Ceiling != amount || revalidated.Proof != proof)
+            throw new InvalidDataException("Long Audio request authority changed during current readiness.");
         var next = ledger with { Claims = [.. ledger.Claims, new(request.AttemptId, request.BindingSha256, amount, proof)] };
         string pending = ledgerPath + "." + Guid.NewGuid().ToString("N") + ".pending";
         try
@@ -73,7 +73,7 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
     /// <summary>Exact current estimate; never creates a financial claim or a submission journal.</summary>
     public async ValueTask<GoogleLongAudioCostReview> ReviewAsync(GoogleLongAudioRequest request, CancellationToken cancellationToken)
     {
-        var (scope, parent) = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        var (scope, parent, amount, proof) = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
         ChirpPolicyFiles.RejectLinks(ledgerPath + ".lock");
         using var lease = new FileStream(ledgerPath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var ledger = ChirpPolicyFiles.Parse<GoogleLongAudioBudgetLedger>(await ChirpPolicyFiles.ReadAsync(ledgerPath, 8 * 1024 * 1024, cancellationToken).ConfigureAwait(false));
@@ -82,14 +82,14 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         foreach (var claim in ledger.Claims) provision = checked(provision + claim.MaximumUsdCents);
         RequireBudget(scope, parent, provision);
         var existing = ledger.Claims.SingleOrDefault(x => x.AttemptId == request.AttemptId);
-        long amount = ResolveCeiling(request, scope);
         if (existing is not null && (!Same(existing.RequestBindingSha256, request.BindingSha256) || existing.MaximumUsdCents != amount
-            || existing.Recovery != RecoveryProof(request, scope)))
+            || existing.Recovery != proof))
             throw new InvalidDataException("The saved Long Audio commitment cannot be presented as a different request.");
         long retained = checked(parent.Budget.ProjectCeilingMinorUnits + provision);
         long additional = existing is null ? amount : 0;
         var review = GoogleLongAudioCostReview.Prepare(request, scope.UsdPerMillionCharacters,
             retained, scope.TaxFxProvisionUsdCents, scope.TotalGoogleCapUsdCents, scope.PricingProvenance);
+        RequireBudget(scope, parent, checked(provision + additional));
         return review with
         {
             IsAlreadyCommitted = existing is not null,
@@ -98,11 +98,18 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         };
     }
 
+    async ValueTask IGoogleLongAudioSubmissionPreflight.RequireBeforeJournalAsync(GoogleLongAudioRequest request, CancellationToken cancellationToken)
+    {
+        var review = await ReviewAsync(request, cancellationToken).ConfigureAwait(false);
+        if (review.IsAlreadyCommitted)
+            throw new InvalidOperationException("This request already has a retained commitment; reconcile its saved operation instead of submitting it.");
+    }
+
     /// <summary>Read-only continuation check. It neither creates a commitment nor authorizes another POST.</summary>
     public async ValueTask RequireExistingCommitmentAsync(GoogleLongAudioRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var (scope, parent) = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        var (scope, parent, amount, proof) = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
         ChirpPolicyFiles.RejectLinks(ledgerPath + ".lock");
         using var lease = new FileStream(ledgerPath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         byte[] original = await ChirpPolicyFiles.ReadAsync(ledgerPath, 8 * 1024 * 1024, cancellationToken).ConfigureAwait(false);
@@ -110,13 +117,15 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         ValidateLedger(ledger);
         var claim = ledger.Claims.SingleOrDefault(x => x.AttemptId == request.AttemptId);
         if (claim is null || !Same(claim.RequestBindingSha256, request.BindingSha256)
-            || claim.MaximumUsdCents != ResolveCeiling(request, scope) || claim.Recovery != RecoveryProof(request, scope))
+            || claim.MaximumUsdCents != amount || claim.Recovery != proof)
             throw new InvalidOperationException("The original Long Audio commitment is absent or changed; no storage read is authorized.");
         long provision = 0;
         foreach (var item in ledger.Claims) provision = checked(provision + item.MaximumUsdCents);
         RequireBudget(scope, parent, provision);
         await requireReadiness(request, parent, cancellationToken).ConfigureAwait(false);
-        _ = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        var revalidated = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        if (revalidated.Ceiling != amount || revalidated.Proof != proof)
+            throw new InvalidDataException("Long Audio continuation authority changed during current readiness.");
         byte[] current = await ChirpPolicyFiles.ReadAsync(ledgerPath, 8 * 1024 * 1024, cancellationToken).ConfigureAwait(false);
         if (!original.AsSpan().SequenceEqual(current))
             throw new InvalidDataException("Long Audio history changed during continuation verification.");
@@ -126,7 +135,7 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
     {
         long total = checked(parent.Budget.ProjectCeilingMinorUnits + scope.TaxFxProvisionUsdCents + longAudioCommitments);
         if (total > scope.TotalGoogleCapUsdCents)
-            throw new InvalidOperationException("Cumulative provision including the whole existing grant exceeds the reviewed Google-charge cap.");
+            throw new GoogleLongAudioBudgetExceededException(total, scope.TotalGoogleCapUsdCents);
     }
 
     private void ValidateLedger(GoogleLongAudioBudgetLedger ledger)
@@ -135,7 +144,8 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
             || ledger.Claims.Any(x => x is null || x.AttemptId == Guid.Empty || !IsHash(x.RequestBindingSha256) || x.MaximumUsdCents <= 0)
             || ledger.Claims.Any(x => x.Recovery is { } proof && (!IsHash(proof.RootBindingSha256) || !IsHash(proof.ParentBindingSha256)
                 || !IsHash(proof.ParentCheckpointSha256) || proof.StartScalar < 0 || proof.EndScalarExclusive <= proof.StartScalar
-                || !Same(proof.PlannerVersion, GoogleLongAudioRecoveryPlanner.Version)))
+                || !Same(proof.PlannerVersion, GoogleLongAudioRecoveryPlanner.Version)
+                    && !Same(proof.PlannerVersion, GoogleLongAudioExplicitRegeneration.PlannerVersion)))
             || ledger.Claims.Select(x => x.AttemptId).Distinct().Count() != ledger.Claims.Count
             || ledger.Claims.Select(x => x.RequestBindingSha256).Distinct(StringComparer.Ordinal).Count() != ledger.Claims.Count)
             throw new InvalidDataException("Long Audio cumulative ledger is invalid; history must be reconciled, never reset.");

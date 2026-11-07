@@ -19,13 +19,15 @@ public sealed partial class NarrationPartGroupTests
             foreach($name in @('Provisioning.Files.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1')){. (Join-Path $Repository ('tools/long-audio/'+$name))}
             $context=Get-LAContext $Install $Profile $Scope $Sha;Assert-LASavedInputs $context
             $original=Read-LABytes $context.Ledger;$ledger=ConvertFrom-LAJson $original
+            $index=1
+            if($Fault.StartsWith('replacement-',[StringComparison]::Ordinal)){$index=$ledger.Claims.Count-1;$Fault=$Fault.Substring(12)}
             switch($Fault){
-                'range' {$ledger.Claims[1].Recovery.EndScalarExclusive--}
-                'parent' {$ledger.Claims[1].Recovery.ParentCheckpointSha256=('a'*64)}
-                'planner' {$ledger.Claims[1].Recovery.PlannerVersion='unreviewed-version'}
-                'amount' {$ledger.Claims[1].MaximumUsdCents++}
-                'missing' {[void]$ledger.Claims[1].Remove('Recovery')}
-                'extra' {$ledger.Claims[1].Recovery.Extra='synthetic-canary'}
+                'range' {$ledger.Claims[$index].Recovery.EndScalarExclusive--}
+                'parent' {$ledger.Claims[$index].Recovery.ParentCheckpointSha256=('a'*64)}
+                'planner' {$ledger.Claims[$index].Recovery.PlannerVersion='unreviewed-version'}
+                'amount' {$ledger.Claims[$index].MaximumUsdCents++}
+                'missing' {[void]$ledger.Claims[$index].Remove('Recovery')}
+                'extra' {$ledger.Claims[$index].Recovery.Extra='synthetic-canary'}
                 'valid' {}
                 default {throw 'UnexpectedSyntheticVector'}
             }

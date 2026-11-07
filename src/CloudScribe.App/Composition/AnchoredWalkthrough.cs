@@ -83,9 +83,10 @@ internal sealed class AnchoredWalkthrough : IDisposable
         cardGrid.Children.Add(actions);
         _card = new Border
         {
-            Background = new SolidColorBrush(Color.Parse("#10243A")),
-            BorderBrush = Brushes.White,
-            BorderThickness = new Thickness(2),
+            Background = CosmicDialogTheme.CreateDialogBackground(),
+            BorderBrush = CosmicDialogTheme.Solid(CosmicDialogTheme.Gold),
+            BorderThickness = new Thickness(1.5),
+            CornerRadius = new CornerRadius(14),
             Child = cardGrid,
         };
         _root.Children.Add(_card);

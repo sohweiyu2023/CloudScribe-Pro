@@ -7,7 +7,7 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed partial class GoogleLongAudioDocumentService
 {
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "A single serialized operation owns polling, stop-after-outcome and the original failure; no paid retry loop exists.")]
-    public async Task<GoogleLongAudioDocumentRun> RunAsync(GoogleLongAudioDocumentReview review, GoogleLongAudioMediaTools tools,
+    private async Task<GoogleLongAudioDocumentRun> RunCoreAsync(GoogleLongAudioDocumentReview review, GoogleLongAudioMediaTools tools,
         bool captureConfirmed, GoogleLongAudioRunControl control, IProgress<GoogleLongAudioDocumentProgress>? progress = null,
         CancellationToken token = default)
     {

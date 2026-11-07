@@ -25,11 +25,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             MinHeight = 480,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             RequestedThemeVariant = ThemeVariant.Dark,
-            Background = new SolidColorBrush(Color.Parse("#111C2B")),
+            Background = CosmicDialogTheme.CreateDialogBackground(),
         };
         StackPanel body = new() { Spacing = 12, Margin = new Avalonia.Thickness(20) };
         TextBlock Text(string value) => new() { Text = value, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
         body.Children.Add(Text("Documents autosave locally after a short pause. Ctrl+S creates a checkpoint; Library reopens saved documents."));
+        AddAudioToolsSettings(dialog, body);
         TextBlock connection = Text("Reading saved connection metadata locally..."); body.Children.Add(connection);
         Button repair = NewButton("Repair existing Google connection");
         repair.IsEnabled = credentialRepair is not null;
@@ -83,7 +84,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             if (saved.SelectedItem is not string selected) return;
             preferences.DeleteSetup(selected); message.Text = "Named setup deleted. Your connection, documents and audio are unchanged.";
         });
-        body.Children.Add(Text("Local audio stays on disk after restart. Play/export trust is session-only; use your player to open older MP3s without regenerating."));
+        body.Children.Add(Text("Local audio stays on disk after restart. Verified whole-article and Long Audio outputs can be reopened from their saved jobs. Older session-only samples may need your external player; do not regenerate just to listen again."));
         Button audio = NewButton("Open saved MP3 folder (no generation)");
         audio.Click += (_, _) => OpenLocalFolder(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CloudScribe Pro", "Generated"), message);
         body.Children.Add(audio);

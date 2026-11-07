@@ -84,7 +84,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             MinHeight = 520,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             RequestedThemeVariant = ThemeVariant.Dark,
-            Background = new SolidColorBrush(Color.Parse("#111C2B")),
+            Background = CosmicDialogTheme.CreateDialogBackground(),
         };
         StackPanel body = new() { Spacing = 16, Margin = new Thickness(20) };
         body.Children.Add(GoogleIllustration("GoogleProjectIllustration", "In your browser · Google Cloud project",

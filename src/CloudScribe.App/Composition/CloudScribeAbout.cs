@@ -28,7 +28,7 @@ public static class CloudScribeAbout
             MinHeight = 440,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             RequestedThemeVariant = ThemeVariant.Dark,
-            Background = new SolidColorBrush(Color.Parse("#111C2B")),
+            Background = CosmicDialogTheme.CreateDialogBackground(),
         };
         StackPanel body = new() { Spacing = 16, Margin = new Thickness(26) };
         body.Children.Add(Text("CLOUDSCRIBE PRO", 25));

@@ -70,6 +70,9 @@ class Check:
     run: Callable[[], None]
 
 
+# Windows 1.0.x servicing releases that keep the certified Stage 8 1.0.0 governance identity.
+SERVICING_RELEASES = ("1.0.1", "1.0.2")
+
 def assert_true(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -182,9 +185,12 @@ def build_checks(root: Path) -> list[Check]:
     is_release_101_patch = (
         current_stage == 8
         and version == "1.0.0"
-        and "<Version>1.0.1</Version>" in app_project_text
-        and "<InformationalVersion>1.0.1</InformationalVersion>" in app_project_text
-        and "<FileVersion>1.0.1.0</FileVersion>" in app_project_text
+        and any(
+            f"<Version>{servicing}</Version>" in app_project_text
+            and f"<InformationalVersion>{servicing}</InformationalVersion>" in app_project_text
+            and f"<FileVersion>{servicing}.0</FileVersion>" in app_project_text
+            for servicing in SERVICING_RELEASES
+        )
     )
     required_sdk_for_checkpoint = "10.0.402" if is_release_101_patch else "10.0.400"
 

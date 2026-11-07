@@ -17,6 +17,7 @@ public sealed class ChirpWholeArticleRuntime : IChirpWholeArticleRuntime
     private readonly ArticleAudioExportService exporter;
     private readonly string destination;
     private readonly string ffmpeg;
+    private readonly TrustedMediaToolSelection? approvedMediaTools;
     private readonly Func<bool>? catalogExpired;
     private readonly Func<CancellationToken, Task<ShellViewModel.GoogleTtsStudioRequestSelection>>? refreshSelection;
     private readonly PrivateArticleErrorCaptureScope? privateCapture;
@@ -31,7 +32,7 @@ public sealed class ChirpWholeArticleRuntime : IChirpWholeArticleRuntime
         ArticleAudioExportService exporter, ShellViewModel.GoogleTtsStudioRequestSelection selection, string destination, string ffmpeg,
         Func<bool>? catalogExpired = null, Func<CancellationToken, Task<ShellViewModel.GoogleTtsStudioRequestSelection>>? refreshSelection = null,
         PrivateArticleErrorCaptureScope? privateCapture = null, ILogger? diagnosticLogger = null,
-        Action<ArticleExecutionStage, int>? observeStage = null, IGoogleTrendHistoryHealth? trendHistory = null)
+        Action<ArticleExecutionStage, int>? observeStage = null, IGoogleTrendHistoryHealth? trendHistory = null, TrustedMediaToolSelection? approvedMediaTools = null)
     {
         this.preparation = preparation ?? throw new ArgumentNullException(nameof(preparation));
         this.articles = articles ?? throw new ArgumentNullException(nameof(articles));
@@ -43,7 +44,7 @@ public sealed class ChirpWholeArticleRuntime : IChirpWholeArticleRuntime
         this.catalogExpired = catalogExpired; this.refreshSelection = refreshSelection;
         this.privateCapture = privateCapture;
         this.diagnosticLogger = diagnosticLogger; this.observeStage = observeStage;
-        this.trendHistory = trendHistory;
+        this.trendHistory = trendHistory; this.approvedMediaTools = approvedMediaTools;
     }
 
     public ChirpWholeArticleRuntime(ChirpArticlePreparationService preparation, ChirpArticleService articles,
@@ -51,8 +52,8 @@ public sealed class ChirpWholeArticleRuntime : IChirpWholeArticleRuntime
         ArticleAudioExportService exporter, ShellViewModel.GoogleTtsStudioRequestSelection selection, string destination, string ffmpeg,
         Func<bool>? catalogExpired = null, Func<CancellationToken, Task<ShellViewModel.GoogleTtsStudioRequestSelection>>? refreshSelection = null,
         PrivateArticleErrorCaptureScope? privateCapture = null, ILogger? diagnosticLogger = null,
-        Action<ArticleExecutionStage, int>? observeStage = null, IGoogleTrendHistoryHealth? trendHistory = null)
-        : this(preparation, articles, requests, resolver.ResolveAsync, exporter, selection, destination, ffmpeg, catalogExpired, refreshSelection, privateCapture, diagnosticLogger, observeStage, trendHistory) { }
+        Action<ArticleExecutionStage, int>? observeStage = null, IGoogleTrendHistoryHealth? trendHistory = null, TrustedMediaToolSelection? approvedMediaTools = null)
+        : this(preparation, articles, requests, resolver.ResolveAsync, exporter, selection, destination, ffmpeg, catalogExpired, refreshSelection, privateCapture, diagnosticLogger, observeStage, trendHistory, approvedMediaTools) { }
 
     public bool RequiresCatalogRefresh => catalogExpired?.Invoke() == true;
 
@@ -229,7 +230,9 @@ public sealed class ChirpWholeArticleRuntime : IChirpWholeArticleRuntime
         ObserveOperation(job, 0, stage, ArticleExecutionOutcome.Started, true, true, GoogleErrorStatus.NotProvided);
         try
         {
-            await exporter.ExportAsync(job.DocumentId, destination, ffmpeg, cancellationToken).ConfigureAwait(false);
+            if (approvedMediaTools is not null)
+                await exporter.ExportAsync(job.DocumentId, destination, approvedMediaTools, cancellationToken).ConfigureAwait(false);
+            else await exporter.ExportAsync(job.DocumentId, destination, ffmpeg, cancellationToken).ConfigureAwait(false);
             stage = ArticleExecutionStage.OutputVerification;
             ObserveOperation(job, 0, stage, ArticleExecutionOutcome.Started, true, true, GoogleErrorStatus.NotProvided);
             using var stream = File.OpenRead(destination);

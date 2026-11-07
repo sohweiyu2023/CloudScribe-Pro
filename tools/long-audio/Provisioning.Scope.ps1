@@ -1,3 +1,5 @@
+. (Join-Path $PSScriptRoot 'Replacement.Scope.ps1')
+. (Join-Path $PSScriptRoot 'Deferred.Scope.ps1')
 function Get-LAContext([string]$InstallRoot,[string]$ProfileRoot,[string]$ReviewedScopePath,[string]$ReviewedScopeSha256) {
     foreach($path in @($InstallRoot,$ProfileRoot,$ReviewedScopePath)){Assert-LAPhysical $path}
     Assert-LAHash $ReviewedScopeSha256
@@ -59,6 +61,10 @@ function Assert-LARetainedInstalledScope($Context,$Parent) {
             ($claims[0].Contains('Recovery') -and $null -ne $claims[0].Recovery)){throw 'LongAudioHistoricalBindingNotRetained'}
         [void]$view.ApprovedRequestCeilingsUsdCents.Remove($entry.Key)
     }
+    $total += Assert-LAReplacementScope $Context.Scope
+    if($Context.Scope.Contains('DeferredUnknownRanges')){foreach($d in $Context.Scope.DeferredUnknownRanges){
+        if($d.Contains('ExplicitRegeneration') -and $null -ne $d.ExplicitRegeneration){$total += [decimal]$d.ExplicitRegeneration.MaximumUsdCents}
+    }}
     if($total -gt [decimal]$Context.Scope.TotalGoogleCapUsdCents){throw 'LongAudioCumulativeBudget'}
     Assert-LAScope $view $Parent $Context.ParentSha
     $viewContext=@{}+$Context;$viewContext.Scope=$view;Assert-LASavedInputs $viewContext
@@ -68,6 +74,8 @@ function Assert-LAScope($Scope,$Parent,[string]$ParentSha) {
     $fields=@('Version','ParentPolicySha256','SourceApprovalSha256','ProjectNumber','CredentialReferenceId','VoiceName','LanguageCode','AudioEncoding',
         'OutputBucket','TotalGoogleCapUsdCents','TaxFxProvisionUsdCents','UsdPerMillionCharacters','PricingProvenance','ApprovedRequestCeilingsUsdCents','DocumentJobs')
     if($Scope.Contains('AdaptiveRecoveryRootBindings')){$fields += 'AdaptiveRecoveryRootBindings'}
+    if($Scope.Contains('FailedRangeReplacements')){$fields += 'FailedRangeReplacements'}
+    if($Scope.Contains('DeferredUnknownRanges')){$fields += 'DeferredUnknownRanges'}
     Assert-LARecord $Scope $fields
     Assert-LAHash $Scope.SourceApprovalSha256
     if($Scope.Version -ne 1 -or $Scope.ParentPolicySha256 -cne $ParentSha -or $Parent.Currency -cne 'USD' -or $Parent.Scale -ne 2){throw 'LongAudioScopeBinding'}
@@ -89,6 +97,11 @@ function Assert-LAScope($Scope,$Parent,[string]$ParentSha) {
             if(-not $roots.Add($binding) -or -not $Scope.ApprovedRequestCeilingsUsdCents.Contains($binding)){throw 'LongAudioRecoveryRootBinding'}
         }
     }
+    $total += Assert-LAReplacementScope $Scope
+    Assert-LADeferredScope $Scope
+    if($Scope.Contains('DeferredUnknownRanges')){foreach($d in $Scope.DeferredUnknownRanges){
+        if($d.Contains('ExplicitRegeneration') -and $null -ne $d.ExplicitRegeneration){$total += [decimal]$d.ExplicitRegeneration.MaximumUsdCents}
+    }}
     if($total -gt [decimal]$Scope.TotalGoogleCapUsdCents){throw 'LongAudioCumulativeBudget'}
     if($Scope.DocumentJobs -isnot [array] -or $Scope.DocumentJobs.Count -eq 0){throw 'LongAudioDocumentJobsMissing'}
     if($Scope.DocumentJobs.Count -ne $Scope.ApprovedRequestCeilingsUsdCents.Count){throw 'LongAudioUnmappedRequestAuthority'}

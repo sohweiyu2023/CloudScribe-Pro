@@ -77,13 +77,19 @@ function Invoke-LABuildRebind([string]$Install,[string]$Profile,[string]$Package
             (Get-LABuildTreeHash $Profile) -cne $c.Plan.ProfileTreeSha256 -or
             (Get-LABuildTreeHash (Join-Path $Install 'long-audio-provisioning')) -cne $c.Plan.PreviousProvisioningTreeSha256){throw 'LongAudioBuildBaselineChanged'}
         $operations=Join-Path $Profile 'data/google-long-audio/operations'
-        if(Test-Path -LiteralPath (Join-Path $operations 'observation-pending.guard')){throw 'LongAudioBuildPendingProviderEvidence'}
+        if($c.Plan.Version -eq 1 -and (Test-Path -LiteralPath (Join-Path $operations 'observation-pending.guard'))){throw 'LongAudioBuildPendingProviderEvidence'}
         $retained=ConvertFrom-LAJson $c.OldLedger
+        $nextScope=ConvertFrom-LAJson $c.NewScope
+        if($c.Plan.Version -eq 2){
+            Assert-LADeferredEvidence @{Scope=$nextScope;Profile=$Profile;Data=(Join-Path $Profile 'data/google-long-audio')} $retained
+            if(@(Get-ChildItem -LiteralPath $operations -Filter '*.observation-pending.guard').Count -ne 0){throw 'LongAudioBuildAdditionalPendingProviderEvidence'}
+        }
         $journals=@(Get-ChildItem -LiteralPath $operations -Filter '*.json')
         if($journals.Count -ne $retained.Claims.Count){throw 'LongAudioBuildUnmatchedOperationHistory'}
         foreach($claim in $retained.Claims){
             $path=Join-Path $operations (([Guid]$claim.AttemptId).ToString('N')+'.json')
             $state=ConvertFrom-LAJson (Read-LABytes $path 8192)
+            if($c.Plan.Version -eq 2 -and @($nextScope.DeferredUnknownRanges|Where-Object {[Guid]$_.AttemptId -eq [Guid]$claim.AttemptId}).Count -eq 1){continue}
             if([Guid]$state.AttemptId -ne [Guid]$claim.AttemptId -or $state.BindingSha256 -cne $claim.RequestBindingSha256 -or
                 $state.State -notin @(2,3) -or $state.OperationParseFailed -or -not $state.Observation.ReadbackVerified -or
                 $state.Observation.ReadState -ne 1 -or $state.Observation.Truncated){throw 'LongAudioBuildPendingProviderEvidence'}

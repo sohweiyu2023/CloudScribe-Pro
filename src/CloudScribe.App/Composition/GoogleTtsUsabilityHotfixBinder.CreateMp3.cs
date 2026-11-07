@@ -55,11 +55,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             MinHeight = 500,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             RequestedThemeVariant = ThemeVariant.Dark,
-            Background = new SolidColorBrush(Color.Parse("#111C2B")),
+            Background = CosmicDialogTheme.CreateDialogBackground(),
         };
         StackPanel body = new() { Spacing = 12, Margin = new Thickness(20) };
         TextBlock Text(string value) => new() { Text = value, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
-        body.Children.Add(Text("Choose your voice, review the cost, then create your MP3."));
+        body.Children.Add(CosmicDialogTheme.Heading("Create MP3", "Choose your voice, review the cost, then create your MP3."));
         TextBlock connection = Text("Reading saved connection...");
         connection.Name = "GuideConnectionStatus";
         AutomationProperties.SetName(connection, "Google connection status");
@@ -257,11 +257,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         foreach (Button button in new[] { review, create, close }) actionRow.Children.Add(button);
         foreach (Control control in actionRow.Children) control.Margin = new Thickness(0, 0, 8, 4);
         footer.Children.Add(actionRow);
-        Grid.SetRow(footer, 1);
-        layout.Children.Add(footer);
+        Border footerBar = CosmicDialogTheme.ActionBar(footer);
+        Grid.SetRow(footerBar, 1);
+        layout.Children.Add(footerBar);
         if (guided)
         {
             layout.Children.Clear();
+            footerBar.Child = null;
             body.Children.Add(footer);
             layout.Children.Add(bodyScroll);
         }

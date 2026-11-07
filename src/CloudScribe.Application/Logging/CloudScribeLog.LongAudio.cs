@@ -6,6 +6,9 @@ namespace CloudScribe.Application.Logging;
 
 public static partial class CloudScribeLog
 {
+    [LoggerMessage(EventId = 1621, Level = LogLevel.Information, Message = "Long Audio local budget stop v1: required provision USD cents {ProvisionUsdCents}, approved cap USD cents {CapUsdCents}. This is a pre-dispatch funding stop, not a provider error or invoice. Existing audio, holds and history remain preserved; no additional synthesis was sent by this action.")]
+    public static partial void LongAudioBudgetStop(ILogger logger, long provisionUsdCents, long capUsdCents);
+
     [LoggerMessage(EventId = 1620, Level = LogLevel.Information, Message = "Long Audio recovery v1: root {RootAttemptId}, attempt {AttemptId}, parent {ParentAttemptId}, source scalar range {StartScalar}..{EndScalarExclusive}, depth {SplitDepth}, payload SHA256 {PayloadSha256}, stage {Stage}, safe failure kind {FailureKind}. InspectOrSubmit is not evidence of a new POST; join exact exchange and private retention by attempt. No text, credentials or output paths retained.")]
     public static partial void LongAudioRecovery(ILogger logger, Guid rootAttemptId, Guid attemptId, Guid? parentAttemptId,
         int startScalar, int endScalarExclusive, int splitDepth, string payloadSha256, LongAudioRecoveryStage stage, int? failureKind);

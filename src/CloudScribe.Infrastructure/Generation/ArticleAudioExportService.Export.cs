@@ -7,6 +7,13 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed partial class ArticleAudioExportService
 {
+    public async Task ExportAsync(Guid parentId, string destination, TrustedMediaToolSelection approved,
+        CancellationToken cancellationToken = default)
+    {
+        using var lease = await TrustedMediaToolsStore.AcquireVerifiedLeaseAsync(approved).ConfigureAwait(false);
+        await ExportAsync(parentId, destination, approved.EncoderPath, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task ExportAsync(Guid parentId, string destination, string ffmpegPath,
         CancellationToken cancellationToken = default)
     {

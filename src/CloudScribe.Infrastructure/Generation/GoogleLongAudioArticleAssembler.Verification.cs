@@ -27,8 +27,10 @@ public sealed partial class GoogleLongAudioArticleAssembler
                 ?? throw new InvalidDataException("Verified article input has no retained commitment.");
             if (claim.AttemptId != review.Request.AttemptId && (claim.Recovery is not { } proof
                 || !Same(proof.RootBindingSha256, review.Request.BindingSha256) || proof.StartScalar != leaf.Range.StartScalar
-                || proof.EndScalarExclusive != leaf.Range.EndScalarExclusive || !Same(proof.PlannerVersion, GoogleLongAudioRecoveryPlanner.Version)))
+                || proof.EndScalarExclusive != leaf.Range.EndScalarExclusive
+                || !Same(proof.PlannerVersion, GoogleLongAudioRecoveryPlanner.Version) && !Same(proof.PlannerVersion, GoogleLongAudioExplicitRegeneration.PlannerVersion)))
                 throw new InvalidDataException("The retained child does not cover this exact article range.");
+            VerifyExplicitCoverage(review, leaf, claim, context);
             if (claim.AttemptId == review.Request.AttemptId && (ordered.Count != 1 || !Same(claim.RequestBindingSha256, review.Request.BindingSha256)))
                 throw new InvalidDataException("The successful root cannot be combined with child output.");
             if (!await store.HasVerifiedAsync(claim.AttemptId, claim.RequestBindingSha256, token).ConfigureAwait(false))
@@ -40,6 +42,26 @@ public sealed partial class GoogleLongAudioArticleAssembler
             cursor = leaf.Range.EndScalarExclusive;
         }
         if (cursor != source.EnumerateRunes().Count()) throw new InvalidDataException("Article source coverage is incomplete.");
+    }
+
+    private static void VerifyExplicitCoverage(GoogleLongAudioDocumentReview review, GoogleLongAudioRecoveryOutput leaf,
+        GoogleLongAudioBudgetClaim claim, InstalledGoogleLongAudioContext context)
+    {
+        var overlaps = context.Scope.DeferredUnknownRanges?.Where(x => Same(x.RootBindingSha256, review.Request.BindingSha256)
+            && leaf.Range.StartScalar < x.EndScalarExclusive && x.StartScalar < leaf.Range.EndScalarExclusive).ToArray() ?? [];
+        bool explicitProof = Same(claim.Recovery?.PlannerVersion, GoogleLongAudioExplicitRegeneration.PlannerVersion);
+        if (!explicitProof && overlaps.Length == 0) return;
+        if (overlaps.Length != 1 || overlaps[0].ExplicitRegeneration is null)
+            throw new InvalidDataException("Unknown source coverage has no exact approved regeneration.");
+        var authority = new GoogleLongAudioRecoveryAuthority(review.Request, context.OperationsDirectory, context.OutputDirectory);
+        authority.Deferred = new(review.Request, context.Scope, context.OperationsDirectory, context.OutputDirectory,
+            context.LedgerPath, context.ScopeSha256, authority);
+        var exact = authority.FindExact(claim.AttemptId, context.Scope);
+        if (exact.RegenerationOwner != overlaps[0].AttemptId || claim.AttemptId == overlaps[0].AttemptId
+            || exact.Proof != claim.Recovery || exact.Part.Range != leaf.Range || exact.Part.MaximumHoldCents != claim.MaximumUsdCents
+            || !Same(exact.Part.Request.BindingSha256, claim.RequestBindingSha256))
+            throw new InvalidDataException("The chosen replacement coverage does not match its exact retained provenance.");
+        authority.Deferred.RequireReady(exact.Part.Request, newPost: false);
     }
 
     private async Task<double> ProbeAsync(string path, string codec, GoogleLongAudioDocumentReview review,

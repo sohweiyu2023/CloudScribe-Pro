@@ -13,6 +13,33 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed class GoogleTrendHistoryLoggerTests
 {
     [Fact]
+    public void RunSummaryAndWaitEventsRemainInSafeHistoryAfterRestart()
+    {
+        using var fixture = new TrendFixture();
+        Guid id = Guid.NewGuid();
+        using (var provider = new GoogleTrendHistoryLoggerProvider(fixture.Paths, TimeProvider.System))
+        {
+            var logger = provider.CreateLogger("synthetic-not-retained");
+            CloudScribeLog.LongAudioRunSummary(logger, id, CloudScribe.Application.Generation.LongAudioWorkflowStage.Completed,
+                1000, 800, false, false, 3, 5, 7, 9, 50);
+            CloudScribeLog.LongAudioRunSummaryUnavailable(logger, id, CloudScribe.Application.Generation.LongAudioWorkflowStage.Stopped, -1);
+            CloudScribeLog.WholeArticleRunTiming(logger, id, 1000, true, true);
+            CloudScribeLog.LongAudioPollDeadline(logger, id, 120, true);
+            CloudScribeLog.LongAudioUserStoppedWaiting(logger, id, CloudScribe.Application.Generation.LongAudioWorkflowStage.WaitingForGoogle);
+            provider.RequireReady();
+        }
+        using (var reopened = new GoogleTrendHistoryLoggerProvider(fixture.Paths, TimeProvider.System))
+        {
+            reopened.RequireReady();
+            var rows = ReadHistoryLines(fixture.History).Where(x => EventKind(x, "Event"))
+                .Select(x => JsonSerializer.Deserialize<JsonElement>(x)).ToArray();
+            Assert.Equal([1622, 1623, 1624, 1625, 1626], rows.Select(x => x.GetProperty("EventId").GetInt32()).ToArray());
+            Assert.All(rows, x => Assert.True(x.GetProperty("FieldsComplete").GetBoolean()));
+            Assert.DoesNotContain("synthetic-not-retained", ReadHistory(fixture.History), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void ProductionDependencyInjectionKeepsTraceTrendEventsDespiteOrdinaryWarningFilter()
     {
         using var f = new TrendFixture();
