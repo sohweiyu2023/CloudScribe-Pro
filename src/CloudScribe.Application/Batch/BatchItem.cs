@@ -2,7 +2,11 @@ namespace CloudScribe.Application.Batch;
 
 /// <summary>One input file and its single output MP3. Article text is never stored here; the library holds it.
 /// <see cref="SameTextAs"/> is the order number of an earlier file with identical text: shown as a note, never excluded.
-/// <see cref="Engine"/> is the engine chosen for this file when the batch was approved; it never changes after a job starts.</summary>
+/// <see cref="Engine"/> is the engine chosen for this file when the batch was approved; it never changes after a job starts.
+/// <see cref="SourcePath"/> is where the TXT was read from (when the system gave a local path), so an unsaved draft or an
+/// interrupted import can read it again; the file's SHA-256 must still match. <see cref="UncertainOutcomes"/> counts runs
+/// whose request may have reached Google without a confirmed result: it never goes down, so a possible earlier charge stays
+/// visible even after replacement audio is verified.</summary>
 public sealed record BatchItem(
     Guid ItemId,
     int Order,
@@ -27,7 +31,9 @@ public sealed record BatchItem(
     DateTimeOffset? FinishedUtc = null,
     long ActiveMilliseconds = 0,
     int? SameTextAs = null,
-    string? Engine = null)
+    string? Engine = null,
+    string? SourcePath = null,
+    int UncertainOutcomes = 0)
 {
     public bool IsIncluded => State is not BatchItemState.Excluded and not BatchItemState.Skipped;
 

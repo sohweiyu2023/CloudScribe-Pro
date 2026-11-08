@@ -71,7 +71,7 @@ class Check:
 
 
 # Windows 1.0.x servicing releases that keep the certified Stage 8 1.0.0 governance identity.
-SERVICING_RELEASES = ("1.0.1", "1.0.2", "1.0.3")
+SERVICING_RELEASES = ("1.0.1", "1.0.2", "1.0.3", "1.0.4")
 
 def assert_true(condition: bool, message: str) -> None:
     if not condition:

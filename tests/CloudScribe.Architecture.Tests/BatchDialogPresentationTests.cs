@@ -47,7 +47,8 @@ public sealed class BatchDialogPresentationTests
     {
         var text = BatchDialogPresentation.Summary(Batch(Item(1, BatchItemState.Completed), Item(2, BatchItemState.Failed), Item(3, BatchItemState.Ready)), Profile);
         Assert.Contains("1 of 3 done · 1 failed", text, StringComparison.Ordinal);
-        Assert.Contains("not your Google bill", text, StringComparison.Ordinal);
+        Assert.Contains("not a bill", text, StringComparison.Ordinal);
+        Assert.Contains("Your Google Cloud bill is the only record of actual charges.", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -88,7 +89,7 @@ public sealed class BatchDialogPresentationTests
         string detail = BatchDialogPresentation.Detail(item, Profile);
         Assert.Contains("Long Audio", detail, StringComparison.Ordinal);
         Assert.Contains("up to about S$1.56 (US$1.20)", detail, StringComparison.Ordinal);
-        Assert.Contains("same text as file 02 (kept)", detail, StringComparison.Ordinal);
+        Assert.Contains("same text as file 02, kept as its own track", detail, StringComparison.Ordinal);
         Assert.Contains("Retry copies it again with no new request", BatchDialogPresentation.Reason("batch.local-copy-failed-speech-kept"), StringComparison.Ordinal);
     }
 

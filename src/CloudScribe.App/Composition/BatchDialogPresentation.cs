@@ -9,7 +9,7 @@ public static class BatchDialogPresentation
 {
     public const string CheckAgainGuidance = "Marks this saved job for rechecking when you resume the batch. It never repeats an uncertain request. Without a saved Google operation ID, CloudScribe cannot check that request with Google; review may still be needed.";
 
-    public static string Row(BatchItem item, BatchAuthorityProfile? profile) => Title(item) + "\n      " + Detail(item, profile);
+    public static string Row(BatchItem item, BatchAuthorityProfile? profile, string? earlierName = null) => Title(item) + "\n      " + Detail(item, profile, earlierName);
 
     public static string Title(BatchItem item)
     {
@@ -18,15 +18,18 @@ public static class BatchDialogPresentation
         return item.IsIncluded ? $"{order}  {item.SourceFileName}  →  {item.OutputFileName}" : $"{order}  {item.SourceFileName}";
     }
 
-    public static string Detail(BatchItem item, BatchAuthorityProfile? profile)
+    /// <summary>One row's detail line; <paramref name="earlierName"/> names the earlier file with identical text, when known.</summary>
+    public static string Detail(BatchItem item, BatchAuthorityProfile? profile, string? earlierName = null)
     {
         ArgumentNullException.ThrowIfNull(item);
         if (!item.IsIncluded) return "skipped: " + Exclusion(item.Exclusion);
         string engine = item.Engine is null ? string.Empty : " · " + BatchEngines.Describe(item.Engine);
         string estimate = profile is null ? string.Empty
             : " · up to " + BatchMoney.Format(item.EstimatedMaximumMinorUnits > 0 ? item.EstimatedMaximumMinorUnits : profile.EstimateMinorUnits(item.Characters), profile);
-        string same = item.SameTextAs is { } earlier ? $" · same text as file {earlier.ToString("00", CultureInfo.InvariantCulture)} (kept)" : string.Empty;
-        return $"{item.Characters.ToString("N0", CultureInfo.InvariantCulture)} characters{engine}{estimate}{same} · {State(item)}";
+        string same = item.SameTextAs is { } earlier ? $" · same text as file {earlier.ToString("00", CultureInfo.InvariantCulture)}{(earlierName is null ? string.Empty : $" ({earlierName})")}, kept as its own track" : string.Empty;
+        string earlierCharge = item.UncertainOutcomes > 0
+            ? " · an earlier request for this file may have reached Google and may be charged; check your Google bill" : string.Empty;
+        return $"{item.Characters.ToString("N0", CultureInfo.InvariantCulture)} characters{engine}{estimate}{same} · {State(item)}{earlierCharge}";
     }
 
     /// <summary>Colour role for a row: done, attention (needs checking or running), failed, waiting or muted.</summary>
@@ -99,6 +102,8 @@ public static class BatchDialogPresentation
         "batch.file-not-approved" => "not covered by the batch approval",
         "batch.output-missing-or-changed" => "the finished MP3 is missing or changed; it was not regenerated",
         "batch.import-interrupted-add-again" => "the app closed while adding it; add the file again",
+        "batch.source-changed-add-again" => "the TXT file changed after it was listed; remove it and add it again so the new text is reviewed",
+        "batch.source-missing-add-again" => "the TXT file could not be read again (moved, renamed or deleted); add it again",
         "batch.narration-failed-before-start" => "stopped before anything was sent",
         "batch.narration-failed-after-start-reconcile" => "stopped after it started; check it before retrying",
         "batch.paused" => "paused",
@@ -109,20 +114,68 @@ public static class BatchDialogPresentation
         _ => code,
     };
 
-    public static string Summary(NarrationBatch batch, BatchAuthorityProfile? profile)
+    public static string Summary(NarrationBatch batch, BatchAuthorityProfile? profile, long? approvedMinorUnits = null)
     {
         ArgumentNullException.ThrowIfNull(batch);
-        int failed = batch.Items.Count(x => x.State == BatchItemState.Failed);
-        int uncertain = batch.Items.Count(x => x.State == BatchItemState.Uncertain);
-        int excluded = batch.Items.Count(x => !x.IsIncluded);
-        string text = $"{batch.CompletedCount} of {batch.IncludedCount} done";
-        if (failed > 0) text += $" · {failed} failed";
-        if (uncertain > 0) text += $" · {uncertain} need checking";
-        if (excluded > 0) text += $" · {excluded} not included";
+        var counts = Counts(batch);
+        string text = $"{counts.Completed} of {batch.IncludedCount} done";
+        if (counts.Failed > 0) text += $" · {counts.Failed} failed";
+        if (counts.Uncertain > 0) text += $" · {counts.Uncertain} need checking";
+        if (counts.Skipped > 0) text += $" · {counts.Skipped} skipped";
+        if (counts.NotIncluded > 0) text += $" · {counts.NotIncluded} not included";
         if (profile is null) return text + ".";
+        return text + ".\n" + Money(batch, profile, approvedMinorUnits);
+    }
+
+    /// <summary>The three amounts the window shows, each labelled for what it is, none of them a bill: the estimated
+    /// maximum, the approved allowance, and holds and possible charges from requests that may have reached Google.</summary>
+    public static string Money(NarrationBatch batch, BatchAuthorityProfile profile, long? approvedMinorUnits)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+        ArgumentNullException.ThrowIfNull(profile);
         long estimate = batch.Included.Sum(x => x.EstimatedMaximumMinorUnits > 0 ? x.EstimatedMaximumMinorUnits : profile.EstimateMinorUnits(x.Characters));
-        return text + $".\nEstimated maximum for the batch: {BatchMoney.Format(estimate, profile)}. Held so far: {BatchMoney.Format(batch.ReservedMinorUnits, profile)}."
-            + "\nThese are estimates and holds, not your Google bill.";
+        var lines = new List<string>
+        {
+            $"Estimate (upper limit, not a bill): up to {BatchMoney.Format(estimate, profile)} for the batch.",
+            approvedMinorUnits is { } approved ? $"Approved allowance: up to {BatchMoney.Format(approved, profile)}." : "Approved allowance: none yet.",
+        };
+        int possible = batch.Items.Count(x => x.UncertainOutcomes > 0 || x.State == BatchItemState.Uncertain);
+        lines.Add(batch.ReservedMinorUnits > 0 || possible > 0
+            ? $"Held for files that started: {BatchMoney.Format(batch.ReservedMinorUnits, profile)}" + (possible > 0 ? $"; {possible} file(s) had a request that may have reached Google, so a charge is possible even where new audio exists." : ".")
+            : "Held for files that started: nothing yet.");
+        lines.Add("Your Google Cloud bill is the only record of actual charges.");
+        return string.Join('\n', lines);
+    }
+
+    public sealed record ResultCounts(int Completed, int Failed, int Uncertain, int Skipped, int NotIncluded, int Waiting);
+
+    public static ResultCounts Counts(NarrationBatch batch)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+        return new(batch.Items.Count(x => x.State == BatchItemState.Completed), batch.Items.Count(x => x.State == BatchItemState.Failed),
+            batch.Items.Count(x => x.State == BatchItemState.Uncertain), batch.Items.Count(x => x.State == BatchItemState.Skipped),
+            batch.Items.Count(x => x.State == BatchItemState.Excluded), batch.Items.Count(x => x.State is BatchItemState.Ready or BatchItemState.Running));
+    }
+
+    /// <summary>One line for the results area: completed, failed, skipped and needing checking, kept apart.</summary>
+    public static string Results(NarrationBatch batch)
+    {
+        var c = Counts(batch);
+        if (c.Completed + c.Failed + c.Uncertain + c.Skipped == 0) return string.Empty;
+        return $"Results: {c.Completed} MP3 done · {c.Failed} failed · {c.Uncertain} need checking · {c.Skipped} skipped by you · {c.Waiting} waiting."
+            + (c.Failed > 0 ? " A failed local copy can be retried without new speech." : string.Empty)
+            + (c.Uncertain > 0 ? " Needs checking is never resent automatically." : string.Empty);
+    }
+
+    /// <summary>The draft's summary line before it is saved.</summary>
+    public static string DraftSummary(IReadOnlyList<BatchItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (items.Count == 0) return string.Empty;
+        int included = items.Count(x => x.IsIncluded);
+        int same = items.Count(x => x.IsIncluded && x.SameTextAs is not null);
+        return $"{included} of {items.Count} files will be narrated, one MP3 each, in this order. Drag rows (or use Alt+Up / Alt+Down) to change it."
+            + (same > 0 ? $" {same} file(s) have the same text as an earlier file; each is still its own track." : string.Empty);
     }
 
     public static string Timing(NarrationBatch batch, TimeSpan currentRun)
@@ -152,7 +205,7 @@ public static class BatchDialogPresentation
 
     public static string Authority(BatchAuthorityProfile? profile)
     {
-        if (profile is null) return "Batch narration is not set up on this computer. You can prepare files now; saving or rehearsing also requires a verified voice.";
+        if (profile is null) return "Batch spending is not set up on this computer, so a paid batch cannot start yet. You can prepare files now; saving or rehearsing also requires a verified voice. Preparing, saving and rehearsing cost nothing. The batch guide explains how spending limits are set up.";
         string limits = $"limit {BatchMoney.Format(profile.PerBatchCeilingMinorUnits, profile)} per batch and {BatchMoney.Format(profile.RollingCeilingMinorUnits, profile)} per {profile.RollingWindowDays} days";
         return profile.Mode switch
         {

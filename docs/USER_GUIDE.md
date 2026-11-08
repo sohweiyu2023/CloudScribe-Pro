@@ -1,4 +1,4 @@
-# CloudScribe Pro 1.0.3: setup and everyday use
+# CloudScribe Pro 1.0.4: setup and everyday use
 
 The local usability update adds saved voice setups, remembered choices, offline request inspection and local narration-part preparation. See [Saved setups and local recovery](SAVED_SETUPS_AND_LOCAL_RECOVERY.md) for the updated workflow and persistence details.
 
@@ -59,15 +59,14 @@ Short-request approval is single-use. A new prepared short request needs fresh c
 
 ## Many TXT files at once
 
-Use **Create MP3 → Batch MP3 from TXT files…** to make one MP3 per TXT file with one voice and one approval:
-1. Add the files or a folder.
-2. Check the order and the MP3 names.
-3. Choose **Add to library and save batch**.
-4. Review each file's engine and maximum, then approve the exact batch within its installed authority.
-5. For Long Audio files, read and select the separate private-response consent. Choose **Rehearse (no cost)** to check admission, output names, tools and approval.
-6. Choose **Start**.
+Use **Create MP3 → Batch MP3 from TXT files…** to make one MP3 per TXT file with one voice and one approval. The window shows five steps and a **Next:** line:
+1. **Files:** drag TXT files or folders into the list (or use **Add TXT files…** / **Add a folder…**). Drag rows, or use Alt+Up / Alt+Down, to set the order; select several rows to move them together. **Undo** (Ctrl+Z) reverses a change. Until it is saved, the batch is an unsaved draft that is kept automatically, even if you close the window.
+2. **Voice and output:** choose the voice in the window (or **Refresh voices**) and the output folder. Names are never overwritten.
+3. **Review:** choose **Add to library and save batch**, check each file's engine and maximum, then approve the exact batch within its installed authority. For Long Audio files, read and select the separate private-response consent. **Rehearse (no cost)** checks everything and names every problem.
+4. **Run:** choose **Start**.
+5. **Results:** open the output folder or play a finished MP3; failed, skipped and needs-checking files are listed separately.
 
-Finished files are kept if a later file fails, and unknown requests are never automatically resent. The batch survives closing the app; reopen it from **Open a saved batch**. **Check again** queues a check of the same saved job when you choose **Resume**; without a saved Google operation ID, it cannot poll that request. Completed replacement audio does not settle an earlier unknown outcome or release its hold. Setup and approval details are in [BATCH_NARRATION.md](BATCH_NARRATION.md).
+Finished files are kept if a later file fails, and unknown requests are never automatically resent. The batch survives closing the app; reopen it from the batch list at the top of the window. **Check again** queues a check of the same saved job when you choose **Resume**; without a saved Google operation ID, it cannot poll that request. Completed replacement audio does not settle an earlier unknown outcome or release its hold. Setup and approval details are in [BATCH_NARRATION.md](BATCH_NARRATION.md).
 
 For support, open **Diagnostics → Export safe diagnostic history ZIP locally**. This separate action shows its contents, exclusions and local destination, supports cancellation, and uploads nothing. The existing **Export application metadata locally** action still creates metadata-only JSON. Safe ZIPs stream all captured eligible records; individual unsafe or oversized records have omission markers. Routine logs still rotate and private captures expire logically after 24 hours, so the ZIP is not an archive of everything. See [support diagnostics and retention](BATCH_NARRATION.md#support-diagnostics-and-retention).
 

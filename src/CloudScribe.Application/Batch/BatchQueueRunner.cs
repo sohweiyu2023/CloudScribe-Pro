@@ -186,6 +186,7 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
             EstimatedMaximumMinorUnits = outcome.EstimatedMaximumMinorUnits > 0 ? outcome.EstimatedMaximumMinorUnits : latest.EstimatedMaximumMinorUnits,
             ReservedMinorUnits = Math.Max(latest.ReservedMinorUnits, outcome.ReservedMinorUnits),
             ReasonCode = outcome.ReasonCode,
+            UncertainOutcomes = outcome.Kind == BatchOutcomeKind.Uncertain ? latest.UncertainOutcomes + 1 : latest.UncertainOutcomes,
         };
         return outcome.Kind switch
         {

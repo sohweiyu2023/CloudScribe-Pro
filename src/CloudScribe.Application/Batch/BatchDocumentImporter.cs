@@ -45,31 +45,78 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
         catch (ArgumentException) { return new(fileName, sha, bytes.LongLength, null, BatchExclusion.Unreadable); }
     }
 
+    /// <summary>Reads a listed file again from where it was added and returns its text only if its bytes are unchanged.
+    /// A missing path, a read failure or a changed file returns a reason instead, so different text is never narrated
+    /// under an earlier review.</summary>
+    public async Task<(string? Text, string? ReasonCode)> ReadAgainAsync(BatchItem item, long maximumBytes, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (string.IsNullOrEmpty(item.SourcePath)) return (null, "batch.import-interrupted-add-again");
+        BatchSourceFile read;
+        try
+        {
+            var stream = new FileStream(item.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using (stream.ConfigureAwait(false))
+                read = await ReadAsync(item.SourceFileName, stream, maximumBytes, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { return (null, "batch.source-missing-add-again"); }
+        if (!string.Equals(read.Sha256, item.SourceSha256, StringComparison.Ordinal)) return (null, "batch.source-changed-add-again");
+        return read.Text is null ? (null, "batch.source-missing-add-again") : (read.Text, null);
+    }
+
     /// <summary>Adds every included file that is not yet in the library. <paramref name="textByItem"/> holds the decoded
     /// text from <see cref="ReadAsync"/>; it is never written to the queue file.</summary>
-    public async Task<NarrationBatch> ImportAsync(NarrationBatch queue, IReadOnlyDictionary<Guid, string> textByItem, CancellationToken cancellationToken = default)
+    public Task<NarrationBatch> ImportAsync(NarrationBatch queue, IReadOnlyDictionary<Guid, string> textByItem, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(textByItem);
+        return ImportAsync(queue, (item, _) => Task.FromResult<(string?, string?)>(textByItem.TryGetValue(item.ItemId, out string? text)
+            ? (text, null) : (null, "batch.import-interrupted-add-again")), null, cancellationToken);
+    }
+
+    /// <summary>Adds every included file that is not yet in the library, asking <paramref name="textFor"/> for each
+    /// file's text (from memory, or read again from disk with its hash checked). Files left over by an interrupted add
+    /// are picked up again. Each document is recorded in the saved queue before the next file, so a cancelled or
+    /// interrupted add never creates a second copy. <paramref name="progress"/> reports (files done, files to add).</summary>
+    public async Task<NarrationBatch> ImportAsync(NarrationBatch queue, Func<BatchItem, CancellationToken, Task<(string? Text, string? ReasonCode)>> textFor,
+        IProgress<(int Done, int Total)>? progress, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(queue);
-        ArgumentNullException.ThrowIfNull(textByItem);
-        foreach (var item in queue.Items.Where(x => x.IsIncluded && x.DocumentId is null).OrderBy(x => x.Order).ToArray())
+        ArgumentNullException.ThrowIfNull(textFor);
+        var pending = queue.Items.Where(NeedsImport).OrderBy(x => x.Order).ToArray();
+        int done = 0;
+        progress?.Report((0, pending.Length));
+        foreach (var item in pending)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!textByItem.TryGetValue(item.ItemId, out string? text))
+            var (text, reason) = await textFor(item, cancellationToken).ConfigureAwait(false);
+            if (text is null)
             {
-                // The app closed before this file was added; its text is no longer in memory.
-                queue = await store.SaveAsync(queue.WithItem(item with { State = BatchItemState.Failed, ReasonCode = "batch.import-interrupted-add-again" }),
-                    cancellationToken).ConfigureAwait(false);
+                queue = await store.SaveAsync(queue.WithItem(item with { State = BatchItemState.Failed, ReasonCode = reason ?? "batch.import-interrupted-add-again" }),
+                    CancellationToken.None).ConfigureAwait(false);
+                progress?.Report((++done, pending.Length));
                 continue;
             }
             var preview = preprocessor.Preview(text, new(NormalizeLineEndings: true, CollapseHorizontalWhitespace: false,
                 CollapseExcessBlankLines: false, SimplifyUrls: false));
             string title = BatchPlanner.TitleOf(item.SourceFileName);
-            var created = await library.CreateAsync(title, preview.OutputText, cancellationToken).ConfigureAwait(false);
+            var created = await library.CreateAsync(title, preview.OutputText, CancellationToken.None).ConfigureAwait(false);
             var saved = await library.SaveAsync(new(created.Id, created.Title, preview.OutputText, created.ConcurrencyVersion,
                 DocumentRevisionKind.Import, "Imported source (batch)", "batch:" + item.SourceSha256), CancellationToken.None).ConfigureAwait(false);
-            queue = await store.SaveAsync(queue.WithItem(item with { DocumentId = saved.Id, RevisionId = saved.CurrentRevisionId }),
+            queue = await store.SaveAsync(queue.WithItem(item with { State = BatchItemState.Ready, ReasonCode = null, DocumentId = saved.Id, RevisionId = saved.CurrentRevisionId }),
                 CancellationToken.None).ConfigureAwait(false);
+            progress?.Report((++done, pending.Length));
         }
         return queue;
+    }
+
+    /// <summary>True for a file that still has to be added to the library: waiting without a document, or left failed
+    /// by an interrupted or refused add (and never started).</summary>
+    public static bool NeedsImport(BatchItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (item.DocumentId is not null || item.JobId is not null) return false;
+        return item.State == BatchItemState.Ready
+            || item.State == BatchItemState.Failed && item.ReasonCode is "batch.import-interrupted-add-again" or "batch.source-changed-add-again" or "batch.source-missing-add-again";
     }
 }
