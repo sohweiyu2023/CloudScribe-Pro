@@ -182,7 +182,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             session.Profile = await session.Gate.LoadProfileAsync().ConfigureAwait(true);
             var dialog = CreateArticleExportDialog();
             dialog.Title = "Batch MP3 from TXT files"; dialog.Width = 960; dialog.Height = 820; dialog.MinWidth = 560; dialog.MinHeight = 480;
-            var ctx = new BatchContext { Dialog = dialog, Model = model, Session = session, Importer = new BatchDocumentImporter(documentImporter, documentPreprocessor, documentLibrary, store) };
+            var ctx = new BatchContext { Dialog = dialog, Model = model, Session = session, Importer = new BatchDocumentImporter(documentImporter, documentPreprocessor, documentLibrary, store, catalogLogger) };
             BuildBatchLayout(ctx);
             WireBatchHandlers(ctx);
             WireBatchRows(ctx);
@@ -361,7 +361,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         catch (Exception error) when (BatchDiagnostics.NonFatal(error))
         {
             BatchDiagnostics.Failure(catalogLogger, session.Batch?.BatchId, itemId, operation, error);
-            ctx.Status.Text = "That did not complete: " + AudioOutputPresentation.RecoveryAdvice(error) + " Nothing was sent to Google.";
+            if (session.IsDraft) ctx.CloseWhenIdle = false;
+            ctx.Status.Text = "That did not complete: " + AudioOutputPresentation.RecoveryAdvice(error) + " Nothing was sent to Google."
+                + (session.IsDraft ? " The draft is still in this window but may not be saved to disk. Keep this window open and try saving again." : string.Empty);
         }
         finally
         {

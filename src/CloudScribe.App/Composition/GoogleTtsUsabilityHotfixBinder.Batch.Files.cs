@@ -177,9 +177,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
         catch (Exception error) when (BatchDiagnostics.NonFatal(error))
         {
-            // The arrangement is still on screen; only the crash-safe copy is missing. Say so instead of failing the action.
+            // Keep the in-memory arrangement, but fail the action so callers cannot overwrite the warning with success.
             BatchDiagnostics.Failure(catalogLogger, null, null, BatchDiagnosticOperation.SaveDraft, error);
-            ctx.Status.Text = "The draft could not be saved to disk (" + AudioOutputPresentation.RecoveryAdvice(error) + "). Keep this window open, or save the batch.";
+            throw;
         }
     }
 

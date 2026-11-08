@@ -60,11 +60,15 @@ Short-request approval is single-use. A new prepared short request needs fresh c
 ## Many TXT files at once
 
 Use **Create MP3 → Batch MP3 from TXT files…** to make one MP3 per TXT file with one voice and one approval. The window shows five steps and a **Next:** line:
-1. **Files:** drag TXT files or folders into the list (or use **Add TXT files…** / **Add a folder…**). Drag rows, or use Alt+Up / Alt+Down, to set the order; select several rows to move them together. **Undo** (Ctrl+Z) reverses a change. Until it is saved, the batch is an unsaved draft that is kept automatically, even if you close the window.
+1. **Files:** drag TXT files or folders into the list (or use **Add TXT files…** / **Add a folder…**). Drag rows, or use Alt+Up / Alt+Down, to set the order; select several rows to move them together. **Undo** (Ctrl+Z) reverses a change. Until you choose **Add to library and save batch**, the list is an unsaved draft that is autosaved locally. Successfully autosaved drafts return after reopening; check the status line for any save error.
 2. **Voice and output:** choose the voice in the window (or **Refresh voices**) and the output folder. Names are never overwritten.
 3. **Review:** choose **Add to library and save batch**, check each file's engine and maximum, then approve the exact batch within its installed authority. For Long Audio files, read and select the separate private-response consent. **Rehearse (no cost)** checks everything and names every problem.
 4. **Run:** choose **Start**.
 5. **Results:** open the output folder or play a finished MP3; failed, skipped and needs-checking files are listed separately.
+
+Saving a draft rereads the current TXT files: changed text is refreshed before review, and missing or unusable files block saving. Resuming an interrupted saved import instead checks the original saved SHA-256 hash and refuses changed bytes. A file that failed before library import can be removed and added again while additions are allowed; its saved history remains, and the added file needs fresh review and approval. See [batch file recovery](BATCH_NARRATION.md#using-it).
+
+When no batch action is in progress, you can add files to a ready or paused batch with fresh review and approval, and move or remove waiting files that have no saved job. These actions remain available after earlier files have started; moving or removing waiting files keeps the approval for the remaining unchanged requests. The output folder cannot change after the first file starts.
 
 Finished files are kept if a later file fails, and unknown requests are never automatically resent. The batch survives closing the app; reopen it from the batch list at the top of the window. **Check again** queues a check of the same saved job when you choose **Resume**; without a saved Google operation ID, it cannot poll that request. Completed replacement audio does not settle an earlier unknown outcome or release its hold. Setup and approval details are in [BATCH_NARRATION.md](BATCH_NARRATION.md).
 

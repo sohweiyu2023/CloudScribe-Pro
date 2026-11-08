@@ -7,6 +7,9 @@ All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in
 Batch window usability and safety follow-up. No change to spending rules, caps, approvals or provider requests.
 
 ### Windows review fixes
+- Draft autosave failures keep a clear warning instead of being replaced by a success message. The window stays open, and Undo remains available for the in-memory edit so files can be restored before retrying the save.
+- Source checks now record fixed diagnostic outcomes for fresh, changed, missing or refused sources and completed imports. Safe history and support exports retain these events without file names, paths or text; logging failures remain advisory.
+- The user and batch guides now match subfolder import, keyboard Undo, source recovery and the exact editing and approval rules.
 - Keyboard Undo stays reachable after removing selected rows, including the last row. Folder-recursion and track-number checkboxes have explicit screen-reader names.
 - Draft Undo now preserves the previous arrangement instead of retaining the mutable current list.
 - Saving rereads local TXT files even when text is cached; changed files use their current text and missing files block saving. Resuming a saved import always checks its pinned source hash.
@@ -21,10 +24,10 @@ Batch window usability and safety follow-up. No change to spending rules, caps, 
 - **Fixed:** track-number width counted excluded files (100 files with 5 unusable could give three-digit numbers).
 
 ### Drafts, voices and saved batches
-- **Unsaved drafts are kept automatically** (`batches\draft.json`: names, paths, sizes and hashes, never text). Closing the window, switching to a saved batch, a missing voice or a crash no longer loses the list. **Discard draft** is undoable while the window is open.
+- **Drafts are autosaved** (`batches\draft.json`: names, paths, sizes and hashes, never text). Successfully saved drafts return after closing the window, switching to a saved batch, a missing voice or a crash. Check the status line for save errors and keep the window open until saving succeeds. **Discard draft** is undoable while the window is open.
 - **Fixed the missing-voice dead end:** the voice is chosen inside the batch window (with **Refresh voices**), and the draft waits if Google is not connected yet. Saved batches offer **Use this batch's voice**.
 - Saving reads every file again: a missing file is named and nothing is saved; a file changed since listing is taken as it is now and reported.
-- **Saved, not-yet-started batches are editable:** add files, move or remove waiting files, and change the output folder until the first file starts. Additions need a new review and approval; moves and removals keep the approval.
+- **Idle saved batches are editable:** add files in Ready or Paused batches, and move or remove waiting files that have no started job, including after earlier files have started. The output folder can change only before any file starts. Additions and changed request content need a new review and approval; moves and removals keep approval for unchanged remaining requests.
 - **Interrupted or cancelled adds resume** when the batch is reopened, by reading the files again with their SHA-256 checked. A changed file is refused instead of being narrated with different text. Files are never added to the library twice.
 
 ### Guidance, rehearsal and results

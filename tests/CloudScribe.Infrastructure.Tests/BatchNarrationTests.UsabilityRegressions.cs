@@ -8,6 +8,39 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed partial class BatchNarrationTests
 {
     [Theory]
+    [InlineData(null, "ImportInterrupted")]
+    [InlineData("batch.import-interrupted-add-again", "ImportInterrupted")]
+    [InlineData("PRIVATE_UNREVIEWED_SOURCE_REASON", "ImportRefused")]
+    public async Task ImportRefusalLogsOnlyFixedOutcome(string? reason, string outcome)
+    {
+        using var w = new Workspace();
+        var batch = await w.CreateAsync(["PRIVATE_SOURCE.txt"]);
+        batch = await w.Store.SaveAsync(batch with { Items = batch.Items.Select(x => x with { DocumentId = null, RevisionId = null }).ToArray() }, Token);
+        var log = new ListLogger();
+        var library = new MemoryLibrary();
+        var importer = new BatchDocumentImporter(new BoundedLocalDocumentImporter(), new DocumentPreprocessor(), library, w.Store, log);
+        await importer.ImportAsync(batch, (_, _) => Task.FromResult<(string?, string?)>((null, reason)), null, Token);
+        Assert.Empty(library.Created);
+        Assert.Contains(log.Messages, message => message.Contains("source outcome " + outcome, StringComparison.Ordinal));
+        Assert.DoesNotContain(log.Messages, message => message.Contains("PRIVATE_", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SourceLoggingFailureDoesNotPreventDurableImport(bool failAtEnabledCheck)
+    {
+        using var w = new Workspace();
+        var batch = await w.CreateAsync(["synthetic.txt"]);
+        batch = await w.Store.SaveAsync(batch with { Items = batch.Items.Select(x => x with { DocumentId = null, RevisionId = null }).ToArray() }, Token);
+        var library = new MemoryLibrary();
+        var importer = new BatchDocumentImporter(new BoundedLocalDocumentImporter(), new DocumentPreprocessor(), library, w.Store, new ThrowingBatchLogger(failAtEnabledCheck));
+        var saved = await importer.ImportAsync(batch, (_, _) => Task.FromResult<(string?, string?)>(("synthetic text", null)), null, Token);
+        Assert.NotNull(saved.Items[0].DocumentId);
+        Assert.Single(library.Created);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void DraftUndoSnapshotSurvivesReplacingTheMutableList(bool remove)
@@ -54,7 +87,8 @@ public sealed partial class BatchNarrationTests
     {
         using var w = new Workspace();
         var library = new MemoryLibrary();
-        var importer = new BatchDocumentImporter(new BoundedLocalDocumentImporter(), new DocumentPreprocessor(), library, w.Store);
+        var log = new ListLogger();
+        var importer = new BatchDocumentImporter(new BoundedLocalDocumentImporter(), new DocumentPreprocessor(), library, w.Store, log);
         string path = Path.Combine(w.Root, "draft.txt");
         await File.WriteAllTextAsync(path, "old text", Token);
         BatchSourceFile original;
@@ -75,6 +109,11 @@ public sealed partial class BatchNarrationTests
         var memory = await importer.ReadDraftSourceAsync(item with { SourcePath = null }, cached, 1 << 20, Token);
         Assert.Equal("old text", memory.Text);
         Assert.Equal(item.SourceSha256, memory.Sha256);
+        Assert.Contains(log.Messages, message => message.Contains("DraftSourceRefreshed", StringComparison.Ordinal));
+        Assert.Contains(log.Messages, message => message.Contains("SourceUnavailable", StringComparison.Ordinal));
+        Assert.Contains(log.Messages, message => message.Contains("DraftSourceReady", StringComparison.Ordinal));
+        Assert.DoesNotContain(log.Messages, message => message.Contains(path, StringComparison.Ordinal) || message.Contains("draft.txt", StringComparison.Ordinal)
+            || message.Contains("current text", StringComparison.Ordinal) || message.Contains("old text", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -82,7 +121,8 @@ public sealed partial class BatchNarrationTests
     {
         using var w = new Workspace();
         var library = new MemoryLibrary();
-        var importer = new BatchDocumentImporter(new BoundedLocalDocumentImporter(), new DocumentPreprocessor(), library, w.Store);
+        var log = new ListLogger();
+        var importer = new BatchDocumentImporter(new BoundedLocalDocumentImporter(), new DocumentPreprocessor(), library, w.Store, log);
         string path = Path.Combine(w.Root, "pending.txt");
         await File.WriteAllTextAsync(path, "original", Token);
         BatchSourceFile original;
@@ -97,6 +137,7 @@ public sealed partial class BatchNarrationTests
         Assert.Equal(item.SourceSha256, resumed.Items[0].SourceSha256);
         Assert.Equal("batch.source-changed-add-again", resumed.Items[0].ReasonCode);
         File.Delete(path);
+        resumed = await importer.ImportAsync(resumed, (x, t) => importer.ReadPendingAsync(x, cached, 1 << 20, t), null, Token);
         Assert.Equal((null, "batch.source-missing-add-again"), await importer.ReadPendingAsync(item, cached, 1 << 20, Token));
         Assert.Equal(("original", (string?)null), await importer.ReadPendingAsync(item with { SourcePath = null }, cached, 1 << 20, Token));
         Assert.Equal((null, "batch.import-interrupted-add-again"), await importer.ReadPendingAsync(item with { SourcePath = null }, new Dictionary<Guid, string>(), 1 << 20, Token));
@@ -105,5 +146,12 @@ public sealed partial class BatchNarrationTests
         Assert.Single(library.Created);
         Assert.Equal(BatchItemState.Ready, finished.Items[0].State);
         Assert.NotNull(finished.Items[0].DocumentId);
+        Assert.Contains(log.Messages, message => message.Contains("SourceChanged", StringComparison.Ordinal));
+        Assert.Contains(log.Messages, message => message.Contains("SourceUnavailable", StringComparison.Ordinal));
+        Assert.Single(log.Messages, message => message.Contains("source outcome Imported.", StringComparison.Ordinal));
+        await importer.ImportAsync(finished, (x, t) => importer.ReadPendingAsync(x, cached, 1 << 20, t), null, Token);
+        Assert.Single(log.Messages, message => message.Contains("source outcome Imported.", StringComparison.Ordinal));
+        Assert.DoesNotContain(log.Messages, message => message.Contains(path, StringComparison.Ordinal) || message.Contains("pending.txt", StringComparison.Ordinal)
+            || message.Contains("original", StringComparison.Ordinal) || message.Contains("changed", StringComparison.Ordinal));
     }
 }

@@ -4,6 +4,27 @@ namespace CloudScribe.Architecture.Tests;
 public sealed class BatchBinderRegressionTests
 {
     [Fact]
+    public void DraftSaveFailureEscapesBeforeCallersCanClaimSuccess()
+    {
+        string source = BinderSource("Files");
+        int start = source.IndexOf("private async Task SaveDraftAsync", StringComparison.Ordinal);
+        int end = source.IndexOf("private async Task RestoreDraftAsync", start, StringComparison.Ordinal);
+        string save = source[start..end];
+        Assert.Contains("BatchDiagnosticOperation.SaveDraft, error);", save, StringComparison.Ordinal);
+        Assert.Contains("throw;", save, StringComparison.Ordinal);
+        Assert.DoesNotContain("ctx.Status.Text =", save, StringComparison.Ordinal);
+        Assert.Contains("may not be saved to disk. Keep this window open", BinderSource(null), StringComparison.Ordinal);
+        Assert.Contains("if (session.IsDraft) ctx.CloseWhenIdle = false;", BinderSource(null), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SourceDiagnosticsAreWiredAndKeyboardDeleteUsesRemoveOperation()
+    {
+        Assert.Contains("documentLibrary, store, catalogLogger)", BinderSource(null), StringComparison.Ordinal);
+        Assert.Contains("e.Key == Key.Delete ? BatchDiagnosticOperation.Remove", BinderSource("Rows"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ArrangementCapturesSnapshotBeforeSavingAndRowsIncludeIdentity()
     {
         string source = BinderSource("Rows");

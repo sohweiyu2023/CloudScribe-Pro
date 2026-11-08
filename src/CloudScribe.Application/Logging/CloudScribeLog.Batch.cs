@@ -6,6 +6,9 @@ namespace CloudScribe.Application.Logging;
 // Batch events carry identifiers, counts, timings, amounts and fixed codes only: never file names, titles, text or paths.
 public static partial class CloudScribeLog
 {
+    [LoggerMessage(EventId = 1651, Level = LogLevel.Information, Message = "Batch {BatchId} item {ItemId} source outcome {SourceOutcome}. Local validation/import only; no provider request or approval implied.")]
+    public static partial void BatchSource(ILogger logger, Guid? batchId, Guid itemId, BatchSourceOutcome sourceOutcome);
+
     [LoggerMessage(EventId = 1640, Level = LogLevel.Information, Message = "Batch {BatchId} created with {Included} included files ({Excluded} excluded).")]
     public static partial void BatchCreated(ILogger logger, Guid batchId, int included, int excluded);
 

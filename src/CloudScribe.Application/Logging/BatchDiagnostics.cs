@@ -8,6 +8,11 @@ namespace CloudScribe.Application.Logging;
 /// <summary>Advisory, content-free batch observations. Never inspect exception messages, paths or arbitrary type names.</summary>
 public static class BatchDiagnostics
 {
+    public static void Source(ILogger? logger, Guid? batchId, Guid itemId, BatchSourceOutcome outcome)
+    {
+        if (logger is not null) CloudScribeLog.Observe(() => CloudScribeLog.BatchSource(logger, batchId, itemId, outcome));
+    }
+
     public static bool NonFatal(Exception error) => error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException;
 
     public static void Failure(ILogger? logger, Guid? batchId, Guid? itemId, BatchDiagnosticOperation operation, Exception error)

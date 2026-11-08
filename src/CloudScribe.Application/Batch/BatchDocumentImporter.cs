@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using CloudScribe.Application.Documents;
+using CloudScribe.Application.Logging;
 using CloudScribe.Domain.Documents;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Application.Batch;
 
@@ -9,7 +11,7 @@ namespace CloudScribe.Application.Batch;
 /// Each created document is recorded in the saved queue before the next file, so an interrupted import never
 /// creates a second copy of a document that was already added.</summary>
 public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, DocumentPreprocessor preprocessor,
-    IDocumentLibrary library, IBatchQueueStore store)
+    IDocumentLibrary library, IBatchQueueStore store, ILogger? logger = null)
 {
     /// <summary>Decodes one selected file without adding anything to the library.</summary>
     public async Task<BatchSourceFile> ReadAsync(string fileName, Stream content, long maximumBytes, CancellationToken cancellationToken = default)
@@ -82,6 +84,16 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
     public async Task<BatchSourceFile> ReadDraftSourceAsync(BatchItem item, IReadOnlyDictionary<Guid, string> cachedText,
         long maximumBytes, CancellationToken cancellationToken = default)
     {
+        var source = await ReadDraftSourceCoreAsync(item, cachedText, maximumBytes, cancellationToken).ConfigureAwait(false);
+        var outcome = string.IsNullOrWhiteSpace(source.Text) ? BatchSourceOutcome.SourceUnavailable
+            : string.Equals(source.Sha256, item.SourceSha256, StringComparison.Ordinal) ? BatchSourceOutcome.DraftSourceReady : BatchSourceOutcome.DraftSourceRefreshed;
+        BatchDiagnostics.Source(logger, null, item.ItemId, outcome);
+        return source;
+    }
+
+    private async Task<BatchSourceFile> ReadDraftSourceCoreAsync(BatchItem item, IReadOnlyDictionary<Guid, string> cachedText,
+        long maximumBytes, CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(cachedText);
         if (string.IsNullOrEmpty(item.SourcePath))
@@ -126,6 +138,13 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
             {
                 queue = await store.SaveAsync(queue.WithItem(item with { State = BatchItemState.Failed, ReasonCode = reason ?? "batch.import-interrupted-add-again" }),
                     CancellationToken.None).ConfigureAwait(false);
+                BatchDiagnostics.Source(logger, queue.BatchId, item.ItemId, reason switch
+                {
+                    "batch.source-changed-add-again" => BatchSourceOutcome.SourceChanged,
+                    "batch.source-missing-add-again" => BatchSourceOutcome.SourceUnavailable,
+                    null or "batch.import-interrupted-add-again" => BatchSourceOutcome.ImportInterrupted,
+                    _ => BatchSourceOutcome.ImportRefused,
+                });
                 progress?.Report((++done, pending.Length));
                 continue;
             }
@@ -137,6 +156,7 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
                 DocumentRevisionKind.Import, "Imported source (batch)", "batch:" + item.SourceSha256), CancellationToken.None).ConfigureAwait(false);
             queue = await store.SaveAsync(queue.WithItem(item with { State = BatchItemState.Ready, ReasonCode = null, DocumentId = saved.Id, RevisionId = saved.CurrentRevisionId }),
                 CancellationToken.None).ConfigureAwait(false);
+            BatchDiagnostics.Source(logger, queue.BatchId, item.ItemId, BatchSourceOutcome.Imported);
             progress?.Report((++done, pending.Length));
         }
         return queue;

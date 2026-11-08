@@ -8,6 +8,39 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed partial class BatchLoggingTests
 {
     [Fact]
+    public void SourceOutcomesSurviveBothSinksAndExportWithoutUnreviewedValues()
+    {
+        using var fixture = new LoggingFixture();
+        string path;
+        Guid batch = Guid.NewGuid(), item = Guid.NewGuid();
+        using (var ordinary = new BoundedJsonFileLoggerProvider(fixture.Paths, fixture.Options, TimeProvider.System))
+        using (var history = new GoogleTrendHistoryLoggerProvider(fixture.Paths, TimeProvider.System))
+        using (var factory = LoggerFactory.Create(builder => builder.AddProvider(ordinary).AddProvider(history)))
+        {
+            path = ordinary.CurrentLogPath;
+            var logger = factory.CreateLogger("PRIVATE_SOURCE_PATH_TEXT_CREDENTIAL");
+            foreach (var outcome in Enum.GetValues<BatchSourceOutcome>()) BatchDiagnostics.Source(logger, batch, item, outcome);
+            BatchDiagnostics.Source(logger, null, item, (BatchSourceOutcome)int.MaxValue);
+        }
+        string text = File.ReadAllText(path), retained = ReadHistory(fixture.History), exported = Export(text);
+        Assert.DoesNotContain("PRIVATE_SOURCE", text + retained + exported, StringComparison.Ordinal);
+        foreach (var rows in new[] { Rows(text), Rows(exported), Rows(retained).Where(x => string.Equals(x.GetProperty("Kind").GetString(), "Event", StringComparison.Ordinal)).ToArray() })
+        {
+            Assert.Equal(Enum.GetValues<BatchSourceOutcome>().Length + 1, rows.Length);
+            Assert.All(rows, row => Assert.Equal(1651, row.GetProperty("EventId").GetInt32()));
+            foreach (var row in rows[..^1])
+            {
+                Assert.True(row.GetProperty("FieldsComplete").GetBoolean());
+                Assert.Equal(item, row.GetProperty("SafeFields").GetProperty("ItemId").GetGuid());
+                Assert.Equal(batch, row.GetProperty("SafeFields").GetProperty("BatchId").GetGuid());
+            }
+            Assert.Equal(Enum.GetNames<BatchSourceOutcome>(), rows[..^1].Select(row => row.GetProperty("SafeFields").GetProperty("SourceOutcome").GetString()), StringComparer.Ordinal);
+            Assert.False(rows[^1].GetProperty("FieldsComplete").GetBoolean());
+            Assert.False(rows[^1].GetProperty("SafeFields").TryGetProperty("SourceOutcome", out _));
+        }
+    }
+
+    [Fact]
     public void FailureStoreActionAndCurrencyMetadataSurviveBothSinksWithoutPrivateText()
     {
         using var fixture = new LoggingFixture();

@@ -126,8 +126,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         var changed = change(before, ids);
         if (ReferenceEquals(changed, before) || changed.Select(x => (x.ItemId, x.State)).SequenceEqual(before.Select(x => (x.ItemId, x.State))))
         { ctx.Status.Text = "Nothing to change: only files that have not started can be moved or removed, and they are already there."; return; }
-        await SaveArrangementAsync(ctx, changed).ConfigureAwait(true);
-        PushBatchUndo(session, before, what);
+        await SaveArrangementAsync(ctx, changed, () => PushBatchUndo(session, before, what)).ConfigureAwait(true);
+        if (!session.IsDraft) PushBatchUndo(session, before, what);
         BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, null, string.Equals(what, "Removed", StringComparison.Ordinal) ? BatchDiagnosticOperation.Remove : BatchDiagnosticOperation.Reorder, BatchDiagnosticPhase.Returned);
         SelectBatchItems(ctx, ids);
         int count = ids.Length;
@@ -135,7 +135,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             + (session.Batch is not null && string.Equals(what, "Removed", StringComparison.Ordinal) ? " A changed batch is reviewed again before it starts." : string.Empty);
     }
 
-    private async Task SaveArrangementAsync(BatchContext ctx, IReadOnlyList<BatchItem> changed)
+    private async Task SaveArrangementAsync(BatchContext ctx, IReadOnlyList<BatchItem> changed, Action? draftApplied = null)
     {
         var session = ctx.Session;
         var renamed = BatchPlanner.AssignOutputNames(changed, t => t + ".mp3", n => BatchOutputExists(session, n), session.Numbered);
@@ -147,6 +147,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         else
         {
             ReplaceDraft(session, renamed);
+            // In-memory edits remain applied if autosave fails, so their undo snapshot must remain too.
+            draftApplied?.Invoke();
             await SaveDraftAsync(ctx).ConfigureAwait(true);
         }
     }
@@ -188,7 +190,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             };
             if (action is null) return;
             e.Handled = true;
-            _ = GuardBatchAsync(ctx, e.Key == Key.Z ? BatchDiagnosticOperation.Undo : BatchDiagnosticOperation.Reorder, action);
+            _ = GuardBatchAsync(ctx, e.Key == Key.Z ? BatchDiagnosticOperation.Undo : e.Key == Key.Delete ? BatchDiagnosticOperation.Remove : BatchDiagnosticOperation.Reorder, action);
         }, RoutingStrategies.Tunnel);
 
         // Dragging rows: press, move past a few pixels, and an insertion line shows where the files will land.
