@@ -71,7 +71,14 @@ try {
     $exeMember.path = 'app/CloudScribe.exe'
     $runtimeMember = New-FixtureFile (Join-Path $app 'runtime/coreclr.dll') 'inert runtime fixture, never loaded'
     $runtimeMember.path = 'runtime/coreclr.dll'
-    Write-EvidenceJson $packagePath @{ schema_version = 1; candidate_commit = $commit; files = @($exeMember, $runtimeMember) }
+    $packageMembers = @($exeMember, $runtimeMember)
+    foreach ($relative in @('app/CloudScribe.dll', 'app/CloudScribe.Infrastructure.dll', 'runtime/hostfxr.dll', 'runtime/hostpolicy.dll')) {
+        $member = New-FixtureFile (Join-Path $app $relative) ('inert critical fixture ' + $relative)
+        $member.path = $relative
+        $packageMembers += $member
+    }
+    Write-EvidenceJson $packagePath @{ schema_version = 1; candidate_commit = $commit
+        files = $packageMembers; required_loaded_modules = @($packageMembers | ForEach-Object path) }
     $fixturePath = Join-Path $root 'fixture.json'
     $source = New-FixtureFile (Join-Path $fixtures 'source.txt') 'Synthetic source, no private text.'
     $source.kind = 'source'
@@ -102,17 +109,36 @@ try {
 function Get-Process {
     $exe = Join-Path $config.CandidateDirectory 'app/CloudScribe.exe'
     $runtime = Join-Path $config.CandidateDirectory 'runtime/coreclr.dll'
+    $hostfxr = Join-Path $config.CandidateDirectory 'runtime/hostfxr.dll'
+    $hostpolicy = Join-Path $config.CandidateDirectory 'runtime/hostpolicy.dll'
+    $assembly = Join-Path $config.CandidateDirectory 'app/CloudScribe.dll'
+    $infrastructure = Join-Path $config.CandidateDirectory 'app/CloudScribe.Infrastructure.dll'
     $version = [pscustomobject]@{ FileVersion = 'synthetic-test-runtime' }
     $modules = @(
         [pscustomobject]@{ FileName = $exe; ModuleName = 'CloudScribe.exe'; FileVersionInfo = $version },
-        [pscustomobject]@{ FileName = $runtime; ModuleName = 'coreclr.dll'; FileVersionInfo = $version }
+        [pscustomobject]@{ FileName = $runtime; ModuleName = 'coreclr.dll'; FileVersionInfo = $version },
+        [pscustomobject]@{ FileName = $hostfxr; ModuleName = 'hostfxr.dll'; FileVersionInfo = $version },
+        [pscustomobject]@{ FileName = $hostpolicy; ModuleName = 'hostpolicy.dll'; FileVersionInfo = $version },
+        [pscustomobject]@{ FileName = $assembly; ModuleName = 'CloudScribe.dll'; FileVersionInfo = $version },
+        [pscustomobject]@{ FileName = $infrastructure; ModuleName = 'CloudScribe.Infrastructure.dll'; FileVersionInfo = $version }
     )
     return [pscustomobject]@{ MainModule = $modules[0]; Modules = $modules; HasExited = $false }
 };
 '@
     $processResult = Invoke-TestNative $processConfig 'process-sibling-child' $mockModules
     Assert-True (($processResult.report.cases | Where-Object case_id -EQ 'loaded-modules').status -eq 'PASS') 'Pinned app/runtime sibling layout supports loaded module evidence'
-    Assert-True ($processResult.report.module_hashes.Count -eq 2) 'Observed executable and runtime hashes retained'
+    Assert-True ($processResult.report.module_hashes.Count -eq 6) 'Observed executable and runtime hashes retained'
+    $missingMock = $mockModules.Replace('return [pscustomobject]@{ MainModule = $modules[0]; Modules = $modules;', 'return [pscustomobject]@{ MainModule = $modules[0]; Modules = @($modules | Where-Object ModuleName -NE "CloudScribe.Infrastructure.dll");')
+    $processConfig.OutputDirectory = Join-Path $root 'process-missing-critical'
+    $missing = Invoke-TestNative $processConfig 'process-missing-critical-child' $missingMock
+    Assert-True ((($missing.report.cases | Where-Object case_id -EQ 'loaded-modules').status -eq 'BLOCKED' -and ($missing.report.cases | Where-Object case_id -EQ 'loaded-modules').reason -like 'Required loaded modules not observed:*CloudScribe.Infrastructure.dll*')) 'Missing critical managed module cannot pass'
+    foreach ($hostName in @('hostfxr.dll', 'hostpolicy.dll')) {
+        New-FixtureFile (Join-Path $protected $hostName) ('outside ' + $hostName) | Out-Null
+        $outsideHostMock = $mockModules.Replace(("Join-Path "+'$config.CandidateDirectory'+" 'runtime/$hostName'"), ("Join-Path ("+'$config.ProtectedRoots[0]'+") '$hostName'"))
+        $processConfig.OutputDirectory = Join-Path $root ("process-outside-" + $hostName.Replace('.', '-'))
+        $outsideHost = Invoke-TestNative $processConfig ("outside-" + $hostName.Replace('.', '-') + '-child') $outsideHostMock
+        Assert-True ((($outsideHost.report.cases | Where-Object case_id -EQ 'loaded-modules').status -eq 'BLOCKED' -and ($outsideHost.report.cases | Where-Object case_id -EQ 'loaded-modules').reason -like 'Critical app/runtime module is outside*')) "Outside $hostName never passes"
+    }
     New-FixtureFile (Join-Path $protected 'coreclr.dll') 'outside runtime fixture' | Out-Null
     $outsideMock = $mockModules.Replace("Join-Path "+'$config.CandidateDirectory'+" 'runtime/coreclr.dll'", "Join-Path ("+'$config.ProtectedRoots[0]'+") 'coreclr.dll'")
     $processConfig.OutputDirectory = Join-Path $root 'process-outside-runtime'
@@ -192,6 +218,18 @@ function Get-Process {
         $config.OutputDirectory = Join-Path $root 'media-corrupt'
         $corrupt = Invoke-TestNative $config 'media-corrupt-child'
         Assert-True ($corrupt.code -eq 1 -and ($corrupt.report.cases | Where-Object case_id -EQ 'audio-1').status -eq 'FAIL') 'Corrupt declared audio is FAIL, not a playable-output pass'
+        [IO.File]::WriteAllText($audioPath, "#EXTM3U" + [Environment]::NewLine + "#EXTINF:1," + [Environment]::NewLine + "file:///this-fixture-must-not-be-followed.mp3")
+        $audioMember.bytes = (Get-Item $audioPath).Length
+        $audioMember.sha256 = (Get-FileHash -LiteralPath $audioPath).Hash
+        Write-EvidenceJson $fixturePath @{ schema_version = 1; files = @($source, $audioMember) }
+        $config.FixtureManifestSha256 = (Get-FileHash $fixturePath).Hash
+        $marker.fixture_manifest_sha256 = $config.FixtureManifestSha256
+        Write-EvidenceJson $markerPath $marker
+        $config.OutputDirectory = Join-Path $root 'media-playlist'
+        $playlist = Invoke-TestNative $config 'media-playlist-child'
+        Assert-True ($playlist.code -eq 1 -and ($playlist.report.cases | Where-Object case_id -EQ 'audio-1').status -eq 'FAIL') 'External-reference playlist is rejected as MP3, not autodetected'
+        $nativeSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Invoke-NativeAcceptanceEvidence.ps1') -Raw
+        Assert-True ([regex]::Matches($nativeSource, "'-protocol_whitelist', 'file', '-f', 'mp3'").Count -eq 2) 'Both probe and decoder explicitly force MP3 and file-only protocols'
     } else {
         $skips += 'ffmpeg/ffprobe unavailable: actual local MP3 success/error checks NOT RUN; no tools installed.'
     }

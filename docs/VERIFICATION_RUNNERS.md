@@ -75,12 +75,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Runner self-tests failed.' }
 
 Optional -DotnetPath and -PythonPath select explicit executables. This suite
 uses inert synthetic app bytes, mocks process discovery in child processes,
-tests real file locks/junction rejection when supported, synthetic loaded modules
+tests real file locks/junction rejection when supported, critical loaded-module gaps
 in the app/runtime sibling layout, read-only shortcuts and environment restoration,
 and invokes only the
 developer runner's plan. It cannot recurse into the full suite. Already present
 ffmpeg/ffprobe enable actual decoding of a locally generated half-second tone
-and corrupt/missing-tool cases; otherwise that scope is explicitly SKIPPED.
+and corrupt/playlist/missing-tool cases; otherwise that scope is explicitly SKIPPED.
 Synthetic fixtures and evidence remain in a unique temporary directory.
 
 ## Read-only native evidence lane
@@ -100,7 +100,10 @@ Prepare and inspect these inputs first:
   -ExecutableRelativePath for another supported package layout. Include all
   runtime/app modules needed for the
   intended Process check. Commit provenance is asserted by the build owner,
-  not inferred from binary bytes.
+  not inferred from binary bytes. For Process, also provide required_loaded_modules:
+  an array of pinned relative paths identifying exactly one each of CloudScribe.exe,
+  CloudScribe.dll, CloudScribe.Infrastructure.dll, coreclr.dll, hostfxr.dll and
+  hostpolicy.dll. Additional explicitly required modules are permitted.
 - Separate new CloudScribe-acceptance-* profile and CloudScribe-fixture-*
   directories, containing only nonprivate synthetic fixtures using a supported
   disconnected/fake-provider setup. The script does not invent/apply a profile
@@ -123,7 +126,8 @@ Audio entries additionally require provenance_id, permitted_scope equal to
 maximum_duration_seconds. Only a single MP3 audio stream with positive
 channels/rate and matching duration is accepted. Supply explicit installed
 -FfprobePath and -FfmpegPath to inspect metadata and decode completely to a null
-sink. These assertions do not verify a provider's voice, exact payload,
+sink. Both commands force the MP3 demuxer and a file-only protocol whitelist;
+they never autodetect playlists or follow external references. These assertions do not verify a provider's voice, exact payload,
 segment order, complete text, pronunciation or naturalness. No audio is played.
 
 After preparing and checking those inputs:
@@ -159,7 +163,9 @@ separate reviewed semantic adapter; changes are never silently allowlisted.
 Use a different new output directory for each phase.
 
 **Process:** supply -AppProcessId for an already running test-owned instance.
-The exact executable path and observed loaded modules are checked. Package-local
+The exact executable path and every declared critical loaded module are checked.
+Missing required modules, including managed assemblies not exposed by the process
+inspection API, are BLOCKED rather than inferred from disk. Package-local
 modules must match the pinned manifest. A shared runtime outside the package is
 hashed but BLOCKED without independent expected identity. No profile snapshot
 is attempted in this phase. The process-to-profile binding is not established

@@ -83,7 +83,7 @@ function Add-Case([string]$Id, [string]$Family, [string]$Scenario, [string]$Lane
 $packageCase = Add-Case 'package-files' 'W02' 'Pinned package members match SHA-256 and length.'
 $snapshotCase = Add-Case 'closed-snapshot' 'W03' 'Closed synthetic profile and source/audio fixtures captured under exclusive read locks.'
 $preservationCase = Add-Case 'byte-preservation' 'W03' 'After capture is byte-identical to pinned before snapshot; no intended mutations assumed.'
-$moduleCase = Add-Case 'loaded-modules' 'W02' 'Selected process executable and loaded package/runtime modules match pinned package members.'
+$moduleCase = Add-Case 'loaded-modules' 'W02' 'Selected executable and every declared critical app/runtime module are observed loaded and match pinned members.'
 $shortcutCase = Add-Case 'shortcut-target' 'W02' 'Actual supplied shortcut targets the exact candidate executable.'
 $activityCase = Add-Case 'provider-counters' 'B01' 'Instrumented app provider submissions and credential mutations are zero.'
 $activityCase.status = 'BLOCKED'; $activityCase.reason = 'No supported app counter instrumentation supplied; absence of logs is not proof.'
@@ -175,24 +175,50 @@ try {
     if ($Phase -eq 'Process') {
         Invoke-NativeCase $moduleCase {
             if ($packageCase.status -ne 'PASS' -or $AppProcessId -le 0) { throw 'Verified package and explicit existing process ID required.' }
+            if (-not $package.PSObject.Properties['required_loaded_modules'] -or -not @($package.required_loaded_modules).Count) {
+                throw 'Pinned manifest must declare required_loaded_modules for the critical app/runtime set.'
+            }
+            $packageMembers = @{}
+            foreach ($member in $package.files) { $packageMembers[(Resolve-ManifestMember $app $member.path)] = $member }
+            $requiredModules = @{}
+            foreach ($relativePath in $package.required_loaded_modules) {
+                $requiredPath = Resolve-ManifestMember $app $relativePath
+                if (-not $packageMembers.ContainsKey($requiredPath) -or $requiredModules.ContainsKey($requiredPath)) {
+                    throw 'Required loaded module is unpinned or duplicated.'
+                }
+                $requiredModules[$requiredPath] = [IO.Path]::GetFileName($requiredPath)
+            }
+            $criticalNames = @('CloudScribe.exe', 'CloudScribe.dll', 'CloudScribe.Infrastructure.dll', 'coreclr.dll', 'hostfxr.dll', 'hostpolicy.dll')
+            foreach ($name in $criticalNames) {
+                if (@($requiredModules.Values | Where-Object { $_ -ieq $name }).Count -ne 1) {
+                    throw "Pinned required module list must identify exactly one $name."
+                }
+            }
             $process = Get-Process -Id $AppProcessId -ErrorAction Stop
             if ($process.MainModule.FileName -ne $report.executable_path) { throw 'Selected process is not the exact candidate executable.' }
             $modules = @($process.Modules)
             $packageModules = @()
+            $observedModules = @{}
             foreach ($module in $modules) {
                 $modulePath = Resolve-PhysicalPath $module.FileName
                 $entry = @{ path = $modulePath; sha256 = (Get-FileHash -LiteralPath $modulePath).Hash; version = $module.FileVersionInfo.FileVersion }
                 $report.module_hashes += $entry
+                $observedModules[$modulePath] = $entry
                 if ($modulePath.StartsWith($app + '\', [StringComparison]::OrdinalIgnoreCase)) {
                     $relative = [IO.Path]::GetRelativePath($app, $modulePath)
-                    $expected = @($package.files | Where-Object { (Resolve-ManifestMember $app $_.path) -eq $modulePath })
-                    if ($expected.Count -ne 1 -or $expected[0].sha256 -ne $entry.sha256) { throw "FAIL: Loaded package module mismatch: $relative" }
+                    if (-not $packageMembers.ContainsKey($modulePath) -or $packageMembers[$modulePath].sha256 -ne $entry.sha256) {
+                        throw "FAIL: Loaded package module mismatch: $relative"
+                    }
                     $packageModules += $relative
                 }
                 if ($module.ModuleName -ieq 'coreclr.dll') { $report.runtime_version = $entry.version }
             }
-            if (@($modules | Where-Object { $_.ModuleName -ieq 'coreclr.dll' -and -not $_.FileName.StartsWith($app + '\', [StringComparison]::OrdinalIgnoreCase) }).Count) {
-                throw 'Loaded shared runtime is outside the pinned package; its observed hash is recorded but expected identity is unavailable.'
+            if (@($modules | Where-Object { $_.ModuleName -in $criticalNames -and -not $_.FileName.StartsWith($app + '\', [StringComparison]::OrdinalIgnoreCase) }).Count) {
+                throw 'Critical app/runtime module is outside the pinned package; observed hashes do not establish expected identity.'
+            }
+            $missingModules = @($requiredModules.Keys | Where-Object { -not $observedModules.ContainsKey($_) })
+            if ($missingModules.Count) {
+                throw ('Required loaded modules not observed: ' + (($missingModules | ForEach-Object { [IO.Path]::GetRelativePath($app, $_) }) -join ', '))
             }
             if (-not $report.runtime_version -or -not $packageModules.Count) { throw 'Runtime or package module enumeration incomplete.' }
             if ($process.HasExited) { throw 'Process exited during inspection.' }
@@ -234,7 +260,7 @@ try {
                 throw 'Audio provenance, nonprivate scope and positive expected duration interval required.'
             }
             $base = Join-Path $out "audio-$index-metadata"
-            $code = Invoke-LoggedProcess $probe @('-v', 'error', '-show_format', '-show_streams', '-of', 'json', $file) $out $base
+            $code = Invoke-LoggedProcess $probe @('-v', 'error', '-protocol_whitelist', 'file', '-f', 'mp3', '-show_format', '-show_streams', '-of', 'json', $file) $out $base
             if ($code -ne 0) { throw "FAIL: ffprobe exited $code." }
             $metadata = Get-Content -LiteralPath ($base + '.stdout.log') -Raw | ConvertFrom-Json
             $streams = @($metadata.streams | Where-Object codec_type -EQ 'audio')
@@ -244,12 +270,12 @@ try {
                 $duration -lt $member.minimum_duration_seconds -or $duration -gt $member.maximum_duration_seconds) {
                 throw 'FAIL: MP3 stream metadata or declared duration interval mismatch.'
             }
-            $code = Invoke-LoggedProcess $decoder @('-nostdin', '-v', 'error', '-xerror', '-i', $file, '-map', '0:a:0', '-f', 'null', '-') $out (Join-Path $out "audio-$index-decode")
+            $code = Invoke-LoggedProcess $decoder @('-nostdin', '-v', 'error', '-xerror', '-protocol_whitelist', 'file', '-f', 'mp3', '-i', $file, '-map', '0:a:0', '-f', 'null', '-') $out (Join-Path $out "audio-$index-decode")
             if ($code -ne 0) { throw "FAIL: Complete decode exited $code." }
             if ((Get-FileHash -LiteralPath $file).Hash -ne $member.sha256) { throw 'FAIL: Audio changed during inspection.' }
             return @{ duration_seconds = $duration; channels = $streams[0].channels; sample_rate = $streams[0].sample_rate
-                provenance_id = $member.provenance_id; ffprobe_path = $probe; ffprobe_sha256 = (Get-FileHash $probe).Hash
-                ffmpeg_path = $decoder; ffmpeg_sha256 = (Get-FileHash $decoder).Hash
+                provenance_id = $member.provenance_id; ffprobe_path = $probe; ffprobe_sha256 = (Get-FileHash -LiteralPath $probe).Hash
+                ffmpeg_path = $decoder; ffmpeg_sha256 = (Get-FileHash -LiteralPath $decoder).Hash
                 limitation = 'Decode and container duration do not prove segment order, complete text, pronunciation or naturalness.' }
         }
         Save-NativeReport
