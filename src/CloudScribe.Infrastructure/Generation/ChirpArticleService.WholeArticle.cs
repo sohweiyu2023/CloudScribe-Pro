@@ -20,21 +20,15 @@ public sealed partial class ChirpArticleService
         var remaining = progress.Parts.Where(x => !x.Reused && !string.Equals(x.Status, "Saved accepted audio", StringComparison.Ordinal)).ToArray();
         if (remaining.Any(x => !x.CurrentlyAdmitted || policy.SentenceRecovery is null && !string.Equals(x.Status, "Not requested", StringComparison.Ordinal)))
             throw new InvalidOperationException("Reconcile the existing request or recover its local output before starting an article job. No automatic retry is permitted.");
-        long maximum = remaining.Sum(x => article.AllowedSegments.Single(a => a.CoverageOrdinal == x.CoverageOrdinal).MaximumMinorUnits);
         using var context = await factory.CreateDbContextAsync(token).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(token).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: false);
         var financial = await ReadFinancialAsync(connection, transaction, policy, token).ConfigureAwait(false);
         var existingJob = await FindReviewedWholeJobAsync(connection, transaction, policy, article.Proposal.PlanSha256, token).ConfigureAwait(false);
-        int failed = 0;
-        foreach (var part in remaining.Where(x => !string.Equals(x.Status, "Not requested", StringComparison.Ordinal)))
-        {
-            _ = await RecoverableOrdinalAsync(connection, transaction, policy, article.Proposal.PlanSha256, part.CoverageOrdinal, token).ConfigureAwait(false);
-            maximum -= article.AllowedSegments.Single(x => x.CoverageOrdinal == part.CoverageOrdinal).MaximumMinorUnits; failed++;
-        }
-        await _evidence.ResolveAsync(connection, transaction, policy, documentId, financial.Old, token).ConfigureAwait(false);
-        await RequireWholeReviewReadyAsync(connection, transaction, policy, financial, existingJob, token).ConfigureAwait(false);
+        var scope = await PrepareNarrationWholeReviewAsync(connection, transaction, policy, article, remaining, financial, existingJob, token).ConfigureAwait(false);
+        remaining = scope.Remaining; long maximum = scope.OrdinaryMaximum;
+        int failed = scope.Failed;
         if (remaining.Length - failed > policy.MaximumNewAttempts - financial.Extra.Length
             || maximum > policy.MaximumAdditionalReservationMinorUnits - financial.Additional
             || maximum > financial.AllocationRemaining || maximum > policy.Budget.ProjectCeilingMinorUnits - financial.ProjectCommitted)
@@ -53,25 +47,28 @@ public sealed partial class ChirpArticleService
             Ordinals = remaining.Select(x => x.CoverageOrdinal).ToArray(),
             Maximum = maximum,
             RecoveryRequests = recovery.Requests,
-            RecoveryMinorUnits = recovery.MinorUnits
+            RecoveryMinorUnits = recovery.MinorUnits,
+            scope.BlockedOrdinaryRequests,
+            RecoveryJob = scope.RecoveryJob?.JobId,
+            RecoveryCheckpoint = scope.RecoveryJob is null ? null : ChirpPolicyValidation.Hash(scope.RecoveryJob)
         });
         var review = new ChirpWholeArticleReview(Guid.NewGuid(), hash, documentId, article.Proposal.PlanSha256,
             article.Proposal.VoiceName, policy.Currency, policy.Scale, progress.SavedCoverageParts, progress.TotalCoverageParts,
             remaining.Length, maximum, financial.ProjectCommitted, policy.ExpiresAtUtc, policy.WholeArticleGeneration!.MaximumCatalogRefreshes,
-            policy.ExpiresAtUtc, recovery.Requests, recovery.MinorUnits, ChirpPolicyValidation.IsCompletionBound(policy));
+            policy.ExpiresAtUtc, recovery.Requests, recovery.MinorUnits, ChirpPolicyValidation.IsCompletionBound(policy), scope.BlockedOrdinaryRequests);
         await RequirePolicyCurrentAsync(policy, token).ConfigureAwait(false);
-        PublishWholeReview(review, ChirpPolicyValidation.Hash(policy), financial.Sha256, now);
+        PublishWholeReview(review, ChirpPolicyValidation.Hash(policy), financial.Sha256, now, scope);
         return review;
     }
 
-    private void PublishWholeReview(ChirpWholeArticleReview review, string policy, string financial, DateTimeOffset now)
+    private void PublishWholeReview(ChirpWholeArticleReview review, string policy, string financial, DateTimeOffset now, NarrationWholeReviewScope scope)
     {
         lock (_wholeReviewGate)
         {
             foreach (var item in _wholePending)
                 if (!item.Value.Review.CompletionBound && now >= item.Value.Review.ConfirmByUtc || item.Value.Review.DocumentId == review.DocumentId
                     || !string.Equals(item.Value.PolicySha256, policy, StringComparison.Ordinal)) _wholePending.TryRemove(item.Key, out _);
-            _wholePending[review.PreviewId] = new(review, policy, financial, now);
+            _wholePending[review.PreviewId] = new(review, policy, financial, now, scope.RequiresCurrentNarrationCopy, scope.RecoveryJob);
         }
     }
 
@@ -96,6 +93,10 @@ public sealed partial class ChirpArticleService
         var financial = await ReadFinancialAsync(connection, transaction, policy, token).ConfigureAwait(false);
         if (!string.Equals(financial.Sha256, pending.FinancialSha256, StringComparison.Ordinal))
             throw new InvalidOperationException("Retained financial evidence changed. Review the article again.");
+        var recoveryOnly = await TryStartNarrationRecoveryOnlyAsync(connection, transaction, policy, financial, existing, pending, token).ConfigureAwait(false);
+        if (recoveryOnly is not null) return recoveryOnly;
+        if (pending.RequiresCurrentNarrationCopy)
+            await RequireCurrentNarrationCopyAsync(pending.Review.DocumentId, token).ConfigureAwait(false);
         await _evidence.ResolveAsync(connection, transaction, policy, pending.Review.DocumentId, financial.Old, token).ConfigureAwait(false);
         await RequireWholeReviewReadyAsync(connection, transaction, policy, financial, existing, token).ConfigureAwait(false);
         if (existing?.State == ChirpWholeArticleState.Complete) return existing;
@@ -141,11 +142,12 @@ public sealed partial class ChirpArticleService
     }
 
     private async Task RequireWholeArticleRuntimeJobAsync(SqliteConnection connection, SqliteTransaction transaction,
-        ChirpArticleAdmissionPolicy policy, string plan, int ordinal, CancellationToken token)
+        ChirpArticleAdmissionPolicy policy, string plan, int ordinal, CancellationToken token, bool recoveryChild = false)
     {
         RequireWholeArticleGrant(policy, plan);
         var job = await FindWholeArticleJobAsync(connection, transaction, ChirpPolicyValidation.Hash(policy), plan, token).ConfigureAwait(false);
         if (job is null || job.State != ChirpWholeArticleState.Executing || job.ActiveOrdinal != ordinal
+            || job.NarrationRecoveryOnly && !recoveryChild
             || job.CompletionBound != ChirpPolicyValidation.IsCompletionBound(policy)
             || clock.GetUtcNow() < job.LastObservedAtUtc || ChirpPolicyValidation.IsJobExpired(job, clock.GetUtcNow()))
             throw new InvalidOperationException("The article job is stopped, expired or no longer owns this request. No dispatch is permitted.");
@@ -156,7 +158,7 @@ public sealed partial class ChirpArticleService
     {
         RequireWholeArticleGrant(policy, plan);
         var job = await ReadWholeArticleJobAsync(connection, transaction, jobId, token).ConfigureAwait(false);
-        if (job.State != ChirpWholeArticleState.Executing || job.ActiveOrdinal != ordinal || ChirpPolicyValidation.IsJobExpired(job, clock.GetUtcNow())
+        if (job.State != ChirpWholeArticleState.Executing || job.NarrationRecoveryOnly || job.ActiveOrdinal != ordinal || ChirpPolicyValidation.IsJobExpired(job, clock.GetUtcNow())
             || job.CompletionBound != ChirpPolicyValidation.IsCompletionBound(policy)
             || clock.GetUtcNow() < job.LastObservedAtUtc
             || !string.Equals(job.PolicySha256, ChirpPolicyValidation.Hash(policy), StringComparison.Ordinal)
@@ -172,5 +174,6 @@ public sealed partial class ChirpArticleService
             throw new InvalidOperationException("The article-level cost consent is exhausted; all holds remain retained.");
     }
 
-    private sealed record WholePending(ChirpWholeArticleReview Review, string PolicySha256, string FinancialSha256, DateTimeOffset CreatedAt);
+    private sealed record WholePending(ChirpWholeArticleReview Review, string PolicySha256, string FinancialSha256, DateTimeOffset CreatedAt,
+        bool RequiresCurrentNarrationCopy, ChirpWholeArticleJob? RecoveryJob);
 }

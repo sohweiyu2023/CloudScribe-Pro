@@ -325,6 +325,9 @@
           <Button x:Name="CreateMp3Button" Classes="primary" Content="Create MP3"
                   ToolTip.Tip="Review the current text, voice and cost before creating an MP3"
                   AutomationProperties.Name="Create MP3" />
+          <Button x:Name="BatchMp3Button" Classes="secondary" Content="Batch MP3"
+                  ToolTip.Tip="Drag in or choose TXT files and folders to make one MP3 per file"
+                  AutomationProperties.Name="Batch MP3 from TXT files and folders" />
           <Button x:Name="QuickStartHelpButton" Classes="secondary" Content="Help"
                   ToolTip.Tip="Open the step-by-step Quick Start walkthrough"
                   AutomationProperties.Name="Help and Quick Start" />
@@ -627,7 +630,7 @@
         </ScrollViewer>
 
         <!-- Truthful route states for non-Studio routes. -->
-        <ScrollViewer IsVisible="{Binding IsRouteStateSelected}" Padding="28">
+        <ScrollViewer x:Name="RouteStateSurface" IsVisible="{Binding IsRouteStateSelected}" DragDrop.AllowDrop="{Binding IsQueueSelected}" Padding="28">
           <Border
               MaxWidth="820"
               HorizontalAlignment="Center"
@@ -640,6 +643,17 @@
               <TextBlock Text="{Binding CurrentPage.Eyebrow}" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
               <TextBlock Text="{Binding CurrentPage.Title}" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" FontSize="{DynamicResource Typography.Display}" TextWrapping="Wrap" />
               <TextBlock Text="{Binding CurrentPage.Description}" Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.BodyLarge}" />
+              <Border x:Name="QueuePageDropZone" IsVisible="{Binding IsQueueSelected}" MinHeight="160"
+                      Background="{DynamicResource Brush.PaperWarm}" BorderBrush="{DynamicResource Brush.Secondary}"
+                      BorderThickness="2" CornerRadius="{DynamicResource Radius.Card}" Padding="24"
+                      AutomationProperties.Name="Queue TXT file and folder drop area">
+                <StackPanel Spacing="10" VerticalAlignment="Center">
+                  <TextBlock Text="Drop TXT files or folders here" Foreground="{DynamicResource Brush.Ink}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center" />
+                  <TextBlock Text="One MP3 per TXT file. Dropping adds to your batch draft; it does not generate audio." Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" TextAlignment="Center" />
+                  <Button x:Name="QueuePageBatchButton" Classes="primary" Content="Batch MP3: choose files or folders" HorizontalAlignment="Center"
+                          AutomationProperties.Name="Open batch MP3 to choose TXT files or folders" />
+                </StackPanel>
+              </Border>
               <Border Margin="0,12,0,0" Background="{DynamicResource Brush.PaperWarm}" BorderBrush="{DynamicResource Brush.PaperBorder}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="22">
                 <StackPanel Spacing="10">
                   <TextBlock Text="{Binding CurrentPage.StateKind}" Foreground="{DynamicResource Brush.WarningOnPaper}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
@@ -915,7 +929,7 @@
     <!-- Queue drawer. -->
     <Grid Grid.Row="1" Grid.RowSpan="4" IsVisible="{Binding IsQueueDrawerOpen}" Panel.ZIndex="53">
       <Button Classes="scrim" Background="{DynamicResource Brush.Scrim}" BorderThickness="0" IsTabStop="False" Command="{Binding CloseTransientSurfacesCommand}" AutomationProperties.Name="Close queue drawer" />
-      <Border MinHeight="250" VerticalAlignment="Bottom" Margin="12,0,12,8" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1" CornerRadius="18,18,0,0" Padding="22" BoxShadow="{DynamicResource Elevation.Floating}" KeyboardNavigation.TabNavigation="Cycle">
+      <Border x:Name="QueueDrawerSurface" DragDrop.AllowDrop="{Binding IsQueueDrawerOpen}" MinHeight="250" VerticalAlignment="Bottom" Margin="12,0,12,8" Background="{DynamicResource Brush.PanelGradient}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="1" CornerRadius="18,18,0,0" Padding="22" BoxShadow="{DynamicResource Elevation.Floating}" KeyboardNavigation.TabNavigation="Cycle">
         <Grid RowDefinitions="Auto,*" RowSpacing="12">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel>
@@ -926,9 +940,18 @@
               <PathIcon Data="M5,3 L12,10 L19,3 L21,5 L14,12 L21,19 L19,21 L12,14 L5,21 L3,19 L10,12 L3,5 Z" Width="15" Height="15" />
             </Button>
           </Grid>
-          <Border Grid.Row="1" Background="{DynamicResource Brush.SurfaceInset}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}" Padding="{DynamicResource Spacing.Panel}">
-            <TextBlock Text="Use Setups in the toolbar to inspect persisted requests. Unresolved submissions may have been charged: do not resubmit until the provider outcome is known. This drawer does not claim that the durable queue is empty." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" />
-          </Border>
+          <StackPanel Grid.Row="1" Spacing="12">
+            <Border x:Name="QueueDrawerDropZone" MinHeight="140" Background="{DynamicResource Brush.SurfaceInset}" BorderBrush="{DynamicResource Brush.Cyan}" BorderThickness="2" CornerRadius="{DynamicResource Radius.Panel}" Padding="18"
+                    AutomationProperties.Name="Queue TXT file and folder drop area">
+              <StackPanel Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Drop TXT files or folders here" Foreground="{DynamicResource Brush.TextOnDark}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center" />
+                <TextBlock Text="One MP3 per TXT file. Dropping adds to your batch draft; it does not generate audio." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" TextAlignment="Center" />
+                <Button x:Name="QueueDrawerBatchButton" Classes="secondary" Content="Batch MP3: choose files or folders" HorizontalAlignment="Center"
+                        AutomationProperties.Name="Open batch MP3 to choose TXT files or folders" />
+              </StackPanel>
+            </Border>
+            <TextBlock Text="Use Setups in the toolbar to inspect persisted requests. Unresolved submissions may have been charged: do not resubmit until the provider outcome is known. This drawer does not claim that the durable queue is empty." Foreground="{DynamicResource Brush.TextOnDarkMuted}" TextWrapping="Wrap" />
+          </StackPanel>
         </Grid>
       </Border>
     </Grid>

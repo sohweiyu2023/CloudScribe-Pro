@@ -144,8 +144,13 @@ public static class CompositionRoot
         // Batch approvals may add Long Audio jobs within the installed scope and cap (see docs/BATCH_NARRATION.md).
         services.AddSingleton(provider => new CloudScribe.Infrastructure.Batch.InstalledBatchAuthorityStore(AppContext.BaseDirectory,
             provider.GetRequiredService<AppPaths>().RootDirectory));
+        services.AddSingleton<CloudScribe.Application.Batch.IBatchQueueStore>(provider =>
+            new CloudScribe.Infrastructure.Batch.FileBatchQueueStore(provider.GetRequiredService<AppPaths>().RootDirectory,
+                provider.GetRequiredService<ILogger<CloudScribe.Infrastructure.Batch.FileBatchQueueStore>>()));
         services.AddSingleton(provider => new CloudScribe.Infrastructure.Batch.BatchLongAudioScopeExtensionSource(
-            provider.GetRequiredService<CloudScribe.Infrastructure.Batch.InstalledBatchAuthorityStore>(), provider.GetRequiredService<TimeProvider>()));
+            provider.GetRequiredService<CloudScribe.Infrastructure.Batch.InstalledBatchAuthorityStore>(), provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<INarrationCopyStore>(), provider.GetRequiredService<CloudScribe.Application.Batch.IBatchQueueStore>(),
+            provider.GetRequiredService<IDocumentLibrary>()));
         services.AddSingleton(provider => new InstalledGoogleLongAudioStore(AppContext.BaseDirectory,
             provider.GetRequiredService<AppPaths>(), provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<CloudScribe.Infrastructure.Batch.BatchLongAudioScopeExtensionSource>()));

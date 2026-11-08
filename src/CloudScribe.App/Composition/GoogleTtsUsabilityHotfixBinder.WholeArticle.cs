@@ -50,11 +50,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 await OpenReadOnlyArticleReviewAsync(owner, model, document, error, lifetime.Token).ConfigureAwait(true);
                 return;
             }
-            var dialog = CreateArticleExportDialog(); dialog.Title = "Generate complete article MP3"; dialog.Width = 720; dialog.Height = 620;
+            var dialog = CreateArticleExportDialog(); dialog.Title = WholeArticleReviewPresentation.ActionLabel(review); dialog.Width = 720; dialog.Height = 620;
             var body = new StackPanel { Margin = new Thickness(20), Spacing = 14 };
             var estimate = NewDescription($"Article: {model.DocumentTitle}. " + WholeArticleReviewPresentation.Estimate(review));
             AutomationProperties.SetName(estimate, "Article estimate and spending limit");
-            var status = NewDescription("Choose where to save the complete MP3. No article job or paid request has started.");
+            var status = NewDescription(review.BlockedOrdinaryRequests > 0
+                ? "Recovery only: already-started work can be checked or recovered. Remaining fresh parts stay blocked, so this action will not produce a complete MP3. Choose a destination for the existing workflow; no new request has started."
+                : "Choose where to save the complete MP3. No article job or paid request has started.");
             AutomationProperties.SetName(status, "Article setup and generation progress");
             var coverage = new ProgressBar { Minimum = 0, Maximum = 100, Height = 12, IsIndeterminate = false };
             AutomationProperties.SetName(coverage, "Verified article parts, not time remaining");
@@ -72,8 +74,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             var captureWarning = NewDescription(review.MaximumRecoveryRequests > 0
                 ? "Select the private evidence option to enable automatic split recovery. Required error evidence is checked before another reservation. Existing one-response consent is not reused."
                 : "Private capture is off unless you select the separate option. Routine metadata cannot preserve the full provider explanation. Existing single-request consent does not cover this article.");
-            var choose = NewButton("Choose where to save the complete MP3");
-            var generate = NewButton("Generate complete article MP3"); generate.IsEnabled = false;
+            var choose = NewButton(review.BlockedOrdinaryRequests > 0 ? "Choose recovery output destination" : "Choose where to save the complete MP3");
+            var generate = NewButton(WholeArticleReviewPresentation.ActionLabel(review)); generate.IsEnabled = false;
             string? destination = null, ffmpeg = null;
             TrustedMediaToolSelection? approvedMediaTools = null;
             bool selecting = false, startAttempted = false;
@@ -93,14 +95,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     if (tool is null) { if (destination is not null) status.Text += $"\nPrevious output selection retained: {destination}"; return; }
                     var file = await dialog.StorageProvider.SaveFilePickerAsync(new()
                     {
-                        Title = "Save complete article MP3",
+                        Title = review.BlockedOrdinaryRequests > 0 ? "Choose recovery output destination" : "Save complete article MP3",
                         SuggestedFileName = AudioOutputPresentation.SuggestedFileName(model.DocumentTitle, ".mp3"),
                         DefaultExtension = "mp3",
                         FileTypeChoices = [Mp3FileType],
                         ShowOverwritePrompt = true
                     }).ConfigureAwait(true);
                     if (file is null || !file.Path.IsFile) { status.Text = "Output selection cancelled; no article job or paid request started." + (destination is null ? string.Empty : $"\nPrevious output selection retained: {destination}"); return; }
-                    approvedMediaTools = tool; ffmpeg = tool.EncoderPath; destination = file.Path.LocalPath; status.Text = $"MP3 destination: {destination}\nReview the cost and choose Generate when ready. No paid request has started."; Update();
+                    approvedMediaTools = tool; ffmpeg = tool.EncoderPath; destination = file.Path.LocalPath; status.Text = $"MP3 destination: {destination}\nReview the cost and choose {WholeArticleReviewPresentation.ActionLabel(review)} when ready. No new paid request has started."
+                        + (review.BlockedOrdinaryRequests > 0 ? " A complete article MP3 will not be produced while fresh parts are blocked." : string.Empty); Update();
                 }
                 catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
                 { status.Text = AudioOutputPresentation.RecoveryAdvice(error) + "\n" + ReportLocalFailure(LocalRequestStage.Export, error); }
@@ -204,7 +207,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                         if (runCompleted) { coverage.Value = 100; coverageText.Text = "All required source parts and the final MP3 are verified."; }
                         outputControls.IsVisible = completedJob is not null; refreshOutput();
                         status.Text = result.State == ChirpWholeArticleState.Complete ? $"Complete article MP3 verified: {result.Output?.Path}. Original text, accepted audio and historical holds preserved."
-                            : $"Article job stopped ({result.ReasonCode}). Reconcile existing evidence before any new paid attempt.";
+                            : string.Equals(result.ReasonCode, "article.narration-copy-recovery-only"
+, StringComparison.Ordinal) ? "Recovered audio is retained. Remaining fresh parts are blocked because the original changed; no complete MP3 was assembled. To narrate them, save the original text as a new document and prepare a new narration copy with its own approval."
+                                : $"Article job stopped ({result.ReasonCode}). Reconcile existing evidence before any new paid attempt.";
                     }, lifetime.Token).ConfigureAwait(true);
                 }
                 catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)

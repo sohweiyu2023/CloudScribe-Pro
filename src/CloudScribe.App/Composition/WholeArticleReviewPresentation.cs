@@ -4,12 +4,20 @@ namespace CloudScribe.App.Composition;
 
 public static class WholeArticleReviewPresentation
 {
+    public static string ActionLabel(ChirpWholeArticleReview review) => review.BlockedOrdinaryRequests > 0
+        ? "Recover already-started work only" : "Generate complete article MP3";
+
     public static string Estimate(ChirpWholeArticleReview review) =>
-        $"Voice: {review.VoiceName}. Estimated additional cost: up to {Amount(review.Currency, review.MaximumAdditionalMinorUnits, review.Scale)} (not the final Google bill). "
+        (review.BlockedOrdinaryRequests > 0
+            ? $"Recovery only: {review.BlockedOrdinaryRequests} unstarted part(s) are blocked because the narration source changed. This action will not complete the article MP3. "
+            : string.Empty)
+        + $"Voice: {review.VoiceName}. Estimated additional cost: up to {Amount(review.Currency, review.MaximumAdditionalMinorUnits, review.Scale)} (not the final Google bill). "
         + "Actual charges may differ because of taxes, credits or currency conversion. "
-        + $"Generate authorizes up to this amount for this article within the existing approved spending limit, without separate confirmations for its {review.RemainingRequests} remaining parts. "
+        + (review.BlockedOrdinaryRequests > 0
+            ? "Recover authorizes only the displayed already-started work and its admitted split recovery within the existing approved spending limit. It does not authorize the blocked parts. "
+            : $"Generate authorizes up to this amount for this article within the existing approved spending limit, without separate confirmations for its {review.RemainingRequests} remaining parts. ")
         + RecoveryDescription(review)
-        + $"Existing commitments: {Amount(review.Currency, review.RetainedCommitmentsMinorUnits, review.Scale)} remain retained; Generate acknowledges these existing holds. "
+        + $"Existing commitments: {Amount(review.Currency, review.RetainedCommitmentsMinorUnits, review.Scale)} remain retained; this action acknowledges these existing holds. "
         + "Accepted audio is reused. The app stops if a request has an uncertain outcome; it will not automatically pay to repeat it.";
 
     public static string Details(ChirpWholeArticleReview review) =>

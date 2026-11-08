@@ -110,6 +110,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStudioSelected))]
+    [NotifyPropertyChangedFor(nameof(IsQueueSelected))]
     [NotifyPropertyChangedFor(nameof(IsRouteStateSelected))]
     [NotifyPropertyChangedFor(nameof(IsSafeDiagnosticExportVisible))]
     [NotifyPropertyChangedFor(nameof(CanOpenDocumentSurfaces))]
@@ -252,6 +253,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private WorkspaceLifecycleState _lifecycleState = WorkspaceLifecycleState.Offline;
 
     public bool IsStudioSelected => SelectedNavigationItem?.Route == AppRoute.Studio;
+
+    public bool IsQueueSelected => SelectedNavigationItem?.Route == AppRoute.Queue;
 
     public bool IsRouteStateSelected => !IsStudioSelected;
 

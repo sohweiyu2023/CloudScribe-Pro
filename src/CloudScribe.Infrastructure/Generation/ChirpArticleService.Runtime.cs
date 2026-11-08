@@ -77,11 +77,13 @@ public sealed partial class ChirpArticleService
         if (!string.Equals(financial.Sha256, financialHash, StringComparison.Ordinal))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Financial state changed after article approval; no dispatch is allowed."), LocalRequestReason.FinancialChanged);
         var article = policy.Articles.Single(x => string.Equals(x.Proposal.PlanSha256, plan, StringComparison.Ordinal));
-        if (policy.WholeArticleGeneration is not null)
-            await RequireWholeArticleRuntimeJobAsync(connection, transaction, policy, plan, ordinal, token).ConfigureAwait(false);
         var current = await _evidence.ResolveAsync(connection, transaction, policy, article.Proposal.DocumentId, financial.Old, token,
             requirePersistedLegacy: true).ConfigureAwait(false);
         var recoveryChild = await ReadRecoveryChildAsync(connection, transaction, envelope.ChirpAuthorizationId!.Value, token).ConfigureAwait(false);
+        if (policy.WholeArticleGeneration is not null)
+            await RequireWholeArticleRuntimeJobAsync(connection, transaction, policy, plan, ordinal, token, recoveryChild is not null).ConfigureAwait(false);
+        if (recoveryChild is null)
+            await RequireCurrentNarrationCopyAsync(article.Proposal.DocumentId, token).ConfigureAwait(false);
         if (recoveryChild is not null)
         {
             var job = await ReadWholeArticleJobAsync(connection, transaction, recoveryChild.JobId, token).ConfigureAwait(false);

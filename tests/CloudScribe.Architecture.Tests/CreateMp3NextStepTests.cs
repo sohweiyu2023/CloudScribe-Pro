@@ -8,6 +8,8 @@ public sealed class CreateMp3NextStepTests
     public void EmptyDocumentExplainsTheFirstActionAndAllowsPublicSamples()
     {
         string message = CreateMp3NextStep.Describe(false, false, false, false, false, true, false, false, false);
+        Assert.Contains("Batch MP3 from TXT files", message, StringComparison.Ordinal);
+        Assert.Contains("files or folders", message, StringComparison.Ordinal);
         Assert.Contains("write or import text", message, StringComparison.Ordinal);
         Assert.Contains("public voice samples", message, StringComparison.Ordinal);
     }

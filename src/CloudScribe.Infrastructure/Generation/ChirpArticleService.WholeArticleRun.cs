@@ -33,6 +33,7 @@ public sealed partial class ChirpArticleService
                 job = await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Ready, null, "article.accepted-reconciled", token).ConfigureAwait(false);
             }
             job = await GenerateWholeArticleRemainingAsync(job, runtime, coverage, progress, token).ConfigureAwait(false);
+            if (job.State == ChirpWholeArticleState.Stopped) return job;
             // Assembly is local and may finish after paid authority expires. The existing exporter rechecks every receipt and fully decodes.
             job = await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Assembling, null, "article.assembling", token).ConfigureAwait(false);
             var output = await runtime.ExportAsync(job, token).ConfigureAwait(false);
@@ -89,6 +90,10 @@ public sealed partial class ChirpArticleService
             var next = coverage.Parts.First(x => !IsAccepted(x));
             if (!next.CurrentlyAdmitted || job.MaximumRecoveryRequests < 2 && !string.Equals(next.Status, "Not requested", StringComparison.Ordinal))
                 throw new InvalidOperationException("An existing request requires reconciliation. No automatic retry.");
+            if (job.NarrationRecoveryOnly && string.Equals(next.Status, "Not requested", StringComparison.Ordinal))
+                return await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Stopped, null, "article.narration-copy-recovery-only", token).ConfigureAwait(false);
+            if (string.Equals(next.Status, "Not requested", StringComparison.Ordinal))
+                await RequireCurrentNarrationCopyAsync(job.DocumentId, token).ConfigureAwait(false);
             job = await RefreshWholeArticleCatalogIfNeededAsync(job, policy, runtime, token).ConfigureAwait(false);
             job = await TransitionWholeArticleAsync(job, ChirpWholeArticleState.Executing, next.CoverageOrdinal, "article.request-starting", token).ConfigureAwait(false);
             if (!string.Equals(next.Status, "Not requested", StringComparison.Ordinal))

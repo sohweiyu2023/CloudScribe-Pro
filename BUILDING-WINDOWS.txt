@@ -1,4 +1,4 @@
-CloudScribe Pro 1.0.3 - Building the Windows executable
+CloudScribe Pro 1.0.4 - Building the Windows executable
 =========================================================
 
 QUICK DEVELOPMENT BUILD
@@ -106,7 +106,7 @@ Run source and verifier checks separately:
 
 The self-test runner projects a temporary historical Stage4 fixture for its
 Stage4 contracts. Standalone Stage3/Stage4 verifiers expect their historical
-stage/SDK identities and do not accept the current Stage8/app-1.0.3 tree.
+stage/SDK identities and do not accept the current Stage8/app-1.0.4 tree.
 After intentional source/doc edits, regenerate SHA256SUMS.txt with
 python tools/update_sha256_manifest.py, then rerun --check. Inspect unexpected
 changes before refreshing. Keep evidence, archives and backups outside the repo.
@@ -126,7 +126,7 @@ IMPORTANT
 A successful build/test run does not certify runtime behavior or promote a
 release. Preserve active certification workflows and manual Windows acceptance.
 SESSION_STATE.json retains historical Stage8 1.0.0 governance while the app is
-1.0.3; do not rewrite the historical stage identity to match the application.
+1.0.4; do not rewrite the historical stage identity to match the application.
 Historical batch records remain verifier inputs. Superseded handovers and unused
 transport fragments are recoverable from Git history and the external backup.
 Chirp internal article integration additionally uses synthetic admission parser/outer-entry tests:

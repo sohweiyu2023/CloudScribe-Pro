@@ -1,6 +1,6 @@
 # CloudScribe Pro
 
-CloudScribe Pro 1.0.3 is a Windows text-to-speech workspace for Google Cloud voices. Write or import a document, review the exact request and its estimated maximum cost, approve it, then create, play and export a verified MP3.
+CloudScribe Pro 1.0.4 is a Windows text-to-speech workspace for Google Cloud voices. Write or import a document, review the exact request and its estimated maximum cost, approve it, then create, play and export a verified MP3.
 
 **[Download for Windows x64](https://files.awakeningtoreality.com/CloudScribe-Windows-x64.zip)** · **[Setup and user guide](docs/USER_GUIDE.md)** · **[Source code](https://github.com/sohweiyu2023/CloudScribe-Pro)**
 
@@ -22,7 +22,8 @@ Google bills your own Cloud account. A ChatGPT subscription does not include Goo
 - Exact-request preparation, explicit single-use cost approval, and verified MP3 playback/export.
 - A guided setup walkthrough, voice comparison and separately approved short samples.
 - Local narration-part preparation for longer text. Each part still requires its own review and approval.
-- [Batch MP3 from TXT files](docs/BATCH_NARRATION.md): one MP3 per file, with an installed batch profile and exact batch approval. Existing engine admissions and spending caps still apply.
+- Open **Batch MP3** beside **Create MP3**, or use the **Queue** drop area, to [narrate TXT files](docs/BATCH_NARRATION.md), with one MP3 per file, an installed batch profile and exact batch approval. Existing engine admissions and spending caps still apply.
+- Skip web addresses in audio using a previewed, saved narration copy; the original text stays in Library. Available in **Create MP3** and **Batch MP3**, before the copy's own cost review and approval.
 - [One continuous article MP3](docs/ARTICLE_MP3_EXPORT.md) from complete, verified local part outputs, using an existing FFmpeg installation. Missing or uncertain parts block export; this action never synthesizes audio.
 
 A single **Create MP3** request is limited to Google's synchronous **5,000-byte** input (the app counts JSON escaping and request fields too). Longer text uses **Review full article and cost**, which narrates an admitted article in parts after one cost review and joins them into one MP3. It requires a separately reviewed article policy; the clean package does not authorize arbitrary articles. An optional, separately provisioned [Google Long Audio](docs/GOOGLE_LONG_AUDIO.md) path sends a whole saved article as one asynchronous job; if Google reports over-long sentences, its admitted adaptive mode splits only that section at existing punctuation and assembles one MP3. Multi-speaker scripts and custom SSML lexicons are not supplied. Prices require current admitted evidence and user source review; the app does not promise live billing-account tracking. See [saved setups and recovery](docs/SAVED_SETUPS_AND_LOCAL_RECOVERY.md) and [voice comparison](docs/VOICE_COMPARISON.md).

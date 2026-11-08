@@ -8,10 +8,22 @@ public sealed partial class GoogleLongAudioRuntimeFactory
 {
     /// <summary>Uses the normal exact-request admission, POST-once journal, capture and verified download path.
     /// Unadmitted children stop before submission; this method never expands installed authority.</summary>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One composition binds exact deferred evidence to serialized admission, capture and deterministic recovery without a second submission route.")]
-    public async Task<GoogleLongAudioRecoveryRunner> CreateRecoveryRunnerAsync(GoogleLongAudioRequest root,
+    public Task<GoogleLongAudioRecoveryRunner> CreateRecoveryRunnerAsync(GoogleLongAudioRequest root,
         GoogleLongAudioMediaTools tools, GoogleLongAudioOutputAllowance outputAllowance, bool captureConfirmed,
-        IGoogleTrendHistoryHealth trendHealth, CancellationToken token = default)
+        IGoogleTrendHistoryHealth trendHealth, CancellationToken token = default) =>
+        CreateRecoveryRunnerCoreAsync(root, tools, outputAllowance, captureConfirmed, trendHealth, null, token);
+
+    internal Task<GoogleLongAudioRecoveryRunner> CreateDocumentRecoveryRunnerAsync(GoogleLongAudioRequest root,
+        GoogleLongAudioMediaTools tools, GoogleLongAudioOutputAllowance outputAllowance, bool captureConfirmed,
+        IGoogleTrendHistoryHealth trendHealth, Func<CancellationToken, Task> freshRootCheck, CancellationToken token) =>
+        CreateRecoveryRunnerCoreAsync(root, tools, outputAllowance, captureConfirmed, trendHealth,
+            (request, ct) => request.AttemptId == root.AttemptId && string.Equals(request.BindingSha256, root.BindingSha256, StringComparison.Ordinal)
+                ? new ValueTask(freshRootCheck(ct)) : ValueTask.CompletedTask, token);
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One composition binds exact deferred evidence to serialized admission, capture and deterministic recovery without a second submission route.")]
+    private async Task<GoogleLongAudioRecoveryRunner> CreateRecoveryRunnerCoreAsync(GoogleLongAudioRequest root,
+        GoogleLongAudioMediaTools tools, GoogleLongAudioOutputAllowance outputAllowance, bool captureConfirmed,
+        IGoogleTrendHistoryHealth trendHealth, Func<GoogleLongAudioRequest, CancellationToken, ValueTask>? freshRootCheck, CancellationToken token)
     {
         ArgumentNullException.ThrowIfNull(trendHealth);
         var context = await installed.LoadVerifiedAsync(token).ConfigureAwait(false)
@@ -31,7 +43,7 @@ public sealed partial class GoogleLongAudioRuntimeFactory
         {
             await RequireContextAsync(context, cancel).ConfigureAwait(false);
             trendHealth.RequireReady(); if (!pollOnly) GoogleLongAudioStructure.Log(logger, request, request.AttemptId == root.AttemptId ? 0 : -1); trendHealth.RequireReady();
-            using var session = await OpenCoreAsync(request, tools, outputAllowance, captureConfirmed, recovery, cancel).ConfigureAwait(false);
+            using var session = await OpenCoreAsync(request, tools, outputAllowance, captureConfirmed, recovery, freshRootCheck, cancel).ConfigureAwait(false);
             var outcome = pollOnly ? await session.PollAsync(cancel).ConfigureAwait(false) : await session.AdvanceAsync(cancel).ConfigureAwait(false);
             if (outcome.Artifact is { } artifact) await artifacts.RetainAsync(root, request, artifact, cancel).ConfigureAwait(false);
             return outcome;

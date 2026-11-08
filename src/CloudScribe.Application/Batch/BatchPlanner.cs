@@ -15,31 +15,23 @@ public static class BatchPlanner
         Func<string, bool> outputExists, bool numberTracks = false) => Append([], files, outputNameFor, outputExists, numberTracks);
 
     /// <summary>Adds files after the existing ones. The existing (possibly hand-arranged) order is kept; only the new
-    /// files are put in natural order among themselves.</summary>
+    /// files are put in natural order among themselves (by name, or as given when <paramref name="keepGivenOrder"/> is
+    /// set because the caller already sorted them, for example by folder and then name).</summary>
     public static IReadOnlyList<BatchItem> Append(IReadOnlyList<BatchItem> existing, IEnumerable<BatchSourceFile> files,
-        Func<string, string> outputNameFor, Func<string, bool> outputExists, bool numberTracks = false)
+        Func<string, string> outputNameFor, Func<string, bool> outputExists, bool numberTracks = false, bool keepGivenOrder = false)
     {
         ArgumentNullException.ThrowIfNull(existing);
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(outputNameFor);
         ArgumentNullException.ThrowIfNull(outputExists);
         var items = existing.ToList();
-        var firstWithText = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var item in items.Where(x => x.IsIncluded)) firstWithText.TryAdd(item.SourceSha256, item.Order);
-        foreach (var file in files.OrderBy(x => x.FileName, BatchNaturalOrder.Instance))
+        foreach (var file in keepGivenOrder ? files : files.OrderBy(x => x.FileName, BatchNaturalOrder.Instance))
         {
             var problem = file.Problem;
             if (problem == BatchExclusion.None && string.IsNullOrWhiteSpace(file.Text)) problem = BatchExclusion.Empty;
-            int order = items.Count + 1;
-            int? same = null;
-            if (problem == BatchExclusion.None)
-            {
-                if (firstWithText.TryGetValue(file.Sha256, out int earlier)) same = earlier;
-                else firstWithText[file.Sha256] = order;
-            }
-            items.Add(new BatchItem(Guid.NewGuid(), order, file.FileName, file.Sha256, file.Bytes,
+            items.Add(new BatchItem(Guid.NewGuid(), items.Count + 1, file.FileName, file.Sha256, file.Bytes,
                 file.Text is null ? 0 : CountCharacters(file.Text), string.Empty,
-                problem == BatchExclusion.None ? BatchItemState.Ready : BatchItemState.Excluded, problem, SameTextAs: same));
+                problem == BatchExclusion.None ? BatchItemState.Ready : BatchItemState.Excluded, problem, SourcePath: file.SourcePath));
         }
         return AssignOutputNames(items, outputNameFor, outputExists, numberTracks);
     }
@@ -54,19 +46,36 @@ public static class BatchPlanner
         ArgumentNullException.ThrowIfNull(outputExists);
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in items.Where(IsLocked)) if (item.OutputFileName.Length > 0) used.Add(item.OutputFileName);
-        int width = Math.Max(2, items.Count.ToString(CultureInfo.InvariantCulture).Length);
+        int width = TrackWidth(items);
         var result = new List<BatchItem>(items.Count);
+        // Identical text is noted against the earliest file with that text in the current order, so the note stays
+        // right after the user moves or removes files (it is never an order number from when the file was added).
+        var firstWithText = new Dictionary<string, int>(StringComparer.Ordinal);
         int track = 0;
         foreach (var item in items)
         {
-            if (item.IsIncluded) track++;
+            int order = result.Count + 1;
+            int? same = null;
+            if (item.IsIncluded)
+            {
+                track++;
+                if (firstWithText.TryGetValue(item.SourceSha256, out int earlier)) same = earlier;
+                else firstWithText[item.SourceSha256] = order;
+            }
             string name = item.OutputFileName;
             if (!IsLocked(item))
                 name = item.IsIncluded ? UniqueName(PreferredName(item.SourceFileName, track, width, numberTracks, outputNameFor), used, outputExists) : string.Empty;
             if (name.Length > 0) used.Add(name);
-            result.Add(item with { Order = result.Count + 1, OutputFileName = name });
+            result.Add(item with { Order = order, OutputFileName = name, SameTextAs = same });
         }
         return result;
+    }
+
+    /// <summary>Digits used for track numbers: at least two, enough for every included file.</summary>
+    public static int TrackWidth(IReadOnlyList<BatchItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        return Math.Max(2, items.Count(x => x.IsIncluded).ToString(CultureInfo.InvariantCulture).Length);
     }
 
     /// <summary>The name a file would get with no clash: its title, optionally prefixed with its track number.
@@ -84,7 +93,7 @@ public static class BatchPlanner
     public static IReadOnlyList<BatchItem> Renamed(IReadOnlyList<BatchItem> items, Func<string, string> outputNameFor, bool numberTracks = false)
     {
         ArgumentNullException.ThrowIfNull(items);
-        int width = Math.Max(2, items.Count.ToString(CultureInfo.InvariantCulture).Length);
+        int width = TrackWidth(items);
         var result = new List<BatchItem>();
         int track = 0;
         foreach (var item in items)
@@ -132,7 +141,7 @@ public static class BatchPlanner
     /// <summary>Unicode scalar count, shown to the user. The exact billable maximum comes from the provider-specific review.</summary>
     public static int CountCharacters(string text) => text.EnumerateRunes().Count();
 
-    private static bool IsLocked(BatchItem item) => item.State is BatchItemState.Completed or BatchItemState.Running || item.JobId is not null;
+    public static bool IsLocked(BatchItem item) => item.State is BatchItemState.Completed or BatchItemState.Running || item.JobId is not null;
 
     private static string UniqueName(string candidate, HashSet<string> used, Func<string, bool> exists)
     {

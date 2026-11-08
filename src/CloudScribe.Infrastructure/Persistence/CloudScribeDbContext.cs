@@ -37,12 +37,37 @@ public sealed class CloudScribeDbContext(DbContextOptions<CloudScribeDbContext> 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ConfigureNarrationCopies(modelBuilder);
         ConfigureNarrationPartGroups(modelBuilder);
         ConfigureObservability(modelBuilder);
         ConfigureDocuments(modelBuilder);
         ConfigurePricingCatalogHistory(modelBuilder);
         ConfigurePricingContractOverrides(modelBuilder);
         ConfigureProviderAccountsAndCapabilities(modelBuilder);
+    }
+
+    private static void ConfigureNarrationCopies(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<BatchSourceImportEntity>(entity =>
+        {
+            entity.ToTable("batch_source_imports");
+            entity.HasKey(item => new { item.BatchId, item.ItemId });
+            entity.HasIndex(item => item.SourceDocumentId).IsUnique();
+            entity.HasIndex(item => item.SourceRevisionId).IsUnique();
+            entity.HasOne<DocumentEntity>().WithMany().HasForeignKey(item => item.SourceDocumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DocumentRevisionEntity>().WithMany().HasForeignKey(item => item.SourceRevisionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<NarrationCopyEntity>(entity =>
+        {
+            entity.ToTable("narration_copies");
+            entity.HasKey(item => new { item.SourceDocumentId, item.SourceRevisionId, item.TransformVersion, item.TransformSettings });
+            entity.HasIndex(item => item.ChildDocumentId).IsUnique();
+            entity.HasIndex(item => item.ChildRevisionId).IsUnique();
+            entity.HasOne<DocumentEntity>().WithMany().HasForeignKey(item => item.SourceDocumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DocumentRevisionEntity>().WithMany().HasForeignKey(item => item.SourceRevisionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DocumentEntity>().WithMany().HasForeignKey(item => item.ChildDocumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DocumentRevisionEntity>().WithMany().HasForeignKey(item => item.ChildRevisionId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureNarrationPartGroups(ModelBuilder modelBuilder)

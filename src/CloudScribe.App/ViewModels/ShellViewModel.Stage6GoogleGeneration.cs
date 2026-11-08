@@ -142,6 +142,7 @@ public sealed partial class ShellViewModel
             _googleSamplePrepared = false;
             cancellationToken.ThrowIfCancellationRequested();
             StatusMessage = "Google generation · compiling exact current request for spend review";
+            await ValidateCurrentNarrationCopyAsync(cancellationToken).ConfigureAwait(true);
             GoogleGenerationSpendReview review = await prepare(cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Google generation preparation returned no spend review.");
             review.Validate();
@@ -179,6 +180,7 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Google generation explicit spend approval is not configured.");
             cancellationToken.ThrowIfCancellationRequested();
             StatusMessage = "Google generation · confirming spend authorization for the displayed compiled request";
+            await ValidateCurrentNarrationCopyAsync(cancellationToken).ConfigureAwait(true);
             await approve(authorizedMaximumMinorUnits, confirmedByUser, cancellationToken).ConfigureAwait(true);
             RequireUnchangedGoogleRequest(requestVersion);
             PreparedGoogleGenerationSpendApproved = true;
@@ -211,7 +213,7 @@ public sealed partial class ShellViewModel
             Guid? articleRevisionAtStart = _currentRevisionId;
             long articleRequestVersion = Volatile.Read(ref _googleRequestVersion);
             bool articleCleanAtStart = !IsDocumentDirty && !IsDocumentSaving;
-            GoogleGenerationUiExecutionContext executionContext = await ResolveGoogleExecutionContextAsync(cancellationToken)
+            GoogleGenerationUiExecutionContext executionContext = await ResolveNarrationExecutionContextAsync(cancellationToken)
                 .ConfigureAwait(true);
             var coordinator = executionContext.Coordinator
                 ?? throw new InvalidOperationException("Google generation coordinator is unavailable for the current authorization state.");

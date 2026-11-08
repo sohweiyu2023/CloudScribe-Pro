@@ -15,7 +15,7 @@ namespace CloudScribe.Infrastructure.Batch;
 /// <item>A file that already started keeps its earlier approval exactly, so its saved job is never orphaned.</item>
 /// </list></summary>
 public sealed class BatchAdmissionRequestBuilder(IDocumentLibrary library, TimeProvider clock, BatchLongAudioPlanner? longAudio = null,
-    IBatchArticleWorkflow? articles = null)
+    IBatchArticleWorkflow? articles = null, INarrationCopyStore? narrationCopies = null)
 {
     public async Task<BatchAdmissionRequest> BuildAsync(NarrationBatch batch, BatchAuthorityProfile profile, string accountStableId, string projectStableId,
         BatchConsent? previous = null, CancellationToken cancellationToken = default)
@@ -41,17 +41,19 @@ public sealed class BatchAdmissionRequestBuilder(IDocumentLibrary library, TimeP
                 if (kept.LongAudio is { } retained && la is not null)
                     retainedLongAudio = checked(retainedLongAudio + la.RetainedCredit(retained, item.JobId));
                 items.Add(new(item.ItemId, item.Order, item.SourceSha256, item.Characters, documentId, kept.RevisionId, kept.Engine, kept.PlanSha256, 0,
-                    kept.MaximumMinorUnits, true, false, "Already started: keeps its original approval.", null, kept.LongAudio));
+                    kept.MaximumMinorUnits, true, false, "Already started: keeps its original approval.", null, kept.LongAudio, kept.NarrationTextSha256, kept.NarrationSource));
                 continue;
             }
             var document = await library.OpenAsync(documentId, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("A queued document is missing from the library.");
             if (document.CurrentRevisionId != item.RevisionId)
                 throw new InvalidOperationException("A queued document was edited after it was added. Remove it and add the file again.");
-            items.Add(await PlanItemAsync(batch, profile, engines, la, laUnavailable, item, document, cancellationToken).ConfigureAwait(false));
+            await BatchNarrationIdentity.ValidateAsync(library, batch.Settings, item, narrationCopies, cancellationToken).ConfigureAwait(false);
+            var planned = await PlanItemAsync(batch, profile, engines, la, laUnavailable, item, document, cancellationToken).ConfigureAwait(false);
+            items.Add(planned with { NarrationTextSha256 = item.NarrationTextSha256, NarrationSource = item.NarrationSource });
         }
         var consentItems = items.Where(x => x.Engine is not null)
-            .Select(x => new BatchConsentItem(x.ItemId, x.SourceSha256, x.DocumentId, x.RevisionId, x.PlanSha256, x.EstimatedMaximumMinorUnits, x.Engine!, x.LongAudio))
+            .Select(x => new BatchConsentItem(x.ItemId, x.SourceSha256, x.DocumentId, x.RevisionId, x.PlanSha256, x.EstimatedMaximumMinorUnits, x.Engine!, x.LongAudio, x.NarrationTextSha256, x.NarrationSource))
             .ToArray();
         var consent = BatchConsent.Create(Guid.NewGuid(), batch, BatchConsentSource.ReviewedInstall, profile, accountStableId, projectStableId, consentItems, clock.GetUtcNow());
         return new(BatchAdmissionRequest.CurrentFormat, batch.BatchId, profile.Sha256(), batch.SettingsSha256, accountStableId, projectStableId,

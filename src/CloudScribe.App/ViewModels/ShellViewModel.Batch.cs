@@ -29,6 +29,29 @@ public sealed partial class ShellViewModel
         { problem = "The selected voice is not verified for this account. Refresh voices and select it again."; return null; }
     }
 
+    /// <summary>Voices the batch window offers: verified, enabled and authorized for the current account and project.</summary>
+    public IReadOnlyList<CloudScribe.Domain.Generation.VoiceLabCatalogSelection> BatchVoiceChoices =>
+        VoiceLabCatalogResults.Where(v => v.CapabilityCurrent && v.VoiceEnabled && v.AccountProjectAuthorized)
+            .OrderBy(v => v.VoiceStableId, StringComparer.Ordinal).ToArray();
+
+    /// <summary>Selects the verified voice with this identity for the batch (the same selection the main window uses).
+    /// Returns false, changing nothing, when that voice is not in the current verified catalog.</summary>
+    public bool TrySelectBatchVoice(string voiceStableId)
+    {
+        var match = BatchVoiceChoices.FirstOrDefault(v => string.Equals(v.VoiceStableId, voiceStableId, StringComparison.Ordinal));
+        if (match is null) return false;
+        SelectedVoiceLabVoice = match;
+        return true;
+    }
+
+    /// <summary>Refreshes the verified voice catalog, when the main window could refresh it now. Sends no synthesis request.</summary>
+    public async Task<bool> RefreshBatchVoicesAsync()
+    {
+        if (!RefreshVoiceLabCatalogCommand.CanExecute(null)) return false;
+        await RefreshVoiceLabCatalogCommand.ExecuteAsync(null).ConfigureAwait(true);
+        return true;
+    }
+
     /// <summary>The same verified voice applied to one batch document.</summary>
     public static GoogleTtsStudioRequestSelection ForBatchDocument(GoogleTtsStudioRequestSelection voice, Guid documentId, Guid revisionId, string text)
     {

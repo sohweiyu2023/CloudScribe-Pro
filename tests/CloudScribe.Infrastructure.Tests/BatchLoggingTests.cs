@@ -62,6 +62,7 @@ public sealed partial class BatchLoggingTests
     [InlineData("article.provider-rejected-no-retry")]
     [InlineData("article.provider-outcome-uncertain-no-retry")]
     [InlineData("article.stopped-reconcile")]
+    [InlineData("article.narration-copy-recovery-only")]
     public void FixedReasonsRemainCompleteInBothSinksAndSafeExport(string reason)
     {
         using var fixture = new LoggingFixture();

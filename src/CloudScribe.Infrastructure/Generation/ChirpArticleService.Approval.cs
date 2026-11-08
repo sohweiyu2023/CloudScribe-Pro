@@ -27,7 +27,7 @@ public sealed partial class ChirpArticleService
         using var transaction = connection.BeginTransaction(deferred: false);
         if (wholeArticleJobId is { } jobId)
             await RequireWholeArticleJobAsync(connection, transaction, policy, jobId, pending.Review.PlanSha256, pending.Intent.CoverageOrdinal, cancellationToken).ConfigureAwait(false);
-        var current = await CurrentAsync(connection, transaction, policy, pending.Intent, cancellationToken).ConfigureAwait(false);
+        var current = await CurrentFreshArticleAsync(connection, transaction, policy, pending.Intent, cancellationToken).ConfigureAwait(false);
         var financial = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(financial.Sha256, pending.FinancialSha256, StringComparison.Ordinal))
             throw LocalRequestDiagnostics.Mark(new InvalidOperationException("Financial evidence changed after review; all reservations remain retained."), LocalRequestReason.FinancialChanged, pending.CreatedAt, pending.Review.ExpiresAtUtc);

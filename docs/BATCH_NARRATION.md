@@ -2,44 +2,67 @@
 
 Make one MP3 for each of several TXT files with one voice, one review and one approval. Source files are only read. Each file becomes its own library document (exactly like **Import…**) and its own MP3, in the order you set. Files are never merged, and no extra tracks are created.
 
+## Skip web addresses without changing your originals
+
+In an unsaved batch, tick **Skip web addresses in narration** under **Voice and output**. Select a row and choose **Preview selected narration text** to inspect what will be spoken. On **Add to library and save batch**, CloudScribe keeps the imported original and saves a separate narration copy only when URLs were found. Each row reports its omission count; the review and estimate use that copy's actual text. URL-only files are skipped locally with a reason, never submitted as empty requests. Files without recognized URLs keep the normal single-document path.
+
+The option is locked for a saved batch; prepare a new batch to choose differently. Editing the original or its narration copy invalidates approval for requests that have not started. Editing the original does not change the text bound to an existing job: **Check again**, then **Resume**, checks recorded jobs before unstarted files, even when a different file needs a fresh review. Never regenerate merely to reconcile an uncertain result. Editing the narration copy itself can block article progress or export under its existing revision checks; receipts and accepted audio are retained, but this is not automatic recovery of every historical revision.
+
+The original TXT bytes, normalized original document and narration copy have separate integrity pins. A restart or a queue-save failure reuses the same verified imported document and copy rather than duplicating them. An edited or damaged copy is not silently reused or repaired by clearing the checkbox. To prepare a replacement, start a new batch from the original TXT, or put the original text in a new saved document and preview URL skipping there. Keep existing jobs and accepted audio for reconciliation.
+
+For an existing long document, **Create MP3** offers the same preview and **Save and use narration copy** action. Then choose **Review this copy as a one-file batch**. Choose an output folder and review the normal batch approval. This requires the existing batch/Long Audio setup; it does not inherit the original's admission. If an unsaved draft already exists, it is kept and you are asked to finish or discard it first.
+
+URL skipping has a local safety bound of 16,777,216 UTF-16 text units per document; larger files are kept as originals and excluded from that batch. Split them or prepare a new batch with the option off.
+
+Preview is deliberately literal: recognized web addresses are omitted; inline Markdown link labels remain; punctuation and whitespace are retained. Ambiguous strings may remain. This feature does not change the older text-editing **Simplify URLs** option.
+
+If an article has recoverable already-started work but its original has changed, a **Recover already-started work only** review can finish that admitted recovery. Unstarted parts remain blocked, and this action does not promise a complete article MP3.
+
 ## Using it
 
-1. Open **Create MP3** and select a verified voice. The whole batch uses it.
-2. Choose **Batch MP3 from TXT files…** near the top. It is also under **Create MP3** in the side panel when connected.
-3. Choose **Add TXT files…** (multi-select) or **Add a folder…** (top-level `.txt` files; subfolders are not included).
-   - The first files are listed in natural order: `2` before `10`, full-width digits included.
-   - Files added later go **after** the current list, so an order you arranged is kept.
-   - **Move up**, **Move down** and **Remove** change the list.
-   - A file with the same text as an earlier one is **kept** as its own track and marked "same text as file NN".
+The window walks through five steps, shown at the top with a **Next:** line that always says what to do now:
+**1 Files → 2 Voice and output → 3 Review and approval → 4 Run → 5 Results**. A button that is not available yet explains why when you point at it (or focus it with the keyboard).
+
+1. Open **Queue** in the navigation or player strip to see **Drop TXT files or folders here** immediately. Dropping there opens the batch window and appends the files to your existing draft. You can also choose **Batch MP3** beside **Create MP3** in the main window, or **Batch MP3 from TXT files…** near the top of **Create MP3**. No text in the current Studio document is needed.
+2. **Files.** Drag TXT files or whole folders from File Explorer anywhere in the batch list, whether empty or populated, or choose **Add TXT files…** (multi-select) or **Add a folder…** (several folders allowed). Tick **Include subfolders** to look inside subfolders too.
+   - The drop area lights up while you drag; anything that is not a `.txt` file is left out and the status line says how many.
+   - New files go **after** the current list, so an order you arranged is kept. Among themselves they are sorted naturally by folder and then name (`2` before `10`, full-width digits included).
+   - One TXT always makes one MP3. Adding the same file twice is ignored (and reported). Two different files with identical text stay two tracks; the later one is marked "same text as file NN (*name*), kept as its own track", and this note follows the current order after any move or removal.
    - Only files that cannot be used are left out, with the reason on the row: empty, not UTF-8/UTF-16 (save it as UTF-8 and add it again), over 32 MB, unreadable, or not `.txt`.
-4. Choose the engine:
+   - There is no limit on the number of files. Reading and adding show progress and can be cancelled; anything finished before the cancel is kept.
+3. **Arrange.** Drag rows by their grip (⠿); a gold line shows where they will land, and the list scrolls when you drag near its top or bottom edge. Select several rows with Shift or Ctrl and drag or move them together; they keep their relative order. Keyboard: **Alt+Up / Alt+Down** moves the selected files, **Alt+Home / Alt+End** moves them to the top or end, **Delete** removes them, **Ctrl+Z** undoes, and **Enter** plays a finished MP3. **Move up**, **Move down**, **Remove** and **Undo** do the same with the mouse. Only waiting files without a saved job can be moved. Files that failed before library import can also be removed and added again; started files remain protected. **Ctrl+Z** stays available after **Delete**, including when you remove the last row.
+4. **The draft is kept automatically.** Until you save it, the batch is an *unsaved draft* stored in the profile (`batches\draft.json`: file names, paths, sizes and SHA-256 hashes, never the text). Successfully autosaved drafts return after reopening, including after a crash, and appear as **Unsaved draft** in the batch list. Opening a saved batch or waiting for a voice does not discard the draft. Check the status line for any save error. **Discard draft** clears it, and **Undo discard** brings it back while the window is open.
+5. **Voice and output.** Choose the voice in the window (the same verified voices as the main window; **Refresh voices** reads the list again without requesting narration). If Google is not connected yet, keep arranging files; the draft waits. Choose the engine:
    - **Long Audio first** (recommended): Long Audio for every file it can take, the ordinary engine for the rest.
    - **Ordinary engine only**.
    - **Long Audio only**.
 
-   Also choose what happens when a file fails: skip it and continue (default), or stop the batch.
-5. Optionally tick **Number the MP3 files** (01, 02, …). A title that already starts with a number, such as `01 Preface`, is never numbered twice.
-6. Choose an output folder; it defaults to the source folder. An existing file is never overwritten. A clashing name gets ` (2)`, ` (3)` and so on, and the window says which names changed. Names are checked again when you save and when you start.
-7. Choose **Add to library and save batch**. The batch is saved in the profile (`batches\<id>.json`) and survives closing the app or a crash. Reopen it from **Open a saved batch**.
-8. The window then reviews every file, without sending anything.
+   Also choose what happens when a file fails: skip it and continue (default), or stop the batch. Optionally tick **Number the MP3 files** (01, 02, …): the width follows the number of narrated files, and a title that already starts with a number, such as `01 Preface`, is never numbered twice.
+6. **Output folder.** It defaults to the folder of the first file. An existing file is never overwritten: a clashing name gets ` (2)`, ` (3)` and so on, and the window says which names changed. Names are checked again when you save and when you start.
+7. Choose **Add to library and save batch**. Every file is read again first and must still be there. A file that changed since it was listed is taken as it is now (nothing was reviewed yet) and the window says so; a missing file stops the save and is named. The batch is then saved in the profile (`batches\<id>.json`) and survives closing the app or a crash. Reopen it from the batch list at the top. If adding to the library is cancelled or interrupted, opening the batch again finishes it by reading the files again; a file whose bytes changed is refused rather than narrated with different text. If a file fails before library import, remove it, fix or restore the source if needed, then add it again while additions are allowed. The removed row remains in the saved history; any new file needs a new review and approval.
+8. **Editing a saved batch.** Wait until the batch is not running and no other action is in progress. You can add files when the batch is ready or paused, including after earlier files have started; added files go into the library at once and need a new review and approval. Waiting files without a saved job can still be moved or removed while the batch is idle, even after earlier files have started. Moving or removing these files keeps the approval for the remaining unchanged requests. The output folder can change only before the first file starts.
+9. The window then reviews every file, without sending anything.
    - Each row shows its engine and the most it may cost.
    - The review summary shows the total and how much room is left in the installed Long Audio cap.
    - It also lists any files that still need an ordinary-engine admission, and any that no allowed engine can take.
-9. Approve:
-   - **Approve N files, up to …** (in-app mode).
-   - **Export batch request for review…** (reviewed mode; see below).
-10. If the batch has Long Audio files, tick the Long Audio consent to save private provider responses (it is required by Long Audio, and worded exactly as in the single-document Long Audio window).
-11. **Rehearse (no cost)** checks every file's real admission and exact maximum in its engine. It also checks:
-    - that the output folder is writable (by creating and removing a small probe file of its own);
-    - the names and the audio tools;
-    - the approval.
-12. Choose **Start**. Files run one at a time.
+   - If the selected voice is not the batch's own voice, choose **Use this batch's voice**.
+10. Approve:
+    - **Approve N files, up to …** (in-app mode).
+    - **Export batch request for review…** (reviewed mode; see below).
+    - If this computer has no batch spending setup, the window says so and **Start** stays unavailable. Preparing, saving and rehearsing still cost nothing.
+11. If the batch has Long Audio files, tick the Long Audio consent to save private provider responses (it is required by Long Audio, and worded exactly as in the single-document Long Audio window).
+12. **Rehearse (no cost)** checks every file's real admission and exact maximum in its engine. It also checks the voice, that the output folder is writable (by creating and removing a small probe file of its own), the names, the audio tools, the spending setup and the approval. The checklist appears under Review and approval; its verdict counts **every** ✗ line, so it never says "ready" while the voice, folder, setup or approval is a problem. Failed and needs-checking files are listed separately, because **Resume** skips them until you choose **Retry** or **Check again**.
+13. Choose **Start**. Files run one at a time.
     - **Pause after this file** stops before the next file starts.
     - **Stop now** stops at the next safe point. A request Google already received may still finish and be charged. Its saved job is preserved, and an unknown request is never automatically resent.
     - **Resume** continues the saved job after either, subject to its existing approval and reconciliation checks.
+    - Clicking twice, or clicking another action while a step is still working, is refused with a short message; nothing runs twice.
     - When the batch finishes, an ordered playlist (`<name> playlist.m3u8`) and a CSV summary are written to the output folder, never over an existing file.
+14. **Results.** The results line keeps done, failed, needs checking, skipped and waiting apart. **Open output folder** opens it; select a finished row and choose **Play selected MP3** (or press Enter). A failed local copy shows "speech is saved": **Retry** copies the verified MP3 again with no new request. **Needs checking** is never resent automatically. A file that once had an uncertain request keeps a note that an earlier request may have been charged, even after replacement audio is verified.
 
-Amounts are upper limits, estimates and holds, shown in Singapore dollars with the billing currency beside them. They are never a Google bill.
+The window works with the keyboard and screen readers (named controls, polite status announcements, focus kept on the moved files), at small window sizes (the button rows wrap and the page scrolls), at high DPI and with file names in any language.
+
+Amounts are shown in three separate places, each labelled: the **estimate** (an upper limit), the **approved allowance**, and what is **held** for started files together with any file whose request may have reached Google. Amounts are in Singapore dollars with the billing currency beside them. None of them is a Google bill; your Google Cloud bill is the only record of actual charges.
 
 ## Engines
 
@@ -63,7 +86,7 @@ A file's engine is fixed when it starts and is never switched afterwards, so a c
 - **Success means verified output.** A file is marked done only after its MP3 in the output folder matches the reported size and SHA-256.
 - **Saved speech is never regenerated.** If only the local copy failed (folder full, file locked, a name appeared), the file shows "speech is saved". **Retry** copies the verified MP3 again with no new request.
 - **Failures stay local.** A failed file never removes or changes finished ones.
-- **Redacted logs.** Events 1640–1650 retain IDs linking batches, items and jobs, counts, timings, fixed reason codes, safe failure categories/numeric error codes, queue recovery observations, user-action stages, and amounts with currency and decimal scale. They contain no file names, source text, paths, credentials or exception messages. These batch events persist in safe trend history; diagnostic observer failure cannot change narration or cause a retry.
+- **Redacted logs.** Batch events retain IDs linking batches, items and jobs, counts, timings, fixed reason codes, safe failure categories/numeric error codes, queue recovery observations, user-action stages, and amounts with currency and decimal scale. Source checks also record whether a draft is ready, refreshed or unavailable, or a saved import encounters changed or unavailable bytes, is interrupted or refused, or succeeds after its queue record is saved. They contain no file names, source text, paths, credentials or exception messages. These batch events persist in safe trend history; diagnostic observer failure cannot change narration or cause a retry.
 
 ## Support diagnostics and retention
 
@@ -96,7 +119,7 @@ The rolling ceiling counts other batches' holds, their unfinished files' approve
 
 These ceilings are limits on what an approval may cover. They are never an approval themselves: nothing runs until you approve a specific batch, with its total shown.
 
-**2. The per-batch approval** binds the exact source hashes, documents and revisions, each file's engine, its exact plan or Long Audio request binding (which covers the saved text, attempt and output object), its maximum, the total and an expiry. Any change before a file starts needs a new approval. Approvals are stored side by side and never overwritten, so a file that started under an earlier approval always keeps it.
+**2. The per-batch approval** binds the exact source hashes, documents and revisions, each file's engine, its exact plan or Long Audio request binding (which covers the saved text, attempt and output object), its maximum, the total and an expiry. Adding a file or changing the approved request content needs a new review and approval. Moving or removing waiting files keeps the existing approval for the remaining unchanged requests. Approvals are stored side by side and never overwritten, so a file that started under an earlier approval always keeps it.
 - In `InAppWithinLimits` mode, **Approve** is one click. It is saved only if it fits both ceilings and the Long Audio cap room.
 - In `Reviewed` mode, **Export batch request for review…** writes `batch-admission-request-<id>.json` (format v2). The reviewer installs it once with the script below.
 
@@ -136,4 +159,3 @@ Example profile (`batch-profile.json`):
 
 - **Ordinary-engine files still need an installed article admission.** Admitting them from a batch approval would change the article service's reviewed financial continuity (policy hashes, attempt counts, allocations), so it needs its own independent review.
 - **ID3 track numbers** are not written. Order is carried by the playlist, the CSV and the optional `NN` prefixes.
-- **Subfolders** are not scanned.

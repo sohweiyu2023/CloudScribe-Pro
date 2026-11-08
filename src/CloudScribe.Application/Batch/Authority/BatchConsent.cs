@@ -51,6 +51,10 @@ public sealed record BatchConsent(
         {
             Add(string.Join('|', item.ItemId.ToString("N"), item.SourceSha256, item.DocumentId.ToString("N"), item.RevisionId.ToString("N"),
                 item.PlanSha256, item.MaximumMinorUnits.ToString(CultureInfo.InvariantCulture), item.Engine));
+            if (item.NarrationTextSha256 is { } textHash) Add("narration-text-v1|" + textHash);
+            if (item.NarrationSource is { } source)
+                Add(string.Join('|', "narration-source-v1", source.DocumentId.ToString("N"), source.RevisionId.ToString("N"),
+                    source.TextSha256, source.TransformVersion, source.OmittedUrlCount.ToString(CultureInfo.InvariantCulture)));
             if (item.LongAudio is { } la)
                 Add(string.Join('|', "long-audio", la.AttemptId.ToString("N"), la.OutputGcsUri, la.RequestBindingSha256,
                     la.CeilingUsdCents.ToString(CultureInfo.InvariantCulture), la.FamilyMaximumUsdCents.ToString(CultureInfo.InvariantCulture),

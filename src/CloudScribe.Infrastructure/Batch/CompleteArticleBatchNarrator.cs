@@ -19,7 +19,7 @@ public sealed class CompleteArticleBatchNarrator(BatchAuthorityGate gate, IBatch
         if (!string.Equals(queue.Settings.Engine, BatchEngines.CompleteArticle, StringComparison.Ordinal))
             return (false, "This batch uses an engine that is not available for batches in this version.");
         var (account, project) = identity();
-        var decision = await gate.CheckAsync(queue, account, project, cancellationToken).ConfigureAwait(false);
+        var decision = await gate.CheckRunAsync(queue, account, project, cancellationToken).ConfigureAwait(false);
         return (decision.Allowed, decision.Explanation);
     }
 
@@ -29,6 +29,9 @@ public sealed class CompleteArticleBatchNarrator(BatchAuthorityGate gate, IBatch
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(recordJob);
+        var (account, project) = identity();
+        var decision = await gate.CheckItemAsync(queue, item, account, project, cancellationToken).ConfigureAwait(false);
+        if (!decision.Allowed) return new(BatchOutcomeKind.NotAuthorized, decision.ReasonCode);
         var consent = await gate.LoadConsentAsync(queue.BatchId, cancellationToken).ConfigureAwait(false);
         var approved = consent?.Items.SingleOrDefault(x => x.ItemId == item.ItemId);
         if (approved is null || item.DocumentId is not { } documentId || approved.DocumentId != documentId)

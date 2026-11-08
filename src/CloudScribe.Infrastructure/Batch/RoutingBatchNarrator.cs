@@ -11,7 +11,7 @@ public sealed class RoutingBatchNarrator(BatchAuthorityGate gate, Func<(string A
     {
         ArgumentNullException.ThrowIfNull(queue);
         var (account, project) = identity();
-        var decision = await gate.CheckAsync(queue, account, project, cancellationToken).ConfigureAwait(false);
+        var decision = await gate.CheckRunAsync(queue, account, project, cancellationToken).ConfigureAwait(false);
         return (decision.Allowed, decision.Explanation);
     }
 
@@ -20,6 +20,11 @@ public sealed class RoutingBatchNarrator(BatchAuthorityGate gate, Func<(string A
     {
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(item);
+        var (account, project) = identity();
+        var authority = await gate.CheckItemAsync(queue, item, account, project, cancellationToken).ConfigureAwait(false);
+        if (!authority.Allowed) return new(BatchOutcomeKind.NotAuthorized,
+            authority.ReasonCode is "batch.narration-changed" or "batch.narration-validation-unavailable" or "batch.narration-version"
+                ? authority.ReasonCode : "batch.not-authorized");
         var consent = await gate.LoadConsentAsync(queue.BatchId, cancellationToken).ConfigureAwait(false);
         string? engine = consent?.Items.SingleOrDefault(x => x.ItemId == item.ItemId)?.Engine;
         if (engine is null || !engines.TryGetValue(engine, out var narrator))

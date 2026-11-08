@@ -2,6 +2,54 @@
 
 All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in the app are estimates and safety holds, never a Google bill.
 
+## 1.0.4 (8 November 2026)
+
+Batch window usability, optional URL skipping and safety follow-up. Spending rules, caps and explicit approvals stay unchanged.
+
+### Skip web addresses in narration
+- Optional **Skip web addresses in narration** keeps the original document and TXT file unchanged. **Create MP3** previews the result, then saves and opens a separate narration copy before a new cost review. Batch drafts offer the same option and a selected-row preview.
+- Costs, request size checks, payloads and recovery use the actual saved narration text. Long copies use **Review this copy as a one-file batch**, with their own approval under the existing installed setup; an original's admission is never inherited. Existing drafts are not replaced.
+- URL-only inputs are excluded locally. Text without recognized URLs needs no extra copy. The recognizer covers HTTP/HTTPS and www links and preserves inline Markdown labels. Preview the result: it intentionally avoids guessing at ambiguous text and preserves surrounding punctuation and whitespace.
+- Durable source/copy provenance makes repeated preparation and interrupted imports idempotent. Changed originals, copies or options invalidate unstarted approval. Started and uncertain jobs retain their original exact identity for reconciliation. Legacy URL simplification and unchecked requests are unchanged.
+- Raw TXT hashes remain separate from normalized saved-text and narration hashes, including BOM/CRLF inputs. Fixed safe preparation/reuse/failure/invalidation diagnostics contain no URLs, article text or paths.
+
+### Windows review fixes
+- **Queue** now shows a TXT file/folder drop area immediately in both the page and player drawer. Dropping opens the existing batch window and appends to the saved draft without generating audio. **Batch MP3** also opens directly beside **Create MP3**. Empty-document guidance points to Batch, and the empty batch has a prominent drop heading with picker alternatives. Existing queue inspection and spending checks are unchanged.
+- Draft autosave failures keep a clear warning instead of being replaced by a success message. The window stays open, and Undo remains available for the in-memory edit so files can be restored before retrying the save.
+- Source checks now record fixed diagnostic outcomes for fresh, changed, missing or refused sources and completed imports. Safe history and support exports retain these events without file names, paths or text; logging failures remain advisory.
+- The user and batch guides now match subfolder import, keyboard Undo, source recovery and the exact editing and approval rules.
+- Keyboard Undo stays reachable after removing selected rows, including the last row. Folder-recursion and track-number checkboxes have explicit screen-reader names.
+- Draft Undo now preserves the previous arrangement instead of retaining the mutable current list.
+- Saving rereads local TXT files even when text is cached; changed files use their current text and missing files block saving. Resuming a saved import always checks its pinned source hash.
+- A file that failed before import can be removed and added again, while saved audit history and started-file protection remain intact.
+- Switching between batches with identical visible rows refreshes their identities, so selection and row actions target the current batch.
+
+### Adding and arranging files
+- **Drag and drop** TXT files and whole folders from File Explorer into the batch list, with a highlighted drop area and plain messages for anything left out. **Add a folder…** accepts several folders and can **include subfolders**. The pickers stay.
+- New files are appended without disturbing an arranged order, sorted naturally by folder and name. The same TXT added twice is ignored and reported; one TXT always makes one MP3, even when two files have identical text.
+- **Drag rows to reorder**, with a gold insertion line and auto-scroll near the list edges. **Multi-select** (Shift/Ctrl) moves files together in their relative order. Keyboard: Alt+Up/Down, Alt+Home/End, Delete, Ctrl+Z, Enter to play. **Undo** covers moves, removals, adds and discarding a draft.
+- **Fixed:** "same text as file NN" notes used the row number from when a file was added, so they pointed at the wrong file after a move or removal. They now follow the current order and name the earlier file.
+- **Fixed:** track-number width counted excluded files (100 files with 5 unusable could give three-digit numbers).
+
+### Drafts, voices and saved batches
+- **Drafts are autosaved** (`batches\draft.json`: names, paths, sizes and hashes, never text). Successfully saved drafts return after closing the window, switching to a saved batch, a missing voice or a crash. Check the status line for save errors and keep the window open until saving succeeds. **Discard draft** is undoable while the window is open.
+- **Fixed the missing-voice dead end:** the voice is chosen inside the batch window (with **Refresh voices**), and the draft waits if Google is not connected yet. Saved batches offer **Use this batch's voice**.
+- Saving reads every file again: a missing file is named and nothing is saved; a file changed since listing is taken as it is now and reported.
+- **Idle saved batches are editable:** add files in Ready or Paused batches, and move or remove waiting files that have no started job, including after earlier files have started. The output folder can change only before any file starts. Additions and changed request content need a new review and approval; moves and removals keep approval for unchanged remaining requests.
+- **Interrupted or cancelled adds resume** when the batch is reopened, by reading the files again with their SHA-256 checked. A changed file is refused instead of being narrated with different text. Files are never added to the library twice.
+
+### Guidance, rehearsal and results
+- A **step guide** (Files → Voice and output → Review → Run → Results) with a **Next:** line, and tooltips on unavailable buttons that list every missing prerequisite. When this computer has no batch spending setup, the window says a paid batch cannot start; it no longer implies one is ready.
+- **Fixed:** the rehearsal could report a voice or output-folder problem and still end "All N remaining file(s) are ready". Its verdict now counts every blocking check (voice, folder, spending setup, unfinished adds, approval and each file), lists failed and needs-checking files separately, and appears under Review and approval.
+- Money is shown in three labelled parts: the estimate (upper limit), the approved allowance, and holds plus any file whose request may have reached Google. **A possible earlier charge stays visible** after replacement audio is verified (new `UncertainOutcomes` counter on each file).
+- **Results** keep done, failed, needs checking, skipped and waiting apart. **Open output folder** and **Play selected MP3** were added.
+
+### Responsiveness and accessibility
+- Reading, checking and adding files show progress and can be **cancelled**; work finished before the cancel is kept. Repeated or overlapping clicks are refused with a message instead of running twice. Long queues use a virtualised list; there is no file-count limit.
+- Selection and keyboard focus stay on the moved files; status and next-step lines are announced politely to screen readers; button rows wrap in small windows.
+- **Fixed:** changing the engine, failure policy or track numbering in a draft could be reset by the window's own refresh before it was applied.
+- New redacted diagnostic stages (draft save/load/discard, drop, drag reorder, undo, voice choice, open output, cancel) use the existing batch action event.
+
 ## 1.0.3 (8 November 2026)
 
 ### Batch MP3 from TXT files (new)

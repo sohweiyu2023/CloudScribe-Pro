@@ -6,4 +6,5 @@ public sealed record BatchSourceFile(
     string Sha256,
     long Bytes,
     string? Text,
-    BatchExclusion Problem = BatchExclusion.None);
+    BatchExclusion Problem = BatchExclusion.None,
+    string? SourcePath = null);

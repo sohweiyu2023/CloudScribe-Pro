@@ -38,6 +38,11 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         clock = timeProvider ?? TimeProvider.System;
     }
 
+    private Func<GoogleLongAudioRequest, CancellationToken, ValueTask>? _freshSubmissionCheck;
+
+    internal GoogleLongAudioLedgerAdmission WithFreshSubmissionCheck(Func<GoogleLongAudioRequest, CancellationToken, ValueTask>? check)
+    { _freshSubmissionCheck = check; return this; }
+
     public async ValueTask RequireSubmissionAuthorizedAsync(GoogleLongAudioRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -61,6 +66,7 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         RequireFamilyLimit(ledger, request, proof, amount);
         // Only structurally valid, unconsumed financial authority may reach credential/storage readiness.
         await requireReadiness(request, parent, cancellationToken).ConfigureAwait(false);
+        if (_freshSubmissionCheck is not null) await _freshSubmissionCheck(request, cancellationToken).ConfigureAwait(false);
         var revalidated = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
         if (revalidated.Ceiling != amount || revalidated.Proof != proof)
             throw new InvalidDataException("Long Audio request authority changed during current readiness.");
@@ -113,6 +119,7 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         var review = await ReviewAsync(request, cancellationToken).ConfigureAwait(false);
         if (review.IsAlreadyCommitted)
             throw new InvalidOperationException("This request already has a retained commitment; reconcile its saved operation instead of submitting it.");
+        if (_freshSubmissionCheck is not null) await _freshSubmissionCheck(request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Read-only continuation check. It neither creates a commitment nor authorizes another POST.</summary>

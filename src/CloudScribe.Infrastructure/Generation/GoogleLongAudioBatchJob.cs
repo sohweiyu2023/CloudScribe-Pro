@@ -18,8 +18,9 @@ public sealed record GoogleLongAudioBatchJob(
     long CeilingUsdCents,
     long FamilyMaximumUsdCents,
     bool AdaptiveRecovery,
-    bool Committed = false)
+    bool Committed = false,
+    string? NarrationTextSha256 = null)
 {
     public GoogleLongAudioDocumentJob ToDocumentJob() =>
-        new(DocumentId, RevisionId, SourceSha256, AttemptId, OutputGcsUri, "text", MaximumOutputBytes, ExpectedSampleRate, ExpectedChannels);
+        new(DocumentId, RevisionId, NarrationTextSha256 ?? SourceSha256, AttemptId, OutputGcsUri, "text", MaximumOutputBytes, ExpectedSampleRate, ExpectedChannels);
 }
