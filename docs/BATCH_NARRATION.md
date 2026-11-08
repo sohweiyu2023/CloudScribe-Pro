@@ -67,6 +67,8 @@ A file's engine is fixed when it starts and is never switched afterwards, so a c
 
 ## Support diagnostics and retention
 
+Open **Diagnostics** and choose **Export safe diagnostic history ZIP locally** in the separate safe-history section. Read the contents/exclusions and displayed local destination first. The ZIP is saved in the workspace's `support-bundles` folder; the completed path is shown and nothing is uploaded. **Cancel safe history export** stops an in-progress export, and another export cannot start until it finishes. The existing **Export application metadata locally** action remains separate and creates its metadata-only JSON.
+
 Support ZIPs include regenerated allowlisted routine metadata and permanent safe trend history, including batch events. All records present within each source file's captured byte length are streamed; later appended records belong to a later export. There is no aggregate byte, record-count or recognized-log-file cutoff. `SupportBundleMaximumMiB` remains accepted for configuration compatibility but no longer limits safe exports. `SupportBundleMaximumFileCount` only guards an unexpectedly cluttered directory of non-exportable entries.
 
 This is safe metadata, not an archive of everything. Routine logs still rotate, and private provider captures keep their separate consent and 24-hour logical expiry. Private captures, article text, audio, credentials and databases are excluded from support ZIPs. Malformed, incomplete, unsafe or oversized individual records receive explicit omission markers; schema, record-size and nesting safeguards remain. Export is cancellable, disk errors are reported, and failed or cancelled exports do not publish a partial archive. Original local records are not rewritten by export.

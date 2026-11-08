@@ -192,6 +192,7 @@ public static class CompositionRoot
             serviceProvider.GetRequiredService<IPricingContractOverrideStore>(),
             serviceProvider.GetRequiredService<IProviderAccountStore>(),
             serviceProvider.GetRequiredService<IProviderCapabilitySnapshotStore>());
+        viewModel.ConfigureSafeDiagnosticExport(serviceProvider.GetRequiredService<AppPaths>().SupportBundleStagingDirectory);
         viewModel.ConfigureStage5GenerationDiagnostics(
             serviceProvider.GetRequiredService<GenerationSupportBundleExportCoordinator>(),
             currentPolicyAllowsDiagnostics: true);

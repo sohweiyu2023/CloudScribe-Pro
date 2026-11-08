@@ -659,6 +659,15 @@
                     <TextBlock Text="Inspection reads local metadata only; it never selects a default account or refreshes a provider implicitly." Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" FontSize="{DynamicResource Typography.Small}" />
                   </StackPanel>
                   <Button Classes="primary" Content="{Binding CurrentPage.PrimaryActionLabel}" Command="{Binding CurrentPage.PrimaryActionCommand}" IsVisible="{Binding CurrentPage.HasPrimaryAction}" HorizontalAlignment="Left" />
+                  <StackPanel IsVisible="{Binding IsSafeDiagnosticExportVisible}" Spacing="10" Margin="0,16,0,0">
+                    <TextBlock Text="SAFE DIAGNOSTIC HISTORY ZIP" Foreground="{DynamicResource Brush.Secondary}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
+                    <TextBlock Text="{Binding SafeDiagnosticExportDisclosure}" Foreground="{DynamicResource Brush.InkMuted}" TextWrapping="Wrap" />
+                    <TextBlock Text="Local destination:" Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" />
+                    <SelectableTextBlock Text="{Binding SafeDiagnosticExportDestination}" Foreground="{DynamicResource Brush.Secondary}" TextWrapping="Wrap" AutomationProperties.Name="Local safe diagnostic history export destination" />
+                    <Button Content="Export safe diagnostic history ZIP locally" Command="{Binding ExportSafeDiagnosticHistoryCommand}" HorizontalAlignment="Left" />
+                    <Button Content="Cancel safe history export" Command="{Binding CancelSafeDiagnosticHistoryCommand}" HorizontalAlignment="Left" />
+                    <SelectableTextBlock Text="{Binding SafeDiagnosticExportStatus}" Foreground="{DynamicResource Brush.Secondary}" TextWrapping="Wrap" AutomationProperties.Name="Safe diagnostic history export status" />
+                  </StackPanel>
                 </StackPanel>
               </Border>
             </StackPanel>
