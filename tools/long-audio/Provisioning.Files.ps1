@@ -30,7 +30,11 @@ function ConvertFrom-LAJson([byte[]]$Bytes) {
     try{Assert-LAUnique $json.RootElement}finally{$json.Dispose()}
     return ConvertFrom-Json -InputObject $text -AsHashtable -Depth 64
 }
-function ConvertTo-LABytes($Value) { return ,([Text.UTF8Encoding]::new($false).GetBytes(($Value|ConvertTo-Json -Compress -Depth 64))) }
+function ConvertTo-LABytes($Value) {
+    # The pipeline emits nothing for an empty array. Preserve every existing nonempty serialized identity.
+    if($Value -is [array] -and $Value.Count -eq 0){return ,([Text.Encoding]::UTF8.GetBytes('[]'))}
+    return ,([Text.UTF8Encoding]::new($false).GetBytes(($Value|ConvertTo-Json -Compress -Depth 64)))
+}
 function Assert-LARecord($Value,[string[]]$Fields) {
     if($Value -isnot [Collections.IDictionary] -or $Value.Count -ne $Fields.Count){throw 'LongAudioRecordShape'}
     foreach($key in $Value.Keys){if($key -cnotin $Fields){throw 'LongAudioUnknownField'}}

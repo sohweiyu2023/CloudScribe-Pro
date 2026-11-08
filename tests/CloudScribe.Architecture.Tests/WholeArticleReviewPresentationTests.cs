@@ -47,8 +47,9 @@ public sealed class WholeArticleReviewPresentationTests
         string text = WholeArticleReviewPresentation.Estimate(Review());
         Assert.Contains("up to USD 0.17", text, StringComparison.Ordinal);
         Assert.Contains("Generate authorizes up to this amount", text, StringComparison.Ordinal);
-        Assert.Contains("Existing commitments: USD 1.75", text, StringComparison.Ordinal);
+        Assert.Contains("Article-generation commitments: USD 1.75", text, StringComparison.Ordinal);
         Assert.Contains("acknowledges these existing holds", text, StringComparison.Ordinal);
+        Assert.Contains("retained article approval baselines and reservations, not your complete Google account bill", text, StringComparison.Ordinal);
         Assert.Contains("not the final Google bill", text, StringComparison.Ordinal);
         Assert.Contains("without separate confirmations", text, StringComparison.Ordinal);
         Assert.Contains("existing approved spending limit", text, StringComparison.Ordinal);

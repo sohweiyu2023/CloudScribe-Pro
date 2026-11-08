@@ -51,7 +51,7 @@ public static class ChirpArticleAudioCoverage
             {
                 var candidates = byOrdinal[part.CoverageOrdinal].ToArray();
                 if (!IsHash(part.PayloadSha256) || part.PayloadBytes is < 1 or > 5_000
-                    || part.Range.EndScalarExclusive - part.Range.StartScalar > ChirpNarrationPlanner.MaximumRequestScalars
+                    || part.Range.EndScalarExclusive - part.Range.StartScalar > MaximumPartScalars(plan, part)
                     || candidates.Length != 1 || !string.Equals(candidates[0].PlanSha256, plan.PlanSha256, StringComparison.Ordinal)
                     || candidates[0].Range != part.Range || candidates[0].Audio.DocumentId != plan.DocumentId
                     || candidates[0].Audio.RevisionId != plan.RevisionId
@@ -69,6 +69,11 @@ public static class ChirpArticleAudioCoverage
         RequireUniqueBoundedAudio(ordered);
         return ordered.AsReadOnly();
     }
+
+    private static int MaximumPartScalars(ChirpArticlePlanProposal plan, ChirpArticlePlanPart part) =>
+        string.Equals(plan.PlannerVersion, ChirpArticlePlanCompiler.Neural2Version, StringComparison.Ordinal)
+            && GoogleFullDocumentVoiceSupport.IsNeural2(plan.LanguageCode, plan.VoiceName)
+            ? part.PayloadBytes : ChirpNarrationPlanner.MaximumRequestScalars;
 
     private static ArticleAcceptedAudio[] RequireRecoveredPart(ChirpArticlePlanProposal plan,
         ChirpArticlePlanPart part, ChirpRecoveredArticleCoverage recovered)

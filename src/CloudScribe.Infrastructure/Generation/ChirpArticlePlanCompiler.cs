@@ -19,8 +19,9 @@ public static partial class ChirpArticlePlanCompiler
         ArgumentException.ThrowIfNullOrWhiteSpace(voice);
         if (document.Status != DocumentStatus.Active || document.Id == Guid.Empty || document.CurrentRevisionId is not { } revision || revision == Guid.Empty)
             throw new InvalidOperationException("Save an exact article revision before planning internal narration requests.");
-        if (!voice.Contains("-Chirp3-HD-", StringComparison.Ordinal) || !voice.StartsWith(language + "-", StringComparison.Ordinal))
-            throw new InvalidOperationException("This planning proposal applies only to Chirp 3 HD.");
+        if (!GoogleFullDocumentVoiceSupport.Supports(language, voice))
+            throw new InvalidOperationException("Full-document planning supports matching Chirp 3 HD and Neural2 voices; current catalog and exact family pricing are still required.");
+        if (GoogleFullDocumentVoiceSupport.IsNeural2(language, voice)) return CompileNeural2(document, language, voice, reuse);
         var ranges = ChirpNarrationPlanner.Plan(document.Text, reuse);
         var texts = ChirpNarrationPlanner.SliceAll(document.Text, ranges);
         List<ChirpArticlePlanPart> parts = [];

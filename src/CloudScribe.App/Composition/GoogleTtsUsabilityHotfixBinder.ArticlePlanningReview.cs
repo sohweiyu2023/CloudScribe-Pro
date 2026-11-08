@@ -10,8 +10,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     private async Task OpenReadOnlyArticleReviewAsync(Window owner, ShellViewModel model, Guid document, Exception admissionError, CancellationToken token)
     {
         // Historical coverage may be inspected without renewing expired paid authority or consuming an approval.
-        const decimal planningRate = 30m;
         var selection = model.CaptureGoogleTtsStudioRequestSelection();
+        decimal planningRate = GoogleVoiceComparisonInformation.Rate(_comparisonPricing, selection.VoiceStableId)?.UsdPerMillion
+            ?? throw new InvalidOperationException("No verified planning character price is available for this selected voice.");
         var inspection = await chirpArticles!.InspectStoredArticleAsync(document, selection.VoiceStableId,
             selection.LanguageCode, planningRate, token).ConfigureAwait(true);
         var dialog = CreateArticleExportDialog(); dialog.Title = "Full article cost and saved audio"; dialog.Width = 720; dialog.Height = 580;

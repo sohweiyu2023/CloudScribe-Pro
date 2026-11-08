@@ -18,11 +18,11 @@ public sealed partial class ChirpArticleService
     public async Task<IReadOnlyList<ChirpArticleRecoveryChild>> PrepareRecoveryChildrenAsync(Guid jobId,
         Guid parentAuthorizationId, CancellationToken token = default)
     {
-        var policy = await PolicyAsync(token).ConfigureAwait(false);
         using var context = await factory.CreateDbContextAsync(token).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(token).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: true);
         var job = await ReadWholeArticleJobAsync(connection, transaction, jobId, token).ConfigureAwait(false);
+        var policy = await PolicyAsync(token, policySha256: job.PolicySha256).ConfigureAwait(false);
         RequireRecoveryJob(policy, job);
         var rows = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_owned_attempts", token).ConfigureAwait(false);
         var parent = rows.Single(x => Equals(x[0], parentAuthorizationId.ToString("N")));
@@ -34,11 +34,11 @@ public sealed partial class ChirpArticleService
 
     public async Task<ChirpResolvedSegment> ResolveRecoveryChildAsync(ChirpArticleRecoveryChild child, CancellationToken token = default)
     {
-        var policy = await PolicyAsync(token).ConfigureAwait(false);
         using var context = await factory.CreateDbContextAsync(token).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(token).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: true);
         var job = await ReadWholeArticleJobAsync(connection, transaction, child.JobId, token).ConfigureAwait(false);
+        var policy = await PolicyAsync(token, policySha256: job.PolicySha256).ConfigureAwait(false);
         RequireRecoveryJob(policy, job);
         RequireRecoveryChildJob(job, child);
         var financial = await ReadFinancialAsync(connection, transaction, policy, token).ConfigureAwait(false);
@@ -55,11 +55,11 @@ public sealed partial class ChirpArticleService
     public async Task<ChirpApprovedAttempt> ApproveRecoveryChildAsync(ChirpArticleRecoveryChild child,
         ChirpRequestIntent intent, CancellationToken token = default)
     {
-        var policy = await PolicyAsync(token).ConfigureAwait(false);
         using var context = await factory.CreateDbContextAsync(token).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(token).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: false);
         var job = await ReadWholeArticleJobAsync(connection, transaction, child.JobId, token).ConfigureAwait(false);
+        var policy = await PolicyAsync(token, policySha256: job.PolicySha256).ConfigureAwait(false);
         RequireRecoveryJob(policy, job);
         RequireRecoveryChildJob(job, child);
         if (intent.CoverageOrdinal != child.CoverageOrdinal || intent.DocumentId != job.DocumentId)

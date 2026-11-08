@@ -7,7 +7,11 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed class InstalledChirpArticleAdmissionStore(string applicationDirectory, AppPaths paths, TimeProvider clock)
     : IChirpArticleAdmissionStore
 {
-    public async Task<ChirpArticleAdmissionPolicy?> LoadVerifiedAsync(CancellationToken cancellationToken = default)
+    public Task<ChirpArticleAdmissionPolicy?> LoadVerifiedAsync(CancellationToken cancellationToken = default) => LoadCoreAsync(true, cancellationToken);
+
+    internal Task<ChirpArticleAdmissionPolicy?> LoadRetainedVerifiedAsync(CancellationToken cancellationToken = default) => LoadCoreAsync(false, cancellationToken);
+
+    private async Task<ChirpArticleAdmissionPolicy?> LoadCoreAsync(bool requireCurrent, CancellationToken cancellationToken)
     {
         try
         {
@@ -25,7 +29,8 @@ public sealed class InstalledChirpArticleAdmissionStore(string applicationDirect
             foreach (string optional in new[] { "LegacyAssociations", "LegacyAssociationRows" })
                 if (shape.RootElement.TryGetProperty(optional, out var value) && value.ValueKind != JsonValueKind.Array) return null;
             var policy = ChirpPolicyFiles.Parse<ChirpArticleAdmissionPolicy>(bytes);
-            ChirpPolicyValidation.RequireValid(policy, clock.GetUtcNow());
+            var now = clock.GetUtcNow();
+            ChirpPolicyValidation.RequireValid(policy, !requireCurrent && policy.ExpiresAtUtc <= now ? policy.ExpiresAtUtc.AddTicks(-1) : now);
             string appHash = ChirpPolicyFiles.Hash(await ChirpPolicyFiles.ReadAsync(Path.Combine(app, "CloudScribe.dll"), 512 * 1024 * 1024, cancellationToken).ConfigureAwait(false));
             string infrastructureHash = ChirpPolicyFiles.Hash(await ChirpPolicyFiles.ReadAsync(Path.Combine(app, "CloudScribe.Infrastructure.dll"), 512 * 1024 * 1024, cancellationToken).ConfigureAwait(false));
             if (!string.Equals(policy.AppSha256, appHash, StringComparison.Ordinal)

@@ -50,6 +50,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 await OpenReadOnlyArticleReviewAsync(owner, model, document, error, lifetime.Token).ConfigureAwait(true);
                 return;
             }
+            if (!await ConfirmArticleVoiceSelectionAsync(owner, model, review).ConfigureAwait(true)) return;
             var dialog = CreateArticleExportDialog(); dialog.Title = WholeArticleReviewPresentation.ActionLabel(review); dialog.Width = 720; dialog.Height = 620;
             var body = new StackPanel { Margin = new Thickness(20), Spacing = 14 };
             var estimate = NewDescription($"Article: {model.DocumentTitle}. " + WholeArticleReviewPresentation.Estimate(review));

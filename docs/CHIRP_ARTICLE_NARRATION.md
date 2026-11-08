@@ -1,8 +1,16 @@
-# Chirp 3 internal article narration
+# Full-document narration: Chirp 3 and Neural2
+
+## Neural2 and voice comparisons
+
+The complete-article workflow also accepts supported Neural2 voices through the separate `google-neural2-compiled-boundaries-v1` planner. It compiles plain-text MP3 parts to at most 5,000 serialized bytes each, counting request fields and JSON escaping. It preserves every source character, whitespace, order and final cutoff, preferring existing natural boundaries and otherwise splitting only between complete Unicode text elements. An indivisible over-limit text element or an unfit whitespace-only range stops planning without discarding text. No SSML or additional voice-control support is implied.
+
+Neural2 does not use Chirp's legacy 333-scalar heuristic. Existing Chirp planner versions, hashes and request identities are unchanged; the Chirp-specific sections below still apply to those plans. Both paths retain the existing 1,000,000-Unicode-scalar source and 10,000-coverage-part resource bounds, request-byte checks and exact admission/budget gates. Full-document planning adds no arbitrary short-document limit and does not use the 500-character sample box.
+
+In **Voices**, **Review full document with this voice** opens the existing complete-article review for a saved, nonempty document and supported connected voice. To compare the same passage with Neural2 and Chirp, save a separate document with identical text for each voice and obtain each exact admission and approval. A selected/admitted voice mismatch stops the review with guidance to use a separate document; it never replaces an older plan or voice. See [Voice comparison](VOICE_COMPARISON.md).
 
 ## Complete-article workflow
 
-For a complete recording, select the saved original article, choose **Create MP3**, then **Review full article and cost**. Review the estimate, exact voice and retained commitments, choose a destination and select **Generate complete article MP3** once. The admitted job handles internal requests, progress, accepted-audio reuse and ordered assembly. Completed-output controls refer to that article's verified export. The individual-request procedure below is the advanced diagnostic route, not a required click for every chunk.
+For a complete recording, select the saved original article, choose **Create MP3**, then **Review full article and cost**. Review the estimate, exact voice and retained commitments, choose a destination and select **Generate complete article MP3** once. The admitted job handles internal requests, progress, accepted-audio reuse and ordered assembly. Completed-output controls refer to that article's verified export. The individual-request procedure below is the advanced diagnostic route, not a required click for every chunk. A clean package alone grants no paid authority; separately reviewed additive admissions are described in [Windows installation](WINDOWS_INSTALLATION.md#add-a-separate-exact-article-admission).
 
 An approved recovery plan can split confirmed sentence-length rejections into strictly smaller source-preserving requests. It stops on indivisible input, no progress, the cumulative spending cap, uncertainty or a distinct provider/system failure, rather than an arbitrary split-depth count. Acceptance is not guaranteed and no numerical Google sentence limit is established. Completion-bound jobs have no fixed run deadline; historical explicitly time-bounded diagnostic scopes retain their own rules and are not renewed implicitly.
 

@@ -17,7 +17,7 @@ public static class WholeArticleReviewPresentation
             ? "Recover authorizes only the displayed already-started work and its admitted split recovery within the existing approved spending limit. It does not authorize the blocked parts. "
             : $"Generate authorizes up to this amount for this article within the existing approved spending limit, without separate confirmations for its {review.RemainingRequests} remaining parts. ")
         + RecoveryDescription(review)
-        + $"Existing commitments: {Amount(review.Currency, review.RetainedCommitmentsMinorUnits, review.Scale)} remain retained; this action acknowledges these existing holds. "
+        + $"Article-generation commitments: {Amount(review.Currency, review.RetainedCommitmentsMinorUnits, review.Scale)} remain retained; this action acknowledges these existing holds. These are retained article approval baselines and reservations, not your complete Google account bill. "
         + "Accepted audio is reused. The app stops if a request has an uncertain outcome; it will not automatically pay to repeat it.";
 
     public static string Details(ChirpWholeArticleReview review) =>

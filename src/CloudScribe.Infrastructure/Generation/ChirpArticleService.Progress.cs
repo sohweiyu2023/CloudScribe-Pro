@@ -9,7 +9,7 @@ public sealed partial class ChirpArticleService
     public async Task<ChirpResolvedSegment> ResolveSegmentAsync(Guid documentId, int ordinal, string accountId,
         string projectId, string voice, string language, CancellationToken cancellationToken = default)
     {
-        var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
+        var policy = await PolicyAsync(cancellationToken, documentId).ConfigureAwait(false);
         if (!string.Equals(policy.AccountId, accountId, StringComparison.Ordinal) || !string.Equals(policy.ProjectId, projectId, StringComparison.Ordinal))
             throw new InvalidOperationException("The current account/project does not match independently admitted article scope.");
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -31,7 +31,7 @@ public sealed partial class ChirpArticleService
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: true);
-        var admittedNow = await admission.LoadVerifiedAsync(cancellationToken).ConfigureAwait(false);
+        var admittedNow = await ChirpArticleAdmissionLookup.FindAsync(admission, documentId, token: cancellationToken).ConfigureAwait(false);
         var refining = admittedNow?.Articles.SingleOrDefault(x => x.Proposal.DocumentId == documentId && (x.Proposal.Refinement is not null || x.Proposal.SentenceSuccessor is not null));
         if (refining is not null)
         {
@@ -43,7 +43,7 @@ public sealed partial class ChirpArticleService
         }
         if (!await HasStoredPlanAsync(documentId, cancellationToken).ConfigureAwait(false))
         {
-            var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
+            var policy = await PolicyAsync(cancellationToken, documentId).ConfigureAwait(false);
             var financial = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
             var current = await _evidence.ResolveAsync(connection, transaction, policy, documentId, financial.Old, cancellationToken).ConfigureAwait(false);
             return DescribeProgress(current.Article, [], [], []);
@@ -59,7 +59,8 @@ public sealed partial class ChirpArticleService
         var splitIds = (await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_split_attempts", cancellationToken).ConfigureAwait(false))
             .Select(x => (string)x[0]!).ToHashSet(StringComparer.Ordinal);
         rows = rows.Where(x => !splitIds.Contains((string)x[0]!)).ToArray();
-        var policyNow = await admission.LoadVerifiedAsync(cancellationToken).ConfigureAwait(false);
+        var policyNow = await ChirpArticleAdmissionLookup.FindAsync(admission, documentId, token: cancellationToken).ConfigureAwait(false);
+        if (policyNow is not null && !ChirpPolicyValidation.IsCompletionBound(policyNow) && policyNow.ExpiresAtUtc <= clock.GetUtcNow()) policyNow = null;
         var active = policyNow?.Articles.SingleOrDefault(x => string.Equals(x.Proposal.PlanSha256, plan, StringComparison.Ordinal));
         IReadOnlyList<ChirpSegmentAllowance> allowed = active?.AllowedSegments ?? [];
         if (await ResumePolicyAsync(null, cancellationToken).ConfigureAwait(false) is { } resume)

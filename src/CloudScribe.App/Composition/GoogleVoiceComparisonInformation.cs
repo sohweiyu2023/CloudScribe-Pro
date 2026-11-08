@@ -30,7 +30,7 @@ public static class GoogleVoiceComparisonInformation
         "Wavenet" => "WaveNet family. Its checked character price matches Standard; compare the delivery rather than assuming a higher price.",
         "Neural2" => "Neural2 family. Higher character price; naturalness and pronunciation still need listening comparison.",
         "Studio" => "Studio family. Substantially higher list price; official samples only in this focused comparison panel.",
-        "Chirp 3 HD" => "HD family with different request capabilities. Official samples only; this panel does not assume compatible prosody settings.",
+        "Chirp 3 HD" => "HD family with different request capabilities. Use full-document review for supported narration; the short-sample box does not assume compatible prosody settings.",
         _ => "Catalog/reference entry. No compatible priced short-sample workflow is asserted for this family.",
     };
 

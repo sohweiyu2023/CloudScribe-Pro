@@ -19,6 +19,8 @@ on:
       - 'licenses/**'
       - 'scripts/**'
       - 'tools/completion_workflow/**'
+      - 'tools/article-admission/**'
+      - 'tools/long-audio/**'
       - '.gitattributes'
       - '.github/triggers/**'
       - '.github/workflows/cloudscribe-voice-comparison.yml'
@@ -70,6 +72,9 @@ jobs:
           ./scripts/Test-InstallCloudScribe-SelfTests.ps1
           ./scripts/Test-RecoveryAdmissionPolicy-SelfTests.ps1
           ./scripts/Test-ChirpArticlePolicy-SelfTests.ps1
+          ./scripts/Test-ArticleVoicePolicy-SelfTests.ps1
+          ./scripts/Test-AdditiveArticleAdmission-SelfTests.ps1
+          ./scripts/Test-AdditiveArticleBuildRebind-SelfTests.ps1
           ./scripts/Test-ChirpReservationResumePolicy-SelfTests.ps1
           ./scripts/Test-CompletionWorkflowGate-SelfTests.ps1 -PythonPath (Get-Command python).Source
           ./scripts/Test-CompletionInterpreterRepair-SelfTests.ps1 -PythonPath (Get-Command python).Source

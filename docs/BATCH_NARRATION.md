@@ -73,7 +73,9 @@ A file can use Long Audio when:
 - its text is at most 1 MB;
 - its whole cost, including any splitting, fits the room left in the installed Long Audio cap.
 
-**Ordinary engine** (complete article): the existing sentence-sized workflow, joined into one MP3. A file can use it once an installed article admission covers its exact plan. The review then shows the service's exact maximum; until then the row says "needs an installed article admission", and the file stops with nothing sent.
+**Ordinary engine** (complete article): internal requests are joined into one MP3. Neural2 uses its separately versioned plain-text planner, which sizes each request against the actual serialized 5,000-byte envelope, including JSON escaping and request fields. Chirp retains the existing sentence plan and its identities. A file can use this engine once an installed article admission covers its exact saved document, voice and plan. The review then shows the service's exact maximum; until then the row says "needs an installed article admission", and the file stops with nothing sent.
+
+Ordinary planning does not use the voice comparison box's 500-character cap or add an arbitrary short-document limit. Existing resource bounds remain: 1,000,000 Unicode scalars per saved source and 10,000 coverage parts, alongside the TXT import, request-byte, provider, authority and budget checks. A batch uses one voice; to compare identical text in two voices, prepare separate saved documents/batches with separate exact admissions and approvals. Changing a voice never transfers another document's authority.
 
 A file's engine is fixed when it starts and is never switched afterwards, so a charge can never be duplicated by trying another engine.
 

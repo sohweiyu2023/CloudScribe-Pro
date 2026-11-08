@@ -67,7 +67,8 @@ function Invoke-LABuildRebind([string]$Install,[string]$Profile,[string]$Package
             Assert-LABuildRollbackFinished $c
             return [pscustomobject]@{Verified=$true;AlreadyRolledBack=$true;NewCommitments=0;ProviderCalls=0}
         }
-        Assert-LABuildProfile $c
+        $publishedAdditive=$null -ne $c.Additive -and (Get-LAHash (Read-LABytes (Join-Path $c.Additive.Root 'registry.json'))) -ceq $c.Additive.NewRegistrySha
+        if(-not $publishedAdditive){Assert-LABuildProfile $c}
     }
     if(-not $c.Sealed){
         $old=Get-LAContext $Install $Profile (Join-Path $Install 'google-long-audio-scope.json') $c.Plan.PreviousScopeSha256
@@ -77,10 +78,11 @@ function Invoke-LABuildRebind([string]$Install,[string]$Profile,[string]$Package
             (Get-LABuildTreeHash $Profile) -cne $c.Plan.ProfileTreeSha256 -or
             (Get-LABuildTreeHash (Join-Path $Install 'long-audio-provisioning')) -cne $c.Plan.PreviousProvisioningTreeSha256){throw 'LongAudioBuildBaselineChanged'}
         $operations=Join-Path $Profile 'data/google-long-audio/operations'
-        if($c.Plan.Version -eq 1 -and (Test-Path -LiteralPath (Join-Path $operations 'observation-pending.guard'))){throw 'LongAudioBuildPendingProviderEvidence'}
         $retained=ConvertFrom-LAJson $c.OldLedger
         $nextScope=ConvertFrom-LAJson $c.NewScope
-        if($c.Plan.Version -eq 2){
+        $hasDeferred=$nextScope.Contains('DeferredUnknownRanges') -and $null -ne $nextScope.DeferredUnknownRanges
+        if(($c.Plan.Version -eq 1 -or -not $hasDeferred) -and (Test-Path -LiteralPath (Join-Path $operations 'observation-pending.guard'))){throw 'LongAudioBuildPendingProviderEvidence'}
+        if($c.Plan.Version -ge 2 -and $hasDeferred){
             Assert-LADeferredEvidence @{Scope=$nextScope;Profile=$Profile;Data=(Join-Path $Profile 'data/google-long-audio')} $retained
             if(@(Get-ChildItem -LiteralPath $operations -Filter '*.observation-pending.guard').Count -ne 0){throw 'LongAudioBuildAdditionalPendingProviderEvidence'}
         }
@@ -89,7 +91,7 @@ function Invoke-LABuildRebind([string]$Install,[string]$Profile,[string]$Package
         foreach($claim in $retained.Claims){
             $path=Join-Path $operations (([Guid]$claim.AttemptId).ToString('N')+'.json')
             $state=ConvertFrom-LAJson (Read-LABytes $path 8192)
-            if($c.Plan.Version -eq 2 -and @($nextScope.DeferredUnknownRanges|Where-Object {[Guid]$_.AttemptId -eq [Guid]$claim.AttemptId}).Count -eq 1){continue}
+            if($c.Plan.Version -ge 2 -and $hasDeferred -and @($nextScope.DeferredUnknownRanges|Where-Object {[Guid]$_.AttemptId -eq [Guid]$claim.AttemptId}).Count -eq 1){continue}
             if([Guid]$state.AttemptId -ne [Guid]$claim.AttemptId -or $state.BindingSha256 -cne $claim.RequestBindingSha256 -or
                 $state.State -notin @(2,3) -or $state.OperationParseFailed -or -not $state.Observation.ReadbackVerified -or
                 $state.Observation.ReadState -ne 1 -or $state.Observation.Truncated){throw 'LongAudioBuildPendingProviderEvidence'}
@@ -122,9 +124,18 @@ function Assert-LABuildFinished($Context) {
     if((Get-LABuildTreeHash (Join-Path $c.Install 'app')) -cne (Get-LAHash (ConvertTo-LABytes $candidate))){throw 'LongAudioBuildInstalledApplicationChanged'}
     $current=Get-LAContext $c.Install $c.Profile (Join-Path $c.Install 'google-long-audio-scope.json') $c.Plan.NewScopeSha256
     Assert-LACompleted $current (Read-LAPlan $current)
+    if($null -ne $c.Additive){Assert-AABuildFinished $c}
 }
 function Invoke-LABuildRebindLocked($Context,[string]$Phase,[scriptblock]$AfterCheckpoint) {
     $c=Get-LABuildRebind $Context.Install $Context.Profile $Context.Package $Context.PlanPath $Context.PlanSha
+    if($null -ne $c.Additive -and (Get-LAHash (Read-LABytes (Join-Path $c.Additive.Root 'registry.json'))) -ceq $c.Additive.NewRegistrySha){
+        if($Phase -ceq 'Rollback'){throw 'ArticleAdmissionPublishedBuildHistoryMustBePreserved'}
+        # The registry is the committed authority publication. New SQL reservations may exist after a crash.
+        # Verify exact installed app/metadata/retained Long Audio and finish only the build audit receipt.
+        Assert-LABuildFinished $c
+        Set-LABuildPhase $c 'Complete' $AfterCheckpoint
+        return [pscustomobject]@{Installed=$true;AlreadyPublished=$true;HistoryPreserved=$true;NewCommitments=0;ProviderCalls=0}
+    }
     $install=$c.Install;$before=Join-Path $c.History 'before';$app=Join-Path $install 'app';$oldApp=Join-Path $before 'app';$stage=Join-Path $c.History 'app-stage'
     foreach($path in @($before,$app,$oldApp,$stage)){Assert-LAPhysical $path;if(-not $path.StartsWith($install+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'LongAudioBuildMoveEscaped'}}
     if(-not $c.Sealed){
@@ -139,10 +150,13 @@ function Invoke-LABuildRebindLocked($Context,[string]$Phase,[scriptblock]$AfterC
         Copy-LABuildSnapshot $c.Profile (Join-Path $c.History 'closed-profile-backup') $inventory
         foreach($entry in @(@('cloudscribe-install.json',$c.OldMarker),@('chirp-article-admission-policy.json',$c.OldParent),@('google-long-audio-scope.json',$c.OldScope),@('budget-ledger.json',$c.OldLedger))){Set-LAExactFile (Join-Path $before $entry[0]) $entry[1]}
         Copy-LABuildSnapshot (Join-Path $install 'long-audio-provisioning') (Join-Path $before 'long-audio-provisioning') (Get-LABuildInventory (Join-Path $install 'long-audio-provisioning'))
+        if($null -ne $c.Additive){Copy-LABuildSnapshot $c.Additive.Root (Join-Path $before 'chirp-article-admissions') (Get-LABuildInventory $c.Additive.Root)}
         Set-LABuildPhase $c 'Prepared' $null
         if($AfterCheckpoint){& $AfterCheckpoint 'PreparedBeforeSeal'}
         Set-LAExactFile (Join-Path $c.History 'plan.json') $c.PlanBytes
-        $c.Sealed=$true;if($AfterCheckpoint){& $AfterCheckpoint 'Prepared'}
+        $c.Sealed=$true
+        if($null -ne $c.Additive){$c.Additive=Get-AABuildBinding $c}
+        if($AfterCheckpoint){& $AfterCheckpoint 'Prepared'}
     }elseif($Phase -ceq 'Install'){throw 'LongAudioBuildUseExactResume'}
     Assert-LABuildProfile $c
     if((Get-LABuildTreeHash (Join-Path $before 'long-audio-provisioning')) -cne $c.Plan.PreviousProvisioningTreeSha256){throw 'LongAudioBuildFrozenProvisioningChanged'}
@@ -153,6 +167,7 @@ function Invoke-LABuildRebindLocked($Context,[string]$Phase,[scriptblock]$AfterC
     foreach($row in $candidate){if($row.Path -ceq 'appsettings.json'){$row.Sha256=Get-LAHash $oldSettings;$row.Bytes=[long]$oldSettings.Length}}
     $candidateHash=Get-LAHash (ConvertTo-LABytes $candidate)
     if($Phase -ceq 'Rollback'){
+        if($null -ne $c.Additive -and (Get-LAHash (Read-LABytes (Join-Path $c.Additive.Root 'registry.json'))) -ceq $c.Additive.NewRegistrySha){throw 'ArticleAdmissionPublishedBuildHistoryMustBePreserved'}
         if(Test-Path -LiteralPath $app){
             $hash=Get-LABuildTreeHash $app
             if($hash -ceq $candidateHash){$displaced=Join-Path $c.History 'app-displaced';Assert-LAPhysical $displaced;if(Test-Path -LiteralPath $displaced){throw 'LongAudioBuildDisplacedAlreadyPresent'};[IO.Directory]::Move($app,$displaced)}
@@ -192,6 +207,7 @@ function Invoke-LABuildRebindLocked($Context,[string]$Phase,[scriptblock]$AfterC
     Write-LABuildAtomic $c (Join-Path $install 'cloudscribe-install.json') $c.NewMarker -Replace;Set-LABuildPhase $c 'MarkerPublished' $AfterCheckpoint
     $current=Get-LAContext $install $c.Profile (Join-Path $install 'google-long-audio-scope.json') $c.Plan.NewScopeSha256
     Assert-LACompleted $current (Read-LAPlan $current)
+    if($null -ne $c.Additive){Publish-AABuildBinding $c;Set-LABuildPhase $c 'AdditiveRegistryPublished' $AfterCheckpoint}
     Set-LABuildPhase $c 'Complete' $AfterCheckpoint
     return [pscustomobject]@{Installed=$true;BuildOnly=$true;Executable=(Join-Path $app 'CloudScribe.exe');PreservedClaimCount=(ConvertFrom-LAJson $c.NewLedger).Claims.Count;NewCommitments=0;ProviderCalls=0;History=$c.History}
 }
@@ -205,6 +221,7 @@ function Assert-LABuildRollbackFinished($Context) {
         (Get-LABuildTreeHash (Join-Path $c.Install 'long-audio-provisioning')) -cne $c.Plan.PreviousProvisioningTreeSha256){throw 'LongAudioBuildRollbackReadback'}
     $previous=Get-LAContext $c.Install $c.Profile (Join-Path $c.Install 'google-long-audio-scope.json') $c.Plan.PreviousScopeSha256
     Assert-LACompleted $previous (Read-LAPlan $previous)
+    if($null -ne $c.Additive){Assert-AABuildFinished $c -Rollback}
 }
 function Assert-LABuildKnownMetadata($Context) {
     $c=$Context;$pending=ConvertFrom-LAJson $c.NewMarker;$pending.LongAudioBuildRebindPending=$true
@@ -214,6 +231,7 @@ function Assert-LABuildKnownMetadata($Context) {
         if((Get-LAHash (Read-LABytes (Join-Path $c.Install $entry[0]))) -cnotin $entry[1]){throw 'LongAudioBuildUnknownIntermediateMetadata'}
     }
     if((Get-LAHash (Read-LABytes $c.LedgerPath)) -cnotin @((Get-LAHash $c.OldLedger),(Get-LAHash $c.NewLedger))){throw 'LongAudioBuildUnknownIntermediateLedger'}
+    if($null -ne $c.Additive){Assert-AABuildKnown $c}
     $frozen=Join-Path $c.History 'before/long-audio-provisioning'
     if(Test-Path -LiteralPath $frozen){
         $oldRows=Get-LABuildInventory $frozen;$newRows=@{}

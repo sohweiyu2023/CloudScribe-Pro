@@ -11,7 +11,7 @@ public sealed partial class ChirpArticleService
 
     public async Task<ChirpWholeArticleReview> PrepareWholeArticleAsync(Guid documentId, CancellationToken token = default)
     {
-        var policy = await PolicyAsync(token).ConfigureAwait(false);
+        var policy = await PolicyAsync(token, documentId).ConfigureAwait(false);
         var article = policy.Articles.Single(x => x.Proposal.DocumentId == documentId);
         RequireWholeArticleGrant(policy, article.Proposal.PlanSha256);
         var progress = await ProgressAsync(documentId, token).ConfigureAwait(false);
@@ -54,7 +54,7 @@ public sealed partial class ChirpArticleService
         });
         var review = new ChirpWholeArticleReview(Guid.NewGuid(), hash, documentId, article.Proposal.PlanSha256,
             article.Proposal.VoiceName, policy.Currency, policy.Scale, progress.SavedCoverageParts, progress.TotalCoverageParts,
-            remaining.Length, maximum, financial.ProjectCommitted, policy.ExpiresAtUtc, policy.WholeArticleGeneration!.MaximumCatalogRefreshes,
+            remaining.Length, maximum, financial.RetainedCommitments, policy.ExpiresAtUtc, policy.WholeArticleGeneration!.MaximumCatalogRefreshes,
             policy.ExpiresAtUtc, recovery.Requests, recovery.MinorUnits, ChirpPolicyValidation.IsCompletionBound(policy), scope.BlockedOrdinaryRequests);
         await RequirePolicyCurrentAsync(policy, token).ConfigureAwait(false);
         PublishWholeReview(review, ChirpPolicyValidation.Hash(policy), financial.Sha256, now, scope);
@@ -66,8 +66,8 @@ public sealed partial class ChirpArticleService
         lock (_wholeReviewGate)
         {
             foreach (var item in _wholePending)
-                if (!item.Value.Review.CompletionBound && now >= item.Value.Review.ConfirmByUtc || item.Value.Review.DocumentId == review.DocumentId
-                    || !string.Equals(item.Value.PolicySha256, policy, StringComparison.Ordinal)) _wholePending.TryRemove(item.Key, out _);
+                if (!item.Value.Review.CompletionBound && now >= item.Value.Review.ConfirmByUtc || item.Value.Review.DocumentId == review.DocumentId)
+                    _wholePending.TryRemove(item.Key, out _);
             _wholePending[review.PreviewId] = new(review, policy, financial, now, scope.RequiresCurrentNarrationCopy, scope.RecoveryJob);
         }
     }
@@ -81,7 +81,7 @@ public sealed partial class ChirpArticleService
             || confirmation.MaximumAdditionalMinorUnits != pending.Review.MaximumAdditionalMinorUnits
             || clock.GetUtcNow() < pending.CreatedAt || !pending.Review.CompletionBound && clock.GetUtcNow() >= pending.Review.ConfirmByUtc)
             throw new InvalidOperationException("Review the complete article, maximum cost and retained holds before Generate.");
-        var policy = await PolicyAsync(token).ConfigureAwait(false);
+        var policy = await PolicyAsync(token, policySha256: pending.PolicySha256).ConfigureAwait(false);
         RequireWholeArticleGrant(policy, pending.Review.PlanSha256);
         if (!string.Equals(ChirpPolicyValidation.Hash(policy), pending.PolicySha256, StringComparison.Ordinal))
             throw new InvalidOperationException("The independent article workflow admission changed after review.");

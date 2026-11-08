@@ -10,6 +10,12 @@ internal static class ChirpLegacySpendGuard
     {
         if (admission is not null)
         {
+            if (admission is IChirpArticleAdmissionCatalog catalogStore)
+            {
+                var catalog = await catalogStore.LoadCatalogVerifiedAsync(token).ConfigureAwait(false);
+                if (catalog.Families.Any(x => string.Equals(x.Policy.AccountId, account, StringComparison.Ordinal)))
+                    throw new InvalidOperationException("An independent article family allowance is active; ordinary spend cannot compete with its retained budget.");
+            }
             var policy = await admission.LoadVerifiedAsync(token).ConfigureAwait(false);
             if (policy is not null && string.Equals(policy.AccountId, account, StringComparison.Ordinal))
                 throw new InvalidOperationException("A reviewed internal article allocation is active; use its dedicated approval path so legacy spend cannot compete with its retained budget.");

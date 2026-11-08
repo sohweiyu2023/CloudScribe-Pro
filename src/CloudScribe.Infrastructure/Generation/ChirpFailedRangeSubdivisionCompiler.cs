@@ -10,6 +10,8 @@ public static class ChirpFailedRangeSubdivisionCompiler
     public static ChirpFailedRangeSubdivision Compile(DocumentSnapshot document, ChirpArticlePlanProposal parent,
         int ordinal, IReadOnlyList<ChirpNarrationReuse>? verifiedReuse = null)
     {
+        ArgumentNullException.ThrowIfNull(parent);
+        GoogleFullDocumentVoiceSupport.RequireChirpRecovery(parent.LanguageCode, parent.VoiceName);
         ChirpArticlePlanCompiler.RequireCurrent(parent, document, verifiedReuse);
         var part = parent.Parts.SingleOrDefault(x => x.CoverageOrdinal == ordinal)
             ?? throw new InvalidOperationException("The original immutable request is absent.");

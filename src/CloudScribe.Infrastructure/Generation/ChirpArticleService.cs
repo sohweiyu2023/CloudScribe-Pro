@@ -27,7 +27,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
     {
         ArgumentNullException.ThrowIfNull(intent);
         intent = intent with { CompiledPayload = intent.CompiledPayload.ToArray() };
-        var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
+        var policy = await PolicyAsync(cancellationToken, intent.DocumentId).ConfigureAwait(false);
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -53,7 +53,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
         });
         var review = new ChirpRequestReview(id, reviewHash, current.Article.Proposal.PlanSha256, intent.CoverageOrdinal,
             current.Document.Id, current.Document.CurrentRevisionId!.Value, intent.Envelope.CompiledPayloadSha256, intent.Envelope.CompiledPayloadBytes,
-            intent.Currency, intent.Scale, intent.EstimateMinorUnits, maximum, financial.ProjectCommitted, financial.AllocationRemaining,
+            intent.Currency, intent.Scale, intent.EstimateMinorUnits, maximum, financial.RetainedCommitments, financial.AllocationRemaining,
             existing?.AuthorizationId, policy.ExpiresAtUtc, intent.Envelope.PricingProvenanceId, intent.Envelope.VoiceName, policy.SuccessorGrant?.ParentAuthorizationId);
         foreach (var item in _pending)
             if (clock.GetUtcNow() - item.Value.CreatedAt > TimeSpan.FromMinutes(10)) _pending.TryRemove(item.Key, out _);
@@ -62,9 +62,9 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
         return review;
     }
 
-    private async Task<ChirpArticleAdmissionPolicy> PolicyAsync(CancellationToken token)
+    private async Task<ChirpArticleAdmissionPolicy> PolicyAsync(CancellationToken token, Guid? documentId = null, string? policySha256 = null)
     {
-        var value = await admission.LoadVerifiedAsync(token).ConfigureAwait(false)
+        var value = await ChirpArticleAdmissionLookup.FindAsync(admission, documentId, policySha256, token).ConfigureAwait(false)
             ?? throw LocalRequestDiagnostics.Mark(new InvalidOperationException("No current independently reviewed article-plan policy is admitted."), LocalRequestReason.AdmissionChanged);
         var owned = ChirpPolicyFiles.Parse<ChirpArticleAdmissionPolicy>(JsonSerializer.SerializeToUtf8Bytes(value));
         try { ChirpPolicyValidation.RequireValid(owned, clock.GetUtcNow()); }
@@ -81,7 +81,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
 
     private async Task RequirePolicyCurrentAsync(ChirpArticleAdmissionPolicy expected, CancellationToken token)
     {
-        var current = await PolicyAsync(token).ConfigureAwait(false);
+        var current = await PolicyAsync(token, policySha256: ChirpPolicyValidation.Hash(expected)).ConfigureAwait(false);
         if (!string.Equals(ChirpPolicyValidation.Hash(current), ChirpPolicyValidation.Hash(expected), StringComparison.Ordinal))
             throw new InvalidOperationException("Independent article admission was revoked or replaced during the operation.");
     }
@@ -101,6 +101,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
         if (policy.SuccessorGrant is { } successor && !string.Equals(intent.Envelope.CredentialReferenceId, successor.CredentialReferenceId, StringComparison.Ordinal))
             throw new InvalidOperationException("The successor's independently admitted credential binding changed.");
         var current = await _evidence.ResolveAsync(connection, transaction, policy, intent.DocumentId, financial.Old, token).ConfigureAwait(false);
+        RequireAdditionalRequest(financial.Family, current.Article.Proposal.PlanSha256, intent.CoverageOrdinal, intent.Envelope, intent.EstimateMinorUnits);
         var part = recoveryPart ?? current.Article.Proposal.Parts.SingleOrDefault(x => x.CoverageOrdinal == intent.CoverageOrdinal);
         var allowance = current.Article.AllowedSegments.SingleOrDefault(x => x.CoverageOrdinal == intent.CoverageOrdinal);
         if (part is null || allowance is null || part.Range.ReusedReceiptSha256 is not null || intent.EstimateMinorUnits > allowance.MaximumMinorUnits

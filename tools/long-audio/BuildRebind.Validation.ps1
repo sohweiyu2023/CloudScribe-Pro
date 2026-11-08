@@ -32,16 +32,20 @@ function Get-LABuildRebind([string]$Install,[string]$Profile,[string]$Package,[s
     $planFields=@('Version','TransactionId','SourceApprovalSha256','PreviousMarkerSha256','PreviousParentSha256','PreviousScopeSha256',
         'PreviousLedgerSha256','PreviousAppTreeSha256','PreviousProvisioningTreeSha256','ProfileTreeSha256','PackageAppTreeSha256','NewParentPath','NewParentSha256','NewScopePath','NewScopeSha256',
         'NativeProofPath','NativeProofSha256')
-    if($plan.Version -eq 2){$planFields+='DeferredEvidenceSha256'}
+    if($plan.Version -ge 2){$planFields+='DeferredEvidenceSha256'}
+    if($plan.Version -eq 3){$planFields+=@('AdditiveRegistrySha256','AdditiveSidecarTreeSha256','PreviousLegacyPolicyIdentitySha256','NewLegacyPolicyIdentitySha256','SourceApprovalPath')}
     Assert-LARecord $plan $planFields
-    if($plan.Version -notin @(1,2) -or [Guid]$plan.TransactionId -eq [Guid]::Empty){throw 'LongAudioBuildPlanShape'}
+    if($plan.Version -notin @(1,2,3) -or [Guid]$plan.TransactionId -eq [Guid]::Empty){throw 'LongAudioBuildPlanShape'}
     foreach($key in $plan.Keys|Where-Object {$_ -like '*Sha256'}){Assert-LAHash $plan[$key]}
     foreach($path in @($Install,$Profile,$Package,$plan.NewParentPath,$plan.NewScopePath,$plan.NativeProofPath)){Assert-LAPhysical $path}
     $install=[IO.Path]::GetFullPath($Install).TrimEnd([IO.Path]::DirectorySeparatorChar)
     $profile=[IO.Path]::GetFullPath($Profile).TrimEnd([IO.Path]::DirectorySeparatorChar)
     if($profile.StartsWith($install+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase) -or
         $install.StartsWith($profile+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase) -or $profile -ieq $install){throw 'LongAudioBuildRootOverlap'}
-    foreach($inputPath in @($Package,$PlanPath,$plan.NewParentPath,$plan.NewScopePath,$plan.NativeProofPath)){
+    $inputPaths=@($Package,$PlanPath,$plan.NewParentPath,$plan.NewScopePath,$plan.NativeProofPath)
+    if($plan.Version -eq 3){$inputPaths+=$plan.SourceApprovalPath}
+    foreach($inputPath in $inputPaths){
+        Assert-LAPhysical $inputPath
         $full=[IO.Path]::GetFullPath($inputPath).TrimEnd([IO.Path]::DirectorySeparatorChar)
         foreach($protected in @($install,$profile)){
             if($full -ieq $protected -or $full.StartsWith($protected+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase) -or
@@ -64,7 +68,11 @@ function Get-LABuildRebind([string]$Install,[string]$Profile,[string]$Package,[s
         $ledger.Version -ne 1 -or $ledger.ScopeSha256 -cne $plan.PreviousScopeSha256){throw 'LongAudioBuildPredecessorIdentity'}
     $newParent=Read-LABuildPin $plan.NewParentPath $plan.NewParentSha256;$newScope=Read-LABuildPin $plan.NewScopePath $plan.NewScopeSha256
     Assert-LABuildOnlyFields $parentBytes $newParent @('AppSha256','InfrastructureSha256','SourceApprovalSha256')
-    if($plan.Version -eq 1){Assert-LABuildOnlyFields $scopeBytes $newScope @('ParentPolicySha256','SourceApprovalSha256')}
+    $withoutDeferred=$plan.Version -eq 3 -and -not $scope.Contains('DeferredUnknownRanges') -and -not (ConvertFrom-LAJson $newScope).Contains('DeferredUnknownRanges')
+    if($plan.Version -eq 1 -or $withoutDeferred){
+        Assert-LABuildOnlyFields $scopeBytes $newScope @('ParentPolicySha256','SourceApprovalSha256')
+        if($withoutDeferred -and $plan.DeferredEvidenceSha256 -cne (Get-LAHash ([Text.Encoding]::UTF8.GetBytes('null')))){throw 'LongAudioDeferredApprovalPin'}
+    }
     else{
         $oldView=ConvertFrom-LAJson $scopeBytes;$newView=ConvertFrom-LAJson $newScope
         if(-not $oldView.Contains('DeferredUnknownRanges')){$oldView.DeferredUnknownRanges=$null}
@@ -86,9 +94,11 @@ function Get-LABuildRebind([string]$Install,[string]$Profile,[string]$Package,[s
     $native=ConvertFrom-LAJson (Read-LABuildPin $plan.NativeProofPath $plan.NativeProofSha256)
     Assert-LAInteger $native.Version 1
     $nativeFields=@('Version','Passed','PreviousParentSha256','NewParentSha256','PackageAppTreeSha256','ProfileTreeSha256','LongClaimCount','LongHeldCents','ChirpCommittedCents','ChirpCeilingCents','ProviderCalls','LiveWrites')
-    if($plan.Version -eq 2){$nativeFields+='DeferredEvidenceSha256'}
+    if($plan.Version -ge 2){$nativeFields+='DeferredEvidenceSha256'}
+    if($plan.Version -eq 3){$nativeFields+=@('AdditiveRegistrySha256','AdditiveSidecarTreeSha256','PreviousLegacyPolicyIdentitySha256','NewLegacyPolicyIdentitySha256')}
     Assert-LARecord $native $nativeFields
-    if($plan.Version -eq 2 -and $native.DeferredEvidenceSha256 -cne $plan.DeferredEvidenceSha256){throw 'LongAudioDeferredNativeProofPin'}
+    if($plan.Version -ge 2 -and $native.DeferredEvidenceSha256 -cne $plan.DeferredEvidenceSha256){throw 'LongAudioDeferredNativeProofPin'}
+    if($plan.Version -eq 3){foreach($key in @('AdditiveRegistrySha256','AdditiveSidecarTreeSha256','PreviousLegacyPolicyIdentitySha256','NewLegacyPolicyIdentitySha256')){if($native[$key] -cne $plan[$key]){throw 'ArticleAdmissionBuildNativeProofChanged'}}}
     [long]$held=0;foreach($claim in $ledger.Claims){Assert-LAInteger $claim.MaximumUsdCents 1;$held += [long]$claim.MaximumUsdCents}
     if($native.Version -ne 1 -or $native.Passed -isnot [bool] -or -not $native.Passed -or $native.ProviderCalls -ne 0 -or $native.LiveWrites -ne 0 -or
         $native.PreviousParentSha256 -cne $plan.PreviousParentSha256 -or $native.NewParentSha256 -cne $plan.NewParentSha256 -or
@@ -98,7 +108,13 @@ function Get-LABuildRebind([string]$Install,[string]$Profile,[string]$Package,[s
     $ledger.ScopeSha256=$plan.NewScopeSha256;$newLedger=ConvertTo-LABytes $ledger
     $marker.AppSha256=$nextParent.AppSha256;$marker.ChirpArticlePolicySha256=$plan.NewParentSha256;$marker.GoogleLongAudioScopeSha256=$plan.NewScopeSha256
     $newMarker=ConvertTo-LABytes $marker
-    return @{Install=$install;Profile=$profile;Package=$Package;History=$history;Plan=$plan;PlanPath=$PlanPath;PlanBytes=$planBytes;PlanSha=$PlanSha;Sealed=$sealed;
+    $context=@{Install=$install;Profile=$profile;Package=$Package;History=$history;Plan=$plan;PlanPath=$PlanPath;PlanBytes=$planBytes;PlanSha=$PlanSha;Sealed=$sealed;
         Old=$old;OldMarker=$markerBytes;OldParent=$parentBytes;OldScope=$scopeBytes;OldLedger=$ledgerBytes;LedgerPath=$ledgerPath;
         NewMarker=$newMarker;NewParent=$newParent;NewScope=$newScope;NewLedger=$newLedger;Parent=$nextParent}
+    $sidecar=Join-Path $install 'chirp-article-admissions'
+    if($plan.Version -eq 3 -or (Test-Path -LiteralPath $sidecar)){
+        if(-not (Get-Command Get-AABuildBinding -CommandType Function -ErrorAction SilentlyContinue)){throw 'ArticleAdmissionBuildHelperRequired'}
+        $context.Additive=Get-AABuildBinding $context
+    }else{$context.Additive=$null}
+    return $context
 }
