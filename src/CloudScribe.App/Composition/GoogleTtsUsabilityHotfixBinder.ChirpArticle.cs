@@ -114,7 +114,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 await model.ApproveChirpArticleAsync(new(displayed.PreviewId, displayed.ReviewSha256, displayed.MaximumMinorUnits, true, true), lifetime.Token).ConfigureAwait(true);
                 dialog.Close(); // Only reserves. Existing Generate remains a separate explicit action.
             });
-            export.Click += (_, _) => Start(LocalRequestStage.Export, () => ExecuteArticleExportAsync(dialog, model, document, status, lifetime.Token));
+            export.Click += (_, _) => Start(LocalRequestStage.Export, () => ExecuteArticleExportAsync(dialog, model, document, model.DocumentTitle, status, lifetime.Token));
             var close = CreateHistoricalCloseButton(dialog);
             foreach (Control control in new Control[] { status, choice, refresh, prepare, reviewText, consent, reserve, privateReview, repair, export, close }) body.Children.Add(control);
             dialog.Closed += (_, _) => { lifetime.Cancel(); if (displayed is not null) chirpPreparation.Discard(displayed.PreviewId); };

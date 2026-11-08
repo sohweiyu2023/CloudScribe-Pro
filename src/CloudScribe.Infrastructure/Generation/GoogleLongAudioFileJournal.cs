@@ -7,11 +7,14 @@ namespace CloudScribe.Infrastructure.Generation;
 public sealed partial class GoogleLongAudioFileJournal
 {
     private readonly string _root;
+    private readonly GoogleLongAudioDeferredWork? deferred;
 
     public GoogleLongAudioFileJournal(string privateDirectory)
     {
         _root = PhysicalDirectoryPolicy.EnsureExistsWithoutLinks(privateDirectory, "Long Audio journal requires a physical private directory.");
     }
+
+    internal GoogleLongAudioFileJournal(string privateDirectory, GoogleLongAudioDeferredWork? deferred) : this(privateDirectory) => this.deferred = deferred;
 
     public GoogleLongAudioCheckpoint Load(Guid id)
     {
@@ -21,11 +24,14 @@ public sealed partial class GoogleLongAudioFileJournal
 
     internal bool TryClaim(GoogleLongAudioRequest request)
     {
+        // The adapter already owns the global response lease. Validate before taking this attempt's
+        // non-reentrant journal lease, because deterministic ancestry inspection reads sibling journals.
+        deferred?.RequireReady(request, newPost: true);
         using var lease = Lease(request.AttemptId);
         string path = PathFor(request.AttemptId);
         if (File.Exists(path)) return false;
         using var submission = SubmissionLease();
-        BeginObservation(request.AttemptId, allowExisting: false);
+        BeginObservation(request.AttemptId, allowExisting: false, alreadyValidated: true);
         var value = new GoogleLongAudioCheckpoint(request.AttemptId, request.BindingSha256, request.ProjectNumber,
             request.Location, request.CredentialReferenceId, request.OutputGcsUri, request.PayloadSha256, request.PayloadBytes,
             GoogleLongAudioState.PostClaimed, null, 0, null, 0);
@@ -46,7 +52,8 @@ public sealed partial class GoogleLongAudioFileJournal
             Revision = expected.Revision,
             Observation = expected.Observation,
             OperationParseFailed = expected.OperationParseFailed,
-            FailureKind = expected.FailureKind
+            FailureKind = expected.FailureKind,
+            PollWaitDeadlineElapsed = expected.PollWaitDeadlineElapsed
         } != expected || updated.Revision != expected.Revision + 1)
             throw new InvalidOperationException("Long Audio journal binding cannot change.");
         string path = PathFor(expected.AttemptId), pending = path + "." + Guid.NewGuid().ToString("N") + ".pending";
@@ -82,6 +89,8 @@ public sealed partial class GoogleLongAudioFileJournal
             || observation.PrivateRecordId == Guid.Empty || observation.ReadbackVerified && (observation.PrivateRecordId is null
                 || observation.Retention != CloudScribe.Domain.Generation.GoogleExplanationRetentionState.SavedPrivately)))
             throw new InvalidDataException("Invalid Long Audio observation metadata.");
+        if (item.PollWaitDeadlineElapsed && !item.HasVerifiedPollDeadline)
+            throw new InvalidDataException("Invalid local poll-deadline evidence.");
         return item;
     }
 

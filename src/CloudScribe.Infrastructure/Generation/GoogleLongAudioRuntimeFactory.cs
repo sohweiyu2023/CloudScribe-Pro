@@ -38,7 +38,7 @@ public sealed partial class GoogleLongAudioRuntimeFactory(InstalledGoogleLongAud
         if (!review.IsAlreadyCommitted) recovery?.RequireNoOtherPending(request);
         await RequireLocalReadyAsync(request, context, tools, readAllowance, cancellationToken).ConfigureAwait(false);
         var observer = new GoogleLongAudioProtectedResponseObserver(persistence, clock);
-        var journal = new GoogleLongAudioFileJournal(context.OperationsDirectory);
+        var journal = new GoogleLongAudioFileJournal(context.OperationsDirectory, recovery?.Deferred);
         var adapter = new GoogleLongAudioAdapter(credentials, admission, journal, observer, trustedTransportFactory?.Invoke(), logs?.CreateLogger<GoogleLongAudioAdapter>());
         GoogleLongAudioOutputBoundary? output = null;
         try

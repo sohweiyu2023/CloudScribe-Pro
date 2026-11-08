@@ -8,6 +8,7 @@ using Avalonia.Styling;
 using CloudScribe.App.Diagnostics;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Documents;
+using CloudScribe.Application.Logging;
 
 namespace CloudScribe.App.Composition;
 
@@ -116,7 +117,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         Height = 480,
         WindowStartupLocation = WindowStartupLocation.CenterOwner,
         RequestedThemeVariant = ThemeVariant.Dark,
-        Background = new SolidColorBrush(Color.Parse("#111C2B")),
+        Background = CosmicDialogTheme.CreateDialogBackground(),
     };
 
     private async Task<(bool Complete, string Status)> InspectArticlePresentationAsync(Guid parentId)
@@ -139,7 +140,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     {
         export.IsEnabled = false;
         choice.IsEnabled = false;
-        try { await ExecuteArticleExportAsync(dialog, model, parentId, status, cancellationToken).ConfigureAwait(true); }
+        try { await ExecuteArticleExportAsync(dialog, model, parentId, choice.SelectedItem?.ToString(), status, cancellationToken).ConfigureAwait(true); }
         finally
         {
             if (!cancellationToken.IsCancellationRequested)
@@ -152,7 +153,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
     }
 
-    private async Task ExecuteArticleExportAsync(Window dialog, ShellViewModel model, Guid parentId, TextBlock status, CancellationToken cancellationToken)
+    private async Task ExecuteArticleExportAsync(Window dialog, ShellViewModel model, Guid parentId, string? title, TextBlock status, CancellationToken cancellationToken)
     {
         try
         {
@@ -163,7 +164,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             var destination = await dialog.StorageProvider.SaveFilePickerAsync(new()
             {
                 Title = "Save one continuous article MP3 to a new file",
-                SuggestedFileName = "complete-article.mp3",
+                SuggestedFileName = AudioOutputPresentation.SuggestedFileName(title, ".mp3"),
                 DefaultExtension = "mp3",
                 FileTypeChoices = [Mp3FileType],
                 ShowOverwritePrompt = true,
@@ -173,7 +174,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             status.Text = "Verifying and joining complete local audio. No provider call will be made.";
             await articleAudio.ExportAsync(parentId, destination.Path.LocalPath, tool, cancellationToken).ConfigureAwait(true);
             NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Complete);
-            status.Text = "One continuous article MP3 exported and locally decoded successfully. Originals preserved.";
+            status.Text = $"One continuous article MP3 exported and locally decoded successfully.\nSaved file: {destination.Path.LocalPath}\nOriginals preserved.";
             model.StatusMessage = status.Text;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -184,7 +185,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
             NativeUiDiagnosticLog.Action(NativeUiOperation.Export, NativeUiPhase.Failed, error);
-            status.Text = "Article export stopped safely. Check complete revision evidence, local audio integrity, FFmpeg and a new writable filename. No synthesis or ledger change was made.";
+            status.Text = AudioOutputPresentation.RecoveryAdvice(error) + "\n" + ReportLocalFailure(LocalRequestStage.Export, error) + "\nNo synthesis or ledger change was made.";
         }
 
     }

@@ -35,15 +35,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                         FileTypeChoices = [Mp3FileType],
                         ShowOverwritePrompt = true
                     }).ConfigureAwait(true);
-                    if (chosen is null || !chosen.Path.IsFile) return;
+                    if (chosen is null || !chosen.Path.IsFile) { status.Text = "Save copy cancelled; the verified original is unchanged."; return; }
                     string destination = Path.GetFullPath(chosen.Path.LocalPath);
                     await CopyCompleteOutputAsync(output, destination).ConfigureAwait(true);
-                    status.Text = "Complete article copied and hash-verified. No provider request or new charge.";
+                    status.Text = $"Complete article copied and hash-verified.\nSaved file: {destination}\nNo provider request or new charge.";
                 }
                 else OpenLocalFolder(Path.GetDirectoryName(output.Path)!, status);
             }
             catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-            { status.Text = ReportLocalFailure(LocalRequestStage.Export, error); }
+            { status.Text = AudioOutputPresentation.RecoveryAdvice(error) + "\n" + ReportLocalFailure(LocalRequestStage.Export, error); }
             finally { busy = false; Refresh(); }
         }
         play.Click += async (_, _) => await UseAsync(0).ConfigureAwait(true);

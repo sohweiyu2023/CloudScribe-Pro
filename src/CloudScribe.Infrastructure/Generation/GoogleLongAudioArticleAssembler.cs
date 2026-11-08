@@ -6,10 +6,36 @@ using CloudScribe.Infrastructure.Files;
 
 namespace CloudScribe.Infrastructure.Generation;
 
-/// <summary>Local PCM concatenation and one final MP3 encode. No provider calls, normalization, tempo,
-/// pitch, gain or silence filters. Original WAVs and interrupted local work remain recoverable.</summary>
+/// <summary>Local PCM concatenation and one final MP3 encode. No provider calls, normalization, compression, tempo,
+/// pitch or silence filters; only a fixed safety headroom. Original WAVs and interrupted local work remain recoverable.</summary>
 public sealed partial class GoogleLongAudioArticleAssembler(INativeMediaTool native)
 {
+    /// <summary>Fixed attenuation before MP3 encoding. Google LINEAR16 parts were measured peaking at digital full scale,
+    /// and the decoded MP3 then exceeded full scale (+0.35 dBFS, 620 over-range samples in a 74-minute article).
+    /// A constant gain keeps relative loudness and joins unchanged; it is not normalization or limiting.</summary>
+    public const string EncodeHeadroomFilter = "volume=-1.5dB";
+
+    public static IReadOnlyList<string> FinalEncodeArguments(string manifest, string pending, string? title = null)
+    {
+        List<string> arguments = ["-nostdin", "-xerror", "-v", "error", "-protocol_whitelist", "file,pipe", "-f", "concat", "-safe", "1", "-i", manifest,
+            "-map", "0:a:0", "-map_metadata", "-1", "-af", EncodeHeadroomFilter, "-c:a", "libmp3lame", "-q:a", "2"];
+        string? tag = MetadataTitle(title);
+        if (tag is not null) arguments.AddRange(["-id3v2_version", "3", "-metadata", "title=" + tag]);
+        arguments.AddRange(["-n", pending]);
+        return arguments.AsReadOnly();
+    }
+
+    /// <summary>The article title for the MP3 tag, so players show a name instead of a file identifier.
+    /// Control characters become spaces and very long titles are shortened; the article text is never included.</summary>
+    public static string? MetadataTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return null;
+        string clean = string.Join(' ', new string(title.Select(c => char.IsControl(c) ? ' ' : c).ToArray())
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        if (clean.Length > 200) clean = clean[..(char.IsHighSurrogate(clean[199]) ? 199 : 200)];
+        return clean.Length == 0 ? null : clean;
+    }
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "One local assembly lease owns immutable snapshots, encoding, full verification and durable receipt; it cannot submit provider requests.")]
     public async Task<GoogleLongAudioArticleOutput> AssembleAsync(GoogleLongAudioDocumentReview review,
         IReadOnlyList<GoogleLongAudioRecoveryOutput> ordered, InstalledGoogleLongAudioContext context,
@@ -42,9 +68,8 @@ public sealed partial class GoogleLongAudioArticleAssembler(INativeMediaTool nat
         {
             string pending = Path.Combine(work, "article.mp3"); ChirpPolicyFiles.RejectLinks(pending);
             if (File.Exists(pending)) File.Delete(pending); // Owned, incomplete local encode only; never source or provider output.
-            var result = await native.RunAsync(new(tools.FfmpegPath,
-                ["-nostdin", "-xerror", "-v", "error", "-protocol_whitelist", "file,pipe", "-f", "concat", "-safe", "1", "-i", manifest,
-                    "-map", "0:a:0", "-c:a", "libmp3lame", "-q:a", "2", "-n", pending], work, TimeSpan.FromMinutes(30), 4096), token).ConfigureAwait(false);
+            var result = await native.RunAsync(new(tools.FfmpegPath, FinalEncodeArguments(manifest, pending, review.Title),
+                work, TimeSpan.FromMinutes(30), 4096), token).ConfigureAwait(false);
             if (!result.Succeeded) throw new InvalidDataException("Local article MP3 encoding failed; WAVs and provider outcomes are preserved.");
             await VerifyFinalAsync(pending, duration, ordered.Count, review, tools, work, token).ConfigureAwait(false);
             await VerifyInputsAsync(review, ordered, context, token).ConfigureAwait(false);
@@ -57,8 +82,31 @@ public sealed partial class GoogleLongAudioArticleAssembler(INativeMediaTool nat
         var output = new GoogleLongAudioArticleOutput(1, review.DocumentId, review.RevisionId, review.SourceSha256,
             review.Request.BindingSha256, ordered, path, info.Length, await HashFileAsync(path, token).ConfigureAwait(false));
         await WriteImmutableAsync(receiptPath, JsonSerializer.SerializeToUtf8Bytes(output), token).ConfigureAwait(false);
-        return await InspectAsync(review, context, token).ConfigureAwait(false)
+        var verified = await InspectAsync(review, context, token).ConfigureAwait(false)
             ?? throw new InvalidDataException("Article output receipt could not be read back.");
+        RemoveVerifiedSnapshots(work, ordered.Count);
+        return verified;
+    }
+
+    /// <summary>After the final MP3 and its receipt are verified, the per-part WAV snapshot copies are redundant:
+    /// the original verified WAVs stay in place and the receipt pins them. Removing the copies roughly halves the
+    /// disk used per article. The recipe files stay. Best effort: inaccessible copies remain in place.</summary>
+    public static int RemoveVerifiedSnapshots(string work, int verifiedPartCount)
+    {
+        int removed = 0;
+        for (int i = 0; i < verifiedPartCount; i++)
+        {
+            try
+            {
+                string snapshot = Path.Combine(work, "part-" + i.ToString("D8", CultureInfo.InvariantCulture) + ".wav");
+                ChirpPolicyFiles.RejectLinks(snapshot);
+                if (!File.Exists(snapshot)) continue;
+                File.Delete(snapshot);
+                removed++;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException) { _ = error; /* Preserve verified completion and inaccessible copies. */ }
+        }
+        return removed;
     }
 
     public static async Task<GoogleLongAudioArticleOutput?> InspectAsync(GoogleLongAudioDocumentReview review,

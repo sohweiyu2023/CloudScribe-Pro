@@ -35,9 +35,12 @@ public sealed partial class GoogleLongAudioOutputBoundary : IDisposable
         ffmpeg = Path.GetFullPath(tools.FfmpegPath); ffprobe = Path.GetFullPath(tools.FfprobePath);
         if (!Path.IsPathFullyQualified(privateOutputRoot)) throw new ArgumentException("Private output root must be absolute.", nameof(privateOutputRoot));
         root = Path.GetFullPath(privateOutputRoot); RequirePhysical(root);
-        http = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false })
-        { Timeout = TimeSpan.FromSeconds(12) };
+        http = new HttpClient(handler ?? GoogleLongAudioTransport.CreateHandler())
+        { Timeout = Timeout.InfiniteTimeSpan };
     }
+
+    /// <summary>Upper bound for one download-and-verify pass. Expiry stops this pass only; resume repeats GETs, never synthesis.</summary>
+    public TimeSpan ReadDeadline { get; init; } = GoogleLongAudioTransport.StorageReadDeadline;
 
     public async Task<GoogleLongAudioVerifiedArtifact> DownloadAndVerifyAsync(GoogleLongAudioRequest request, CancellationToken token = default)
     {
@@ -56,7 +59,10 @@ public sealed partial class GoogleLongAudioOutputBoundary : IDisposable
         var allowed = await authority.RequireReadAuthorizedAsync(request, checkpoint, token).ConfigureAwait(false);
         RequireAllowance(request, allowed);
         using var bound = CancellationTokenSource.CreateLinkedTokenSource(token);
-        if (allowed.ReadNotAfterUtc is { } deadline) bound.CancelAfter(deadline - clock.GetUtcNow());
+        TimeSpan limit = ReadDeadline > TimeSpan.Zero ? ReadDeadline : Timeout.InfiniteTimeSpan;
+        if (allowed.ReadNotAfterUtc is { } deadline && (limit == Timeout.InfiniteTimeSpan || deadline - clock.GetUtcNow() < limit))
+            limit = deadline - clock.GetUtcNow();
+        if (limit != Timeout.InfiniteTimeSpan) bound.CancelAfter(limit);
         RequirePhysical(root); Directory.CreateDirectory(root); RequirePhysical(root);
         string prefix = Path.Combine(root, request.AttemptId.ToString("N"));
         RequirePhysical(prefix + ".download.lease");

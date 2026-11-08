@@ -57,6 +57,8 @@ public sealed partial class NarrationPartGroupTests
         var runner = await fixture.Factory.CreateRecoveryRunnerAsync(root, tools, new(4096, null, "pcm_s16le", 24000, 1), true, history, TestContext.Current.CancellationToken);
         var stopped = await runner.RunAsync(root, control, token: TestContext.Current.CancellationToken);
         Assert.False(stopped.CoverageComplete); Assert.Equal(pollable ? 0 : 1, stopped.Outputs.Count); Assert.Equal(2, transport.Posts);
+        if (family && !pollable && localFailure is "none" && realNative is null)
+            await AssertUnrelatedRecoveryMediaIsNotReadAsync(runner, root, p.Root, () => transport.Calls);
         var resumed = await runner.RunAsync(root, new(), token: TestContext.Current.CancellationToken);
         Assert.True(resumed.CoverageComplete); Assert.Equal(3, resumed.Outputs.Count); Assert.Equal(5, transport.Posts);
         Assert.Equal(pollable ? 1 : 0, transport.Polls);
@@ -186,7 +188,7 @@ public sealed partial class NarrationPartGroupTests
             return inner.RunAsync(invocation, cancellationToken);
         }
     }
-    private sealed class AdaptiveTransport(GoogleLongAudioRequest[] allowed, Guid[] reject, Guid? pending = null, Action? onPending = null, byte[]? pcm = null)
+    private sealed class AdaptiveTransport(GoogleLongAudioRequest[] allowed, Guid[] reject, Guid? pending = null, Action? onPending = null, byte[]? pcm = null, Guid? writeFailure = null)
     {
         private readonly byte[] Audio = pcm ?? "Synthetic inert bytes for fake native verifier; no real audio claim."u8.ToArray();
         internal int Posts { get; private set; }
@@ -202,6 +204,7 @@ public sealed partial class NarrationPartGroupTests
                 var request = Assert.Single(allowed, x => x.CopyPayload().AsSpan().SequenceEqual(bytes));
                 string name = "projects/123456/locations/global/operations/" + request.AttemptId.ToString("N");
                 if (request.AttemptId == pending) { onPending?.Invoke(); return Json(new { name, done = false }); }
+                if (request.AttemptId == writeFailure) return Json(new { name, done = true, error = new { code = 13, message = "Failed to write to GCS URI: synthetic-private-output" } });
                 return reject.Contains(request.AttemptId) ? Json(new
                 {
                     name,

@@ -27,7 +27,7 @@ public sealed class GoogleCredentialRepairDialog : Window, IDisposable
         Title = "Repair existing Google connection - no speech";
         Width = 720; Height = 680; MinWidth = 560; MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = new SolidColorBrush(Color.Parse("#111C2B"));
+        Background = CosmicDialogTheme.CreateDialogBackground();
         StackPanel body = new() { Margin = new Avalonia.Thickness(20), Spacing = 12 };
         TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White };
         body.Children.Add(Text("Existing local account: " + accountId));

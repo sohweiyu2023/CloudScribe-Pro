@@ -19,19 +19,20 @@ public sealed partial class GoogleLongAudioFileJournal
 
     internal void FinishObservation(GoogleLongAudioCheckpoint current)
     {
-        if (current.State == GoogleLongAudioState.PostClaimed || current.Observation is not { ReadbackVerified: true } observation
+        if (!current.HasVerifiedPollDeadline && (current.State == GoogleLongAudioState.PostClaimed || current.Observation is not { ReadbackVerified: true } observation
             || observation.ParseState is GoogleLongAudioParseState.Unavailable or GoogleLongAudioParseState.RedactionUnavailable
-                or GoogleLongAudioParseState.InvalidUtf8 || observation.ReadState != CloudScribe.Domain.Generation.GoogleResponseReadState.Complete) return;
+                or GoogleLongAudioParseState.InvalidUtf8 || observation.ReadState != CloudScribe.Domain.Generation.GoogleResponseReadState.Complete)) return;
         using var submission = SubmissionLease();
-        string pending = ObservationPath();
+        string pending = ObservationPath(current.AttemptId);
         if (!File.Exists(pending) || ReadObservationOwner(pending) != current.AttemptId)
             throw new InvalidDataException("Long Audio observation ownership changed.");
         File.Delete(pending); // Only this exact verified observation releases this adapter's next-POST stop.
     }
 
-    private void BeginObservation(Guid id, bool allowExisting)
+    private void BeginObservation(Guid id, bool allowExisting, bool alreadyValidated = false)
     {
-        string pending = ObservationPath();
+        if (!alreadyValidated) deferred?.RequireReady(id);
+        string pending = ObservationPath(id);
         if (File.Exists(pending))
         {
             if (allowExisting && ReadObservationOwner(pending) == id) return;
@@ -40,9 +41,9 @@ public sealed partial class GoogleLongAudioFileJournal
         WriteNew(pending, Encoding.ASCII.GetBytes(id.ToString("N")));
     }
 
-    private string ObservationPath()
+    private string ObservationPath(Guid id)
     {
-        string path = Path.Combine(_root, "observation-pending.guard");
+        string path = Path.Combine(_root, deferred is null ? "observation-pending.guard" : id.ToString("N") + ".observation-pending.guard");
         RequirePhysical(path); return path;
     }
 

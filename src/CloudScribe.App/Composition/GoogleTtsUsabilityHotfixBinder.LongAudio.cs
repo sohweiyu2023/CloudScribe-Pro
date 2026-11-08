@@ -3,6 +3,8 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Generation;
 using CloudScribe.Application.Logging;
@@ -42,16 +44,90 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             var review = await longAudioDocuments.ReviewAsync(document, lifetime.Token).ConfigureAwait(true);
             var dialog = CreateArticleExportDialog(); dialog.Title = "Long Audio: complete saved document"; dialog.Width = 720; dialog.Height = 620;
             var body = new StackPanel { Margin = new Thickness(20), Spacing = 12 };
-            var estimate = NewDescription(LongAudioReviewText(review)); body.Children.Add(estimate);
+            var estimate = NewDescription(LongAudioReviewText(review));
+            var headline = new TextBlock { FontSize = 20, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap };
+            AutomationProperties.SetName(headline, "Long Audio current stage");
+            var stepper = new WrapPanel { Orientation = Orientation.Horizontal };
+            var pills = new List<Border>();
+            foreach (string step in LongAudioDialogPresentation.Steps)
+            {
+                var pill = new Border
+                {
+                    CornerRadius = new CornerRadius(12),
+                    Padding = new Thickness(12, 4),
+                    Margin = new Thickness(0, 0, 6, 6),
+                    BorderThickness = new Thickness(1),
+                    Child = new TextBlock { Text = step },
+                };
+                pills.Add(pill); stepper.Children.Add(pill);
+            }
+            var lastStage = LongAudioWorkflowStage.Reviewing;
+            void ShowStage(LongAudioWorkflowStage stage)
+            {
+                lastStage = stage;
+                headline.Text = LongAudioDialogPresentation.Headline(stage);
+                int current = LongAudioDialogPresentation.StepIndex(stage);
+                for (int i = 0; i < pills.Count; i++)
+                {
+                    bool now = i == current, done = current >= 0 && i < current;
+                    pills[i].Background = new SolidColorBrush(Color.Parse(now ? "#FFC857" : done ? "#3348BDEB" : "#00000000"));
+                    pills[i].BorderBrush = new SolidColorBrush(Color.Parse(now ? "#FFC857" : done ? "#48BDEB" : "#766485"));
+                    if (pills[i].Child is TextBlock label)
+                    {
+                        label.Foreground = now ? new SolidColorBrush(Color.Parse("#1C182B")) : null;
+                        label.FontWeight = now ? FontWeight.SemiBold : FontWeight.Normal;
+                        label.Text = (done ? "\u2713 " : string.Empty) + LongAudioDialogPresentation.Steps[i];
+                    }
+                    AutomationProperties.SetName(pills[i], LongAudioDialogPresentation.Steps[i] + ": " + LongAudioDialogPresentation.StepState(i, current));
+                }
+            }
+            ShowStage(LongAudioWorkflowStage.Reviewing);
             var status = NewDescription("Review the estimate, select the private evidence option and check audio setup. No request has started.");
             AutomationProperties.SetName(status, "Long Audio progress and next step");
+            var coverage = new ProgressBar { Minimum = 0, Maximum = 100, Height = 12, IsIndeterminate = true };
+            AutomationProperties.SetName(coverage, "Verified source coverage; not provider processing percentage");
+            var coverageText = NewDescription("Waiting for verified source coverage. Google does not expose a processing percentage.");
+            var summaryText = NewDescription("Reading saved timing and spending summary...");
+            GoogleLongAudioRunSummary? summary = null; bool summaryBusy = false, summaryUnavailable = false;
+            System.Diagnostics.Stopwatch? runClock = null;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            int summaryTicks = 0;
+            async Task RefreshSummaryAsync()
+            {
+                if (summaryUnavailable) { summaryText.Text = "The audio result is preserved, but its timing/cost summary could not be fully saved. Inspect local diagnostics; no actual billing total is claimed."; return; }
+                if (summaryBusy) return;
+                summaryBusy = true;
+                try
+                {
+                    summary = await longAudioDocuments.InspectRunSummaryAsync(review, lifetime.Token).ConfigureAwait(true);
+                    summaryText.Text = LongAudioSummaryText(summary, DateTimeOffset.UtcNow, runClock?.IsRunning == true ? runClock.Elapsed : null, review.Cost.EstimatedSynthesisUsdCents);
+                }
+                catch (Exception error) when (NonFatalLongAudio(error))
+                { summary = null; summaryText.Text = "Timing/spending summary is temporarily unavailable. Saved audio and financial records are unchanged. " + ReportLocalFailure(LocalRequestStage.Review, error); }
+                finally { summaryBusy = false; }
+            }
+            timer.Tick += async (_, _) =>
+            {
+                if (!summaryUnavailable && summary is not null) summaryText.Text = LongAudioSummaryText(summary, DateTimeOffset.UtcNow, runClock?.IsRunning == true ? runClock.Elapsed : null, review.Cost.EstimatedSynthesisUsdCents);
+                if (++summaryTicks >= 15) { summaryTicks = 0; await RefreshSummaryAsync().ConfigureAwait(true); }
+            };
             var consent = new CheckBox { Content = NewDescription("Save bounded, encrypted, redacted provider responses privately for this job; omissions and truncation are reported. They may contain article fragments; exclude from normal logs and exports. Logical expiry is 24 hours, deletion on next access; encrypted remnants may remain while closed or in backups.") };
             var setup = NewButton("Check audio setup");
             var generate = NewButton(LongAudioStartText(review)); generate.IsEnabled = false;
             var stop = NewButton("Stop after current action"); stop.IsEnabled = false;
+            var stopNow = NewButton("Stop waiting now"); stopNow.IsVisible = false;
+            var stopState = new LongAudioStopButtons();
+            void ApplyStopState() { stop.IsEnabled = stopState.StopEnabled; stopNow.IsVisible = stopState.StopNowVisible; stopNow.IsEnabled = stopState.StopNowEnabled; }
+            ToolTip.SetTip(stopNow, "Stops waiting immediately. A request Google already received may still finish and be charged; the saved job checks its outcome before sending anything else.");
+            CancellationTokenSource? activeRun = null;
             var close = NewButton("Close"); close.Click += (_, _) => dialog.Close();
             GoogleLongAudioMediaTools? tools = null; GoogleLongAudioRunControl? control = null; bool setupBusy = false, completed = false, permitted = true;
-            void Update() => generate.IsEnabled = permitted && !completed && !setupBusy && tools is not null && consent.IsChecked == true && active is not { IsCompleted: false };
+            void Update()
+            {
+                generate.IsEnabled = permitted && !completed && !setupBusy && tools is not null && consent.IsChecked == true && active is not { IsCompleted: false };
+                generate.IsVisible = stop.IsVisible = !completed;
+                if (completed) { coverage.IsIndeterminate = false; coverage.Value = 100; coverageText.Text = "Complete: all source audio verified and saved."; }
+            }
             consent.PropertyChanged += (_, e) => { if (e.Property == Avalonia.Controls.Primitives.ToggleButton.IsCheckedProperty) Update(); };
             setup.Click += async (_, _) =>
             {
@@ -59,11 +135,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 setupBusy = true; setup.IsEnabled = false; Update();
                 try
                 {
-                    string? executable = await ChooseExistingMediaToolsAsync(dialog, status).ConfigureAwait(true);
-                    if (executable is not null)
+                    var selectedTools = await ChooseExistingMediaToolsAsync(dialog, status).ConfigureAwait(true);
+                    if (selectedTools is not null)
                     {
-                        string probe = Path.Combine(Path.GetDirectoryName(executable)!, "ffprobe.exe");
-                        tools = new(executable, await HashToolAsync(executable).ConfigureAwait(true), probe, await HashToolAsync(probe).ConfigureAwait(true));
+                        string probe = Path.Combine(Path.GetDirectoryName(selectedTools.EncoderPath)!, "ffprobe.exe");
+                        tools = new(selectedTools.EncoderPath, selectedTools.EncoderSha256, probe, selectedTools.ProbeSha256);
                         status.Text = "Audio setup is ready. Verified audio will be saved automatically; you can play it or save a copy afterward.";
                     }
                 }
@@ -75,55 +151,98 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             completed = await refreshOutput().ConfigureAwait(true);
             var initial = await longAudioDocuments.InspectContinuationAsync(review, lifetime.Token).ConfigureAwait(true);
             permitted = initial.Kind != GoogleLongAudioContinuationKind.ReconcileRequired;
-            if (completed) { setup.IsVisible = consent.IsVisible = false; estimate.Text = LongAudioCompletedReviewText(review); status.Text = LongAudioProgressText(new(LongAudioWorkflowStage.Completed, initial.Checkpoint)); }
-            else if (!permitted) { setup.IsEnabled = consent.IsEnabled = false; status.Text = LongAudioProgressText(new(LongAudioWorkflowStage.Failed, initial.Checkpoint)); }
+            if (completed) { setup.IsVisible = consent.IsVisible = false; estimate.Text = LongAudioCompletedReviewText(review); status.Text = LongAudioProgressText(new(LongAudioWorkflowStage.Completed, initial.Checkpoint)); ShowStage(LongAudioWorkflowStage.Completed); }
+            else if (!permitted) { setup.IsEnabled = consent.IsEnabled = false; status.Text = LongAudioProgressText(new(LongAudioWorkflowStage.Failed, initial.Checkpoint)); ShowStage(LongAudioWorkflowStage.Failed); }
             async Task GenerateAsync()
             {
                 if (tools is null) return;
-                control = new(); setup.IsEnabled = consent.IsEnabled = generate.IsEnabled = close.IsEnabled = false; stop.IsEnabled = true;
-                bool showing = true;
+                control = new(); setup.IsEnabled = consent.IsEnabled = generate.IsEnabled = close.IsEnabled = false; stopState.RunStarted(); ApplyStopState();
+                using var runCancel = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); activeRun = runCancel;
+                bool showing = true, fundingStopped = false; runClock = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     await model.RunLongAudioOperationAsync(document, async token =>
                     {
-                        var progress = new Progress<GoogleLongAudioDocumentProgress>(p => { if (showing) status.Text = LongAudioProgressText(p); });
+                        var progress = new Progress<GoogleLongAudioDocumentProgress>(p =>
+                        {
+                            if (!showing) return;
+                            status.Text = LongAudioProgressText(p); ShowStage(p.Stage);
+                            if (p.TotalScalars is > 0 && p.VerifiedScalars is { } saved)
+                            {
+                                coverage.IsIndeterminate = false; coverage.Value = Math.Clamp(100d * saved / p.TotalScalars.Value, 0, 100);
+                                coverageText.Text = $"Verified source coverage: {saved:N0} / {p.TotalScalars:N0} characters ({coverage.Value:0.0}%). Final assembly and verification follow.";
+                            }
+                        });
                         var result = await longAudioDocuments.RunAsync(review, tools, true, control, progress, token).ConfigureAwait(true);
-                        status.Text = LongAudioProgressText(new(result.Stage, result.Outcome.Checkpoint));
+                        status.Text = LongAudioProgressText(new(result.Stage, result.Outcome.Checkpoint)); ShowStage(result.Stage);
+                        summaryUnavailable = result.SummaryUnavailable;
                         if (result.Outcome.Artifact is not null || result.ArticleOutput is not null) completed = await refreshOutput().ConfigureAwait(true);
-                    }, lifetime.Token).ConfigureAwait(true);
+                    }, runCancel.Token).ConfigureAwait(true);
                 }
-                catch (Exception error) when (NonFatalLongAudio(error)) { status.Text = ReportLocalFailure(LocalRequestStage.GenerationDispatch, error) + " Saved operations and holds are preserved; do not start a duplicate job."; }
+                catch (OperationCanceledException) when (runCancel.IsCancellationRequested && !lifetime.IsCancellationRequested)
+                {
+                    ShowStage(LongAudioWorkflowStage.Stopped);
+                    status.Text = "Stopped waiting. Saved audio and spending records are unchanged. If a request had already reached Google, it may still finish and be charged; reopening this document checks that saved outcome before anything else is sent.";
+                }
+                catch (Exception error) when (NonFatalLongAudio(error))
+                {
+                    fundingStopped = error is GoogleLongAudioBudgetExceededException; ShowStage(LongAudioWorkflowStage.Failed);
+                    status.Text = ReportLongAudioFailure(LocalRequestStage.GenerationDispatch, error) + " Saved operations and holds are preserved; do not start a duplicate job.";
+                }
                 finally
                 {
-                    showing = false; stop.IsEnabled = false;
+                    showing = false; runClock.Stop(); stopState.RunEnded(); ApplyStopState(); activeRun = null;
                     try
                     {
                         var continuation = await longAudioDocuments.InspectContinuationAsync(review, lifetime.Token).ConfigureAwait(true);
                         review = continuation.Review; estimate.Text = completed ? LongAudioCompletedReviewText(review) : LongAudioReviewText(review);
-                        permitted = continuation.Kind != GoogleLongAudioContinuationKind.ReconcileRequired;
+                        permitted = !fundingStopped && continuation.Kind != GoogleLongAudioContinuationKind.ReconcileRequired;
                         setup.IsEnabled = consent.IsEnabled = permitted && !completed;
                         setup.IsVisible = consent.IsVisible = !completed;
                         generate.Content = LongAudioStartText(review);
                     }
                     catch (Exception error) when (NonFatalLongAudio(error))
-                    { permitted = false; _ = ReportLocalFailure(LocalRequestStage.Review, error); status.Text += "\nContinuation could not be verified. Keep this job and inspect its saved evidence."; }
-                    active = null; close.IsEnabled = true; Update();
+                    { permitted = false; var message = ReportLongAudioFailure(LocalRequestStage.Review, error); if (!fundingStopped) status.Text = message + "\nKeep this saved job and its evidence; no automatic retry was made."; }
+                    active = null; close.IsEnabled = true; Update(); await RefreshSummaryAsync().ConfigureAwait(true);
                 }
             }
             generate.Click += (_, _) => { if (generate.IsEnabled && active is not { IsCompleted: false }) active = GenerateAsync(); };
-            stop.Click += (_, _) => { control?.RequestStop(); stop.IsEnabled = false; status.Text = "Stopping after the current submission/status/output action is recorded. The in-flight paid request is not cancelled or repeated."; };
-            foreach (var item in new Control[] { status, setup, consent, outputs }) body.Children.Add(item);
+            stop.Click += (_, _) =>
+            {
+                control?.RequestStop(); stopState.StopRequested(activeRun is not null); ApplyStopState();
+                status.Text = "Stopping after the current step is saved. A request already sent is not cancelled or repeated. If this takes too long, choose Stop waiting now.";
+            };
+            stopNow.Click += (_, _) =>
+            {
+                if (activeRun is not { } run || run.IsCancellationRequested || !stopState.StopNowClicked()) return;
+                ApplyStopState();
+                if (catalogLogger is not null) CloudScribeLog.LongAudioUserStoppedWaiting(catalogLogger, review.Request.AttemptId, lastStage);
+                run.Cancel();
+            };
+            foreach (var item in new Control[] { headline, stepper, status, coverage, coverageText, outputs, summaryText }) body.Children.Add(item);
+            AddSection(body, "Cost, spending cap and recovery details", expanded: !completed).Children.Add(estimate);
+            foreach (var item in new Control[] { setup, consent }) body.Children.Add(item);
             var layout = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
             layout.Children.Add(new ScrollViewer { Content = body });
             var actions = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 8, 20, 16) };
-            foreach (var button in new[] { generate, stop, close }) { button.Margin = new Thickness(0, 0, 8, 4); actions.Children.Add(button); }
-            Grid.SetRow(actions, 1); layout.Children.Add(actions); dialog.Content = layout;
-            dialog.Closing += (_, e) => { if (active is { IsCompleted: false } || setupBusy) e.Cancel = true; };
-            DialogBounds.Fit(dialog, owner); shown = true; await dialog.ShowDialog(owner).ConfigureAwait(true);
+            foreach (var button in new[] { generate, stop, stopNow, close }) { button.Margin = new Thickness(0, 0, 8, 4); actions.Children.Add(button); }
+            var actionBar = CosmicDialogTheme.ActionBar(actions);
+            Grid.SetRow(actionBar, 1); layout.Children.Add(actionBar); dialog.Content = layout;
+            dialog.Closing += (_, e) =>
+            {
+                if (active is not { IsCompleted: false } && !setupBusy) return;
+                e.Cancel = true;
+                if (active is { IsCompleted: false })
+                    status.Text = "A run is still active. Choose Stop after current action (or Stop waiting now), then close.";
+            };
+            Update(); await RefreshSummaryAsync().ConfigureAwait(true);
+            DialogBounds.Fit(dialog, owner); shown = true; timer.Start();
+            try { await dialog.ShowDialog(owner).ConfigureAwait(true); }
+            finally { timer.Stop(); }
         }
         catch (Exception error) when (NonFatalLongAudio(error))
         {
-            model.StatusMessage = ReportLocalFailure(LocalRequestStage.Review, error);
+            model.StatusMessage = ReportLongAudioFailure(LocalRequestStage.Review, error);
             if (!shown)
             {
                 var notice = CreateArticleExportDialog(); notice.Title = "Long Audio review needs attention";
@@ -137,6 +256,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     }
 
     private static bool NonFatalLongAudio(Exception error) => error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException;
+    private string ReportLongAudioFailure(LocalRequestStage stage, Exception error)
+    {
+        if (error is not GoogleLongAudioBudgetExceededException budget) return ReportLocalFailure(stage, error);
+        if (catalogLogger is not null) CloudScribeLog.LongAudioBudgetStop(catalogLogger, budget.ProvisionUsdCents, budget.CapUsdCents);
+        return budget.Message;
+    }
     private static async Task<string> HashToolAsync(string path)
     {
         RequirePhysicalOutputPath(path); using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous);

@@ -74,13 +74,13 @@ def _stage4_contract_root() -> tempfile.TemporaryDirectory[str]:
         raise RuntimeError("Historical Stage4 projection requires a valid supported source SDK identity")
     if actual_sdk in ("10.0.401", "10.0.402"):
         app_project = (root / "src/CloudScribe.App/CloudScribe.App.csproj").read_text(encoding="utf-8-sig")
-        if not all(marker in app_project for marker in (
-            "<Version>1.0.1</Version>",
-            "<InformationalVersion>1.0.1</InformationalVersion>",
-            "<FileVersion>1.0.1.0</FileVersion>",
-        )):
+        if not any(all(marker in app_project for marker in (
+            f"<Version>{servicing}</Version>",
+            f"<InformationalVersion>{servicing}</InformationalVersion>",
+            f"<FileVersion>{servicing}.0</FileVersion>",
+        )) for servicing in ("1.0.1", "1.0.2")):
             temporary.cleanup()
-            raise RuntimeError("A servicing SDK may only project the exact 1.0.1 patch source")
+            raise RuntimeError("A servicing SDK may only project an exact 1.0.x servicing patch source")
     state["current_stage"] = 4
     state["repository_version"] = "0.5.0-stage4-preservation-self-test"
     state["required_dotnet_sdk"] = "10.0.400"
