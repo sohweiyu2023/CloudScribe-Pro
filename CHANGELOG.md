@@ -7,6 +7,7 @@ All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in
 Batch window usability and safety follow-up. No change to spending rules, caps, approvals or provider requests.
 
 ### Windows review fixes
+- Keyboard Undo stays reachable after removing selected rows, including the last row. Folder-recursion and track-number checkboxes have explicit screen-reader names.
 - Draft Undo now preserves the previous arrangement instead of retaining the mutable current list.
 - Saving rereads local TXT files even when text is cached; changed files use their current text and missing files block saving. Resuming a saved import always checks its pinned source hash.
 - A file that failed before import can be removed and added again, while saved audit history and started-file protection remain intact.

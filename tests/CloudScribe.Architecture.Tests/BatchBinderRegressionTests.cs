@@ -23,13 +23,25 @@ public sealed class BatchBinderRegressionTests
         Assert.Contains("return;", source[missing..create], StringComparison.Ordinal);
     }
 
-    private static string BinderSource(string part)
+    [Fact]
+    public void EmptySelectionKeepsKeyboardUndoReachableAndCheckboxesHaveNames()
+    {
+        string source = BinderSource(null);
+        int list = source.IndexOf("public ListBox List", StringComparison.Ordinal);
+        int overlay = source.IndexOf("public Canvas Overlay", list, StringComparison.Ordinal);
+        Assert.Contains("Focusable = true", source[list..overlay], StringComparison.Ordinal);
+        Assert.Contains("if (listHadFocus) RestoreBatchListFocus(ctx);", source, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.SetName(ctx.Subfolders, \"Include subfolders when adding a folder\")", source, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.SetName(ctx.Numbering, \"Number the MP3 files in this order\")", source, StringComparison.Ordinal);
+    }
+
+    private static string BinderSource(string? part)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
             if (File.Exists(Path.Combine(directory.FullName, "CloudScribe.sln")))
-                return File.ReadAllText(Path.Combine(directory.FullName, "src", "CloudScribe.App", "Composition", "GoogleTtsUsabilityHotfixBinder.Batch." + part + ".cs"));
+                return File.ReadAllText(Path.Combine(directory.FullName, "src", "CloudScribe.App", "Composition", "GoogleTtsUsabilityHotfixBinder.Batch" + (part is null ? string.Empty : "." + part) + ".cs"));
             directory = directory.Parent;
         }
         throw new DirectoryNotFoundException("CloudScribe repository root was not found.");

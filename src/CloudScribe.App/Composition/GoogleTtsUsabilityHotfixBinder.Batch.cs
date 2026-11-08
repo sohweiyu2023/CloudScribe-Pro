@@ -110,6 +110,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             MinHeight = 200,
             MaxHeight = 380,
             SelectionMode = SelectionMode.Multiple,
+            Focusable = true, // Keep keyboard Undo reachable after the selected rows are removed.
             Background = CosmicDialogTheme.Solid(CosmicDialogTheme.Raised),
             BorderBrush = CosmicDialogTheme.Solid(CosmicDialogTheme.BorderSubtle),
             BorderThickness = new Thickness(1),
@@ -229,6 +230,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         AutomationProperties.SetName(ctx.Engine, "Narration engine for this batch");
         AutomationProperties.SetName(ctx.Policy, "What to do when a file fails");
         AutomationProperties.SetName(ctx.Results, "Batch results");
+        AutomationProperties.SetName(ctx.Subfolders, "Include subfolders when adding a folder");
+        AutomationProperties.SetName(ctx.Numbering, "Number the MP3 files in this order");
         ctx.Next.FontWeight = Avalonia.Media.FontWeight.SemiBold;
         ctx.Steps.Foreground = CosmicDialogTheme.Solid(CosmicDialogTheme.Cyan);
         ctx.Start.Classes.Add("primary"); ctx.Approve.Classes.Add("primary"); ctx.Save.Classes.Add("primary");
