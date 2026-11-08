@@ -6,6 +6,12 @@ All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in
 
 Batch window usability and safety follow-up. No change to spending rules, caps, approvals or provider requests.
 
+### Windows review fixes
+- Draft Undo now preserves the previous arrangement instead of retaining the mutable current list.
+- Saving rereads local TXT files even when text is cached; changed files use their current text and missing files block saving. Resuming a saved import always checks its pinned source hash.
+- A file that failed before import can be removed and added again, while saved audit history and started-file protection remain intact.
+- Switching between batches with identical visible rows refreshes their identities, so selection and row actions target the current batch.
+
 ### Adding and arranging files
 - **Drag and drop** TXT files and whole folders from File Explorer into the batch list, with a highlighted drop area and plain messages for anything left out. **Add a folder…** accepts several folders and can **include subfolders**. The pickers stay.
 - New files are appended without disturbing an arranged order, sorted naturally by folder and name. The same TXT added twice is ignored and reported; one TXT always makes one MP3, even when two files have identical text.

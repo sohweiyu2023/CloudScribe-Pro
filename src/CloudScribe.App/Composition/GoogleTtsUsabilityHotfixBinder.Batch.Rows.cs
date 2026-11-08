@@ -75,7 +75,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             string? earlierName = x.SameTextAs is { } earlier && byOrder.TryGetValue(earlier, out var first) ? first.SourceFileName : null;
             return new BatchRowModel(x, BatchDialogPresentation.Detail(x, profile, earlierName), earlierName);
         }).ToArray();
-        string key = string.Join('\u001e', rows.Select(x => BatchDialogPresentation.Title(x.Item) + "\u001f" + x.Text + "\u001f" + x.EarlierName));
+        string key = string.Join('\u001e', rows.Select(x => x.Item.ItemId + "\u001f" + BatchDialogPresentation.Title(x.Item) + "\u001f" + x.Text + "\u001f" + x.EarlierName));
         if (string.Equals(key, ctx.ShownRows, StringComparison.Ordinal)) return;
         var selected = SelectedBatchRows(ctx).Select(x => x.ItemId).ToHashSet();
         bool hadFocus = ctx.List.IsKeyboardFocusWithin;
@@ -122,7 +122,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         var session = ctx.Session;
         ids ??= [.. SelectedBatchRows(ctx).Select(x => x.ItemId)];
         if (ids.Length == 0) { ctx.Status.Text = "Select one or more files first (Shift or Ctrl selects several)."; return; }
-        var before = session.Items;
+        var before = session.Items.ToArray();
         var changed = change(before, ids);
         if (ReferenceEquals(changed, before) || changed.Select(x => (x.ItemId, x.State)).SequenceEqual(before.Select(x => (x.ItemId, x.State))))
         { ctx.Status.Text = "Nothing to change: only files that have not started can be moved or removed, and they are already there."; return; }

@@ -65,6 +65,38 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
         return read.Text is null ? (null, "batch.source-missing-add-again") : (read.Text, null);
     }
 
+    /// <summary>Checks a pending saved import against its pinned bytes, even when decoded text is cached.
+    /// Only files without a local path may use their in-memory text.</summary>
+    public Task<(string? Text, string? ReasonCode)> ReadPendingAsync(BatchItem item, IReadOnlyDictionary<Guid, string> cachedText,
+        long maximumBytes, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(cachedText);
+        return string.IsNullOrEmpty(item.SourcePath) && cachedText.TryGetValue(item.ItemId, out string? text)
+            ? Task.FromResult<(string?, string?)>((text, null))
+            : ReadAgainAsync(item, maximumBytes, cancellationToken);
+    }
+
+    /// <summary>Reads the current source for an unreviewed draft. Local files always come from disk, not cache;
+    /// changed bytes may be adopted before saving and review. Missing or invalid sources have no usable text.</summary>
+    public async Task<BatchSourceFile> ReadDraftSourceAsync(BatchItem item, IReadOnlyDictionary<Guid, string> cachedText,
+        long maximumBytes, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(cachedText);
+        if (string.IsNullOrEmpty(item.SourcePath))
+            return new(item.SourceFileName, item.SourceSha256, item.SourceBytes,
+                cachedText.GetValueOrDefault(item.ItemId), SourcePath: item.SourcePath);
+        try
+        {
+            var stream = new FileStream(item.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using (stream.ConfigureAwait(false))
+                return await ReadAsync(item.SourceFileName, stream, maximumBytes, cancellationToken).ConfigureAwait(false) with { SourcePath = item.SourcePath };
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { return new(item.SourceFileName, string.Empty, 0, null, BatchExclusion.Unreadable, item.SourcePath); }
+    }
+
     /// <summary>Adds every included file that is not yet in the library. <paramref name="textByItem"/> holds the decoded
     /// text from <see cref="ReadAsync"/>; it is never written to the queue file.</summary>
     public Task<NarrationBatch> ImportAsync(NarrationBatch queue, IReadOnlyDictionary<Guid, string> textByItem, CancellationToken cancellationToken = default)

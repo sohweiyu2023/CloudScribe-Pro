@@ -1,7 +1,7 @@
 namespace CloudScribe.Application.Batch;
 
 /// <summary>Arranging and removing files before they start. Only files that are waiting and have no saved job can be
-/// moved or removed; started, finished, failed and uncertain files keep their place, name and history. Every change
+/// moved; failed pre-import files may also be removed. Started, finished and uncertain files keep their history. Every change
 /// keeps the relative order of the files it moves, so a multi-file move never scrambles them.</summary>
 public static class BatchEditor
 {
@@ -12,11 +12,11 @@ public static class BatchEditor
         return item.State == BatchItemState.Ready && item.JobId is null;
     }
 
-    /// <summary>True when the file may be taken out of the batch (a waiting file, or in a draft any file that cannot be used).</summary>
+    /// <summary>True when the file may be taken out: waiting or failed before import, or an unusable draft file.</summary>
     public static bool CanRemove(BatchItem item, bool draft)
     {
         ArgumentNullException.ThrowIfNull(item);
-        return CanArrange(item) || draft && item.State == BatchItemState.Excluded;
+        return CanArrange(item) || BatchDocumentImporter.NeedsImport(item) || draft && item.State == BatchItemState.Excluded;
     }
 
     /// <summary>Moves the arrangeable files among <paramref name="ids"/> so that they sit, in their current relative
@@ -73,7 +73,7 @@ public static class BatchEditor
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(ids);
         if (draft) return items.Where(x => !(ids.Contains(x.ItemId) && CanRemove(x, draft: true))).ToArray();
-        return items.Select(x => ids.Contains(x.ItemId) && CanArrange(x)
+        return items.Select(x => ids.Contains(x.ItemId) && CanRemove(x, draft: false)
             ? x with { State = BatchItemState.Excluded, Exclusion = BatchExclusion.RemovedByUser } : x).ToArray();
     }
 

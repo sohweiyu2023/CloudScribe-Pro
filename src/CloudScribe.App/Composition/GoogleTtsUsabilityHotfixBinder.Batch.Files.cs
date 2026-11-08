@@ -192,7 +192,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         // Names and same-text notes are recomputed for the folder as it is now (files may have appeared meanwhile).
         ReplaceDraft(session, BatchPlanner.AssignOutputNames(session.Draft, t => t + ".mp3", n => BatchOutputExists(session, n), session.NumberTracks));
         BatchDiagnostics.Action(catalogLogger, null, null, BatchDiagnosticOperation.LoadDraft, BatchDiagnosticPhase.Returned);
-        ctx.Status.Text = $"Your unsaved draft is back ({draft.Items.Count} file(s), last changed {draft.UpdatedUtc.ToLocalTime():d MMM HH:mm}). Files are read again, and must be unchanged, when you save it.";
+        ctx.Status.Text = $"Your unsaved draft is back ({draft.Items.Count} file(s), last changed {draft.UpdatedUtc.ToLocalTime():d MMM HH:mm}). Files are read again when you save it; changed text is refreshed before review.";
     }
 
     private static void ApplyDraftSettings(BatchSession session, BatchDraft draft)
@@ -290,9 +290,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     {
         var session = ctx.Session;
         var progress = new Progress<(int Done, int Total)>(p => ReportBatchWork(ctx, "Adding files to the library", p.Done, p.Total));
-        var result = await ctx.Importer.ImportAsync(batch, async (item, t) =>
-            session.Texts.TryGetValue(item.ItemId, out string? text) ? (text, null)
-                : await ctx.Importer.ReadAgainAsync(item, BatchMaximumSourceBytes, t).ConfigureAwait(true),
+        var result = await ctx.Importer.ImportAsync(batch, (item, t) => ctx.Importer.ReadPendingAsync(item, session.Texts, BatchMaximumSourceBytes, t),
             progress, token).ConfigureAwait(true);
         foreach (var item in result.Items.Where(x => x.DocumentId is not null)) session.Texts.Remove(item.ItemId);
         int failed = result.Items.Count(x => x.State == BatchItemState.Failed && x.DocumentId is null && x.JobId is null);
@@ -318,25 +316,16 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             token.ThrowIfCancellationRequested();
             ReportBatchWork(ctx, "Checking files", i, included.Length);
             var item = included[i];
-            if (session.Texts.ContainsKey(item.ItemId)) continue;
-            var (text, reason) = await ctx.Importer.ReadAgainAsync(item, BatchMaximumSourceBytes, token).ConfigureAwait(true);
-            if (text is not null) { session.Texts[item.ItemId] = text; continue; }
-            if (string.Equals(reason, "batch.source-changed-add-again", StringComparison.Ordinal) && item.SourcePath is { } path)
+            var fresh = await ctx.Importer.ReadDraftSourceAsync(item, session.Texts, BatchMaximumSourceBytes, token).ConfigureAwait(true);
+            if (!string.IsNullOrWhiteSpace(fresh.Text))
             {
-                // Not reviewed yet, so the draft simply takes the file as it is now (and says so).
-                BatchSourceFile fresh;
-                var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                await using (stream.ConfigureAwait(true))
-                    fresh = await ctx.Importer.ReadAsync(item.SourceFileName, stream, BatchMaximumSourceBytes, token).ConfigureAwait(true);
-                if (fresh.Text is { } updatedText && !string.IsNullOrWhiteSpace(updatedText))
-                {
-                    session.Texts[item.ItemId] = updatedText;
-                    int index = session.Draft.FindIndex(x => x.ItemId == item.ItemId);
-                    session.Draft[index] = item with { SourceSha256 = fresh.Sha256, SourceBytes = fresh.Bytes, Characters = BatchPlanner.CountCharacters(updatedText) };
-                    changed++;
-                    continue;
-                }
+                session.Texts[item.ItemId] = fresh.Text;
+                int index = session.Draft.FindIndex(x => x.ItemId == item.ItemId);
+                session.Draft[index] = item with { SourceSha256 = fresh.Sha256, SourceBytes = fresh.Bytes, Characters = BatchPlanner.CountCharacters(fresh.Text) };
+                if (!string.Equals(item.SourceSha256, fresh.Sha256, StringComparison.Ordinal)) changed++;
+                continue;
             }
+            session.Texts.Remove(item.ItemId);
             missing.Add(item.SourceFileName);
         }
         if (missing.Count > 0)
