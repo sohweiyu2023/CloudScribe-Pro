@@ -16,13 +16,25 @@ public sealed class SafeTrendExportTests
         const string privateText = "PRIVATE_TREND_ERROR_ARTICLE_CREDENTIAL_PATH";
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            Version = version, Kind = kind, EventId = eventId, FieldsComplete = true,
-            EventName = privateText, Module = privateText, Message = privateText, GapReason = privateText,
-            ApplicationVersion = privateText, ComponentBuildId = privateText, TimestampUtc = privateText,
+            Version = version,
+            Kind = kind,
+            EventId = eventId,
+            FieldsComplete = true,
+            EventName = privateText,
+            Module = privateText,
+            Message = privateText,
+            GapReason = privateText,
+            ApplicationVersion = privateText,
+            ComponentBuildId = privateText,
+            TimestampUtc = privateText,
             SafeFields = new Dictionary<string, string?>(StringComparer.Ordinal)
             {
-                ["BatchId"] = Guid.NewGuid().ToString("D"), ["ItemId"] = null, ["Operation"] = "ReadPrimary",
-                ["FailureCategory"] = privateText, ["LocalHResult"] = "-2147024784", ["UnknownField"] = privateText,
+                ["BatchId"] = Guid.NewGuid().ToString("D"),
+                ["ItemId"] = null,
+                ["Operation"] = "ReadPrimary",
+                ["FailureCategory"] = privateText,
+                ["LocalHResult"] = "-2147024784",
+                ["UnknownField"] = privateText,
             },
         });
         string text = Encoding.UTF8.GetString(SafeDiagnosticExportEncoder.Encode(bytes));

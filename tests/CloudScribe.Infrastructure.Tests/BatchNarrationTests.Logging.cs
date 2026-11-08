@@ -29,7 +29,8 @@ public sealed partial class BatchNarrationTests
         var batch = await w.CreateAsync(["a.txt", "b.txt"]);
         var savedJob = Guid.NewGuid();
         batch = await w.Store.SaveAsync(batch.WithItem(batch.Items[0] with { State = BatchItemState.Running, JobId = savedJob })
-            with { State = BatchQueueState.Running }, Token);
+            with
+        { State = BatchQueueState.Running }, Token);
         var log = new ListLogger();
         var narrator = new FakeNarrator();
         foreach (var item in batch.Items)

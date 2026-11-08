@@ -27,12 +27,7 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
     public async Task<NarrationBatch> RunAsync(Guid batchId, string currentSettingsSha256, IProgress<NarrationBatch>? progress = null,
         IProgress<BatchItemProgress>? itemProgress = null, CancellationToken cancellationToken = default)
     {
-        if (!Active.TryAdd(batchId, 0))
-        {
-            var error = new BatchAlreadyRunningException();
-            BatchDiagnostics.Failure(logger, batchId, null, BatchDiagnosticOperation.AcquireRunLock, error);
-            throw error;
-        }
+        EnterRun(batchId);
         try
         {
             using var runLock = store.TryAcquireRunLock(batchId) ?? throw new BatchAlreadyRunningException();
@@ -89,6 +84,14 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
         finally { Active.TryRemove(batchId, out _); }
     }
 
+    private void EnterRun(Guid batchId)
+    {
+        if (Active.TryAdd(batchId, 0)) return;
+        var error = new BatchAlreadyRunningException();
+        BatchDiagnostics.Failure(logger, batchId, null, BatchDiagnosticOperation.AcquireRunLock, error);
+        throw error;
+    }
+
     private async Task<(NarrationBatch Queue, string? StopReason)> ProcessAsync(NarrationBatch queue, BatchItem item,
         IProgress<NarrationBatch>? progress, IProgress<BatchItemProgress>? itemProgress, CancellationToken token)
     {
@@ -97,11 +100,7 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
             case BatchItemState.Excluded or BatchItemState.Skipped or BatchItemState.Failed or BatchItemState.Uncertain:
                 return (queue, null);
             case BatchItemState.Completed:
-                if (await narrator.VerifyOutputAsync(item, token).ConfigureAwait(false)) return (queue, null);
-                queue = await SaveAsync(queue.WithItem(item with { State = BatchItemState.Failed, ReasonCode = "batch.output-missing-or-changed" }),
-                    progress, token).ConfigureAwait(false);
-                if (logger is not null) CloudScribeLog.Observe(() => CloudScribeLog.BatchItemStopped(logger, queue.BatchId, item.Order, BatchItemState.Failed, "batch.output-missing-or-changed"));
-                return (queue, queue.Settings.FailurePolicy == BatchFailurePolicy.StopBatch ? "batch.stopped-on-failure" : null);
+                return await VerifyCompletedItemAsync(queue, item, progress, token).ConfigureAwait(false);
         }
         if (item.DocumentId is null) throw new InvalidOperationException("A queued file has no imported document.");
         // Ready, or Running after an interruption: a recorded JobId makes the narrator continue/reconcile, never restart.
@@ -154,6 +153,16 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
             _ => null,
         };
         return (queue, stop);
+    }
+
+    private async Task<(NarrationBatch Queue, string? StopReason)> VerifyCompletedItemAsync(NarrationBatch queue, BatchItem item,
+        IProgress<NarrationBatch>? progress, CancellationToken token)
+    {
+        if (await narrator.VerifyOutputAsync(item, token).ConfigureAwait(false)) return (queue, null);
+        queue = await SaveAsync(queue.WithItem(item with { State = BatchItemState.Failed, ReasonCode = "batch.output-missing-or-changed" }),
+            progress, token).ConfigureAwait(false);
+        if (logger is not null) CloudScribeLog.Observe(() => CloudScribeLog.BatchItemStopped(logger, queue.BatchId, item.Order, BatchItemState.Failed, "batch.output-missing-or-changed"));
+        return (queue, queue.Settings.FailurePolicy == BatchFailurePolicy.StopBatch ? "batch.stopped-on-failure" : null);
     }
 
     private void LogJobLink(Guid batchId, BatchItem item)

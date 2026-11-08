@@ -22,12 +22,16 @@ public sealed partial class SupportBundleServiceTests
             {
                 string line = JsonSerializer.Serialize(new
                 {
-                    SchemaVersion = 2, EventId = 1643, FieldsComplete = true,
+                    SchemaVersion = 2,
+                    EventId = 1643,
+                    FieldsComplete = true,
                     Message = PrivateSentinel,
                     SafeFields = new Dictionary<string, string>(StringComparer.Ordinal)
                     {
-                        ["BatchId"] = batch.ToString("D"), ["Order"] = i.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        ["ActiveMilliseconds"] = "100", ["OutputBytes"] = "1000",
+                        ["BatchId"] = batch.ToString("D"),
+                        ["Order"] = i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        ["ActiveMilliseconds"] = "100",
+                        ["OutputBytes"] = "1000",
                     },
                 });
                 await writer.WriteLineAsync(line.AsMemory(), TestContext.Current.CancellationToken);
@@ -106,12 +110,19 @@ public sealed partial class SupportBundleServiceTests
             {
                 string row = JsonSerializer.Serialize(new
                 {
-                    Version = 1, Kind = "Event", TimestampUtc = DateTimeOffset.UnixEpoch, EventId = 1643,
-                    FieldsComplete = true, Module = PrivateSentinel, ApplicationVersion = "1.0.3",
+                    Version = 1,
+                    Kind = "Event",
+                    TimestampUtc = DateTimeOffset.UnixEpoch,
+                    EventId = 1643,
+                    FieldsComplete = true,
+                    Module = PrivateSentinel,
+                    ApplicationVersion = "1.0.3",
                     SafeFields = new Dictionary<string, string>(StringComparer.Ordinal)
                     {
-                        ["BatchId"] = batch.ToString("D"), ["Order"] = i.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        ["ActiveMilliseconds"] = "1", ["OutputBytes"] = "2",
+                        ["BatchId"] = batch.ToString("D"),
+                        ["Order"] = i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        ["ActiveMilliseconds"] = "1",
+                        ["OutputBytes"] = "2",
                     },
                 });
                 await writer.WriteLineAsync(row.AsMemory(), TestContext.Current.CancellationToken);

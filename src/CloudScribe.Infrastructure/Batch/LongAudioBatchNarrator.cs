@@ -59,8 +59,15 @@ public sealed class LongAudioBatchNarrator(BatchAuthorityGate gate, IBatchLongAu
         }
         var audio = output.Value;
         long held = await HeldAsync(review, la, CancellationToken.None).ConfigureAwait(false);
+        return await CopyOutputAsync(queue, item, audio, la.FamilyMaximumUsdCents, held, progress, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<BatchNarrationOutcome> CopyOutputAsync(NarrationBatch queue, BatchItem item,
+        (string Path, string Sha256, long Bytes) audio, long estimatedMaximumMinorUnits, long held,
+        IProgress<BatchItemProgress>? progress, CancellationToken cancellationToken)
+    {
         if (!audio.Path.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
-            return new(BatchOutcomeKind.Failed, "batch.long-audio-output-not-mp3-speech-kept", EstimatedMaximumMinorUnits: la.FamilyMaximumUsdCents, ReservedMinorUnits: held);
+            return new(BatchOutcomeKind.Failed, "batch.long-audio-output-not-mp3-speech-kept", EstimatedMaximumMinorUnits: estimatedMaximumMinorUnits, ReservedMinorUnits: held);
         string destination = item.OutputPath ?? Path.Combine(queue.OutputFolder, item.OutputFileName);
         progress?.Report(new(item.ItemId, "Copying the verified MP3 to the output folder", 0, 0));
         try { await BatchOutputFiles.CopyVerifiedAsync(audio.Path, audio.Sha256, audio.Bytes, destination, cancellationToken).ConfigureAwait(false); }
@@ -68,9 +75,9 @@ public sealed class LongAudioBatchNarrator(BatchAuthorityGate gate, IBatchLongAu
         {
             BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.VerifyOutput, error);
             // Speech is saved and verified in the profile; Retry copies it again without any new request.
-            return new(BatchOutcomeKind.Failed, "batch.local-copy-failed-speech-kept", EstimatedMaximumMinorUnits: la.FamilyMaximumUsdCents, ReservedMinorUnits: held);
+            return new(BatchOutcomeKind.Failed, "batch.local-copy-failed-speech-kept", EstimatedMaximumMinorUnits: estimatedMaximumMinorUnits, ReservedMinorUnits: held);
         }
-        return BatchNarrationOutcome.Completed(destination, audio.Bytes, audio.Sha256, la.FamilyMaximumUsdCents, held);
+        return BatchNarrationOutcome.Completed(destination, audio.Bytes, audio.Sha256, estimatedMaximumMinorUnits, held);
     }
 
     public Task<bool> VerifyOutputAsync(BatchItem item, CancellationToken cancellationToken = default)
