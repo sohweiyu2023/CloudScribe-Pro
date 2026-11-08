@@ -1,4 +1,4 @@
-# CloudScribe Pro 1.0.6: setup and everyday use
+# CloudScribe Pro 1.0.7: setup and everyday use
 
 The local usability update adds saved voice setups, remembered choices, offline request inspection and local narration-part preparation. See [Saved setups and local recovery](SAVED_SETUPS_AND_LOCAL_RECOVERY.md) for the updated workflow and persistence details.
 
@@ -72,6 +72,8 @@ Short-request approval is single-use. A new prepared short request needs fresh c
 ## Compare the same full document in different voices
 
 For a longer comparison, create a separate saved document for each voice and paste the same exact passage into both. For example, two English documents can be reviewed separately with `en-US-Neural2-D` and `en-US-Chirp3-HD-Aoede` when those exact voices are returned by your connected catalog. Equal text does not guarantee equal running time; the voices may speak it at different speeds.
+
+In **Voices**, a slow **Load connected voices / apply locale** or **Refresh connected voices (full verification)** can be dismissed with **Close**, Escape or the window close button. Closing requests cancellation and returns focus to an eligible opener; a dependency may still be finishing in the background. Reopening keeps another catalog load blocked until that operation really ends. Closing does not undo completed work or prove that a request was uncharged. Generation and export retain their separate close safeguards.
 
 Open **Voices**, refresh the connected voices, select one and choose **Review full document with this voice**. This uses the saved Studio document, not the short-sample box. Review the exact document and voice, accepted audio, remaining requests and maximum cost. Each document needs its own installed admission and exact approval before generation. If the selected voice differs from the document's admitted voice, the app asks you to use a separate document instead of reusing the old voice's authority.
 
