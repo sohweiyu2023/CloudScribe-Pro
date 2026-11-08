@@ -30,8 +30,7 @@ public sealed class BatchLongAudioScopeExtensionSource(InstalledBatchAuthoritySt
             var latest = consents.GroupBy(c => c.BatchId).ToDictionary(g => g.Key,
                 g => g.OrderByDescending(c => c.Source == BatchConsentSource.ReviewedInstall).ThenByDescending(c => c.CreatedUtc).First().ConsentId);
             var candidates = consents
-                .Where(c => c.SchemaVersion == BatchConsent.CurrentSchemaVersion && string.Equals(c.ComputeSha256(), c.ConsentSha256, StringComparison.Ordinal)
-                    && string.Equals(c.Currency, "USD", StringComparison.Ordinal) && c.Scale == 2)
+                .Where(c => ValidConsent(scope, c))
                 .OrderBy(c => c.CreatedUtc).ThenBy(c => c.ConsentId)
                 .SelectMany(c => c.Items.Where(i => i.LongAudio is not null && string.Equals(i.Engine, BatchEngines.LongAudio, StringComparison.Ordinal)).Select(i => (Consent: c, Item: i)))
                 .ToArray();
@@ -68,6 +67,21 @@ public sealed class BatchLongAudioScopeExtensionSource(InstalledBatchAuthoritySt
         return effectiveScope.TotalGoogleCapUsdCents - projectCeilingUsdCents - effectiveScope.TaxFxProvisionUsdCents - installedAndBatch;
     }
 
+    // Validate one approval at a time: a damaged unrelated file must not hide already committed jobs.
+    // Latest selection deliberately happens before this filter, so corruption never revives superseded authority.
+    private static bool ValidConsent(GoogleLongAudioBudgetScope scope, BatchConsent consent)
+    {
+        try
+        {
+            return consent.SchemaVersion == BatchConsent.CurrentSchemaVersion && consent.Items is not null
+                && consent.Items.All(item => item is not null && (item.LongAudio is null || Fits(scope, item.LongAudio)))
+                && string.Equals(consent.Currency, "USD", StringComparison.Ordinal) && consent.Scale == 2
+                && string.Equals(consent.ComputeSha256(), consent.ConsentSha256, StringComparison.Ordinal);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or NullReferenceException or OverflowException)
+        { return false; }
+    }
+
     private static bool Current(BatchAuthorityProfile? profile, BatchConsent consent, DateTimeOffset now) =>
         profile is not null && profile.Problem() is null && now < profile.ExpiresUtc && profile.Mode != BatchAuthorityMode.Off
         && profile.AllowsEngine(BatchEngines.LongAudio)
@@ -81,7 +95,7 @@ public sealed class BatchLongAudioScopeExtensionSource(InstalledBatchAuthoritySt
         string extension = string.Equals(scope.AudioEncoding, "MP3", StringComparison.Ordinal) ? ".mp3" : ".wav";
         return la.AttemptId != Guid.Empty && la.CeilingUsdCents > 0 && la.FamilyMaximumUsdCents >= la.CeilingUsdCents
             && la.MaximumOutputBytes >= 12 && la.ExpectedSampleRate > 0 && la.ExpectedChannels > 0
-            && la.OutputGcsUri.StartsWith("gs://" + scope.OutputBucket + "/", StringComparison.Ordinal)
+            && la.OutputGcsUri is not null && la.OutputGcsUri.StartsWith("gs://" + scope.OutputBucket + "/", StringComparison.Ordinal)
             && la.OutputGcsUri.EndsWith("/" + la.AttemptId.ToString("N") + extension, StringComparison.Ordinal)
             && (!la.AdaptiveRecovery || string.Equals(scope.AudioEncoding, "LINEAR16", StringComparison.Ordinal))
             && la.RequestBindingSha256 is { Length: 64 } && la.RequestBindingSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');

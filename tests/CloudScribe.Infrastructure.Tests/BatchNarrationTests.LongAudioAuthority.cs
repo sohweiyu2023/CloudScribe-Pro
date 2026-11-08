@@ -62,6 +62,64 @@ public sealed partial class BatchNarrationTests
             File.WriteAllTextAsync(ledger, JsonSerializer.Serialize(new GoogleLongAudioBudgetLedger(1, pin, claims)), Token);
     }
 
+    [Theory]
+    [InlineData("items")]
+    [InlineData("item")]
+    [InlineData("output")]
+    [InlineData("hash")]
+    public async Task MalformedLatestConsentDoesNotHideUnrelatedCommittedJobsOrReviveOlderApproval(string damage)
+    {
+        using var w = new Workspace();
+        var healthy = await w.CreateAsync(["healthy.txt"]);
+        var damaged = await w.CreateAsync(["damaged.txt"]);
+        string install = Path.Combine(w.Root, "install"), authorityPath = Path.Combine(install, "batch-authority");
+        Directory.CreateDirectory(authorityPath);
+        var profile = Profile(w.Root, BatchAuthorityMode.InAppWithinLimits);
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(profile, InstalledBatchAuthorityStore.Json);
+        await File.WriteAllBytesAsync(Path.Combine(authorityPath, "profile.json"), bytes, Token);
+        await File.WriteAllTextAsync(Path.Combine(authorityPath, "pins.json"), JsonSerializer.Serialize(new BatchAuthorityPins(1,
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)), new Dictionary<string, string>(StringComparer.Ordinal))), Token);
+        var store = new InstalledBatchAuthorityStore(Path.Combine(install, "app"), w.Root);
+        var healthyApproval = BatchApproval('a');
+        var corruptApproval = BatchApproval('c');
+        await store.SaveInAppConsentAsync(Approve(healthy, healthyApproval, Now.AddMinutes(-3)), Token);
+        await store.SaveInAppConsentAsync(Approve(damaged, BatchApproval('b'), Now.AddMinutes(-2)), Token);
+        var corrupt = Approve(damaged, corruptApproval, Now.AddMinutes(-1));
+        corrupt = damage switch
+        {
+            "items" => corrupt with { Items = null! },
+            "item" => corrupt with { Items = [null!] },
+            "output" => corrupt with { Items = [corrupt.Items[0] with { LongAudio = corruptApproval with { OutputGcsUri = null! } }] },
+            _ => corrupt with { ConsentSha256 = new string('0', 64) },
+        };
+        if (string.Equals(damage, "output", StringComparison.Ordinal)) corrupt = corrupt with { ConsentSha256 = corrupt.ComputeSha256() };
+        await store.SaveInAppConsentAsync(corrupt, Token);
+        string pin = new('d', 64), ledger = Path.Combine(w.Root, "ledger.json");
+        await SaveLedger([new(healthyApproval.AttemptId, healthyApproval.RequestBindingSha256, 1)]);
+        await Check();
+        // Even a claim is insufficient to recover authority from the corrupt approval itself.
+        await SaveLedger([new(healthyApproval.AttemptId, healthyApproval.RequestBindingSha256, 1),
+            new(corruptApproval.AttemptId, corruptApproval.RequestBindingSha256, 1)]);
+        await Check();
+
+        async Task Check()
+        {
+            var result = await new BatchLongAudioScopeExtensionSource(store, new FixedClock(Now)).LoadAsync(BatchScope(), pin, ledger, 0, Token);
+            var job = Assert.Single(result.Jobs);
+            Assert.Equal(healthyApproval.AttemptId, job.AttemptId);
+            Assert.True(job.Committed);
+        }
+        BatchConsent Approve(NarrationBatch queue, BatchLongAudioApproval la, DateTimeOffset at)
+        {
+            var item = queue.Items[0];
+            return BatchConsent.Create(Guid.NewGuid(), queue, BatchConsentSource.InApp, profile, Account, Project,
+                [new(item.ItemId, item.SourceSha256, item.DocumentId!.Value, item.RevisionId!.Value, la.RequestBindingSha256,
+                    la.FamilyMaximumUsdCents, BatchEngines.LongAudio, la)], at);
+        }
+        Task SaveLedger(IReadOnlyList<GoogleLongAudioBudgetClaim> claims) =>
+            File.WriteAllTextAsync(ledger, JsonSerializer.Serialize(new GoogleLongAudioBudgetLedger(1, pin, claims)), Token);
+    }
+
     [Fact]
     public void LongAudioRetainedHeadroomCreditsOnlyTheSameCommittedJob()
     {
