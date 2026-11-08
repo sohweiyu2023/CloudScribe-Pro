@@ -113,6 +113,8 @@ Ordinary-engine files still need an installed complete-article policy that names
 
 **Trust boundary.** The app never writes to `<install>\batch-authority\`. `Install-BatchAuthority.ps1` records each installed file's SHA-256 in `pins.json`; the app ignores anything unpinned, edited or bound to another profile folder. In-app approvals live in the user profile and can never pose as reviewed ones. The install folder is per-user, so this is the same process boundary as the existing reviewed policies, not an operating-system permission.
 
+Run the administrative commands below from a reviewed source checkout. The clean Windows package includes this guide, but not the batch-authority installer or a private authority profile; downloading the package does not enable paid batch narration.
+
 ```powershell
 pwsh -File scripts\Install-BatchAuthority.ps1 -ProfileRootSha256For "$env:LOCALAPPDATA\CloudScribe Pro\Profiles\Studio"
 pwsh -File scripts\Install-BatchAuthority.ps1 -ReviewedProfilePath .\batch-profile.json -ReviewedProfileSha256 <sha256> [-ValidateOnly]
