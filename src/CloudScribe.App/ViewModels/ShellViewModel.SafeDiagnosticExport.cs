@@ -19,7 +19,7 @@ public sealed partial class ShellViewModel
 
     public string SafeDiagnosticExportDestination => _safeDiagnosticExportDestination ?? "Not configured";
 
-    public string SafeDiagnosticExportDisclosure =>
+    public string SafeDiagnosticExportDisclosure { get; } =
         "This separate ZIP contains allowlisted metadata from available local logs and permanent safe trend history, plus a generated manifest. It excludes documents, audio, databases, credentials, private provider captures, request/response bodies and free-form exception text. All captured records are streamed; malformed, oversized or unsupported records have omission markers. Existing records are not rewritten. Nothing is uploaded and no provider request is sent.";
 
     public bool CanExportSafeDiagnosticHistory => _safeDiagnosticExportDestination is not null

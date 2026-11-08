@@ -64,7 +64,7 @@ public sealed partial class ShellViewModelStateTests
         service.Export = async (destination, token) =>
         {
             entered.TrySetResult();
-            await release.Task.WaitAsync(token);
+            await release.Task.WaitAsync(token).ConfigureAwait(false);
             return Path.Combine(destination, "synthetic-safe-history.zip");
         };
         using ShellViewModel model = CreateViewModel(supportBundles: service);
@@ -91,7 +91,7 @@ public sealed partial class ShellViewModelStateTests
         service.Export = async (_, token) =>
         {
             entered.TrySetResult();
-            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(false);
             return "not-published.zip";
         };
         using ShellViewModel model = CreateViewModel(supportBundles: service);
@@ -140,7 +140,7 @@ public sealed partial class ShellViewModelStateTests
         service.Export = async (_, token) =>
         {
             entered.TrySetResult();
-            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(false);
             return "not-published.zip";
         };
         using ShellViewModel model = CreateViewModel(supportBundles: service);
