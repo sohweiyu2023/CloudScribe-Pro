@@ -31,7 +31,7 @@ public sealed partial class ShellViewModelStateTests
         object context = CreatePreviewBatchContext(owner, model, f, queue, original);
         int requests = f.Handler.TotalRequests;
         Task closed = (Task)typeof(GoogleTtsUsabilityHotfixBinder).GetMethod("PreviewBatchNarrationAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(ui.Binder, [context])!;
+            .Invoke(ui.Binder, [context, true])!;
         Window preview = Assert.Single(owner.OwnedWindows);
         try
         {

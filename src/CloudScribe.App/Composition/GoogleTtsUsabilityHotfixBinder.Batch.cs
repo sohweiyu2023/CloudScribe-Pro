@@ -477,7 +477,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 await ReviewBatchAsync(ctx).ConfigureAwait(true);
             }).ConfigureAwait(true);
         };
-        OnBatch(ctx, ctx.PreviewNarration, BatchDiagnosticOperation.Rehearse, () => PreviewBatchNarrationAsync(ctx));
+        ctx.PreviewNarration.Click += async (_, _) =>
+        {
+            try
+            {
+                await GuardBatchAsync(ctx, BatchDiagnosticOperation.Rehearse,
+                    () => PreviewBatchNarrationAsync(ctx, restoreInvoker: false)).ConfigureAwait(true);
+            }
+            finally { RestoreDialogInvoker(ctx.Dialog, ctx.PreviewNarration); }
+        };
         ctx.SkipUrls.IsCheckedChanged += async (_, _) => await DraftSettingChangedAsync(ctx, () => session.SkipUrls = ctx.SkipUrls.IsChecked == true).ConfigureAwait(true);
         ctx.Engine.SelectionChanged += async (_, _) => await DraftSettingChangedAsync(ctx, () => session.EngineChoice = Math.Max(0, ctx.Engine.SelectedIndex)).ConfigureAwait(true);
         ctx.Policy.SelectionChanged += async (_, _) => await DraftSettingChangedAsync(ctx, () => session.Policy = ctx.Policy.SelectedIndex == 1 ? BatchFailurePolicy.StopBatch : BatchFailurePolicy.SkipAndContinue).ConfigureAwait(true);

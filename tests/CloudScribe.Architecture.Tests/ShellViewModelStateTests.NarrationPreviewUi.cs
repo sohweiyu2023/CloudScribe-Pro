@@ -90,7 +90,7 @@ public sealed partial class ShellViewModelStateTests
 
     private static Task<bool> OpenNarrationPreview(Window owner, ShellViewModel model) =>
         (Task<bool>)typeof(GoogleTtsUsabilityHotfixBinder).GetMethod("PreviewNarrationCopyAsync", BindingFlags.Static | BindingFlags.NonPublic)!
-            .Invoke(null, [owner, model])!;
+            .Invoke(null, [owner, model, true])!;
 
     private static async Task SettlePreviewFocusAsync(Window dialog, bool text)
     {

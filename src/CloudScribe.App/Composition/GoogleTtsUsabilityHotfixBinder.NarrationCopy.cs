@@ -12,7 +12,7 @@ namespace CloudScribe.App.Composition;
 
 public sealed partial class GoogleTtsUsabilityHotfixBinder
 {
-    private static async Task<bool> PreviewNarrationCopyAsync(Window owner, ShellViewModel model)
+    private static async Task<bool> PreviewNarrationCopyAsync(Window owner, ShellViewModel model, bool restoreInvoker = true)
     {
         string original = model.DocumentText;
         var result = NarrationUrlOmission.Transform(original);
@@ -46,13 +46,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         };
         dialog.Content = body;
         DialogBounds.Fit(dialog, owner);
-        await ShowNarrationPreviewAsync(dialog, owner).ConfigureAwait(true);
+        await ShowNarrationPreviewAsync(dialog, owner, restoreInvoker).ConfigureAwait(true);
         return opened;
     }
 
-    private static async Task ShowNarrationPreviewAsync(Window dialog, Window owner)
+    private static async Task ShowNarrationPreviewAsync(Window dialog, Window owner, bool restoreInvoker)
     {
-        var invoker = owner.FocusManager?.GetFocusedElement() as Control;
+        var invoker = restoreInvoker ? owner.FocusManager?.GetFocusedElement() as Control : null;
         dialog.KeyDown += (_, args) =>
         {
             if (args.Key != Key.Escape) return;
@@ -83,7 +83,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         _ => "Unsupported URL policy. This saved narration cannot be prepared or upgraded automatically.",
     };
 
-    private async Task PreviewBatchNarrationAsync(BatchContext ctx)
+    private async Task PreviewBatchNarrationAsync(BatchContext ctx, bool restoreInvoker = true)
     {
         if (SelectedBatchRows(ctx) is not [var item]) return;
         string text;
@@ -119,7 +119,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             body.Children.Add(NewDescription("No spoken words remain. This file is excluded locally; no request is sent."));
         var close = NewButton("Close preview"); close.Click += (_, _) => dialog.Close(); body.Children.Add(close);
         dialog.Content = body; DialogBounds.Fit(dialog, ctx.Dialog);
-        await ShowNarrationPreviewAsync(dialog, ctx.Dialog).ConfigureAwait(true);
+        await ShowNarrationPreviewAsync(dialog, ctx.Dialog, restoreInvoker).ConfigureAwait(true);
     }
 
     private async Task AddSavedNarrationCopyNoticeAsync(Window owner, StackPanel body, ShellViewModel model)
