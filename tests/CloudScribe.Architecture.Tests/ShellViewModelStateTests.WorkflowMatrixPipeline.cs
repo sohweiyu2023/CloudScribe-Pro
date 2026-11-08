@@ -20,6 +20,8 @@ public sealed partial class ShellViewModelStateTests
         internal GoogleGenerationPersistedQueueStateStore Queue { get; }
         internal GoogleGenerationProductionRuntimeRequestSource Runtime { get; }
         internal int CanarySubmissions { get; private set; }
+        internal int OutputPublicationAttempts { get; private set; }
+        internal int PlaybackAttempts { get; private set; }
         private readonly GoogleTtsStudioCaptureCoordinator _capture;
         private readonly GoogleGenerationProductionIntentAssemblyCoordinator _assembly;
         private readonly GoogleGenerationProductionPreparationCoordinator _preparation;
@@ -80,8 +82,15 @@ public sealed partial class ShellViewModelStateTests
                 var request = await Runtime.ResolveAsync(token).ConfigureAwait(false);
                 return new GoogleGenerationUiExecutionContext(new(bound), request.Snapshot, request.SubmissionEnvelope);
             });
-            model.ConfigureStage6GoogleGenerationOutput((_, _) => throw new InvalidOperationException("Synthetic canary cannot publish audio."),
-                (_, _) => throw new InvalidOperationException("Synthetic canary cannot play audio."));
+            model.ConfigureStage6GoogleGenerationOutput((_, _) =>
+            {
+                OutputPublicationAttempts++;
+                throw new InvalidOperationException("Synthetic canary cannot publish audio.");
+            }, (_, _) =>
+            {
+                PlaybackAttempts++;
+                throw new InvalidOperationException("Synthetic canary cannot play audio.");
+            });
         }
     }
 }

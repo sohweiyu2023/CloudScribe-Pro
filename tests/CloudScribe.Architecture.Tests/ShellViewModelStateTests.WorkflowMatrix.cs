@@ -112,6 +112,8 @@ public sealed partial class ShellViewModelStateTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => pipeline.Runtime.ResolveAsync(token)).ConfigureAwait(false);
         await model.GenerateWithGoogleCommand.ExecuteAsync(null).ConfigureAwait(false);
         Assert.Equal(0, pipeline.CanarySubmissions);
+        Assert.Equal(0, pipeline.OutputPublicationAttempts);
+        Assert.Equal(0, pipeline.PlaybackAttempts);
 
         var capabilityAfter = (await f.Capabilities.GetLatestAsync(GoogleGenerationProvider.StableProviderId, CatalogReopenFixture.Account, token).ConfigureAwait(false))!;
         bool changed = !string.Equals(row[4], "unchanged", StringComparison.Ordinal) || string.Equals(row[3], "refresh", StringComparison.Ordinal);
@@ -167,6 +169,8 @@ public sealed partial class ShellViewModelStateTests
         Assert.False(model.CanGenerateWithGoogle);
         await model.GenerateWithGoogleCommand.ExecuteAsync(null).ConfigureAwait(false);
         Assert.Equal(0, pipeline.CanarySubmissions);
+        Assert.Equal(0, pipeline.OutputPublicationAttempts);
+        Assert.Equal(0, pipeline.PlaybackAttempts);
     }
 
     private static string MatrixVoice(string key) => key switch

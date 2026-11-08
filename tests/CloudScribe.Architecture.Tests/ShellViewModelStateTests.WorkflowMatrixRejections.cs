@@ -23,14 +23,20 @@ public sealed partial class ShellViewModelStateTests
         await model.PrepareGoogleGenerationSpendReviewAsync(token);
         await model.GenerateWithGoogleCommand.ExecuteAsync(null);
         Assert.Equal(0, pipeline.CanarySubmissions);
+        Assert.Equal(0, pipeline.OutputPublicationAttempts);
+        Assert.Equal(0, pipeline.PlaybackAttempts);
         var review = await model.PrepareGoogleGenerationSpendReviewAsync(token);
         await model.ApproveGoogleGenerationSpendAsync(review.CurrentEstimateMinorUnits, true, token);
         Assert.True(model.CanGenerateWithGoogle);
         await model.GenerateWithGoogleCommand.ExecuteAsync(null);
         Assert.Equal(1, pipeline.CanarySubmissions);
+        Assert.Equal(0, pipeline.OutputPublicationAttempts);
+        Assert.Equal(0, pipeline.PlaybackAttempts);
         Assert.False(model.CanGenerateWithGoogle);
         await model.GenerateWithGoogleCommand.ExecuteAsync(null);
         Assert.Equal(1, pipeline.CanarySubmissions);
+        Assert.Equal(0, pipeline.OutputPublicationAttempts);
+        Assert.Equal(0, pipeline.PlaybackAttempts);
         Assert.Equal(0, f.Handler.PaidRequests);
         Assert.Equal(source, await f.Disk.NewLibrary().OpenAsync(source.Id, token));
     }
