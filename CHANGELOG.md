@@ -2,7 +2,7 @@
 
 All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in the app are estimates and safety holds, never a Google bill.
 
-## 1.0.3 (8 November 2026, not yet released)
+## 1.0.3 (8 November 2026)
 
 ### Batch MP3 from TXT files (new)
 - **Create MP3 → Batch MP3 from TXT files…** turns several TXT files, or a folder, into one MP3 each. One voice, one review and one approval cover the batch. Source files are only read; each becomes its own library document, exactly like Import. Files are never merged, and no extra tracks are created.
