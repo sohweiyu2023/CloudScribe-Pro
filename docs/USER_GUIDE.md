@@ -28,6 +28,8 @@ For several TXT files, use the checkbox and **Preview selected narration text** 
 
 Editing the original blocks fresh requests from its old narration copy, while already-started jobs retain their exact text. A recovery-only article review can recover admitted work but will not complete an MP3 while fresh parts remain blocked. Editing the narration copy itself may also block article progress or export; keep its receipts and accepted audio. To prepare a replacement, save the original text as a new document and preview URL skipping again, or start a new batch from the original TXT. Turning the checkbox off does not restore or repair an edited copy.
 
+The separate **unreleased v2 source change** also skips conservative bare addresses such as `84000.co`. This is not a claim about the published 1.0.5 package. Existing copies and saved batches keep their original v1 text and approvals; they are not silently upgraded. The exact suffix list, exclusions and preview limitations are in [Batch narration: bare-domain policy](BATCH_NARRATION.md#bare-domains-in-the-unreleased-v2-source-change).
+
 ## Set up Google Cloud once
 
 You need your own Google Cloud account, an enabled billing account, a project with Cloud Text-to-Speech enabled, and a service-account JSON key. Google charges your Cloud account; a ChatGPT subscription does not pay these charges.

@@ -197,6 +197,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
     private static void ApplyDraftSettings(BatchSession session, BatchDraft draft)
     {
+        string version = draft.ResolveUrlTransformVersion();
+        session.UrlTransformVersion = version;
         session.Name = draft.Name;
         session.OutputFolder = draft.OutputFolder;
         session.NumberTracks = draft.NumberTracks;
@@ -213,7 +215,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         var session = ctx.Session;
         ClearBatchView(session);
         var draft = await session.Drafts.LoadAsync().ConfigureAwait(true);
-        if (draft is not null) ApplyDraftSettings(session, draft);
+        ApplyDraftSettings(session, draft ?? BatchDraft.Empty(DateTimeOffset.UtcNow));
         await LoadSavedListAsync(ctx).ConfigureAwait(true);
         ctx.Status.Text = message + (session.Draft.Count > 0 ? $" The draft has {session.Draft.Count} file(s)." : " Drag in TXT files or folders, or choose Add TXT files….");
     }
@@ -232,6 +234,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         session.Undo.Add(new BatchUndo(session.Draft.ToArray(), "Discard", session.ToDraft()));
         ReplaceDraft(session, []);
         session.OutputFolder = null; session.Name = null; session.NumberTracks = false;
+        session.SkipUrls = false; session.UrlTransformVersion = CloudScribe.Application.Documents.NarrationUrlOmission.CurrentVersion;
         await SaveDraftAsync(ctx).ConfigureAwait(true);
         await LoadSavedListAsync(ctx).ConfigureAwait(true);
         ctx.Status.Text = "Draft discarded. Choose Undo discard (Ctrl+Z) to bring it back while this window is open.";
@@ -309,6 +312,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         if (model.TryCaptureBatchVoice(out string? problem) is not { } voice) { ctx.Status.Text = problem ?? "Choose the voice first."; return; }
         if (session.OutputFolder is null) { ctx.Status.Text = "Choose the output folder first."; return; }
         var token = BeginBatchWork(ctx);
+        session.UrlTransformVersion = session.ToDraft().ResolveUrlTransformVersion();
         var included = session.Draft.Where(x => x.IsIncluded).ToArray();
         var missing = new List<string>();
         int changed = 0;
@@ -320,7 +324,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             if (item.DocumentId is not null)
             {
                 await BatchNarrationIdentity.ValidateAsync(documentLibrary!, new("", "", "", "", session.Policy, session.SkipUrls,
-                    session.SkipUrls ? CloudScribe.Application.Documents.NarrationUrlOmission.CurrentVersion : null), item, token).ConfigureAwait(true);
+                    session.SkipUrls ? session.UrlTransformVersion : null), item, token).ConfigureAwait(true);
                 continue;
             }
             var fresh = await ctx.Importer.ReadDraftSourceAsync(item, session.Texts, BatchMaximumSourceBytes, token).ConfigureAwait(true);
@@ -345,7 +349,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             Engine = BatchDialogPresentation.EngineForChoice(session.EngineChoice),
             SkipUrls = session.SkipUrls,
-            UrlTransformVersion = session.SkipUrls ? CloudScribe.Application.Documents.NarrationUrlOmission.CurrentVersion : null
+            UrlTransformVersion = session.SkipUrls ? session.UrlTransformVersion : null
         };
         ReplaceDraft(session, BatchPlanner.AssignOutputNames(session.Draft, t => t + ".mp3", n => BatchOutputExists(session, n), session.NumberTracks));
         var batch = new NarrationBatch(NarrationBatch.CurrentVersion, Guid.NewGuid(), session.Name ?? "Batch", 0, BatchQueueState.Ready, settings, settings.Sha256(),
@@ -357,6 +361,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         // From here the saved batch is the record: the draft is removed, and a cancel or crash resumes on reopening.
         ReplaceDraft(session, []);
         session.OutputFolder = null; session.Name = null; session.Undo.Clear();
+        session.SkipUrls = false; session.UrlTransformVersion = CloudScribe.Application.Documents.NarrationUrlOmission.CurrentVersion;
         await session.Drafts.DeleteAsync().ConfigureAwait(true);
         session.Batch = await ImportPendingAsync(ctx, batch, token).ConfigureAwait(true);
         session.Texts.Clear();

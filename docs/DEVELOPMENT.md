@@ -269,6 +269,12 @@ After committing the intended source and manifest, rerun required checks on that
 
 `SESSION_STATE.json` deliberately retains Stage8 **1.0.0** governance while the app is a **1.0.x** servicing release. Do not change that identity to match the executable version.
 
+## URL omission compatibility checks (unreleased v2 servicing source)
+
+`NarrationUrlOmission.Transform(text, version)` dispatches only immutable supported policies. New preparations select v2; old copies, imports, settings hashes, provenance and saved previews replay their stored version. Do not migrate approved text, alter `BatchSettings.Sha256`/copy-key formats, update a frozen suffix policy in place or make a network suffix refresh. This branch does not change the published 1.0.5 release.
+
+The original v1 recognition cases are retained with only a v1 type alias. A separate v2 compatibility suite repeats those explicit-URL/Markdown/Unicode/processing-budget cases, with bare-domain preservation differences (including a valid domain containing `www` inside a label) tested separately by version. Additional tests cover bare-domain false positives, adversarial inputs, exact v1/v2 copy reuse, interrupted imports, no-omission v1 identities, draft/session retention, version corruption, consent changes and existing-job recovery. Run focused `NarrationUrlOmission`, `NarrationCopyStoreTests`, `BatchNarrationTests`, `BatchDraftVersionTests` and narration architecture tests, then the full compiled/offline suites under the normal checks above. Focused success is not release certification.
+
 ## Troubleshooting
 
 - **SDK not found/mismatch:** run `dotnet --list-sdks` and `dotnet --version` from the checkout root. Install the exact SDK; do not enable roll-forward or change the pin.

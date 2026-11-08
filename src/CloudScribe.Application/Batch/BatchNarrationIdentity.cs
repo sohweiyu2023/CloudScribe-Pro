@@ -29,8 +29,8 @@ public static class BatchNarrationIdentity
             if (item.NarrationSource is not null) throw new InvalidOperationException("The URL skipping option changed after preparation.");
             return;
         }
-        if (!string.Equals(settings.UrlTransformVersion, NarrationUrlOmission.CurrentVersion, StringComparison.Ordinal) || item.NarrationTextSha256 is null)
-            throw new InvalidOperationException("Prepare the narration text with the current URL skipping option before review.");
+        if (!NarrationUrlOmission.IsSupportedVersion(settings.UrlTransformVersion) || item.NarrationTextSha256 is null)
+            throw new InvalidOperationException("Prepare the narration text with its saved URL skipping option before review.");
         if (copies is not null)
         {
             var stored = await copies.FindAsync(document.Id, token).ConfigureAwait(false);
@@ -41,7 +41,7 @@ public static class BatchNarrationIdentity
         }
         if (item.NarrationSource is not { } source)
         {
-            if (NarrationUrlOmission.Transform(document.Text).OmittedUrlCount != 0)
+            if (NarrationUrlOmission.Transform(document.Text, settings.UrlTransformVersion).OmittedUrlCount != 0)
                 throw new InvalidOperationException("URL skipping has not been prepared for this document.");
             return;
         }
@@ -49,7 +49,7 @@ public static class BatchNarrationIdentity
         if (original is null || original.Status != DocumentStatus.Active || original.CurrentRevisionId != source.RevisionId
             || !string.Equals(Hash(original.Text), source.TextSha256, StringComparison.Ordinal))
             throw new InvalidOperationException("The original changed after the narration copy was prepared. Prepare and review it again.");
-        var transformed = NarrationUrlOmission.Transform(original.Text);
+        var transformed = NarrationUrlOmission.Transform(original.Text, settings.UrlTransformVersion);
         if (source.DocumentId == document.Id || !string.Equals(source.TransformVersion, transformed.TransformVersion, StringComparison.Ordinal)
             || source.OmittedUrlCount != transformed.OmittedUrlCount || !transformed.HasSpeakableContent
             || !string.Equals(transformed.OutputText, document.Text, StringComparison.Ordinal))

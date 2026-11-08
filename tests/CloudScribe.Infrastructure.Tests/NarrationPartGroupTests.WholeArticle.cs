@@ -193,6 +193,7 @@ public sealed partial class NarrationPartGroupTests
     private sealed class WholeFakeRuntime(Fixture fixture, ChirpEvidence evidence) : IChirpWholeArticleRuntime
     {
         public List<int> Ordinals { get; } = [];
+        public Action<ReadOnlyMemory<byte>>? ObservePayload { get; init; }
         public bool Exported { get; private set; }
         public bool FailAfterReservation { get; init; }
         public bool RejectAfterReservation { get; init; }
@@ -226,6 +227,7 @@ public sealed partial class NarrationPartGroupTests
                 throw new InvalidOperationException("Synthetic terminal HTTP400; no retry.");
             }
             if (FailAfterReservation) throw new IOException("SYNTHETIC_PRIVATE_ERROR_NOT_PERSISTED");
+            ObservePayload?.Invoke(intent.CompiledPayload);
             var accepted = await AcceptChirpAsync(fixture, evidence.Service, intent, ordinal, approved).ConfigureAwait(false);
             await evidence.Service.PersistAcceptedAsync(accepted.Request, accepted.Outcome, cancellationToken).ConfigureAwait(false);
             if (RequireRefreshBeforeEveryRequest) RequiresCatalogRefresh = true;

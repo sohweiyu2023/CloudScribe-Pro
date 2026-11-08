@@ -42,6 +42,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         public string? Name { get; set; }
         public bool NumberTracks { get; set; }
         public bool SkipUrls { get; set; }
+        public string UrlTransformVersion { get; set; } = CloudScribe.Application.Documents.NarrationUrlOmission.CurrentVersion;
         public int EngineChoice { get; set; }
         public BatchFailurePolicy Policy { get; set; } = BatchFailurePolicy.SkipAndContinue;
         public BatchAuthorityProfile? Profile { get; set; }
@@ -70,7 +71,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         public bool AnyStarted => Batch is { } b && b.Items.Any(x => x.JobId is not null || x.State == BatchItemState.Completed);
 
         public BatchDraft ToDraft() => new(BatchDraft.CurrentVersion, Name, OutputFolder, NumberTracks,
-            BatchDialogPresentation.EngineForChoice(EngineChoice), Policy, Draft.ToArray(), DateTimeOffset.UtcNow, SkipUrls);
+            BatchDialogPresentation.EngineForChoice(EngineChoice), Policy, Draft.ToArray(), DateTimeOffset.UtcNow, SkipUrls, UrlTransformVersion);
 
         public void Dispose() { Store.Dispose(); Work?.Dispose(); }
     }
@@ -128,6 +129,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         public ComboBox Policy { get; } = new() { ItemsSource = new[] { "If a file fails, skip it and continue", "If a file fails, stop the batch" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 260 };
         public CheckBox Numbering { get; } = new() { Content = NewDescription("Number the MP3 files in this order (01, 02, …). Titles that already start with a number are not numbered twice.") };
         public CheckBox SkipUrls { get; } = new() { Content = NewDescription("Skip web addresses in narration. Keep the original text and save a separate narration copy when needed.") };
+        public TextBlock UrlPolicy { get; } = NewDescription(string.Empty);
         public Button PreviewNarration { get; } = NewButton("Preview selected narration text");
         public CheckBox Subfolders { get; } = new() { Content = NewDescription("Include subfolders when adding a folder") };
         public CheckBox Capture { get; } = new() { Content = NewDescription("For Long Audio files: save bounded, encrypted, redacted provider responses privately for each job (required by Long Audio). They may contain article fragments; they are excluded from normal logs and exports, expire logically after 24 hours and are deleted on next access; encrypted remnants may remain while closed or in backups.") };
@@ -295,6 +297,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         body.Children.Add(Wrap(ctx.Engine, ctx.Policy));
         body.Children.Add(ctx.Numbering);
         body.Children.Add(ctx.SkipUrls);
+        body.Children.Add(ctx.UrlPolicy);
         body.Children.Add(ctx.PreviewNarration);
         body.Children.Add(Section("3  Review and approval"));
         body.Children.Add(ctx.ReviewText);
@@ -673,6 +676,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             ctx.Policy.SelectedIndex = session.Policy == BatchFailurePolicy.StopBatch ? 1 : 0;
             ctx.Numbering.IsChecked = session.NumberTracks;
             ctx.SkipUrls.IsChecked = session.Batch?.Settings.SkipUrls ?? session.SkipUrls;
+            ctx.UrlPolicy.IsVisible = ctx.SkipUrls.IsChecked == true;
+            ctx.UrlPolicy.Text = BatchUrlPolicyText(session.Batch?.Settings.UrlTransformVersion ?? session.UrlTransformVersion);
             ctx.SkipUrls.IsEnabled = draft && idle && !session.Draft.Any(x => x.DocumentId is not null);
             ctx.PreviewNarration.IsEnabled = idle && selected.Count == 1;
             ToolTip.SetTip(ctx.SkipUrls, draft ? "Preview the selected narration text before saving. Originals stay unchanged." : "This saved batch keeps its reviewed option. Start a new batch to choose differently.");

@@ -73,6 +73,7 @@ public sealed class BatchBinderRegressionTests
     public void NarrationCopyPreparationGuardsCloseAndReservesSharedBatchEntry()
     {
         string source = NarrationBinderSource();
+        Assert.Contains("BatchUrlPolicyText(copy.TransformVersion)", source, StringComparison.Ordinal);
         Assert.Contains("dialog.Closing += (_, args) => args.Cancel = saving", source, StringComparison.Ordinal);
         int start = source.IndexOf("private async Task OpenNarrationCopyBatchAsync", StringComparison.Ordinal);
         string opening = source[start..];

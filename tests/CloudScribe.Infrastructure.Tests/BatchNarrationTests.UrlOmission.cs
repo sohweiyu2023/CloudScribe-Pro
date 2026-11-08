@@ -24,13 +24,15 @@ public sealed partial class BatchNarrationTests
         Assert.NotEqual(enabled.Sha256(), (enabled with { UrlTransformVersion = "other-version" }).Sha256(), StringComparer.Ordinal);
     }
 
-    [Fact]
-    public async Task ApprovalBindsCopyHashOriginalAndOptionAndRejectsTampering()
+    [Theory]
+    [InlineData("url-omission-v1")]
+    [InlineData("url-omission-v2")]
+    public async Task ApprovalBindsCopyHashOriginalAndOptionAndRejectsTampering(string transformVersion)
     {
         using var w = new Workspace();
-        var settings = Settings with { SkipUrls = true, UrlTransformVersion = NarrationUrlOmission.CurrentVersion };
+        var settings = Settings with { SkipUrls = true, UrlTransformVersion = transformVersion };
         var batch = await w.CreateAsync(["a.txt"], settings);
-        var source = new BatchNarrationSource(Guid.NewGuid(), Guid.NewGuid(), Sha("original"), NarrationUrlOmission.CurrentVersion, 1);
+        var source = new BatchNarrationSource(Guid.NewGuid(), Guid.NewGuid(), Sha("original"), transformVersion, 1);
         var item = batch.Items[0] with { NarrationTextSha256 = Sha("narration"), NarrationSource = source };
         batch = batch.WithItem(item);
         var profile = Profile(w.Root);
@@ -38,6 +40,10 @@ public sealed partial class BatchNarrationTests
             NarrationTextSha256: item.NarrationTextSha256, NarrationSource: source);
         var consent = BatchConsent.Create(Guid.NewGuid(), batch, BatchConsentSource.ReviewedInstall, profile, Account, Project, [approved], Now);
         Assert.Equal("batch.authorized", Code(profile, consent, batch));
+        string other = string.Equals(transformVersion, NarrationUrlOmission.LegacyVersion, StringComparison.Ordinal)
+            ? NarrationUrlOmission.CurrentVersion : NarrationUrlOmission.LegacyVersion;
+        var changed = settings with { UrlTransformVersion = other };
+        Assert.Equal("batch.consent-settings-changed", Code(profile, consent, batch with { Settings = changed, SettingsSha256 = changed.Sha256() }));
         Assert.Equal("batch.consent-settings-changed", Code(profile, consent, batch with { Settings = settings with { SkipUrls = false } }));
         Assert.Equal("batch.consent-files-changed", Code(profile, consent, batch.WithItem(item with { NarrationTextSha256 = Sha("changed") })));
         Assert.Equal("batch.consent-files-changed", Code(profile, consent, batch.WithItem(item with { NarrationSource = source with { OmittedUrlCount = 2 } })));
@@ -246,6 +252,8 @@ public sealed partial class BatchNarrationTests
             return Task.FromResult<NarrationCopyPreparation?>(copy);
         }
         public Task<NarrationCopyPreparation> PrepareAsync(Guid sourceDocumentId, Guid sourceRevisionId, string sourceTextSha256, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<NarrationCopyPreparation> PrepareAsync(Guid sourceDocumentId, Guid sourceRevisionId, string sourceTextSha256, string transformVersion, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
         public Task<DocumentSnapshot> ImportBatchSourceAsync(Guid batchId, Guid itemId, string rawSha256, string title, string normalizedText, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

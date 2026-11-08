@@ -127,6 +127,8 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
     {
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(textFor);
+        if (queue.Settings.SkipUrls && !NarrationUrlOmission.IsSupportedVersion(queue.Settings.UrlTransformVersion))
+            throw new InvalidOperationException("Unsupported URL skipping version. The saved batch was not changed.");
         var pending = queue.Items.Where(NeedsImport).OrderBy(x => x.Order).ToArray();
         int done = 0;
         progress?.Report((0, pending.Length));
@@ -187,7 +189,7 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
 
     private async Task<BatchItem> PrepareUrlOmissionAsync(NarrationBatch queue, BatchItem item, DocumentSnapshot saved, BatchItem prepared)
     {
-        if (!string.Equals(queue.Settings.UrlTransformVersion, NarrationUrlOmission.CurrentVersion, StringComparison.Ordinal))
+        if (!NarrationUrlOmission.IsSupportedVersion(queue.Settings.UrlTransformVersion))
             throw new InvalidOperationException("Unsupported URL skipping version. Prepare a new batch.");
         if (saved.Text.Length > NarrationUrlOmission.MaximumSourceLength)
             return prepared with
@@ -198,7 +200,7 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
                 EstimatedMaximumMinorUnits = 0
             };
         NarrationUrlOmissionResult omission;
-        try { omission = NarrationUrlOmission.Transform(saved.Text); }
+        try { omission = NarrationUrlOmission.Transform(saved.Text, queue.Settings.UrlTransformVersion); }
         catch (InvalidOperationException error)
         {
             BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.PrepareNarration, error);
@@ -225,7 +227,7 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
         else if (omission.OmittedUrlCount > 0)
         {
             var copy = await narrationCopies!.PrepareAsync(saved.Id, saved.CurrentRevisionId!.Value,
-                prepared.NarrationTextSha256!, CancellationToken.None).ConfigureAwait(false);
+                prepared.NarrationTextSha256!, queue.Settings.UrlTransformVersion!, CancellationToken.None).ConfigureAwait(false);
             prepared = prepared with
             {
                 DocumentId = copy.Narration.Id,

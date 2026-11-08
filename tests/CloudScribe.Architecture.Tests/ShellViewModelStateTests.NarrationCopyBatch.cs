@@ -58,6 +58,8 @@ public sealed partial class ShellViewModelStateTests
             return copy;
         }
         public Task<NarrationCopyPreparation> PrepareAsync(Guid sourceDocumentId, Guid sourceRevisionId, string sourceTextSha256, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<NarrationCopyPreparation> PrepareAsync(Guid sourceDocumentId, Guid sourceRevisionId, string sourceTextSha256, string transformVersion, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
         public Task<DocumentSnapshot> ImportBatchSourceAsync(Guid batchId, Guid itemId, string rawSha256, string title, string normalizedText, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

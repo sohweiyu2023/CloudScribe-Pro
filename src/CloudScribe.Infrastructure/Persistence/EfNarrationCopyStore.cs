@@ -73,13 +73,18 @@ public sealed partial class EfNarrationCopyStore(
         return source;
     }
 
-    public async Task<NarrationCopyPreparation> PrepareAsync(
+    public Task<NarrationCopyPreparation> PrepareAsync(
         Guid sourceDocumentId, Guid sourceRevisionId, string sourceTextSha256,
+        CancellationToken cancellationToken = default) =>
+        PrepareAsync(sourceDocumentId, sourceRevisionId, sourceTextSha256, NarrationUrlOmission.CurrentVersion, cancellationToken);
+
+    public async Task<NarrationCopyPreparation> PrepareAsync(
+        Guid sourceDocumentId, Guid sourceRevisionId, string sourceTextSha256, string transformVersion,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            return await PrepareCoreAsync(sourceDocumentId, sourceRevisionId, sourceTextSha256, cancellationToken).ConfigureAwait(false);
+            return await PrepareCoreAsync(sourceDocumentId, sourceRevisionId, sourceTextSha256, transformVersion, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception error) when (BatchDiagnostics.NonFatal(error))
         {
@@ -89,7 +94,7 @@ public sealed partial class EfNarrationCopyStore(
     }
 
     private async Task<NarrationCopyPreparation> PrepareCoreAsync(
-        Guid sourceDocumentId, Guid sourceRevisionId, string sourceTextSha256,
+        Guid sourceDocumentId, Guid sourceRevisionId, string sourceTextSha256, string transformVersion,
         CancellationToken cancellationToken = default)
     {
         RequireIdentity(sourceDocumentId);
@@ -100,7 +105,7 @@ public sealed partial class EfNarrationCopyStore(
         bool importedSource = await context.Set<BatchSourceImportEntity>().AsNoTracking()
             .AnyAsync(row => row.SourceDocumentId == sourceDocumentId, cancellationToken).ConfigureAwait(false);
         var source = await ReadPinnedAsync(context, sourceDocumentId, sourceRevisionId, sourceTextSha256, importedSource, cancellationToken).ConfigureAwait(false);
-        var transformed = NarrationUrlOmission.Transform(source.Text);
+        var transformed = NarrationUrlOmission.Transform(source.Text, transformVersion);
         if (transformed.OmittedUrlCount == 0)
         {
             BatchDiagnostics.Source(logger, null, sourceDocumentId, BatchSourceOutcome.NarrationUnchanged);
@@ -179,7 +184,7 @@ public sealed partial class EfNarrationCopyStore(
         var source = await ReadPinnedAsync(context, prior.SourceDocumentId, prior.SourceRevisionId,
             prior.SourceTextSha256, false, cancellationToken).ConfigureAwait(false);
         return await ReadPreparationAsync(context, source, prior.SourceTextSha256,
-            NarrationUrlOmission.Transform(source.Text), prior, cancellationToken).ConfigureAwait(false);
+            NarrationUrlOmission.Transform(source.Text, prior.TransformVersion), prior, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<NarrationCopyPreparation> ReadPreparationAsync(

@@ -18,6 +18,21 @@ Preview is deliberately literal: recognized web addresses are omitted; inline Ma
 
 If an article has recoverable already-started work but its original has changed, a **Recover already-started work only** review can finish that admitted recovery. Unstarted parts remain blocked, and this action does not promise a complete article MP3.
 
+## Bare domains in the unreleased v2 source change
+
+This section describes the draft servicing source, **not the published 1.0.5 Windows package**. New narration preparations use `url-omission-v2`, which also recognizes bare ASCII web addresses such as `84000.co`, `read.84000.co:443/translation?q=one%20two#part` and `example.org`. Explicit HTTP(S)/www handling, ordinary inline Markdown labels and literal whitespace/punctuation preservation remain covered by compatibility tests.
+
+The v2 bare-domain policy is deliberately small and local:
+
+- Its fixed, case-insensitive suffix list is `com org net edu gov co io ai dev app info biz uk us ca au nz de fr jp cn in sg hk tw`. It is a hand-maintained lexical policy, **not** the Public Suffix List, DNS lookup, network validation or a guarantee that an address is registered. The common suffix-only tokens `co.uk`, `org.uk`, `ac.uk`, `gov.uk`, `com.au`, `net.au`, `org.au` and `co.nz` are preserved.
+- A bare host is at most 253 ASCII characters, each label is 1–63 letters/digits/hyphens, and labels cannot start/end with a hyphen. Bare path/query lengths use the overall source-size and linear work bounds, without a separate URL-length cutoff. Ports must be numeric and at most 65535; supported ASCII paths, queries, fragments and valid percent escapes are omitted with the host. Commas, semicolons and exclamation marks delimit bare addresses, including in paths; encode them when they belong to the address.
+- Email addresses, explicit non-HTTP schemes, local paths, malformed labels/ports/escapes, unbalanced path brackets, Unicode/punycode bare hosts, Unicode bare paths and adjacent Unicode letters/marks are preserved rather than guessed. `archive.zip`, `notes.md`, `this.is`, decimal/version numbers and unknown suffixes stay in the text. Explicit HTTP(S)/www URLs continue to follow their broader existing lexical policy.
+- Sentence punctuation and enclosing delimiters stay in the text. Multiple trailing dots and ambiguous token joins may remain in full. A filename or ordinary phrase that happens to look exactly like a recognized domain can still be omitted: no lexical policy can determine intent. **Inspect the preview** before saving and approving. Use the original when the result is unsuitable.
+
+Every saved copy and batch retains its own immutable transform version. Old v1 copies still contain bare domains exactly as originally prepared. Reopening, interrupted import, copy-to-batch, preview and recovery do not upgrade them or reuse their approval for new text. Old enabled drafts without a version infer it from consistent saved-copy provenance; otherwise they conservatively retain v1. The batch window and preview explicitly explain that this legacy policy leaves bare domains intact. An old unprepared draft with skipping still off selects v2 when skipping is newly enabled, as does a newly started draft. Mixed, missing or unsupported saved identities fail closed. To use v2 for old material, prepare a new copy from the original and review its own cost.
+
+The policy is frozen in `NarrationUrlOmissionV2.BareDomains.cs`; changing its suffixes, limits or output rules requires a new version. V1 remains a separate frozen implementation. There are no new dependencies, runtime suffix refreshes or third-party policy data. Both versions use the existing document-size and deterministic work-budget bounds; complexity failures never return a partial copy.
+
 ## Using it
 
 The window walks through five steps, shown at the top with a **Next:** line that always says what to do now:

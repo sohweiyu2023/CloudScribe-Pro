@@ -9,14 +9,18 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed partial class BatchNarrationTests
 {
     [Theory]
-    [InlineData(0, BatchFailurePolicy.SkipAndContinue)]
-    [InlineData(1, BatchFailurePolicy.SkipAndContinue)]
-    [InlineData(0, BatchFailurePolicy.StopBatch)]
-    [InlineData(1, BatchFailurePolicy.StopBatch)]
-    public async Task StaleUnstartedSiblingNeverBlocksSelectedExistingJob(int startedIndex, BatchFailurePolicy failurePolicy)
+    [InlineData(0, BatchFailurePolicy.SkipAndContinue, "url-omission-v1")]
+    [InlineData(0, BatchFailurePolicy.SkipAndContinue, "url-omission-v2")]
+    [InlineData(1, BatchFailurePolicy.SkipAndContinue, "url-omission-v1")]
+    [InlineData(1, BatchFailurePolicy.SkipAndContinue, "url-omission-v2")]
+    [InlineData(0, BatchFailurePolicy.StopBatch, "url-omission-v1")]
+    [InlineData(0, BatchFailurePolicy.StopBatch, "url-omission-v2")]
+    [InlineData(1, BatchFailurePolicy.StopBatch, "url-omission-v1")]
+    [InlineData(1, BatchFailurePolicy.StopBatch, "url-omission-v2")]
+    public async Task StaleUnstartedSiblingNeverBlocksSelectedExistingJob(int startedIndex, BatchFailurePolicy failurePolicy, string transformVersion)
     {
         using var w = new Workspace();
-        var settings = Settings with { SkipUrls = true, UrlTransformVersion = NarrationUrlOmission.CurrentVersion, FailurePolicy = failurePolicy };
+        var settings = Settings with { SkipUrls = true, UrlTransformVersion = transformVersion, FailurePolicy = failurePolicy };
         var batch = await w.CreateAsync(["first.txt", "second.txt"], settings);
         var library = new MemoryLibrary();
         var startedDocument = await library.CreateAsync("Started", "Existing exact saved words.", Token);
