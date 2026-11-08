@@ -111,6 +111,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStudioSelected))]
     [NotifyPropertyChangedFor(nameof(IsRouteStateSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSafeDiagnosticExportVisible))]
     [NotifyPropertyChangedFor(nameof(CanOpenDocumentSurfaces))]
     [NotifyPropertyChangedFor(nameof(CanUseFocusReading))]
     [NotifyPropertyChangedFor(nameof(CommandContextTitle))]
@@ -925,6 +926,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             return;
         }
 
+        CancelSafeDiagnosticHistory();
+        NotifySafeDiagnosticExportState();
         _activationRouter.ActivationReceived -= OnActivationReceived;
         _diagnosticLogStatus.StatusChanged -= OnDiagnosticLogStatusChanged;
         GC.SuppressFinalize(this);

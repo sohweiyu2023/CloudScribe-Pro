@@ -57,9 +57,11 @@ public sealed partial class GoogleTrendHistoryLoggerProvider : ILoggerProvider, 
         }
     }
 
+    internal static bool IsTrendEvent(int id) => id is (>= 1600 and <= 1626) or (>= 1640 and <= 1650) or 6300;
+
     private void Capture<TState>(EventId id, TState state)
     {
-        if (id.Id is not (>= 1600 and <= 1626) and not 6300) return;
+        if (!IsTrendEvent(id.Id)) return;
         lock (gate)
         {
             if (!available || disposed) return;

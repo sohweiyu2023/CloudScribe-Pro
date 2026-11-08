@@ -13,7 +13,7 @@ public sealed partial class GoogleLongAudioDocumentService
             authority.Deferred = new(root, context.Scope, context.OperationsDirectory, context.OutputDirectory,
                 context.LedgerPath, context.ScopeSha256, authority);
         var admission = new GoogleLongAudioLedgerAdmission(context.ParentPolicyPath, context.ParentPolicySha256,
-            context.ScopePath, context.ScopeSha256, context.LedgerPath, (_, _, _) => ValueTask.CompletedTask, clock).WithRecovery(authority);
+            context.ScopePath, context.ScopeSha256, context.LedgerPath, (_, _, _) => ValueTask.CompletedTask, clock).WithRecovery(authority).WithExtension(context.Extension);
         long additional = 0; int count = 0;
         foreach (var replacement in resolver.ReviewRequests(source))
         {

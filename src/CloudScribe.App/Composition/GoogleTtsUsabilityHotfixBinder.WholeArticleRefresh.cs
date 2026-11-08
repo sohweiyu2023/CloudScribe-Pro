@@ -13,6 +13,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     private async Task<ShellViewModel.GoogleTtsStudioRequestSelection> RefreshWholeArticleSelectionAsync(
         ShellViewModel model, ShellViewModel.GoogleTtsStudioRequestSelection original, CancellationToken token)
     {
+        await RefreshExactVoiceAsync(model, original, token).ConfigureAwait(true);
+        return model.CaptureGoogleTtsStudioRequestSelection();
+    }
+
+    /// <summary>Refreshes the catalog and reselects exactly the same verified voice, or throws. Never falls back to another voice.</summary>
+    private async Task RefreshExactVoiceAsync(ShellViewModel model, ShellViewModel.GoogleTtsStudioRequestSelection original, CancellationToken token)
+    {
         var previousExpiry = model.VoiceLanguageCatalogExpiresAtUtc;
         if (!await RefreshConnectedVoicesAsync(model, token).ConfigureAwait(true))
             throw new InvalidOperationException("The bounded catalog refresh failed. No speech request was reserved or retried.");
@@ -27,6 +34,5 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             && v.LanguageCodes?.Contains(original.LanguageCode, StringComparer.Ordinal) == true).ToArray();
         if (matching.Length != 1) throw new InvalidOperationException("The exact reviewed voice is no longer uniquely verified. No fallback voice was selected.");
         model.SelectedVoiceLabVoice = matching[0];
-        return model.CaptureGoogleTtsStudioRequestSelection();
     }
 }

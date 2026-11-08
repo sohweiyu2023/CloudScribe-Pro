@@ -15,7 +15,7 @@ public sealed partial class SupportBundleService(
     TimeProvider timeProvider,
     ILogger<SupportBundleService> logger) : ISupportBundleService
 {
-    private const string Disclosure = "Only regenerated allowlisted diagnostic metadata and a generated environment manifest are included. Legacy, malformed and unknown free-form messages and exception text are omitted; original local records are unchanged and may remain private. Source sizes are capture bounds; sanitized output can differ. Documents, audio, databases, credentials, private provider captures and payloads are excluded.";
+    private const string Disclosure = "Only regenerated allowlisted diagnostic metadata, permanent safe trend history and a generated environment manifest are included. Legacy, malformed and unknown free-form messages and exception text are omitted; original local records are unchanged and may remain private. Source sizes are capture bounds; sanitized output can differ. All captured records are streamed without aggregate byte or record-count truncation. Oversized, malformed or incomplete records receive explicit omission markers. Cancelled or failed exports do not publish a partial archive. Documents, audio, databases, credentials, private provider captures and payloads are excluded.";
     private const string ManifestRelativePath = "support-bundle-manifest.json";
     private static readonly string[] ExcludedCategories =
     [
@@ -30,7 +30,7 @@ public sealed partial class SupportBundleService(
     {
         cancellationToken.ThrowIfCancellationRequested();
         DateTimeOffset createdAtUtc = timeProvider.GetUtcNow();
-        SupportBundleFile[] sourceFiles = EnumerateEligibleFiles();
+        SupportBundleFile[] sourceFiles = EnumerateEligibleFiles(cancellationToken);
         byte[] manifestBytes = BuildManifest(sourceFiles, createdAtUtc);
         return Task.FromResult(BuildPreview(sourceFiles, manifestBytes.LongLength));
     }
@@ -41,10 +41,8 @@ public sealed partial class SupportBundleService(
         cancellationToken.ThrowIfCancellationRequested();
 
         DateTimeOffset createdAtUtc = timeProvider.GetUtcNow();
-        SupportBundleFile[] sourceFiles = EnumerateEligibleFiles();
+        SupportBundleFile[] sourceFiles = EnumerateEligibleFiles(cancellationToken);
         byte[] manifestBytes = BuildManifest(sourceFiles, createdAtUtc);
-        long cap = GetBundleCapBytes();
-        EnsureInputFitsCap(sourceFiles, manifestBytes.LongLength, cap);
 
         string physicalDestinationDirectory = PhysicalDirectoryPolicy.EnsureExistsWithoutLinks(
             destinationDirectory,
@@ -52,8 +50,8 @@ public sealed partial class SupportBundleService(
         (string finalPath, string stagingPath) = CreateOutputPaths(physicalDestinationDirectory, createdAtUtc);
         try
         {
-            await WriteBundleAsync(stagingPath, sourceFiles, manifestBytes, cap, cancellationToken).ConfigureAwait(false);
-            EnsureCompressedBundleFitsCap(stagingPath, cap);
+            await WriteBundleAsync(stagingPath, sourceFiles, manifestBytes, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             File.Move(stagingPath, finalPath, overwrite: false);
             CloudScribeLog.Observe(() => CloudScribeLog.SupportBundleCreated(logger));
             return finalPath;
@@ -69,7 +67,6 @@ public sealed partial class SupportBundleService(
         string stagingPath,
         SupportBundleFile[] sourceFiles,
         byte[] manifestBytes,
-        long cap,
         CancellationToken cancellationToken)
     {
         FileStream output = new(
@@ -81,14 +78,12 @@ public sealed partial class SupportBundleService(
             FileOptions.Asynchronous | FileOptions.WriteThrough);
         await using (output.ConfigureAwait(false))
         {
-            using (CappedWriteStream boundedOutput = new(output, cap))
-            using (ZipArchive archive = new(boundedOutput, ZipArchiveMode.Create, leaveOpen: true))
+            using (ZipArchive archive = new(output, ZipArchiveMode.Create, leaveOpen: true))
             {
-                var metadataBudget = new SafeExportBudget(cap - manifestBytes.LongLength);
                 for (int index = 0; index < sourceFiles.Length; index++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await AddCapturedFileAsync(archive, sourceFiles[index], ExportPath(index), metadataBudget, cancellationToken).ConfigureAwait(false);
+                    await AddCapturedFileAsync(archive, sourceFiles[index], ExportPath(sourceFiles[index], index), cancellationToken).ConfigureAwait(false);
                 }
 
                 ZipArchiveEntry manifest = archive.CreateEntry(ManifestRelativePath, CompressionLevel.Optimal);
@@ -98,28 +93,6 @@ public sealed partial class SupportBundleService(
 
             await output.FlushAsync(cancellationToken).ConfigureAwait(false);
             output.Flush(flushToDisk: true);
-        }
-    }
-
-    private long GetBundleCapBytes() => options.Value.SupportBundleMaximumMiB * 1024L * 1024L;
-
-    private static void EnsureInputFitsCap(
-        SupportBundleFile[] sourceFiles,
-        long manifestSizeBytes,
-        long cap)
-    {
-        SupportBundlePreview preview = BuildPreview(sourceFiles, manifestSizeBytes);
-        if (preview.TotalSizeBytes > cap)
-        {
-            throw new InvalidOperationException("Support bundle input exceeds the configured size cap.");
-        }
-    }
-
-    private static void EnsureCompressedBundleFitsCap(string stagingPath, long cap)
-    {
-        if (new FileInfo(stagingPath).Length > cap)
-        {
-            throw new InvalidOperationException("Compressed support bundle exceeds the configured size cap.");
         }
     }
 
@@ -150,34 +123,9 @@ public sealed partial class SupportBundleService(
         ZipArchive archive,
         SupportBundleFile file,
         string exportPath,
-        SafeExportBudget budget,
         CancellationToken cancellationToken)
     {
-        EnsureDiagnosticsDirectoryIsPhysical();
-        const string logPrefix = "logs/";
-        if (!file.RelativePath.StartsWith(logPrefix, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("A support-bundle diagnostic entry has an invalid relative path.");
-        }
-
-        string fileName = file.RelativePath[logPrefix.Length..];
-        if (string.IsNullOrWhiteSpace(fileName)
-            || !string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("A support-bundle diagnostic filename is not a single physical path segment.");
-        }
-
-        string sourcePath = Path.Combine(paths.DiagnosticsDirectory, fileName);
-        string diagnosticsRoot = Path.GetFullPath(paths.DiagnosticsDirectory) + Path.DirectorySeparatorChar;
-        string fullSourcePath = Path.GetFullPath(sourcePath);
-        StringComparison pathComparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        if (!fullSourcePath.StartsWith(diagnosticsRoot, pathComparison))
-        {
-            throw new InvalidOperationException("A support-bundle source escaped the diagnostics directory.");
-        }
-
+        string fullSourcePath = ResolveSourcePath(file);
         FileInfo sourceInfo = new(fullSourcePath);
         if (!sourceInfo.Exists
             || sourceInfo.LinkTarget is not null
@@ -195,7 +143,7 @@ public sealed partial class SupportBundleService(
             FileShare.ReadWrite | FileShare.Delete,
             bufferSize: 81920,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        await SanitizeCapturedAsync(source, destination, file.SizeBytes, budget, cancellationToken).ConfigureAwait(false);
+        await SanitizeCapturedAsync(source, destination, file.SizeBytes, cancellationToken).ConfigureAwait(false);
     }
 
     private static SupportBundlePreview BuildPreview(SupportBundleFile[] sourceFiles, long manifestSizeBytes)
@@ -225,10 +173,12 @@ public sealed partial class SupportBundleService(
             exclusions = ExcludedCategories,
         });
 
-    private static string ExportPath(int index) => FormattableString.Invariant($"logs/diagnostic-{index + 1:D4}.jsonl");
+    private static string ExportPath(SupportBundleFile file, int index) =>
+        string.Equals(file.RelativePath, TrendRelativePath, StringComparison.Ordinal) ? "history/google-trend-history.jsonl"
+            : FormattableString.Invariant($"logs/diagnostic-{index + 1:D4}.jsonl");
 
     private static SupportBundleFile[] ExportFiles(SupportBundleFile[] sourceFiles) => sourceFiles
-        .Select((file, index) => new SupportBundleFile(ExportPath(index), file.SizeBytes, "sanitized-diagnostic-metadata"))
+        .Select((file, index) => new SupportBundleFile(ExportPath(file, index), file.SizeBytes, "sanitized-diagnostic-metadata"))
         .ToArray();
 
 
@@ -242,130 +192,20 @@ public sealed partial class SupportBundleService(
         }
     }
 
-    private sealed class CappedWriteStream(Stream inner, long maximumLength) : Stream
-    {
-        public override bool CanRead => false;
-
-        public override bool CanSeek => inner.CanSeek;
-
-        public override bool CanWrite => inner.CanWrite;
-
-        public override long Length => inner.Length;
-
-        public override long Position
-        {
-            get => inner.Position;
-            set
-            {
-                EnsurePosition(value);
-                inner.Position = value;
-            }
-        }
-
-        public override void Flush() => inner.Flush();
-
-        public override Task FlushAsync(CancellationToken cancellationToken) =>
-            inner.FlushAsync(cancellationToken);
-
-        public override int Read(byte[] buffer, int offset, int count) =>
-            throw new NotSupportedException();
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            long target = origin switch
-            {
-                SeekOrigin.Begin => offset,
-                SeekOrigin.Current => checked(Position + offset),
-                SeekOrigin.End => checked(Length + offset),
-                _ => throw new ArgumentOutOfRangeException(nameof(origin)),
-            };
-            EnsurePosition(target);
-            return inner.Seek(offset, origin);
-        }
-
-        public override void SetLength(long value)
-        {
-            EnsurePosition(value);
-            inner.SetLength(value);
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            EnsureWrite(count);
-            inner.Write(buffer, offset, count);
-        }
-
-        public override void Write(ReadOnlySpan<byte> buffer)
-        {
-            EnsureWrite(buffer.Length);
-            inner.Write(buffer);
-        }
-
-        public override Task WriteAsync(
-            byte[] buffer,
-            int offset,
-            int count,
-            CancellationToken cancellationToken)
-        {
-            EnsureWrite(count);
-            return inner.WriteAsync(buffer, offset, count, cancellationToken);
-        }
-
-        public override ValueTask WriteAsync(
-            ReadOnlyMemory<byte> buffer,
-            CancellationToken cancellationToken = default)
-        {
-            EnsureWrite(buffer.Length);
-            return inner.WriteAsync(buffer, cancellationToken);
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            // The caller owns and durably flushes the underlying FileStream.
-            base.Dispose(disposing);
-        }
-
-        private void EnsureWrite(int count)
-        {
-            ArgumentOutOfRangeException.ThrowIfNegative(count);
-            long projectedLength = Math.Max(Length, checked(Position + count));
-            if (projectedLength > maximumLength)
-            {
-                throw new IOException(
-                    $"Compressed support bundle would exceed its configured {maximumLength}-byte hard cap.");
-            }
-        }
-
-        private void EnsurePosition(long value)
-        {
-            if (value < 0 || value > maximumLength)
-            {
-                throw new IOException(
-                    $"Compressed support bundle attempted to address byte {value} outside its {maximumLength}-byte hard cap.");
-            }
-        }
-    }
-
-    private SupportBundleFile[] EnumerateEligibleFiles()
+    private SupportBundleFile[] EnumerateEligibleFiles(CancellationToken token)
     {
         paths.EnsureDiagnosticsDirectory();
         EnsureDiagnosticsDirectoryIsPhysical();
         int maximumEntryCount = options.Value.SupportBundleMaximumFileCount;
         List<FileInfo> files = new(maximumEntryCount);
-        int examinedEntryCount = 0;
+        int unexpectedEntryCount = 0;
         StringComparison comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
         foreach (FileSystemInfo entry in new DirectoryInfo(paths.DiagnosticsDirectory)
                      .EnumerateFileSystemInfos("*", SearchOption.TopDirectoryOnly))
         {
-            examinedEntryCount++;
-            if (examinedEntryCount > maximumEntryCount)
-            {
-                throw new InvalidOperationException(
-                    $"Support bundle diagnostics contain more than the configured {maximumEntryCount} directory entries.");
-            }
-
+            token.ThrowIfCancellationRequested();
             if (entry is not FileInfo file
                 || !file.Name.StartsWith("cloudscribe-", comparison)
                 || (!file.Name.EndsWith(".jsonl", comparison)
@@ -373,6 +213,8 @@ public sealed partial class SupportBundleService(
                 || file.LinkTarget is not null
                 || file.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
+                if (++unexpectedEntryCount > maximumEntryCount)
+                    throw new InvalidOperationException("Support bundle diagnostics contain too many unexpected directory entries; inspect the directory before exporting.");
                 continue;
             }
 
@@ -380,13 +222,15 @@ public sealed partial class SupportBundleService(
         }
 
         files.Sort(static (left, right) => StringComparer.Ordinal.Compare(left.Name, right.Name));
-        return files
+        var captured = files
             .Select(file => new SupportBundleFile(
                 $"logs/{file.Name}",
                 file.Length,
                 file.Extension.Equals(".jsonl", StringComparison.OrdinalIgnoreCase)
                     ? "bounded-redacted-structured-diagnostic-log"
                     : "bounded-redacted-bootstrap-diagnostic-log"))
-            .ToArray();
+            .ToList();
+        AddTrendSource(captured);
+        return captured.ToArray();
     }
 }

@@ -32,7 +32,7 @@ public sealed partial class GoogleLongAudioRuntimeFactory(InstalledGoogleLongAud
             await RequireLocalReadyAsync(currentRequest, context, tools, readAllowance, token).ConfigureAwait(false);
         }
         var admission = new GoogleLongAudioLedgerAdmission(context.ParentPolicyPath, context.ParentPolicySha256,
-            context.ScopePath, context.ScopeSha256, context.LedgerPath, RequireCurrent, clock);
+            context.ScopePath, context.ScopeSha256, context.LedgerPath, RequireCurrent, clock).WithExtension(context.Extension);
         if (recovery is not null) admission.WithRecovery(recovery);
         var review = await admission.ReviewAsync(request, cancellationToken).ConfigureAwait(false);
         if (!review.IsAlreadyCommitted) recovery?.RequireNoOtherPending(request);

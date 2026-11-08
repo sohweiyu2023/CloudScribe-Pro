@@ -4,7 +4,8 @@ using CloudScribe.Infrastructure.Configuration;
 namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Read-only installation bridge. A missing pin or ledger never initializes or resets history.</summary>
-public sealed class InstalledGoogleLongAudioStore(string applicationDirectory, AppPaths paths, TimeProvider clock)
+public sealed class InstalledGoogleLongAudioStore(string applicationDirectory, AppPaths paths, TimeProvider clock,
+    IGoogleLongAudioScopeExtensionSource? extension = null)
 {
     public async Task<InstalledGoogleLongAudioContext?> LoadVerifiedAsync(CancellationToken token = default) =>
         (await ReadInstallationAsync(token).ConfigureAwait(false)).Context;
@@ -61,7 +62,24 @@ public sealed class InstalledGoogleLongAudioStore(string applicationDirectory, A
         if (ledger.Version != 1 || !Same(ledger.ScopeSha256, scopeSha) || ledger.Claims is null) return null;
         string operations = Path.Combine(root, "operations"), output = Path.Combine(root, "output");
         ChirpPolicyFiles.RejectLinks(operations); ChirpPolicyFiles.RejectLinks(output);
-        return new(parentPath, parentSha, scopePath, scopeSha, ledgerPath, operations, output, scope);
+        var effective = await ExtendAsync(scope, scopeSha, ledgerPath, parent, token).ConfigureAwait(false);
+        return new(parentPath, parentSha, scopePath, scopeSha, ledgerPath, operations, output, effective, extension);
+    }
+
+    /// <summary>Adds batch-approved jobs. A failing or conflicting extension adds nothing; installed jobs are unaffected.</summary>
+    private async Task<GoogleLongAudioBudgetScope> ExtendAsync(GoogleLongAudioBudgetScope scope, string scopeSha, string ledgerPath,
+        ChirpArticleAdmissionPolicy parent, CancellationToken token)
+    {
+        if (extension is null || parent.Budget is null) return scope;
+        try
+        {
+            long fixedCommitments = checked(parent.Budget.ProjectCeilingMinorUnits + scope.TaxFxProvisionUsdCents + GoogleLongAudioScopeExtension.InstalledApprovedUsdCents(scope));
+            var additions = await extension.LoadAsync(scope, scopeSha, ledgerPath, fixedCommitments, token).ConfigureAwait(false);
+            return additions.Apply(scope);
+        }
+        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or JsonException or OverflowException
+            or InvalidOperationException or ArgumentException)
+        { return scope; }
     }
 
     private static async Task<bool> RequireProofAsync(string install, byte[] markerBytes, string scopeSha, string parentSha,

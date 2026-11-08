@@ -35,7 +35,7 @@ public sealed partial class GoogleLongAudioDocumentService(InstalledGoogleLongAu
         }
         var request = GoogleLongAudioDocumentCompiler.Compile(context.Scope, job, text);
         var admission = new GoogleLongAudioLedgerAdmission(context.ParentPolicyPath, context.ParentPolicySha256,
-            context.ScopePath, context.ScopeSha256, context.LedgerPath, (_, _, _) => ValueTask.CompletedTask, clock);
+            context.ScopePath, context.ScopeSha256, context.LedgerPath, (_, _, _) => ValueTask.CompletedTask, clock).WithExtension(context.Extension);
         var cost = await admission.ReviewAsync(request, token).ConfigureAwait(false);
         var replacements = await ReviewReplacementsAsync(context, request, text, token).ConfigureAwait(false);
         cost = cost with { ProjectedProvisionUsdCents = checked(cost.ProjectedProvisionUsdCents + replacements.Additional) };

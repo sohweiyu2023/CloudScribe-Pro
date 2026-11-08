@@ -37,7 +37,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     GoogleGenerationProductionRuntimeRequestSource? wholeArticleRequests = null,
     IGoogleGenerationExecutionContextResolver? wholeArticleResolver = null,
     CloudScribe.Application.Diagnostics.IGoogleTrendHistoryHealth? trendHistory = null,
-    GoogleLongAudioDocumentService? longAudioDocuments = null, InstalledGoogleLongAudioStore? longAudioInstalled = null)
+    GoogleLongAudioDocumentService? longAudioDocuments = null, InstalledGoogleLongAudioStore? longAudioInstalled = null,
+    CloudScribe.Application.Documents.IDocumentLibrary? documentLibrary = null,
+    CloudScribe.Application.Documents.ILocalDocumentImporter? documentImporter = null,
+    CloudScribe.Application.Documents.DocumentPreprocessor? documentPreprocessor = null,
+    CloudScribe.Infrastructure.Batch.InstalledBatchAuthorityStore? batchAuthority = null,
+    CloudScribe.Infrastructure.Batch.BatchLongAudioScopeExtensionSource? batchLongAudioExtension = null)
 {
     private static readonly string[] ProviderControlHostNames =
     [
@@ -126,6 +131,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         create.Classes.Add("primary");
         create.Click += async (_, _) => await OpenCreateMp3Async(window, viewModel).ConfigureAwait(true);
         host.Children.Add(create);
+        AddBatchControl(window, host, viewModel);
 
         StackPanel advanced = AddSection(host, "Advanced tools and connection settings", expanded: false);
         AddLocalPartsControls(window, advanced, viewModel);

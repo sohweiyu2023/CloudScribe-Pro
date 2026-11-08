@@ -14,8 +14,10 @@ public sealed class CloudScribeOptions
 
     public int DiagnosticQueueCapacity { get; set; } = 2048;
 
+    /// <summary>Legacy configuration compatibility only. Safe support exports now stream without an aggregate byte cap.</summary>
     public int SupportBundleMaximumMiB { get; set; } = 48;
 
+    /// <summary>Reject unexpectedly cluttered diagnostic directories. Does not limit recognized log/history files.</summary>
     public int SupportBundleMaximumFileCount { get; set; } = 256;
 
     public int StartupTimeoutSeconds { get; set; } = 20;

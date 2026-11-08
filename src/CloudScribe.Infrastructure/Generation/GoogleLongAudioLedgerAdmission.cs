@@ -11,9 +11,18 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
     private readonly TimeProvider clock;
     private GoogleLongAudioRecoveryAuthority? recoveryAuthority;
 
+    private IGoogleLongAudioScopeExtensionSource? extensionSource;
+    private GoogleLongAudioScopeExtension extensionInEffect = GoogleLongAudioScopeExtension.Empty;
+
     internal GoogleLongAudioLedgerAdmission WithRecovery(GoogleLongAudioRecoveryAuthority authority)
     {
         recoveryAuthority = authority; return this;
+    }
+
+    /// <summary>Includes batch-approved jobs from <paramref name="source"/>. The installed scope, cap and ledger still govern.</summary>
+    public GoogleLongAudioLedgerAdmission WithExtension(IGoogleLongAudioScopeExtensionSource? source)
+    {
+        extensionSource = source; return this;
     }
 
     public GoogleLongAudioLedgerAdmission(string parentPolicyPath, string parentPolicySha256, string reviewedScopePath,
@@ -49,6 +58,7 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
             throw new InvalidOperationException("This Long Audio request is already committed; reconcile its original operation journal without resubmitting.");
         }
         RequireBudget(scope, parent, checked(previous + amount));
+        RequireFamilyLimit(ledger, request, proof, amount);
         // Only structurally valid, unconsumed financial authority may reach credential/storage readiness.
         await requireReadiness(request, parent, cancellationToken).ConfigureAwait(false);
         var revalidated = await ReadScopeAsync(request, cancellationToken).ConfigureAwait(false);
@@ -129,6 +139,18 @@ public sealed partial class GoogleLongAudioLedgerAdmission : IGoogleLongAudioAdm
         byte[] current = await ChirpPolicyFiles.ReadAsync(ledgerPath, 8 * 1024 * 1024, cancellationToken).ConfigureAwait(false);
         if (!original.AsSpan().SequenceEqual(current))
             throw new InvalidDataException("Long Audio history changed during continuation verification.");
+    }
+
+    /// <summary>A batch-approved file may never commit more than its approved maximum, including adaptive split requests.</summary>
+    private void RequireFamilyLimit(GoogleLongAudioBudgetLedger ledger, GoogleLongAudioRequest request, GoogleLongAudioRecoveryProvenance? proof, long amount)
+    {
+        string root = proof?.RootBindingSha256 ?? request.BindingSha256;
+        if (extensionInEffect.ForRoot(root) is not { } job) return;
+        long family = amount;
+        foreach (var claim in ledger.Claims.Where(x => Same(x.RequestBindingSha256, root) || x.Recovery is { } r && Same(r.RootBindingSha256, root)))
+            family = checked(family + claim.MaximumUsdCents);
+        if (family > job.FamilyMaximumUsdCents)
+            throw new GoogleLongAudioBudgetExceededException(family, job.FamilyMaximumUsdCents);
     }
 
     private static void RequireBudget(GoogleLongAudioBudgetScope scope, ChirpArticleAdmissionPolicy parent, long longAudioCommitments)

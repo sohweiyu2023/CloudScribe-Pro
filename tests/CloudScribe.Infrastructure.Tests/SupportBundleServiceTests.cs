@@ -134,7 +134,7 @@ public sealed partial class SupportBundleServiceTests
     }
 
     [Fact]
-    public async Task RejectsInputAboveConfiguredCapWithoutLeavingPartialArchive()
+    public async Task StreamsInputAboveLegacyByteCapWithoutLeavingPartialArchive()
     {
         await using TemporaryDirectory temporary = new();
         AppPaths paths = CreatePaths(temporary.Path);
@@ -147,16 +147,18 @@ public sealed partial class SupportBundleServiceTests
         SupportBundleService service = CreateService(paths, 1);
         string exportDirectory = Path.Combine(temporary.Path, "exports");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.CreateAsync(exportDirectory, TestContext.Current.CancellationToken));
-
-        Assert.False(Directory.Exists(exportDirectory));
+        string bundle = await service.CreateAsync(exportDirectory, TestContext.Current.CancellationToken);
+        Assert.True(File.Exists(bundle));
+        Assert.DoesNotContain(Directory.EnumerateFiles(exportDirectory), file => file.EndsWith(".partial", StringComparison.Ordinal));
+        using var archive = ZipFile.OpenRead(bundle);
+        using var reader = new StreamReader(archive.Entries.Single(x => x.FullName.EndsWith(".jsonl", StringComparison.Ordinal)).Open());
+        Assert.Contains("TruncatedRecord", await reader.ReadToEndAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
     }
 
 
 
     [Fact]
-    public async Task RejectsExcessiveDiagnosticFileCountBeforeBuildingPreviewOrArchive()
+    public async Task IncludesAllRecognizedDiagnosticFilesAboveLegacyCountLimit()
     {
         await using TemporaryDirectory temporary = new();
         AppPaths paths = CreatePaths(temporary.Path);
@@ -171,12 +173,11 @@ public sealed partial class SupportBundleServiceTests
 
         SupportBundleService service = CreateService(paths, 8, maximumFileCount: 3);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.PreviewAsync(TestContext.Current.CancellationToken));
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.CreateAsync(
-                Path.Combine(temporary.Path, "exports"),
-                TestContext.Current.CancellationToken));
+        var preview = await service.PreviewAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(5, preview.Files.Count);
+        string bundle = await service.CreateAsync(Path.Combine(temporary.Path, "exports"), TestContext.Current.CancellationToken);
+        using var archive = ZipFile.OpenRead(bundle);
+        Assert.Equal(5, archive.Entries.Count);
     }
 
     [Fact]

@@ -27,9 +27,11 @@ permissions:
   contents: read
 
 jobs:
-  mocked-checks:
+  # Independent Windows jobs retain every check without serializing the two long suites.
+  # No custom deadline: GitHub's default is 360 minutes per job, also the hosted
+  # runner execution limit: https://docs.github.com/en/actions/reference/limits
+  source-package-checks:
     runs-on: windows-2025
-    timeout-minutes: 90
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
@@ -79,6 +81,27 @@ jobs:
           ./scripts/Test-SentenceDiagnostic-SelfTests.ps1 -PythonPath (Get-Command python).Source -ExpiredWindow
           ./scripts/Test-SentenceDiagnostic-SelfTests.ps1 -PythonPath (Get-Command python).Source -UnusedDiagnostic
           ./scripts/Test-PendingInstallWithdrawal-SelfTests.ps1 -PythonPath (Get-Command python).Source
+
+  offline-python-checks:
+    runs-on: windows-2025
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Exact candidate and source manifest
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:CANDIDATE_SHA) { throw 'Checkout does not match the triggering candidate.' }
+          python -B tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Source manifest check failed.' }
       - name: Offline durable completion gate and isolated bridge
         shell: pwsh
         run: |
@@ -87,5 +110,49 @@ jobs:
             python -m unittest discover -s . -p 'test_*.py' -v
             if ($LASTEXITCODE -ne 0) { throw 'Completion gate offline tests failed.' }
           } finally { Pop-Location }
+
+  compiled-test-checks:
+    runs-on: windows-2025
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Exact candidate and source manifest
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:CANDIDATE_SHA) { throw 'Checkout does not match the triggering candidate.' }
+          python -B tools/update_sha256_manifest.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Source manifest check failed.' }
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.402'
+      - name: Locked restore
+        run: dotnet restore CloudScribe.sln --locked-mode --configfile NuGet.config
+      - name: Strict Release build
+        run: dotnet build CloudScribe.sln -c Release --no-restore
       - name: Mocked and local tests only
         run: dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore --output Detailed
+
+  # Keep the existing required check name. A skipped/cancelled/failed dependency
+  # must fail this gate, rather than silently skipping it or reporting success.
+  mocked-checks:
+    if: ${{ always() }}
+    needs: [source-package-checks, offline-python-checks, compiled-test-checks]
+    runs-on: windows-2025
+    steps:
+      - name: Require every check to succeed
+        shell: pwsh
+        run: |
+          if ('${{ needs.source-package-checks.result }}' -ne 'success' -or
+              '${{ needs.offline-python-checks.result }}' -ne 'success' -or
+              '${{ needs.compiled-test-checks.result }}' -ne 'success') {
+            throw 'All source/package, offline Python, and compiled-test checks must succeed.'
+          }

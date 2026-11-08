@@ -429,9 +429,10 @@ public sealed partial class ShellViewModelStateTests
             (_, _) => Task.CompletedTask);
     }
 
-    private static ShellViewModel CreateViewModel(Microsoft.Extensions.Logging.ILogger<ShellViewModel>? logger = null, TimeProvider? clock = null) => new(
+    private static ShellViewModel CreateViewModel(Microsoft.Extensions.Logging.ILogger<ShellViewModel>? logger = null, TimeProvider? clock = null,
+        ISupportBundleService? supportBundles = null) => new(
         new StubTimelineStore(),
-        new StubSupportBundleService(),
+        supportBundles ?? new StubSupportBundleService(),
         new StubDiagnosticLogStatus(),
         new StubProviderFactoryRegistry(),
         new StubActivationRouter(),
