@@ -71,7 +71,9 @@ public sealed partial class BatchLoggingTests
         using (var factory = LoggerFactory.Create(builder => builder.AddProvider(ordinary).AddProvider(history)))
         {
             path = ordinary.CurrentLogPath;
-            CloudScribeLog.BatchItemStopped(factory.CreateLogger("ignored"), Guid.NewGuid(), 1, BatchItemState.Uncertain, reason);
+            var logger = factory.CreateLogger("ignored");
+            Guid batch = Guid.NewGuid();
+            CloudScribeLog.BatchItemStopped(logger, batch, 1, BatchItemState.Uncertain, reason);
         }
         string text = File.ReadAllText(path);
         foreach (var row in Rows(text).Concat(Rows(Export(text))).Concat(Rows(ReadHistory(fixture.History)).Where(x => string.Equals(x.GetProperty("Kind").GetString(), "Event", StringComparison.Ordinal))))
@@ -96,8 +98,9 @@ public sealed partial class BatchLoggingTests
         {
             path = ordinary.CurrentLogPath;
             var logger = factory.CreateLogger(reason);
-            CloudScribeLog.BatchItemStopped(logger, Guid.NewGuid(), 1, BatchItemState.Uncertain, reason);
-            CloudScribeLog.BatchRunSummary(logger, Guid.NewGuid(), BatchQueueState.Paused, 0, 0, 1, 1, 0, 1, 1, reason);
+            Guid stoppedBatch = Guid.NewGuid(), summaryBatch = Guid.NewGuid();
+            CloudScribeLog.BatchItemStopped(logger, stoppedBatch, 1, BatchItemState.Uncertain, reason);
+            CloudScribeLog.BatchRunSummary(logger, summaryBatch, BatchQueueState.Paused, 0, 0, 1, 1, 0, 1, 1, reason);
         }
         string ordinaryText = File.ReadAllText(path), historyText = ReadHistory(fixture.History), exported = Export(ordinaryText);
         Assert.DoesNotContain("synthetic-private-canary", ordinaryText + historyText + exported, StringComparison.Ordinal);

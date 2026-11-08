@@ -51,7 +51,8 @@ public sealed partial class BatchLoggingTests
         {
             path = provider.CurrentLogPath;
             var logger = provider.CreateLogger("ignored");
-            CloudScribeLog.BatchCostDenomination(logger, Guid.NewGuid(), "PRIVATE_CURRENCY_TEXT", 2);
+            Guid batch = Guid.NewGuid();
+            CloudScribeLog.BatchCostDenomination(logger, batch, "PRIVATE_CURRENCY_TEXT", 2);
             CloudScribeLog.BatchAction(logger, null, null, (BatchDiagnosticOperation)int.MaxValue, BatchDiagnosticPhase.Requested);
         }
         string text = File.ReadAllText(path);

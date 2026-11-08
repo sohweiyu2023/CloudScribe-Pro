@@ -67,11 +67,12 @@ public sealed partial class SupportBundleServiceTests
         Directory.CreateDirectory(Path.GetDirectoryName(history)!);
         await File.WriteAllTextAsync(history, "{PRIVATE_INTERRUPTED_TAIL", TestContext.Current.CancellationToken);
         Guid batch = Guid.NewGuid(), item = Guid.NewGuid(), job = Guid.NewGuid();
+        string idempotencyKeySha256 = new('a', 64), payloadSha256 = new('b', 64);
         using (var provider = new GoogleTrendHistoryLoggerProvider(paths, TimeProvider.System))
         {
             var logger = provider.CreateLogger(PrivateSentinel);
             CloudScribeLog.BatchItemJobLinked(logger, batch, item, 1, job);
-            CloudScribeLog.ArticleRequestIdentity(logger, job, 1, new string('a', 64), new string('b', 64));
+            CloudScribeLog.ArticleRequestIdentity(logger, job, 1, idempotencyKeySha256, payloadSha256);
         }
         await File.AppendAllTextAsync(history, JsonSerializer.Serialize(new { Version = 1, Kind = "Event", EventId = 9999, Message = PrivateSentinel }) + "\n", TestContext.Current.CancellationToken);
         byte[] before = SHA256.HashData(await File.ReadAllBytesAsync(history, TestContext.Current.CancellationToken));
@@ -90,8 +91,8 @@ public sealed partial class SupportBundleServiceTests
         Assert.Contains("MalformedRecord", text, StringComparison.Ordinal);
         Assert.DoesNotContain("PRIVATE_", text, StringComparison.Ordinal);
         Assert.DoesNotContain(PrivateSentinel, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(new string('a', 64), text, StringComparison.Ordinal);
-        Assert.DoesNotContain(new string('b', 64), text, StringComparison.Ordinal);
+        Assert.DoesNotContain(idempotencyKeySha256, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(payloadSha256, text, StringComparison.Ordinal);
         Assert.Equal(before, SHA256.HashData(await File.ReadAllBytesAsync(history, TestContext.Current.CancellationToken)));
     }
 
@@ -186,7 +187,11 @@ public sealed partial class SupportBundleServiceTests
         if (Directory.Exists(directory)) Directory.Delete(directory);
         string outside = Path.Combine(temporary.Path, "outside-trend"); Directory.CreateDirectory(outside);
         await File.WriteAllTextAsync(Path.Combine(outside, "google-trend-history-v1.jsonl"), PrivateSentinel, TestContext.Current.CancellationToken);
-        if (!TryCreateDirectorySymbolicLink(directory, outside)) return;
+        if (!TryCreateDirectorySymbolicLink(directory, outside))
+        {
+            Assert.Skip("Host could not create this temporary directory-link fixture; no privilege or security change attempted.");
+            return;
+        }
         await Assert.ThrowsAsync<InvalidOperationException>(() => CreateService(paths, 1).PreviewAsync(TestContext.Current.CancellationToken));
         Assert.False(Directory.Exists(Path.Combine(temporary.Path, "exports")));
     }
@@ -199,7 +204,11 @@ public sealed partial class SupportBundleServiceTests
         string directory = Path.Combine(paths.RootDirectory, "data"); Directory.CreateDirectory(directory);
         string outside = Path.Combine(temporary.Path, "private.jsonl");
         await File.WriteAllTextAsync(outside, PrivateSentinel, TestContext.Current.CancellationToken);
-        if (!TryCreateFileSymbolicLink(Path.Combine(directory, "google-trend-history-v1.jsonl"), outside)) return;
+        if (!TryCreateFileSymbolicLink(Path.Combine(directory, "google-trend-history-v1.jsonl"), outside))
+        {
+            Assert.Skip("Host could not create this temporary file-link fixture; no privilege or security change attempted.");
+            return;
+        }
         var service = CreateService(paths, 1);
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateAsync(Path.Combine(temporary.Path, "exports"), TestContext.Current.CancellationToken));
         Assert.Equal(PrivateSentinel, await File.ReadAllTextAsync(outside, TestContext.Current.CancellationToken));
