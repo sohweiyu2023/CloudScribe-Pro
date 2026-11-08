@@ -6,6 +6,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -20,7 +21,7 @@ namespace CloudScribe.App.Composition;
 public sealed partial class GoogleTtsUsabilityHotfixBinder
 {
     [SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "Modal view composition and control event wiring stay together; authorization, sample boundaries and cache behavior are implemented and tested separately.")]
-    private async Task OpenVoiceComparisonAsync(MainWindow owner, ShellViewModel model)
+    private async Task ShowVoiceComparisonAsync(MainWindow owner, ShellViewModel model)
     {
         if (!model.CanPrepareGoogleGenerationSpend)
         {
@@ -44,6 +45,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         bool reviewCurrentDocument = false;
         bool busy = false;
         bool rebuilding = false;
+        bool closed = false;
+        bool pendingClose = false;
+        bool waitingForEarlierCatalog = model.IsConnectedVoiceCatalogLoading;
+        int ownedFilterVersion = model.VoiceCatalogFilterVersion;
+        CancellationTokenSource? catalogCancellation = null;
+        Task cancellationCallbacks = Task.CompletedTask;
+        Control? invoker = owner.FocusManager?.GetFocusedElement() as Control;
 
         Window dialog = new()
         {
@@ -103,7 +111,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         sample.AcceptsReturn = true; sample.TextWrapping = TextWrapping.Wrap; sample.MinHeight = 70; sample.MaxHeight = 130;
         AutomationProperties.SetName(sample, "Voice sample text"); content.Children.Add(Info("Short sample — 1 to 500 characters. MP3, normal speed, zero pitch and volume adjustment.")); content.Children.Add(sample);
         TextBlock estimates = Info(string.Empty); AutomationProperties.SetName(estimates, "Voice sample cost and character count"); content.Children.Add(estimates);
-        TextBlock status = Info("No speech request has been sent. The official links offer prerecorded examples; generating your own sample may be billed.");
+        TextBlock status = Info(model.IsConnectedVoiceCatalogLoading
+            ? "An earlier catalog lookup is still finishing. You can close this window; another lookup stays blocked until it ends. Review diagnostic state before another attempt."
+            : "No speech request has been sent. The official links offer prerecorded examples; generating your own sample may be billed.");
         AutomationProperties.SetName(status, "Voice sample status"); content.Children.Add(status);
         CheckBox consent = NewConfirmation("I approve this exact sample and its displayed USD request ceiling.");
         content.Children.Add(consent);
@@ -117,7 +127,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         foreach (Button button in new[] { prepare, generate, replay, export, use, close })
         { button.Margin = new Thickness(0, 0, 8, 8); actions.Children.Add(button); }
         content.Children.Add(actions);
-        AddStopWaitingControl(content, model);
+        AddStopWaitingControl(content, model, dialog);
         content.Children.Add(Info("Verified replay/export is free. This-session cache matches the exact account, project, voice, language, text and MP3 settings; restarting clears it."));
         dialog.Content = new ScrollViewer { Content = content, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
 
@@ -133,6 +143,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
         void Update()
         {
+            if (closed) return;
+            if (waitingForEarlierCatalog)
+            {
+                status.Text = model.IsConnectedVoiceCatalogLoading
+                    ? "An earlier catalog lookup is still finishing. You can close this window; another lookup stays blocked until it ends. Review diagnostic state before another attempt."
+                    : "The earlier catalog lookup ended. Review its recorded diagnostic state before another attempt. No automatic retry was made.";
+                waitingForEarlierCatalog = model.IsConnectedVoiceCatalogLoading;
+            }
             ComparisonVoice? row = voices.SelectedItem as ComparisonVoice;
             var rate = row is null ? null : GoogleVoiceComparisonInformation.Rate(_comparisonPricing, row.Name);
             string text = sample.Text ?? string.Empty;
@@ -162,7 +180,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             reviewDocument.IsEnabled = !busy && selected is not null && model.CurrentDocumentId is not null
                 && !model.IsDocumentDirty && !model.IsDocumentSaving && !string.IsNullOrWhiteSpace(model.DocumentText)
                 && GoogleFullDocumentVoiceSupport.Supports(selected.LanguageCode, selected.Voice.VoiceStableId);
-            close.IsEnabled = !busy; refresh.IsEnabled = !busy; load.IsEnabled = !busy;
+            close.IsEnabled = !busy || catalogCancellation is not null;
+            refresh.IsEnabled = !busy && !model.IsConnectedVoiceCatalogLoading;
+            load.IsEnabled = refresh.IsEnabled;
             locale.IsEnabled = !busy; filter.IsEnabled = !busy; sample.IsEnabled = !busy; voices.IsEnabled = !busy;
         }
 
@@ -196,16 +216,21 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
         async Task Run(Func<Task> action)
         {
-            if (busy) return;
+            if (busy || closed || pendingClose) return;
             busy = true; Update();
             try { await action().ConfigureAwait(true); }
             catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
             {
+                if (closed || pendingClose) return;
                 consent.IsChecked = false;
                 status.Text = "Action stopped safely; no automatic retry. Check the connected voice, current pricing and queue in Studio before preparing again. " +
                     (exception is InvalidOperationException && exception.Message.StartsWith("This sample", StringComparison.Ordinal) ? exception.Message : string.Empty);
             }
-            finally { busy = false; Update(); }
+            finally
+            {
+                busy = false;
+                Update();
+            }
         }
 
         voices.SelectionChanged += (_, _) => Changed();
@@ -215,14 +240,27 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         consent.IsCheckedChanged += (_, _) => Update();
         Task LoadVoicesAsync(bool explicitRefresh) => Run(async () =>
         {
+            if (model.IsConnectedVoiceCatalogLoading) return;
             session.InvalidateReview(); consent.IsChecked = false;
             model.VoiceLabLocaleFilter = locale.Text?.Trim(); model.VoiceLabSearchText = null;
+            ownedFilterVersion = model.VoiceCatalogFilterVersion;
             using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
-            bool loaded = explicitRefresh
-                ? await RefreshConnectedVoicesAsync(model, timeout.Token).ConfigureAwait(true)
-                : await _connectedVoiceCatalog.ApplyFiltersAsync(model, timeout.Token).ConfigureAwait(true);
-            Populate((voices.SelectedItem as ComparisonVoice)?.Name);
-            status.Text = loaded ? model.ConnectedVoiceCatalogStatus : "Voice catalog not loaded. " + model.ConnectedVoiceCatalogStatus;
+            catalogCancellation = timeout;
+            Update();
+            try
+            {
+                bool loaded = explicitRefresh
+                    ? await RefreshConnectedVoicesAsync(model, timeout.Token).ConfigureAwait(true)
+                    : await _connectedVoiceCatalog.ApplyFiltersAsync(model, timeout.Token).ConfigureAwait(true);
+                if (closed || pendingClose || model.VoiceCatalogFilterVersion != ownedFilterVersion) return;
+                Populate((voices.SelectedItem as ComparisonVoice)?.Name);
+                status.Text = loaded ? model.ConnectedVoiceCatalogStatus : "Voice catalog not loaded. " + model.ConnectedVoiceCatalogStatus;
+            }
+            finally
+            {
+                await cancellationCallbacks.ConfigureAwait(true);
+                catalogCancellation = null;
+            }
         });
         load.Click += async (_, _) => await LoadVoicesAsync(false).ConfigureAwait(true);
         refresh.Click += async (_, _) => await LoadVoicesAsync(true).ConfigureAwait(true);
@@ -272,12 +310,42 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
         use.Click += (_, _) => SelectForStudio(review: false);
         reviewDocument.Click += (_, _) => SelectForStudio(review: true);
-        close.Click += (_, _) => dialog.Close();
-        dialog.Closing += (_, args) => { if (busy) args.Cancel = true; };
+        bool RequestClose()
+        {
+            if (closed || pendingClose || !busy) return true;
+            if (catalogCancellation is null) return false; // Generation/export retain their own guards.
+            pendingClose = true;
+            if (model.VoiceCatalogFilterVersion == ownedFilterVersion)
+            {
+                // Retire publication before cancellation or restoration. The operation still
+                // owns the loading/diagnostic lease until it unwinds; closing never reclaims it.
+                ownedFilterVersion = model.RetireVoiceCatalogPresentation();
+                model.InvalidateVoiceLanguageCatalog();
+                model.SelectedVoiceLabVoice = null;
+                model.VoiceLabCatalogResults.Clear();
+                model.ConnectedVoiceCatalogStatus = "Catalog cancellation requested. Wait for any earlier lookup to finish before another lookup. Review diagnostic state before another attempt. Existing audio and reservations are retained.";
+                model.StatusMessage = model.ConnectedVoiceCatalogStatus;
+            }
+            cancellationCallbacks = CancelCatalogCallbacksAsync(catalogCancellation);
+            return true;
+        }
+        close.Click += (_, _) => { if (RequestClose()) dialog.Close(); };
+        dialog.KeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Escape) return;
+            args.Handled = true;
+            if (RequestClose()) dialog.Close();
+        };
+        dialog.Closing += (_, args) =>
+        {
+            args.Cancel = !RequestClose();
+        };
+        dialog.Closed += (_, _) => { _ = RequestClose(); closed = true; };
         void DocumentStateChanged(object? sender, PropertyChangedEventArgs args)
         {
             if (args.PropertyName is nameof(ShellViewModel.CurrentDocumentId) or nameof(ShellViewModel.DocumentText)
-                or nameof(ShellViewModel.IsDocumentDirty) or nameof(ShellViewModel.IsDocumentSaving)) Update();
+                or nameof(ShellViewModel.IsDocumentDirty) or nameof(ShellViewModel.IsDocumentSaving)
+                or nameof(ShellViewModel.IsConnectedVoiceCatalogLoading)) Update();
         }
         model.PropertyChanged += DocumentStateChanged;
         Populate(originalVoice?.VoiceStableId ?? "en-US-Standard-C");
@@ -286,13 +354,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             model.PropertyChanged -= DocumentStateChanged;
             session.InvalidateReview();
-            if (!useSelected)
+            if (!useSelected && model.VoiceCatalogFilterVersion == ownedFilterVersion)
             {
-                var restored = model.HasCurrentVoiceLanguageCatalog
-                    ? model.VoiceLabCatalogResults.FirstOrDefault(candidate => SameVoice(candidate, originalVoice)) : null;
+                string catalogStatus = model.ConnectedVoiceCatalogStatus;
                 model.VoiceLabLocaleFilter = originalLocale; model.VoiceLabSearchText = originalSearch;
-                model.SelectedVoiceLabVoice = restored;
+                model.SelectedVoiceLabVoice = model.HasCurrentVoiceLanguageCatalog
+                    ? model.VoiceLabCatalogResults.FirstOrDefault(candidate => SameVoice(candidate, originalVoice)) : null;
+                if (pendingClose) model.ConnectedVoiceCatalogStatus = catalogStatus;
             }
+            if (!reviewCurrentDocument) RestoreDialogInvoker(owner, invoker);
         }
         if (reviewCurrentDocument) await OpenWholeArticleAsync(owner, model).ConfigureAwait(true);
     }

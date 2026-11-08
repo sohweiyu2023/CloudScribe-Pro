@@ -96,6 +96,7 @@ public sealed partial class ShellViewModel
         OnPropertyChanged(nameof(CanRefreshVoiceLabCatalog));
         RefreshVoiceLabCatalogCommand.NotifyCanExecuteChanged();
 
+        int filterVersion = VoiceCatalogFilterVersion;
         try
         {
             VoiceLabCatalogLastRefreshSucceeded = false;
@@ -108,9 +109,10 @@ public sealed partial class ShellViewModel
                 ?? throw new InvalidOperationException("Voice Lab catalog UI state capture is not configured.");
 
             cancellationToken.ThrowIfCancellationRequested();
-            int filterVersion = Volatile.Read(ref _voiceCatalogFilterVersion);
             var state = await capture(cancellationToken).ConfigureAwait(true)
                 ?? throw new InvalidOperationException("Voice Lab catalog UI state is unavailable.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (RejectChangedVoiceCatalogFilter(filterVersion)) return;
             var results = await catalog.QueryAsync(
                 state.Query,
                 state.AccountAuthorized,
@@ -134,9 +136,10 @@ public sealed partial class ShellViewModel
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
+            GoogleCatalogRefreshDiagnostics.Failure(_logger, refreshId, GoogleCatalogRefreshPhase.UiQuery, exception);
+            if (RejectChangedVoiceCatalogFilter(filterVersion)) return;
             SelectedVoiceLabVoice = null;
             VoiceLabCatalogResults.Clear();
-            GoogleCatalogRefreshDiagnostics.Failure(_logger, refreshId, GoogleCatalogRefreshPhase.UiQuery, exception);
             StatusMessage = VoiceCatalogErrorMessages.For(exception, GoogleCatalogRefreshPhase.UiQuery);
         }
         finally
@@ -150,11 +153,9 @@ public sealed partial class ShellViewModel
 
     private bool RejectChangedVoiceCatalogFilter(int version)
     {
-        if (version == Volatile.Read(ref _voiceCatalogFilterVersion)) return false;
-        SelectedVoiceLabVoice = null;
-        VoiceLabCatalogResults.Clear();
-        StatusMessage = "Language or voice search changed while loading. Refresh voices for the current selection.";
-        return true;
+        // Newer navigation owns the selection and status. Late success, failure or
+        // cancellation must not clear or relabel that newer state.
+        return version != VoiceCatalogFilterVersion;
     }
 
     private void PublishVoiceCatalogResults(IReadOnlyList<VoiceLabCatalogSelection> results, CancellationToken token)

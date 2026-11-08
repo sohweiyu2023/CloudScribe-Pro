@@ -25,6 +25,7 @@ public sealed class GoogleConnectedVoiceCatalogLoader(
         model.SelectedVoiceLabVoice = null;
         model.VoiceLabCatalogResults.Clear();
         Guid refreshId = Guid.NewGuid();
+        int filterVersion = model.VoiceCatalogFilterVersion;
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.UiBootstrap;
         try
         {
@@ -42,10 +43,13 @@ public sealed class GoogleConnectedVoiceCatalogLoader(
             var observed = retainCurrentEvidence
                 ? await _bootstrapService.LoadConfiguredForOpeningAsync(refreshId, token).ConfigureAwait(true)
                 : await _bootstrapService.RefreshConfiguredAsync(refreshId, token).ConfigureAwait(true);
+            token.ThrowIfCancellationRequested();
+            if (model.VoiceCatalogFilterVersion != filterVersion) return false;
             phase = GoogleCatalogRefreshPhase.UiQuery;
             GoogleCatalogRefreshDiagnostics.Phase(catalogLogger, refreshId, phase);
             await model.RefreshVoiceCatalogForUiAsync(refreshId, token).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
+            if (model.VoiceCatalogFilterVersion != filterVersion) return false;
             if (!model.VoiceLabCatalogLastRefreshSucceeded)
             {
                 return VoiceCatalogRefreshPresentation.RejectIncomplete(model, restrictedRefresh, model.StatusMessage);
@@ -56,14 +60,20 @@ public sealed class GoogleConnectedVoiceCatalogLoader(
         }
         catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
-            model.SelectedVoiceLabVoice = null;
-            model.VoiceLabCatalogResults.Clear();
             GoogleCatalogRefreshDiagnostics.Failure(catalogLogger, refreshId, phase, exception);
-            model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception, phase, restrictedRefresh);
-            model.StatusMessage = model.ConnectedVoiceCatalogStatus;
-            return false;
+            if (model.VoiceCatalogFilterVersion != filterVersion) return false;
+            return PublishFailure(model, exception, phase, restrictedRefresh);
         }
         finally { model.IsConnectedVoiceCatalogLoading = false; }
+    }
+
+    private static bool PublishFailure(ShellViewModel model, Exception exception, GoogleCatalogRefreshPhase phase, bool restrictedRefresh)
+    {
+        model.SelectedVoiceLabVoice = null;
+        model.VoiceLabCatalogResults.Clear();
+        model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception, phase, restrictedRefresh);
+        model.StatusMessage = model.ConnectedVoiceCatalogStatus;
+        return false;
     }
 
     private static bool PublishObservedCatalog(ShellViewModel model, GoogleTextToSpeechCatalogBootstrapResult observed,
