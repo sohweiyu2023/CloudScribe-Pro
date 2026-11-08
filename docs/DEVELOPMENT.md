@@ -202,7 +202,8 @@ $packageChecks = @(
     'Test-ArticleVoicePolicy-SelfTests.ps1',
     'Test-AdditiveArticleAdmission-SelfTests.ps1',
     'Test-AdditiveArticleBuildRebind-SelfTests.ps1',
-    'Test-ChirpReservationResumePolicy-SelfTests.ps1'
+    'Test-ChirpReservationResumePolicy-SelfTests.ps1',
+    'Test-VerificationRunners-SelfTests.ps1'
 )
 foreach ($check in $packageChecks) {
     Invoke-RepositoryCheck "./scripts/$check"
