@@ -24,6 +24,7 @@ public static partial class ChirpPolicyValidation
             || p.MaximumAdditionalReservationMinorUnits > b.AllocationCeilingMinorUnits - b.AllocationCommittedMinorUnits)
             throw new InvalidDataException("The article-plan budget does not preserve its reviewed retained baseline.");
         foreach (var pins in new[] { b.QueueRows, b.SpendRows, b.RecoveryRows, b.TransitionRows, p.ScopeRows, p.PriorArticleAttemptRows }) RequirePins(pins);
+        RequireFullDocumentVoiceFormat(p);
         RequireLegacyAssociations(p);
         RequireSuccessorGrant(p);
         RequireDiagnosticEvidence(p);

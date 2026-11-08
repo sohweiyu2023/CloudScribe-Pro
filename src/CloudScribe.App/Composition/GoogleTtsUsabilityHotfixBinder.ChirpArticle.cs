@@ -128,7 +128,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
     private static string FormatChirpReview(ChirpRequestReview review) =>
         $"Internal request {review.CoverageOrdinal:D3}; {review.VoiceName}; {review.Currency} estimate {review.EstimateMinorUnits / 100m:F2}, maximum {review.MaximumMinorUnits / 100m:F2} before tax. "
-        + $"Project already committed {review.ProjectCommittedMinorUnits / 100m:F2}; allocation remaining {review.AllocationRemainingMinorUnits / 100m:F2}. "
+        + $"Article-generation commitments {review.ProjectCommittedMinorUnits / 100m:F2}; selected allocation remaining {review.AllocationRemainingMinorUnits / 100m:F2}. These are retained article approval baselines and reservations, not your complete Google account bill. "
         + $"Payload {review.PayloadSha256}, {review.PayloadBytes} bytes. Admission expires {review.ExpiresAtUtc:O}. "
         + (review.IsCatalogRevalidation ? "Catalog revalidation of the SAME existing authorization; ZERO additional reservation. Independently admitted expiry and exact mapping apply. "
             : review.ExistingAuthorizationId is null ? "This reserves one new request only." : "This resumes the SAME reserved identity without another reservation.")

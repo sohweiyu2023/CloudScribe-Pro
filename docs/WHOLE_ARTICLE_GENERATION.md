@@ -2,6 +2,8 @@
 
 The complete-article action reviews the original saved article, exact voice, retained commitments, maximum new cost and expiry once. Its durable job processes admitted internal requests in order, reuses verified accepted audio and calls the existing complete-coverage MP3 exporter. Users do not select or approve each internal request.
 
+Supported Neural2 documents use the separate `google-neural2-compiled-boundaries-v1` plain-text MP3 planner, sized to the exact serialized 5,000-byte request ceiling. Existing Chirp plan versions and identities are unchanged. **Voices** also opens this review through **Review full document with this voice**; it never uses the short-sample box. A different comparison voice needs a different saved document with identical text and its own exact admission. Existing planning resource bounds, expiry, provider restrictions and spending gates still apply; see [full-document planning](CHIRP_ARTICLE_NARRATION.md#neural2-and-voice-comparisons).
+
 ## Separate authority boundary
 
 This workflow requires an independently reviewed schema-3 article policy with an explicit `WholeArticleGeneration` grant naming exact plan hashes. Existing schema-1/2 request policies cannot authorize it. The ordinary request approval API also cannot substitute for whole-article consent under schema 3. No implementation loop fabricates per-request user confirmations.

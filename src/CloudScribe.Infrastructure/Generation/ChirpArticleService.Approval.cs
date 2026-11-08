@@ -16,7 +16,7 @@ public sealed partial class ChirpArticleService
     private async Task<ChirpApprovedAttempt> ApproveCoreAsync(Pending pending, long maximum, Guid? wholeArticleJobId,
         CancellationToken cancellationToken)
     {
-        var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
+        var policy = await PolicyAsync(cancellationToken, policySha256: pending.PolicySha256).ConfigureAwait(false);
         if (policy.WholeArticleGeneration is not null && wholeArticleJobId is null)
             throw new InvalidOperationException("This admission requires the reviewed complete-article job; individual request consent cannot substitute for it.");
         if (!string.Equals(ChirpPolicyValidation.Hash(policy), pending.PolicySha256, StringComparison.Ordinal))
@@ -94,7 +94,7 @@ public sealed partial class ChirpArticleService
             if (q.Unresolved != 0) throw new InvalidOperationException("An article outcome is uncertain; reconcile before another request.");
             if (!string.Equals(q.DiagnosticCode, "google-accepted", StringComparison.Ordinal))
             {
-                var policy = await PolicyAsync(token).ConfigureAwait(false);
+                var policy = await PolicyAsync(token, policySha256: (string)row[3]!).ConfigureAwait(false);
                 if (await IsCompletedRecoveryFailureAsync(connection, transaction, policy, row, token).ConfigureAwait(false)) continue;
                 throw new InvalidOperationException("An article request failed. Only complete independently admitted recovery permits continuation.");
             }

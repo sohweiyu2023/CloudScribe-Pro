@@ -1,4 +1,4 @@
-# CloudScribe Pro 1.0.4: setup and everyday use
+# CloudScribe Pro 1.0.5: setup and everyday use
 
 The local usability update adds saved voice setups, remembered choices, offline request inspection and local narration-part preparation. See [Saved setups and local recovery](SAVED_SETUPS_AND_LOCAL_RECOVERY.md) for the updated workflow and persistence details.
 
@@ -67,6 +67,16 @@ For plain-text Chirp 3 HD requests, the estimate counts Unicode scalar values in
 
 Short-request approval is single-use. A new prepared short request needs fresh confirmation. Editing text or changing the voice requires a new review. The synchronous workflow accepts short documents within a conservative 5,000-byte compiled-envelope ceiling; use the separately admitted full-article path or prepare local parts for longer passages. Unknown or unpriced voice families are rejected rather than assigned a guessed rate.
 
+## Compare the same full document in different voices
+
+For a longer comparison, create a separate saved document for each voice and paste the same exact passage into both. For example, two English documents can be reviewed separately with `en-US-Neural2-D` and `en-US-Chirp3-HD-Aoede` when those exact voices are returned by your connected catalog. Equal text does not guarantee equal running time; the voices may speak it at different speeds.
+
+Open **Voices**, refresh the connected voices, select one and choose **Review full document with this voice**. This uses the saved Studio document, not the short-sample box. Review the exact document and voice, accepted audio, remaining requests and maximum cost. Each document needs its own installed admission and exact approval before generation. If the selected voice differs from the document's admitted voice, the app asks you to use a separate document instead of reusing the old voice's authority.
+
+Neural2 uses plain-text MP3 requests sized against the actual serialized 5,000-byte envelope, including JSON escaping and request fields. Its parts preserve the source text and are joined into one MP3. Existing Chirp plans retain their own splitting rules and identities. Full-document review adds no arbitrary short-document or duration limit: the existing 1,000,000-Unicode-scalar source and 10,000-coverage-part planning bounds, per-request checks, provider restrictions and approved caps still apply.
+
+**Use selected voice in Studio** is independent of the sample box's contents. The separate **1 to 500 characters** short-sample flow remains available only for Standard, WaveNet and Neural2, with its own review and approval. Neither selecting a voice nor opening a full-document review sends speech. See [Voice comparison](VOICE_COMPARISON.md).
+
 ## Many TXT files at once
 
 Open **Queue** to see the TXT file/folder drop area immediately, or choose **Batch MP3** beside **Create MP3** in the main window. Dropping into Queue opens the batch window and appends to your existing draft without generating audio. The same window is also available from **Create MP3** via **Batch MP3 from TXT files…**. No text in the current Studio document is needed. Make one MP3 per TXT file with one voice and one approval. The window shows five steps and a **Next:** line:
@@ -98,6 +108,7 @@ The current session's Play/Export controls retain accepted-byte integrity eviden
 | No voices | Read the loading/error message. Choose a friendly name in **Language** and check the optional voice search; use **Clear voice search and reload**. For an access error, inspect Setups and Google API/billing permissions. Do not replace a saved key just to retry. |
 | Pricing cannot be activated | Read the displayed error. Verify the official HTTPS page and rate match. Do not confirm mismatching rates. |
 | Review or Create MP3 is disabled | Add text, wait for voices to load, select a verified voice, review the current cost, then tick consent. Editing the request invalidates the old review. |
+| Full-document review asks for a separate document | The selected voice differs from this saved document's admitted voice. Save the identical text as another document, then obtain its own exact admission and review. Keep the earlier document and audio. |
 | Request stopped or reconciliation required | Inspect persisted request status in **Setups** before retrying. A lost response can still have incurred a charge. Do not repeatedly click Generate. |
 | Nothing plays | Confirm the MP3 exists and your default audio player works. Export/listen locally without a new synthesis. |
 

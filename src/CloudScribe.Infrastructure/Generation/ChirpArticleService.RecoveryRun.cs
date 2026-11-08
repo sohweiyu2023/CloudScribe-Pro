@@ -47,7 +47,8 @@ public sealed partial class ChirpArticleService
 
     private async Task<int> RecoveryChildStatusAsync(ChirpArticleRecoveryChild child, CancellationToken token)
     {
-        var policy = await PolicyAsync(token).ConfigureAwait(false);
+        var job = await ReadWholeArticleJobAsync(child.JobId, token).ConfigureAwait(false);
+        var policy = await PolicyAsync(token, policySha256: job.PolicySha256).ConfigureAwait(false);
         using var context = await factory.CreateDbContextAsync(token).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(token).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: true);
@@ -73,7 +74,7 @@ public sealed partial class ChirpArticleService
 
     private async Task<Guid> RecoveryRootForJobAsync(ChirpWholeArticleJob job, int ordinal, CancellationToken token)
     {
-        var policy = await PolicyAsync(token).ConfigureAwait(false);
+        var policy = await PolicyAsync(token, policySha256: job.PolicySha256).ConfigureAwait(false);
         RequireRecoveryJob(policy, job);
         using var context = await factory.CreateDbContextAsync(token).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(token).ConfigureAwait(false);

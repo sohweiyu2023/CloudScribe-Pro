@@ -15,7 +15,7 @@ public sealed partial class ChirpArticleService
         if (envelope.ChirpAuthorizationId is null || envelope.RecoveryAuthorizationId is not null) return null;
         if (await ResumePolicyAsync(envelope.ChirpAuthorizationId, cancellationToken).ConfigureAwait(false) is { } resume)
             return await LoadResumeSpendAsync(resume, envelope, cancellationToken).ConfigureAwait(false);
-        var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
+        var policy = await AuthorizationPolicyAsync(envelope.ChirpAuthorizationId!.Value, cancellationToken).ConfigureAwait(false);
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -39,7 +39,7 @@ public sealed partial class ChirpArticleService
             throw new InvalidOperationException("The internal request requires an exact owned local dispatch claim.");
         if (await ResumePolicyAsync(envelope.ChirpAuthorizationId, cancellationToken).ConfigureAwait(false) is { } resume)
             return await TryClaimResumeAsync(resume, envelope, projectId, currency, scale, estimate, claim, cancellationToken).ConfigureAwait(false);
-        var policy = await PolicyAsync(cancellationToken).ConfigureAwait(false);
+        var policy = await AuthorizationPolicyAsync(envelope.ChirpAuthorizationId!.Value, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(policy.ProjectId, projectId, StringComparison.Ordinal)) return false;
         using var context = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection();

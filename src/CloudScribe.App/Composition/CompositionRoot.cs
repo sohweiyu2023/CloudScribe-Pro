@@ -115,7 +115,7 @@ public static class CompositionRoot
 
     private static void RegisterArticleNarration(IServiceCollection services)
     {
-        services.AddSingleton<IChirpArticleAdmissionStore>(serviceProvider => new InstalledChirpArticleAdmissionStore(AppContext.BaseDirectory,
+        services.AddSingleton<IChirpArticleAdmissionStore>(serviceProvider => new InstalledChirpArticleAdmissionCatalogStore(AppContext.BaseDirectory,
             serviceProvider.GetRequiredService<AppPaths>(), serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<ChirpArticleService>();
         services.AddSingleton<IChirpReservationResumeAdmissionStore>(provider => new InstalledChirpReservationResumeAdmissionStore(AppContext.BaseDirectory,

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -11,6 +12,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Pricing;
 
 namespace CloudScribe.App.Composition;
@@ -40,6 +42,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         string? originalLocale = model.VoiceLabLocaleFilter;
         string? originalSearch = model.VoiceLabSearchText;
         bool useSelected = false;
+        bool reviewCurrentDocument = false;
         bool busy = false;
         bool rebuilding = false;
 
@@ -57,9 +60,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         StackPanel content = new() { Spacing = 8, Margin = new Thickness(18) };
         TextBlock Title(string value) => new() { Text = value, FontSize = 22, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
         TextBlock Info(string value) => new() { Text = value, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
-        content.Children.Add(Title("Compare voices and try a short sample"));
+        content.Children.Add(Title("Compare voices with your text"));
         content.Children.Add(Info("Comparison reference: en-US-Standard-C. Current Studio voice: " + (originalVoice?.VoiceStableId ?? "not selected") + "."));
-        content.Children.Add(Info("Selecting a voice sends nothing. Samples use only the box below; your document stays unchanged."));
+        content.Children.Add(Info("Selecting a voice sends nothing. Short samples use only the box below; full-document review uses your saved Studio document."));
         content.Children.Add(Info("USD list prices checked " + GoogleVoiceComparisonInformation.ReferenceChecked +
             " · authenticated catalog " + V222ControlSet.CatalogVersion + ". Prepare verifies the final request; estimates exclude free allowances, tax and FX."));
 
@@ -91,6 +94,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         TextBlock details = Info(string.Empty); AutomationProperties.SetName(details, "Selected voice details");
         Grid comparison = new() { ColumnDefinitions = new ColumnDefinitions("380,*"), ColumnSpacing = 14 };
         comparison.Children.Add(voices); Grid.SetColumn(details, 1); comparison.Children.Add(details); content.Children.Add(comparison);
+        Button reviewDocument = NewButton("Review full document with this voice");
+        AutomationProperties.SetName(reviewDocument, "Review the full saved document with the selected voice and show its cost");
+        content.Children.Add(Info("For a longer comparison, save a separate copy of the same text for each voice in Studio and choose Review full document with this voice. Internal requests are joined into one MP3. Review sends no speech and requires separate exact approval."));
+        content.Children.Add(reviewDocument);
         TextBox sample = NewTextBox("Short sample text"); sample.Text = GoogleVoiceComparisonInformation.DefaultText;
         sample.AcceptsReturn = true; sample.TextWrapping = TextWrapping.Wrap; sample.MinHeight = 70; sample.MaxHeight = 130;
         AutomationProperties.SetName(sample, "Voice sample text"); content.Children.Add(Info("Short sample — 1 to 500 characters. MP3, normal speed, zero pitch and volume adjustment.")); content.Children.Add(sample);
@@ -113,13 +120,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         content.Children.Add(Info("Verified replay/export is free. This-session cache matches the exact account, project, voice, language, text and MP3 settings; restarting clears it."));
         dialog.Content = new ScrollViewer { Content = content, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
 
+        GoogleVoiceComparisonSelection? Selection() => GoogleVoiceComparisonSelection.TryCreate(
+            (voices.SelectedItem as ComparisonVoice)?.Selection, locale.Text);
+
         GoogleVoiceSampleSpec? Spec()
         {
-            if (voices.SelectedItem is not ComparisonVoice { Selection: { } selected }) return null;
-            string? language = selected.LanguageCodes?.FirstOrDefault(code => string.Equals(code, locale.Text?.Trim(), StringComparison.OrdinalIgnoreCase))
-                ?? (selected.LanguageCodes is { Count: > 0 } codes ? codes[0] : null);
-            if (language is null) return null;
-            var spec = new GoogleVoiceSampleSpec(selected, language, sample.Text ?? string.Empty);
+            if (Selection() is not { } selected) return null;
+            var spec = new GoogleVoiceSampleSpec(selected.Voice, selected.LanguageCode, sample.Text ?? string.Empty);
             try { spec.Validate(); return spec; } catch (InvalidOperationException) { return null; }
         }
 
@@ -135,7 +142,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 " · Provider gender label: " + gender + "\n" + GoogleVoiceComparisonInformation.Description(row.Name) + "\n" +
                 (row.Selection is null ? "Reference only: not currently loaded from the connected catalog." :
                  GoogleVoiceComparisonInformation.SupportsSampleFamily(row.Name) ? "Connected catalog entry; generation still requires current independent checks." :
-                 "Reference only in this sample flow: use the official samples; no generation support is assumed.") + "\n" +
+                 "Connected voice: use full-document review when supported. The short-sample box does not support this family.") + "\n" +
                 (rate?.PriceLabel ?? "No admitted character price; generation unavailable.");
             estimates.Text = text.Length.ToString(CultureInfo.InvariantCulture) + " / 500 sample characters. " +
                 (rate is null ? "No verified character-rate estimate." :
@@ -149,7 +156,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             generate.IsEnabled = !busy && spec is not null && session.Review is not null && consent.IsChecked == true;
             consent.IsEnabled = !busy && session.Review is not null;
             replay.IsEnabled = !busy && cached; export.IsEnabled = !busy && cached && dialog.StorageProvider.CanSave;
-            use.IsEnabled = !busy && spec is not null;
+            GoogleVoiceComparisonSelection? selected = Selection();
+            use.IsEnabled = !busy && selected is not null;
+            reviewDocument.IsEnabled = !busy && selected is not null && model.CurrentDocumentId is not null
+                && !model.IsDocumentDirty && !model.IsDocumentSaving && !string.IsNullOrWhiteSpace(model.DocumentText)
+                && GoogleFullDocumentVoiceSupport.Supports(selected.LanguageCode, selected.Voice.VoiceStableId);
             close.IsEnabled = !busy; refresh.IsEnabled = !busy;
             locale.IsEnabled = !busy; filter.IsEnabled = !busy; sample.IsEnabled = !busy; voices.IsEnabled = !busy;
         }
@@ -247,19 +258,28 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             await session.ExportAsync(spec, destination.Path.LocalPath).ConfigureAwait(true);
             status.Text = "Verified sample exported without a provider request or new charge.";
         }).ConfigureAwait(true);
-        use.Click += (_, _) =>
+        void SelectForStudio(bool review)
         {
-            GoogleVoiceSampleSpec? spec = Spec(); if (spec is null) return;
-            model.SelectedVoiceLabVoice = spec.Voice; model.VoiceLabLocaleFilter = spec.LanguageCode;
-            model.VoiceLabSearchText = null; useSelected = true; dialog.Close();
+            if (busy || Selection() is not { } selected) return;
+            model.SelectedVoiceLabVoice = selected.Voice; model.VoiceLabLocaleFilter = selected.LanguageCode;
+            model.VoiceLabSearchText = null; useSelected = true; reviewCurrentDocument = review; dialog.Close();
             model.RememberSelectedVoiceSetup();
-        };
+        }
+        use.Click += (_, _) => SelectForStudio(review: false);
+        reviewDocument.Click += (_, _) => SelectForStudio(review: true);
         close.Click += (_, _) => dialog.Close();
         dialog.Closing += (_, args) => { if (busy) args.Cancel = true; };
+        void DocumentStateChanged(object? sender, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName is nameof(ShellViewModel.CurrentDocumentId) or nameof(ShellViewModel.DocumentText)
+                or nameof(ShellViewModel.IsDocumentDirty) or nameof(ShellViewModel.IsDocumentSaving)) Update();
+        }
+        model.PropertyChanged += DocumentStateChanged;
         Populate(originalVoice?.VoiceStableId ?? "en-US-Standard-C");
         try { await dialog.ShowDialog(owner).ConfigureAwait(true); }
         finally
         {
+            model.PropertyChanged -= DocumentStateChanged;
             session.InvalidateReview();
             if (!useSelected)
             {
@@ -267,12 +287,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 model.VoiceLabLocaleFilter = originalLocale; model.VoiceLabSearchText = originalSearch;
             }
         }
+        if (reviewCurrentDocument) await OpenWholeArticleAsync(owner, model).ConfigureAwait(true);
     }
 
     private sealed record ComparisonVoice(string Name, VoiceLabCatalogSelection? Selection, GoogleVoiceComparisonInformation.CharacterRate? Rate)
     {
         public string ListLabel => Name + "  ·  " + (Rate?.PriceLabel ?? "price unavailable") +
             (Selection is null ? "  ·  reference only" : GoogleVoiceComparisonInformation.SupportsSampleFamily(Name)
-                ? "  ·  connected / short-sample family" : "  ·  catalog entry / official samples only");
+                ? "  ·  connected / short-sample family" : "  ·  connected / full-document review when supported");
     }
 }

@@ -6,6 +6,15 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public static partial class GoogleSpeechPlanCompiler
 {
+    // Used only to pack new plain-text proposals. Final requests always pass Compile's byte guard.
+    internal static bool FitsPlainTextPayload(string text, GoogleSpeechCompilationOptions options)
+    {
+        options = options.Validate();
+        if (options.SentenceMarkers is not null)
+            throw new InvalidOperationException("Plain-text byte planning cannot infer a sentence-marked request format.");
+        return BuildPayload(new StringBuilder(text), options, new GoogleProsodyState(1m, 0m, 0m)).Length <= options.MaximumPayloadBytes;
+    }
+
     public static GoogleSpeechCompilation Compile(SpeechPlan plan, GoogleSpeechCompilationOptions options)
     {
         ArgumentNullException.ThrowIfNull(plan);

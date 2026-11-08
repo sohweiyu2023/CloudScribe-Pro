@@ -81,7 +81,7 @@ public sealed partial class ChirpArticleService
         {
             token.ThrowIfCancellationRequested();
             RequireWholeJobLifetime(job);
-            var policy = await PolicyAsync(token).ConfigureAwait(false);
+            var policy = await PolicyAsync(token, policySha256: job.PolicySha256).ConfigureAwait(false);
             RequireWholeArticleGrant(policy, job.PlanSha256);
             if (!string.Equals(job.PolicySha256, ChirpPolicyValidation.Hash(policy), StringComparison.Ordinal)
                 || !string.Equals(job.PlanSha256, coverage.PlanSha256, StringComparison.Ordinal) || ChirpPolicyValidation.IsJobExpired(job, clock.GetUtcNow())

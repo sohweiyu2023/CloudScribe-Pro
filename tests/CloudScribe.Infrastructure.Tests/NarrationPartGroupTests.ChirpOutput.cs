@@ -88,9 +88,14 @@ public sealed partial class NarrationPartGroupTests
         Assert.Equal(1, fakeCalls); return (request, outcome);
     }
 
-    private static GenerationCacheTrustContext ChirpTrust(ChirpRequestIntent intent) => new(GoogleGenerationProvider.StableProviderId,
-        intent.Envelope.AccountId, intent.ProjectId, "synthetic-endpoint", "global", GoogleGenerationProvider.SynthesizeOperationStableId,
-        "synthetic-model", intent.Envelope.VoiceName, "synthetic-fingerprint", "synthetic-plan", "cmn-CN", "synthetic-controls", "MP3",
-        "synthetic-sample", "synthetic-adapter", "synthetic-compiler", "synthetic-ast", "synthetic-normalization",
-        intent.Envelope.PricingProvenanceId, intent.Envelope.CapabilityProvenanceId, "synthetic-governance", "synthetic-feature", "synthetic-account-capability");
+    private static GenerationCacheTrustContext ChirpTrust(ChirpRequestIntent intent)
+    {
+        using var payload = JsonDocument.Parse(intent.CompiledPayload);
+        string language = payload.RootElement.GetProperty("voice").GetProperty("languageCode").GetString()!;
+        return new(GoogleGenerationProvider.StableProviderId,
+            intent.Envelope.AccountId, intent.ProjectId, "synthetic-endpoint", "global", GoogleGenerationProvider.SynthesizeOperationStableId,
+            "synthetic-model", intent.Envelope.VoiceName, "synthetic-fingerprint", "synthetic-plan", language, "synthetic-controls", "MP3",
+            "synthetic-sample", "synthetic-adapter", "synthetic-compiler", "synthetic-ast", "synthetic-normalization",
+            intent.Envelope.PricingProvenanceId, intent.Envelope.CapabilityProvenanceId, "synthetic-governance", "synthetic-feature", "synthetic-account-capability");
+    }
 }

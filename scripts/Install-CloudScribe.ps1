@@ -14,6 +14,9 @@ param(
     [string]$ReviewedLongAudioBuildPlanPath,
     [string]$ReviewedLongAudioBuildPlanSha256,
     [ValidateSet('Install','Resume','Rollback')][string]$LongAudioBuildPhase='Install',
+    [string]$ReviewedAdditiveArticlePlanPath,
+    [string]$ReviewedAdditiveArticlePlanSha256,
+    [ValidateSet('Install','Resume','Rollback')][string]$AdditiveArticlePhase='Install',
     [string]$ReviewedCompletionGatePath,
     [string]$ReviewedCompletionGateSha256,
     [string]$ReviewedCompletionBuildTransitionPath,
@@ -33,6 +36,9 @@ param(
     [switch]$ValidatePackageOnly
 )
 $ErrorActionPreference='Stop'
+if([bool]$ReviewedAdditiveArticlePlanPath -ne [bool]$ReviewedAdditiveArticlePlanSha256){throw 'Additive article admission requires its separately reviewed plan and exact hash.'}
+if($PSBoundParameters.ContainsKey('AdditiveArticlePhase') -and -not $ReviewedAdditiveArticlePlanPath){throw 'Additive article resume/rollback requires the original plan.'}
+if($ReviewedAdditiveArticlePlanPath -and @($PSBoundParameters.Keys|Where-Object {$_ -cnotin @('PackageRoot','ReviewedAdditiveArticlePlanPath','ReviewedAdditiveArticlePlanSha256','AdditiveArticlePhase','ValidateOnly')}).Count){throw 'Additive article admission is a separate transaction after the reviewed build-only update.'}
 if([bool]$ReviewedLongAudioBuildPlanPath -ne [bool]$ReviewedLongAudioBuildPlanSha256){throw 'Long Audio build replacement requires its exact independently reviewed plan.'}
 if($PSBoundParameters.ContainsKey('LongAudioBuildPhase') -and -not $ReviewedLongAudioBuildPlanPath){throw 'Long Audio build resume/rollback requires the same reviewed plan.'}
 if($ReviewedLongAudioBuildPlanPath -and @($PSBoundParameters.Keys|Where-Object {$_ -cnotin @('PackageRoot','ReviewedLongAudioBuildPlanPath','ReviewedLongAudioBuildPlanSha256','LongAudioBuildPhase','ValidateOnly')}).Count){throw 'Long Audio build-only replacement cannot combine migration, admission, grant changes or another installation mode.'}
@@ -744,6 +750,15 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
         if($sentence){$planFields.SentenceSuccessor='Object'}
         if($formatted){$planFields.InputFormat='Object'}
         Assert-RecoveryRecord $plan $planFields
+        $neural2=$plan.GetProperty('PlannerVersion').GetString() -ceq 'google-neural2-compiled-boundaries-v1'
+        if($neural2){
+            $language=$plan.GetProperty('LanguageCode').GetString();$voice=$plan.GetProperty('VoiceName').GetString()
+            if([string]::IsNullOrWhiteSpace($language) -or $voice -cnotmatch ('^'+[regex]::Escape($language)+'-Neural2-[A-Z]$') -or
+                $refined -or $sentence -or $formatted -or @($Root.EnumerateObject().Name) -ccontains 'SuccessorGrant' -or
+                @($Root.EnumerateObject().Name) -ccontains 'SentenceRecovery'){
+                throw 'Neural2 full-document admission requires its exact plain-text planner and cannot borrow Chirp recovery.'
+            }
+        }
         if($formatted){Assert-ChirpArticleInputFormat $plan $schema}
         if($sentence){
             if($schema -notin @(2,3,4) -or (-not $formatted -and $plan.GetProperty('PlannerVersion').GetString() -cne 'chirp3-existing-sentence-groups-v1')){throw 'Sentence successor requires its explicit schema and compiler version.'}
@@ -772,8 +787,8 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
             }
             }
         }
-        if(-not $documents.Add($plan.GetProperty('DocumentId').GetGuid()) -or ($plan.GetProperty('SourceScalars').GetInt32() -lt 1 -or $plan.GetProperty('SourceScalars').GetInt32() -gt 1000000) -or (-not $refined -and -not $formatted -and $plan.GetProperty('PlannerVersion').GetString() -cnotin @('chirp3-existing-boundaries-v1','chirp3-existing-sentence-groups-v1')) -or
-            -not $plan.GetProperty('VoiceName').GetString().Contains('-Chirp3-HD-')){throw 'Native article plan identity is incompatible.'}
+        if(-not $documents.Add($plan.GetProperty('DocumentId').GetGuid()) -or ($plan.GetProperty('SourceScalars').GetInt32() -lt 1 -or $plan.GetProperty('SourceScalars').GetInt32() -gt 1000000) -or (-not $neural2 -and -not $refined -and -not $formatted -and $plan.GetProperty('PlannerVersion').GetString() -cnotin @('chirp3-existing-boundaries-v1','chirp3-existing-sentence-groups-v1')) -or
+            (-not $neural2 -and -not $plan.GetProperty('VoiceName').GetString().Contains('-Chirp3-HD-'))){throw 'Native article plan identity is incompatible.'}
         $parts=$plan.GetProperty('Parts');if($parts.GetArrayLength() -lt 1 -or $parts.GetArrayLength() -gt 10000){throw 'Internal coverage count is invalid.'}
         $ordinal=0;$cursor=0;$reusable=[Collections.Generic.HashSet[int]]::new()
         foreach($part in $parts.EnumerateArray()){
@@ -782,7 +797,8 @@ function Assert-ChirpPolicy($Root,[DateTimeOffset]$ValidationTime=[DateTimeOffse
             $range=$part.GetProperty('Range');Assert-ChirpRange $range
             if($range.GetProperty('StartScalar').GetInt32() -ne $cursor){throw 'Internal coverage has a gap or overlap.'};$cursor=$range.GetProperty('EndScalarExclusive').GetInt32()
             if($range.GetProperty('ReusedReceiptSha256').ValueKind -eq [Text.Json.JsonValueKind]::Null){
-                if($part.GetProperty('PayloadSha256').ValueKind -ne [Text.Json.JsonValueKind]::String -or ($part.GetProperty('PayloadBytes').GetInt32() -lt 1 -or $part.GetProperty('PayloadBytes').GetInt32() -gt 5000) -or $cursor-$range.GetProperty('StartScalar').GetInt32() -gt 333){throw 'Internal compiled request is invalid.'}
+                $scalarLimit=333;if($neural2){$scalarLimit=$part.GetProperty('PayloadBytes').GetInt32()}
+                if($part.GetProperty('PayloadSha256').ValueKind -ne [Text.Json.JsonValueKind]::String -or ($part.GetProperty('PayloadBytes').GetInt32() -lt 1 -or $part.GetProperty('PayloadBytes').GetInt32() -gt 5000) -or $cursor-$range.GetProperty('StartScalar').GetInt32() -gt $scalarLimit){throw 'Internal compiled request is invalid.'}
             }else{
                 if($part.GetProperty('PayloadSha256').ValueKind -ne [Text.Json.JsonValueKind]::Null -or $part.GetProperty('PayloadBytes').GetInt32() -ne 0){throw 'Accepted coverage cannot be regenerated.'};$null=$reusable.Add($ordinal)
             }
@@ -1362,7 +1378,22 @@ function Invoke-ReviewedLongAudioBuild([string]$InstallRoot,[string]$ProfileRoot
         if(-not (Test-Path -LiteralPath $module -PathType Leaf)){throw 'The tested build-only Long Audio updater is absent from this package.'}
         . $module
     }
+    foreach($name in @('Admission.Validation.ps1','Admission.Transaction.ps1','BuildRebind.ps1')){
+        $module=Join-Path $package ('app/tools/article-admission/'+$name);Assert-NoLinks $module
+        if(-not (Test-Path -LiteralPath $module -PathType Leaf)){throw 'The additive-preserving build updater is absent from this package.'};. $module
+    }
     Invoke-LABuildRebind $InstallRoot $ProfileRoot $package $PlanPath $PlanSha $Phase
+}
+function Invoke-ReviewedAdditiveArticle([string]$InstallRoot,[string]$ProfileRoot,[string]$PlanPath,[string]$PlanSha,[string]$Phase){
+    foreach($name in @('Provisioning.Files.ps1','Replacement.Scope.ps1','Deferred.Scope.ps1','Provisioning.Scope.ps1','Provisioning.Transaction.ps1','BuildRebind.Validation.ps1')){
+        $module=Join-Path $package ('app/tools/long-audio/'+$name);Assert-NoLinks $module
+        if(-not (Test-Path -LiteralPath $module -PathType Leaf)){throw 'The tested additive installer helper closure is absent.'};. $module
+    }
+    foreach($name in @('Admission.Validation.ps1','Admission.Transaction.ps1','BuildRebind.ps1')){
+        $module=Join-Path $package ('app/tools/article-admission/'+$name);Assert-NoLinks $module
+        if(-not (Test-Path -LiteralPath $module -PathType Leaf)){throw 'The tested additive installer helper closure is absent.'};. $module
+    }
+    Invoke-AAAdmission $InstallRoot $ProfileRoot $PlanPath $PlanSha $Phase
 }
 if($CompletionFunctionsOnly){return}
 foreach($required in @('app/CloudScribe.exe','app/CloudScribe.dll','app/appsettings.json','runtime/dotnet.exe','LICENSE','THIRD-PARTY-NOTICES.md','licenses/third-party/components.json')){
@@ -1419,6 +1450,12 @@ if(Test-Path -LiteralPath $target){
     $oldSettings=Get-Content -LiteralPath (Join-Path $target 'app/appsettings.json') -Raw | ConvertFrom-Json
     $profile=$oldSettings.CloudScribe.AppDataDirectoryOverride
 }
+if($ReviewedAdditiveArticlePlanPath){
+    if(-not $profile){throw 'Additive article admission requires the existing managed profile.'}
+    $phase=if($ValidateOnly){'Inspect'}else{$AdditiveArticlePhase}
+    Invoke-ReviewedAdditiveArticle $target $profile $ReviewedAdditiveArticlePlanPath $ReviewedAdditiveArticlePlanSha256 $phase
+    return
+}
 if($ReviewedLongAudioBuildPlanPath){
     if(-not $profile){throw 'Build-only Long Audio replacement requires the managed existing profile.'}
     $phase=if($ValidateOnly){'Inspect'}else{$LongAudioBuildPhase}
@@ -1434,6 +1471,7 @@ if($ReviewedLongAudioScopePath){
 if($identity -and $identity.PSObject.Properties['GoogleLongAudioScopeSha256']){
     throw 'Long Audio authority/history is installed. Ordinary replacement needs a reviewed Long Audio rebind or verified pre-effect rollback; it will not silently discard the scope.'
 }
+if(Test-Path -LiteralPath (Join-Path $target 'chirp-article-admissions')){throw 'Additional article authority or audit exists. Use its reviewed preserving build update; ordinary replacement cannot discard it.'}
 $migration=$null
 if($MigrateProfileFrom){
     if($profile){throw 'A profile is already configured. Omit MigrateProfileFrom when updating.'}

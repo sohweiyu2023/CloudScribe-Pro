@@ -2,6 +2,23 @@
 
 All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in the app are estimates and safety holds, never a Google bill.
 
+## 1.0.5 (8 November 2026)
+
+Full-document voice comparison and separately reviewed additive admissions. Exact source, voice, pricing and spending approvals remain required; selecting a voice or reviewing a document never starts synthesis.
+
+### Longer voice comparisons
+- **Use selected voice in Studio** is independent of the short-sample text and family, so a current connected voice can be selected even when that box is empty or over 500 characters.
+- **Review full document with this voice** uses a saved, nonempty Studio document for supported Neural2 and Chirp 3 HD voices. The separate 1-to-500-character sample flow remains limited to Standard, WaveNet and Neural2 and retains its own exact approval.
+- Compare identical text using a distinct saved document for each voice, with separate exact admissions and approvals. A selected/admitted voice mismatch gives explicit guidance instead of proceeding under another voice's authority. Existing documents, audio and jobs remain intact.
+- Neural2 uses the new `google-neural2-compiled-boundaries-v1` plain-text MP3 planner. Each serialized request, including JSON escaping and fields, fits the 5,000-byte ceiling; lossless boundaries preserve Unicode text elements, whitespace, order and the final cutoff. Unfit indivisible input fails closed.
+- Full-document planning adds no arbitrary short-document limit. Existing resource bounds of 1,000,000 Unicode scalars and 10,000 coverage parts, provider restrictions, expiry and spending gates remain. Legacy Chirp versions, plan hashes and its 333-scalar boundary heuristic are unchanged. Ordinary batch planning selects the Neural2 byte planner or the existing Chirp sentence planner by family.
+
+### Separate private admission and update continuity
+- A separately reviewed additive installer transaction can admit the exact new comparison documents without replacing older policies, financial caps, holds, histories or accepted audio. Immutable catalog entries and receipts are published before the registry; existing installation-marker authority is not rewritten.
+- Additive admission is separate from a build-only transition. Interrupted work resumes only its exact reviewed plan; rollback is limited to an unpublished transaction, preserving audit history. Published admission is not removed merely because it appears unused.
+- Later version-3 build-only plans explicitly pin an existing additive catalog and append a build-binding receipt. Legacy version-1/2 plans refuse the catalog rather than discarding it. Private catalogs and evidence remain excluded from clean packages.
+- Application product/file versions move to 1.0.5/1.0.5.0. `AssemblyVersion` stays 1.0.0.0 and historical Stage8 governance remains unchanged.
+
 ## 1.0.4 (8 November 2026)
 
 Batch window usability, optional URL skipping and safety follow-up. Spending rules, caps and explicit approvals stay unchanged.

@@ -78,7 +78,10 @@ public sealed class BatchAdmissionRequestBuilder(IDocumentLibrary library, TimeP
         if (!engines.Contains(BatchEngines.CompleteArticle, StringComparer.Ordinal))
             return new(item.ItemId, item.Order, item.SourceSha256, item.Characters, document.Id, item.RevisionId!.Value, null, string.Empty, 0, 0, false, false,
                 (why ?? "No allowed engine can take this file.") + " Remove it, or allow the ordinary engine in the batch profile.", null, null);
-        var compiled = ChirpArticlePlanCompiler.CompileSentences(document, batch.Settings.LanguageCode, batch.Settings.VoiceStableId);
+        // Neural2 uses its separately versioned compiled-byte plan. Never change historical Chirp sentence-plan identities.
+        var compiled = GoogleFullDocumentVoiceSupport.IsNeural2(batch.Settings.LanguageCode, batch.Settings.VoiceStableId)
+            ? ChirpArticlePlanCompiler.Compile(document, batch.Settings.LanguageCode, batch.Settings.VoiceStableId)
+            : ChirpArticlePlanCompiler.CompileSentences(document, batch.Settings.LanguageCode, batch.Settings.VoiceStableId);
         long maximum = profile.EstimateMinorUnits(compiled.SourceScalars);
         bool exact = false, needsAdmission = true;
         if (articles is not null)

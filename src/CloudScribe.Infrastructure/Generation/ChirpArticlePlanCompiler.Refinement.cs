@@ -16,6 +16,7 @@ public static partial class ChirpArticlePlanCompiler
     {
         ArgumentNullException.ThrowIfNull(refinement); ArgumentNullException.ThrowIfNull(verifiedReuse);
         var parent = refinement.Parent;
+        if (parent is not null) GoogleFullDocumentVoiceSupport.RequireChirpRecovery(parent.LanguageCode, parent.VoiceName);
         bool sentenceMarked = refinement.SentenceMarkers is not null;
         if (parent is null || parent.InputFormat is not null || parent.Refinement is not null || parent.SentenceSuccessor is not null && !sentenceMarked || refinement.FailedAuthorizationId == Guid.Empty
             || !Guid.TryParseExact(refinement.FailedLocalAttemptId, "N", out _)

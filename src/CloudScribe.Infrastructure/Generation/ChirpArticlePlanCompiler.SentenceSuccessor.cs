@@ -11,6 +11,7 @@ public static partial class ChirpArticlePlanCompiler
     public static ChirpArticlePlanProposal CompileSentences(DocumentSnapshot document, string language, string voice,
         IReadOnlyList<ChirpNarrationReuse>? verifiedReuse = null, ChirpArticleInputFormat? inputFormat = null)
     {
+        GoogleFullDocumentVoiceSupport.RequireChirpRecovery(language, voice);
         var reuse = verifiedReuse ?? [];
         var original = Compile(document, language, voice, reuse);
         return CompileSentenceParts(document, original, reuse, null, inputFormat);
@@ -21,6 +22,7 @@ public static partial class ChirpArticlePlanCompiler
         IReadOnlyList<ChirpNarrationReuse> verifiedReuse, ChirpArticleInputFormat? inputFormat = null)
     {
         ArgumentNullException.ThrowIfNull(parent); ArgumentNullException.ThrowIfNull(verifiedReuse);
+        GoogleFullDocumentVoiceSupport.RequireChirpRecovery(parent.LanguageCode, parent.VoiceName);
         if (parent.InputFormat is not null || parent.SentenceSuccessor is not null || parent.Refinement?.Parent.Refinement is not null
             || inputFormat is null && parent.Refinement?.SentenceMarkers is not null)
             throw new InvalidOperationException("Sentence successor depth exceeds its reviewed bound.");

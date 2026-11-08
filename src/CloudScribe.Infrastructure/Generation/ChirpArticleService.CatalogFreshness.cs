@@ -9,7 +9,7 @@ public sealed partial class ChirpArticleService
     public async Task RequireUnreservedCatalogRefreshAsync(ChirpWholeArticleJob expected, int ordinal,
         ChirpArticleRecoveryChild? child, CancellationToken token = default)
     {
-        var policy = await PolicyAsync(token).ConfigureAwait(false);
+        var policy = await PolicyAsync(token, policySha256: expected.PolicySha256).ConfigureAwait(false);
         using var context = await factory.CreateDbContextAsync(token).ConfigureAwait(false);
         var connection = (SqliteConnection)context.Database.GetDbConnection(); await connection.OpenAsync(token).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: true);

@@ -5,16 +5,32 @@ namespace CloudScribe.Infrastructure.Generation;
 
 public sealed partial class ChirpArticleService
 {
-    private static async Task<CurrentFinancial> ReadFinancialAsync(SqliteConnection connection, SqliteTransaction transaction,
+    private async Task<CurrentFinancial> ReadFinancialAsync(SqliteConnection connection, SqliteTransaction transaction,
         ChirpArticleAdmissionPolicy policy, CancellationToken token)
     {
         var old = await RecoveryFinancialSnapshot.ReadAsync(connection, transaction, token).ConfigureAwait(false);
         var roots = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_attempts", token).ConfigureAwait(false);
         var legacySuccessors = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_successor_attempts", token).ConfigureAwait(false);
         var splits = await ChirpArticleSql.ReadAsync(connection, transaction, "chirp_article_split_attempts", token).ConfigureAwait(false);
+        if (admission is IChirpArticleAdmissionCatalog catalogStore)
+        {
+            await RequireAuthorizationRegistryAsync(connection, transaction, roots.Concat(legacySuccessors).Concat(splits).ToArray(), token).ConfigureAwait(false);
+            var catalog = ChirpArticleAdmissionLookup.Own(await catalogStore.LoadCatalogVerifiedAsync(token).ConfigureAwait(false));
+            ChirpAdditionalAdmissionValidation.RequireValid(catalog, clock.GetUtcNow());
+            if (catalog.Families.Count != 0)
+                return await ReadFinancialUnionAsync(connection, transaction, policy, catalog, old, roots, legacySuccessors, splits, token).ConfigureAwait(false);
+        }
+        return await EvaluateFinancialAsync(connection, transaction, policy, old, roots, legacySuccessors, splits, token).ConfigureAwait(false);
+    }
+
+    private static async Task<CurrentFinancial> EvaluateFinancialAsync(SqliteConnection connection, SqliteTransaction transaction,
+        ChirpArticleAdmissionPolicy policy, RecoveryFinancialSnapshot old, IReadOnlyList<object?[]> roots,
+        IReadOnlyList<object?[]> legacySuccessors, IReadOnlyList<object?[]> splits, CancellationToken token,
+        ChirpAdditionalAdmissionFamily? family = null)
+    {
         var successors = legacySuccessors.Concat(splits).ToArray();
         var attempts = roots.Concat(successors.Select(x => x.Take(18).ToArray())).ToArray();
-        var associations = await AuditRowsAsync(connection, transaction, policy, token).ConfigureAwait(false);
+        var associations = family is null ? await AuditRowsAsync(connection, transaction, policy, token).ConfigureAwait(false) : [];
         var queueExtra = ChirpArticleSql.Extra(old.Queue, policy.Budget.QueueRows, 3);
         ChirpArticleSql.Exact(old.Spend, policy.Budget.SpendRows, 1);
         ChirpArticleSql.Exact(old.Recovery, policy.Budget.RecoveryRows, 1);
@@ -47,7 +63,7 @@ public sealed partial class ChirpArticleService
             throw new InvalidOperationException("Retained project or article allocation ceiling would be exceeded.");
         var scopedSplits = await RequireSplitLimitsAsync(connection, transaction, policy, splits, token).ConfigureAwait(false);
         string digest = FinancialDigest(old, attempts, associations, successors);
-        return new(old, attempts, extra, digest, committed, remaining, additional, roots, successors, scopedSplits);
+        return new(old, attempts, extra, digest, committed, remaining, additional, roots, successors, scopedSplits, family);
     }
 
     private static void ValidateAttempt(ChirpArticleAdmissionPolicy policy, object?[] row,
@@ -107,5 +123,9 @@ public sealed partial class ChirpArticleService
 
     private sealed record CurrentFinancial(RecoveryFinancialSnapshot Old, IReadOnlyList<object?[]> Attempts, object?[][] Extra,
         string Sha256, long ProjectCommitted, long AllocationRemaining, long Additional,
-        IReadOnlyList<object?[]> RootAttempts, IReadOnlyList<object?[]> SuccessorAttempts, IReadOnlyList<object?[]> SplitAttempts);
+        IReadOnlyList<object?[]> RootAttempts, IReadOnlyList<object?[]> SuccessorAttempts, IReadOnlyList<object?[]> SplitAttempts,
+        ChirpAdditionalAdmissionFamily? Family = null, long? AggregateCommitted = null)
+    {
+        internal long RetainedCommitments => AggregateCommitted ?? ProjectCommitted;
+    }
 }
