@@ -31,10 +31,16 @@ public static class LongAudioDialogPresentation
         LongAudioWorkflowStage.JoiningArticle => "Joining the article into one MP3",
         LongAudioWorkflowStage.VerifyingArticle => "Final check of the finished MP3",
         LongAudioWorkflowStage.Completed => "Your MP3 is ready",
-        LongAudioWorkflowStage.Stopped => "Paused: you can resume later",
+        LongAudioWorkflowStage.Stopped => "Stopped: saved job preserved",
         LongAudioWorkflowStage.DeferredGap => "Almost done: one section needs attention",
         _ => "Needs attention",
     };
+
+    public static string CompletedRequestNotice(bool hasDeferredUnknown) => hasDeferredUnknown
+        ? "An earlier request's outcome remains unknown, so its safety hold stays reserved. Your MP3 is verified; nothing needs to be generated again. The hold reserves room under your approved limit and is not a confirmed Google charge."
+        : string.Empty;
+
+    public const string StoppedGuidance = "Stopped. Saved audio and spending records are preserved. Reopen this document to review the saved job; it can continue only when safe. An uncertain request is not resent.";
 
     public static string StepState(int step, int current) =>
         current < 0 ? "not active" : step < current ? "done" : step == current ? "current" : "not started";

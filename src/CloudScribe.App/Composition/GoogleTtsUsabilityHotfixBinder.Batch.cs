@@ -8,6 +8,7 @@ using Avalonia.Platform.Storage;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Batch;
 using CloudScribe.Application.Batch.Authority;
+using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Batch;
 using CloudScribe.Infrastructure.Generation;
 
@@ -62,12 +63,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         if (documentLibrary is null || documentImporter is null || documentPreprocessor is null)
         { model.StatusMessage = "Batch import is unavailable in this build."; return; }
         _batchDialogOpen = true;
-        var store = new FileBatchQueueStore(paths.RootDirectory);
+        var store = new FileBatchQueueStore(paths.RootDirectory, catalogLogger);
         var authority = batchAuthority ?? new InstalledBatchAuthorityStore(AppContext.BaseDirectory, paths.RootDirectory);
         using var session = new BatchSession { Store = store, Gate = new BatchAuthorityGate(authority, store, TimeProvider.System) };
         var importer = new BatchDocumentImporter(documentImporter, documentPreprocessor, documentLibrary, store);
         try
         {
+            BatchDiagnostics.Action(catalogLogger, null, null, BatchDiagnosticOperation.Window, BatchDiagnosticPhase.Requested);
             session.Profile = await session.Gate.LoadProfileAsync().ConfigureAwait(true);
             var dialog = CreateArticleExportDialog();
             dialog.Title = "Batch MP3 from TXT files"; dialog.Width = 920; dialog.Height = 800;
@@ -115,7 +117,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             var up = NewButton("Move up"); var down = NewButton("Move down"); var remove = NewButton("Remove");
             var retry = NewButton("Retry failed file"); var checkAgain = NewButton("Check again"); var skip = NewButton("Skip file");
             ToolTip.SetTip(retry, "Runs the file again through its saved job, so accepted audio is reused. A failed local copy is copied again without new speech.");
-            ToolTip.SetTip(checkAgain, "Asks the saved job what happened. It continues the same job and never sends the file as a new request.");
+            ToolTip.SetTip(checkAgain, BatchDialogPresentation.CheckAgainGuidance);
             var save = NewButton("Add to library and save batch");
             var rehearse = NewButton("Rehearse (no cost)");
             ToolTip.SetTip(rehearse, "Checks each file's real admission and maximum, the output folder, names, audio tools and approval, without contacting Google.");
@@ -211,13 +213,27 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             }
 
             // Every handler is guarded: a disk, permission or concurrency problem is shown here and never closes the app.
-            void On(Button button, Func<Task> action) => button.Click += async (_, _) => await GuardAsync(action).ConfigureAwait(true);
-            async Task GuardAsync(Func<Task> action)
+            void On(Button button, BatchDiagnosticOperation operation, Func<Task> action) =>
+                button.Click += async (_, _) => await GuardAsync(operation, action).ConfigureAwait(true);
+            async Task GuardAsync(BatchDiagnosticOperation operation, Func<Task> action)
             {
-                try { await action().ConfigureAwait(true); }
-                catch (BatchConcurrencyException error) { status.Text = error.Message + " Reopen the batch from Open a saved batch to see its latest state."; }
-                catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-                { status.Text = "That did not complete: " + AudioOutputPresentation.RecoveryAdvice(error) + " Nothing was sent to Google."; }
+                Guid? itemId = list.SelectedIndex >= 0 && list.SelectedIndex < session.Items.Count ? session.Items[list.SelectedIndex].ItemId : null;
+                BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, itemId, operation, BatchDiagnosticPhase.Requested);
+                try
+                {
+                    await action().ConfigureAwait(true);
+                    BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, itemId, operation, BatchDiagnosticPhase.Returned);
+                }
+                catch (BatchConcurrencyException error)
+                {
+                    BatchDiagnostics.Failure(catalogLogger, session.Batch?.BatchId, itemId, operation, error);
+                    status.Text = error.Message + " Reopen the batch from Open a saved batch to see its latest state.";
+                }
+                catch (Exception error) when (BatchDiagnostics.NonFatal(error))
+                {
+                    BatchDiagnostics.Failure(catalogLogger, session.Batch?.BatchId, itemId, operation, error);
+                    status.Text = "That did not complete: " + AudioOutputPresentation.RecoveryAdvice(error) + " Nothing was sent to Google.";
+                }
                 finally { Refresh(); }
             }
 
@@ -271,7 +287,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                             read.Add(await importer.ReadAsync(file.Name, stream, BatchMaximumSourceBytes).ConfigureAwait(true));
                     }
                     catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-                    { read.Add(new(file.Name, string.Empty, 0, null, BatchExclusion.Unreadable)); }
+                    {
+                        BatchDiagnostics.Failure(catalogLogger, session.Batch?.BatchId, null, BatchDiagnosticOperation.AddFiles, error);
+                        read.Add(new(file.Name, string.Empty, 0, null, BatchExclusion.Unreadable));
+                    }
                     session.OutputFolder ??= file.TryGetLocalPath() is { } local ? Path.GetDirectoryName(local) : null;
                 }
                 session.Name ??= folderName ?? $"Batch {DateTime.Now:d MMM yyyy HH:mm}";
@@ -287,12 +306,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     + RenamedText(session.Draft) + " Check the order and output names, then choose Add to library and save batch.";
             }
 
-            On(addFiles, async () =>
+            On(addFiles, BatchDiagnosticOperation.AddFiles, async () =>
             {
                 var files = await dialog.StorageProvider.OpenFilePickerAsync(new() { Title = "Choose TXT files", AllowMultiple = true, FileTypeFilter = [TextFileType] }).ConfigureAwait(true);
                 if (files.Count > 0) await AddAsync(files, null).ConfigureAwait(true);
             });
-            On(addFolder, async () =>
+            On(addFolder, BatchDiagnosticOperation.AddFolder, async () =>
             {
                 var folders = await dialog.StorageProvider.OpenFolderPickerAsync(new() { Title = "Choose a folder of TXT files", AllowMultiple = false }).ConfigureAwait(true);
                 if (folders.Count == 0) return;
@@ -308,7 +327,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 var renamed = BatchPlanner.AssignOutputNames(session.Draft, t => t + ".mp3", OutputExists, session.NumberTracks);
                 session.Draft.Clear(); session.Draft.AddRange(renamed);
             }
-            On(chooseOutput, async () =>
+            On(chooseOutput, BatchDiagnosticOperation.ChooseOutput, async () =>
             {
                 var folders = await dialog.StorageProvider.OpenFolderPickerAsync(new() { Title = "Choose where to save the MP3 files", AllowMultiple = false }).ConfigureAwait(true);
                 if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path) return;
@@ -329,20 +348,20 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 else { session.Draft.Clear(); session.Draft.AddRange(updated); }
                 list.SelectedIndex = updated.ToList().FindIndex(x => x.ItemId == target.ItemId);
             }
-            On(up, () => ChangeOrderAsync((items, x) => BatchPlanner.Move(items, x.ItemId, -1)));
-            On(down, () => ChangeOrderAsync((items, x) => BatchPlanner.Move(items, x.ItemId, 1)));
-            On(remove, () => ChangeOrderAsync((items, x) => BatchPlanner.Remove(items, x.ItemId)));
+            On(up, BatchDiagnosticOperation.Reorder, () => ChangeOrderAsync((items, x) => BatchPlanner.Move(items, x.ItemId, -1)));
+            On(down, BatchDiagnosticOperation.Reorder, () => ChangeOrderAsync((items, x) => BatchPlanner.Move(items, x.ItemId, 1)));
+            On(remove, BatchDiagnosticOperation.Remove, () => ChangeOrderAsync((items, x) => BatchPlanner.Remove(items, x.ItemId)));
             async Task TransitionAsync(Func<NarrationBatch, Guid, NarrationBatch> change, string message)
             {
                 if (session.Batch is not { } batch || list.SelectedIndex < 0 || list.SelectedIndex >= batch.Items.Count) return;
                 session.Batch = await store.SaveAsync(change(batch, batch.Items[list.SelectedIndex].ItemId)).ConfigureAwait(true);
                 status.Text = message; await ReviewAsync().ConfigureAwait(true);
             }
-            On(retry, () => TransitionAsync(BatchQueueRunner.Retry, "The file will run again when you resume. Its saved job is continued, so accepted audio is reused."));
-            On(checkAgain, () => TransitionAsync(BatchQueueRunner.CheckAgain, "The saved job will be checked when you resume. It is never sent again as a new request."));
-            On(skip, () => TransitionAsync(BatchQueueRunner.Skip, "The file is skipped. Any hold it already has stays until reconciled."));
+            On(retry, BatchDiagnosticOperation.Retry, () => TransitionAsync(BatchQueueRunner.Retry, "The file will run again when you resume. Its saved job is continued, so accepted audio is reused."));
+            On(checkAgain, BatchDiagnosticOperation.CheckAgain, () => TransitionAsync(BatchQueueRunner.CheckAgain, BatchDialogPresentation.CheckAgainGuidance));
+            On(skip, BatchDiagnosticOperation.Skip, () => TransitionAsync(BatchQueueRunner.Skip, "The file is skipped. Any hold it already has stays until reconciled."));
 
-            On(save, async () =>
+            On(save, BatchDiagnosticOperation.SaveAndImport, async () =>
             {
                 if (model.TryCaptureBatchVoice(out string? problem) is not { } voice) { status.Text = problem ?? string.Empty; return; }
                 var settings = ShellViewModel.BatchSettingsFor(voice, policy.SelectedIndex == 1 ? BatchFailurePolicy.StopBatch : BatchFailurePolicy.SkipAndContinue)
@@ -358,13 +377,15 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 batch = await store.SaveAsync(batch).ConfigureAwait(true);
                 session.Batch = await importer.ImportAsync(batch, session.Texts).ConfigureAwait(true);
                 session.Texts.Clear(); session.Draft.Clear();
-                if (catalogLogger is not null) CloudScribe.Application.Logging.CloudScribeLog.BatchCreated(catalogLogger, session.Batch.BatchId, session.Batch.Items.Count, session.Batch.IncludedCount);
+                if (catalogLogger is not null) CloudScribe.Application.Logging.CloudScribeLog.Observe(() =>
+                    CloudScribe.Application.Logging.CloudScribeLog.BatchCreated(catalogLogger, session.Batch.BatchId,
+                        session.Batch.IncludedCount, session.Batch.Items.Count - session.Batch.IncludedCount));
                 model.RefreshDocumentLibraryAfterBatchImport();
                 await LoadSavedListAsync().ConfigureAwait(true);
                 await ReviewAsync().ConfigureAwait(true);
                 status.Text = $"Saved. {session.Batch!.IncludedCount} documents were added to the library. The batch survives closing the app; reopen it from Open a saved batch.";
             });
-            saved.SelectionChanged += async (_, _) => await GuardAsync(async () =>
+            saved.SelectionChanged += async (_, _) => await GuardAsync(BatchDiagnosticOperation.LoadSaved, async () =>
             {
                 if (session.Running || saved.SelectedItem is not ComboBoxItem { Tag: Guid id }) return;
                 session.Batch = await store.LoadAsync(id).ConfigureAwait(true);
@@ -377,13 +398,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             newBatch.Click += (_, _) =>
             {
                 if (session.Running) return;
+                BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, null, BatchDiagnosticOperation.NewBatch, BatchDiagnosticPhase.Requested);
                 session.Batch = null; session.Request = null; session.Decision = null; session.ReviewText = string.Empty;
                 session.Draft.Clear(); session.Texts.Clear(); session.OutputFolder = null; session.Name = null; saved.SelectedItem = null;
                 status.Text = "New batch. Add TXT files or a folder. The previous batch is still saved."; Refresh();
             };
 
-            On(rehearse, async () => status.Text = await RehearseBatchAsync(session, model).ConfigureAwait(true));
-            On(export, async () =>
+            On(rehearse, BatchDiagnosticOperation.Rehearse, async () => status.Text = await RehearseBatchAsync(session, model).ConfigureAwait(true));
+            On(export, BatchDiagnosticOperation.ExportApproval, async () =>
             {
                 if (session.Request is not { } request) return;
                 if (request.Unnarratable.Any()) { status.Text = "Remove the files that no allowed engine can take before exporting."; return; }
@@ -392,11 +414,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 string path = await BatchAdmissionRequestBuilder.WriteAsync(request, folder).ConfigureAwait(true);
                 status.Text = $"Batch request saved to {path}.\nIt contains hashes and limits, not your text. Installing it once (Install-BatchAuthority.ps1) admits every Long Audio file in it; ordinary-engine files also need their article admission. Then reopen this batch and choose Start.";
             });
-            On(approve, async () =>
+            On(approve, BatchDiagnosticOperation.Approve, async () =>
             {
                 if (session.Batch is not { } batch || session.Request is not { } request || model.TryCaptureBatchVoice(out _) is not { } voice) return;
                 approve.IsEnabled = false;
                 var result = await session.Gate.ApproveInAppAsync(batch, voice.AccountStableId, voice.ProjectStableId, request).ConfigureAwait(true);
+                if (!result.Allowed) BatchDiagnostics.Action(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.Approve, BatchDiagnosticPhase.Rejected);
                 status.Text = result.Allowed ? "Approved. Choose Start when ready." : result.Explanation;
                 await ReviewAsync().ConfigureAwait(true);
             });
@@ -406,17 +429,17 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 session.Active = RunBatchAsync(dialog, model, session, controls, Refresh);
                 Refresh();
             };
-            pause.Click += (_, _) => { session.Runner?.RequestPause(); status.Text = "Pausing after the current file finishes. Nothing new will start."; };
-            stopNow.Click += (_, _) => { session.Run?.Cancel(); status.Text = "Stopping at the next safe point. A request already sent is checked, never resent."; };
-            On(manifest, () =>
+            pause.Click += (_, _) => { BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, null, BatchDiagnosticOperation.Pause, BatchDiagnosticPhase.Requested); session.Runner?.RequestPause(); status.Text = "Pausing after the current file finishes. Nothing new will start."; };
+            stopNow.Click += (_, _) => { BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, null, BatchDiagnosticOperation.Stop, BatchDiagnosticPhase.Requested); session.Run?.Cancel(); status.Text = "Stopping at the next safe point. A request already sent is checked, never resent."; };
+            On(manifest, BatchDiagnosticOperation.WriteManifest, () =>
             {
                 if (session.Batch is not { } batch) return Task.CompletedTask;
                 var (playlist, csv) = BatchManifestWriter.Write(batch);
                 status.Text = $"Wrote {Path.GetFileName(playlist)} and {Path.GetFileName(csv)} in the output folder.";
                 return Task.CompletedTask;
             });
-            close.Click += (_, _) => dialog.Close();
-            dialog.Closing += (_, e) => { if (session.Running) { e.Cancel = true; status.Text = "Pause or stop the batch before closing this window."; } };
+            close.Click += (_, _) => { BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, null, BatchDiagnosticOperation.Close, BatchDiagnosticPhase.Requested); dialog.Close(); };
+            dialog.Closing += (_, e) => { if (session.Running) { BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, null, BatchDiagnosticOperation.Close, BatchDiagnosticPhase.Rejected); e.Cancel = true; status.Text = "Pause or stop the batch before closing this window."; } };
             var clock = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             clock.Tick += (_, _) => { if (session.Running) Refresh(); };
             clock.Start();
@@ -455,9 +478,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             await dialog.ShowDialog(owner).ConfigureAwait(true);
             clock.Stop();
             if (session.Active is { } active) await active.ConfigureAwait(true);
+            BatchDiagnostics.Action(catalogLogger, session.Batch?.BatchId, null, BatchDiagnosticOperation.Window, BatchDiagnosticPhase.Returned);
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { model.StatusMessage = "The batch window could not continue: " + AudioOutputPresentation.RecoveryAdvice(error); }
+        {
+            BatchDiagnostics.Failure(catalogLogger, session.Batch?.BatchId, null, BatchDiagnosticOperation.Window, error);
+            model.StatusMessage = "The batch window could not continue: " + AudioOutputPresentation.RecoveryAdvice(error);
+        }
         finally { _batchDialogOpen = false; }
     }
 
@@ -511,6 +538,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         using var run = new CancellationTokenSource(); // A fresh stop signal for every run, so Resume works after Stop now.
         session.Run = run;
         var status = ui.Status;
+        BatchDiagnostics.Action(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.Run, BatchDiagnosticPhase.Requested);
         try
         {
             if (model.TryCaptureBatchVoice(out string? problem) is not { } voice) { status.Text = problem ?? string.Empty; return; }
@@ -530,14 +558,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                         articleAudio, selection, destination, tools.EncoderPath, () => !model.HasCurrentVoiceLanguageCatalog,
                         token => RefreshBatchSelectionOnUiAsync(model, selection, token), null, catalogLogger, observe, trendHistory, approvedMediaTools: tools),
                     voice);
-                engines[BatchEngines.CompleteArticle] = new CompleteArticleBatchNarrator(session.Gate, workflow, () => (voice.AccountStableId, voice.ProjectStableId));
+                engines[BatchEngines.CompleteArticle] = new CompleteArticleBatchNarrator(session.Gate, workflow, () => (voice.AccountStableId, voice.ProjectStableId), catalogLogger);
             }
             if (longAudioDocuments is not null)
             {
                 string probe = Path.Combine(Path.GetDirectoryName(tools.EncoderPath)!, "ffprobe.exe");
                 var longAudioTools = new GoogleLongAudioMediaTools(tools.EncoderPath, tools.EncoderSha256, probe, tools.ProbeSha256);
                 engines[BatchEngines.LongAudio] = new LongAudioBatchNarrator(session.Gate,
-                    new BatchLongAudioWorkflow(longAudioDocuments, longAudioTools, ui.CaptureConsent.IsChecked == true));
+                    new BatchLongAudioWorkflow(longAudioDocuments, longAudioTools, ui.CaptureConsent.IsChecked == true), catalogLogger);
             }
             var router = new RoutingBatchNarrator(session.Gate, () => (voice.AccountStableId, voice.ProjectStableId), engines);
             session.Runner = new BatchQueueRunner(session.Store, router, TimeProvider.System, catalogLogger);
@@ -560,24 +588,38 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 : "Batch paused. Choose Resume to continue; finished files are kept and nothing finished is sent again.";
             if (session.Batch is { State: BatchQueueState.Finished, CompletedCount: > 0 } done)
             {
-                try { BatchManifestWriter.Write(done); status.Text += " A playlist and summary were written to the output folder."; }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { status.Text += " The playlist could not be written."; }
+                try
+                {
+                    BatchManifestWriter.Write(done);
+                    BatchDiagnostics.Action(catalogLogger, done.BatchId, null, BatchDiagnosticOperation.WriteManifest, BatchDiagnosticPhase.Returned);
+                    status.Text += " A playlist and summary were written to the output folder.";
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    BatchDiagnostics.Failure(catalogLogger, done.BatchId, null, BatchDiagnosticOperation.WriteManifest, error);
+                    status.Text += " The playlist could not be written.";
+                }
             }
         }
-        catch (BatchSettingsChangedException) { status.Text = $"Select the batch's voice ({batch.Settings.VoiceLabel}) again to continue. Nothing was sent."; }
-        catch (BatchNotAuthorizedException error) { status.Text = error.Message; }
-        catch (BatchAlreadyRunningException) { status.Text = "This batch is already running in another window."; }
-        catch (OperationCanceledException) { status.Text = "Stopped. Choose Resume to continue; anything already sent is checked, never resent."; }
+        catch (BatchSettingsChangedException error) { BatchDiagnostics.Failure(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.Run, error); status.Text = $"Select the batch's voice ({batch.Settings.VoiceLabel}) again to continue. Nothing was sent."; }
+        catch (BatchNotAuthorizedException error) { BatchDiagnostics.Failure(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.Run, error); status.Text = error.Message; }
+        catch (BatchAlreadyRunningException error) { BatchDiagnostics.Failure(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.Run, error); status.Text = "This batch is already running in another window."; }
+        catch (OperationCanceledException error) { BatchDiagnostics.Failure(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.Run, error); status.Text = "Stopped. Choose Resume to continue; anything already sent is checked, never resent."; }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
-        { status.Text = "The batch stopped: " + AudioOutputPresentation.RecoveryAdvice(error) + " Finished files are kept; files that may have been sent are marked Needs checking."; }
+        { BatchDiagnostics.Failure(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.Run, error); status.Text = "The batch stopped: " + AudioOutputPresentation.RecoveryAdvice(error) + " Finished files are kept; files that may have been sent are marked Needs checking."; }
         finally
         {
             session.RunClock.Stop();
             session.Current = null; ui.Current.Text = string.Empty;
             session.Run = null;
             try { if (await session.Store.LoadAsync(batch.BatchId).ConfigureAwait(true) is { } latest) session.Batch = latest; }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { status.Text += " The saved batch could not be re-read; reopen it."; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                BatchDiagnostics.Failure(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.LoadSaved, error);
+                status.Text += " The saved batch could not be re-read; reopen it.";
+            }
             session.Active = null; refresh();
+            BatchDiagnostics.Action(catalogLogger, batch.BatchId, null, BatchDiagnosticOperation.Run, BatchDiagnosticPhase.Returned);
         }
     }
 

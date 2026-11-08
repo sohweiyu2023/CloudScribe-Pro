@@ -151,7 +151,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             completed = await refreshOutput().ConfigureAwait(true);
             var initial = await longAudioDocuments.InspectContinuationAsync(review, lifetime.Token).ConfigureAwait(true);
             permitted = initial.Kind != GoogleLongAudioContinuationKind.ReconcileRequired;
-            if (completed) { setup.IsVisible = consent.IsVisible = false; estimate.Text = LongAudioCompletedReviewText(review); status.Text = LongAudioProgressText(new(LongAudioWorkflowStage.Completed, initial.Checkpoint)); ShowStage(LongAudioWorkflowStage.Completed); }
+            if (completed) { setup.IsVisible = consent.IsVisible = false; estimate.Text = LongAudioCompletedReviewText(review); status.Text = LongAudioProgressText(new(LongAudioWorkflowStage.Completed, initial.Checkpoint), review.DeferredUnknownRanges is { Count: > 0 }); ShowStage(LongAudioWorkflowStage.Completed); }
             else if (!permitted) { setup.IsEnabled = consent.IsEnabled = false; status.Text = LongAudioProgressText(new(LongAudioWorkflowStage.Failed, initial.Checkpoint)); ShowStage(LongAudioWorkflowStage.Failed); }
             async Task GenerateAsync()
             {
@@ -166,7 +166,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                         var progress = new Progress<GoogleLongAudioDocumentProgress>(p =>
                         {
                             if (!showing) return;
-                            status.Text = LongAudioProgressText(p); ShowStage(p.Stage);
+                            status.Text = LongAudioProgressText(p, review.DeferredUnknownRanges is { Count: > 0 }); ShowStage(p.Stage);
                             if (p.TotalScalars is > 0 && p.VerifiedScalars is { } saved)
                             {
                                 coverage.IsIndeterminate = false; coverage.Value = Math.Clamp(100d * saved / p.TotalScalars.Value, 0, 100);
@@ -174,7 +174,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                             }
                         });
                         var result = await longAudioDocuments.RunAsync(review, tools, true, control, progress, token).ConfigureAwait(true);
-                        status.Text = LongAudioProgressText(new(result.Stage, result.Outcome.Checkpoint)); ShowStage(result.Stage);
+                        status.Text = LongAudioProgressText(new(result.Stage, result.Outcome.Checkpoint), review.DeferredUnknownRanges is { Count: > 0 }); ShowStage(result.Stage);
                         summaryUnavailable = result.SummaryUnavailable;
                         if (result.Outcome.Artifact is not null || result.ArticleOutput is not null) completed = await refreshOutput().ConfigureAwait(true);
                     }, runCancel.Token).ConfigureAwait(true);

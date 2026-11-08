@@ -35,8 +35,8 @@ Make one MP3 for each of several TXT files with one voice, one review and one ap
     - the approval.
 12. Choose **Start**. Files run one at a time.
     - **Pause after this file** stops before the next file starts.
-    - **Stop now** stops at the next safe point. A request Google already received may still finish and be charged; it is checked, never resent.
-    - **Resume** works after either.
+    - **Stop now** stops at the next safe point. A request Google already received may still finish and be charged. Its saved job is preserved, and an unknown request is never automatically resent.
+    - **Resume** continues the saved job after either, subject to its existing approval and reconciliation checks.
     - When the batch finishes, an ordered playlist (`<name> playlist.m3u8`) and a CSV summary are written to the output folder, never over an existing file.
 
 Amounts are upper limits, estimates and holds, shown in Singapore dollars with the billing currency beside them. They are never a Google bill.
@@ -59,11 +59,17 @@ A file's engine is fixed when it starts and is never switched afterwards, so a c
 - **One run per batch.** A second window or process cannot start the same batch (an in-process gate plus an OS file lock).
 - **Every step is saved before the next.** Saves are atomic (temporary file, flush, replace, keeping a `.bak`), with a revision check. If the main file is ever damaged, the batch loads from the backup and keeps saving. The damaged file is kept beside it as `.damaged-<time>`, never deleted, and a stale copy never overwrites newer progress.
 - **The job is recorded before any paid request.** After that, the file is only continued or reconciled through the same job: the article job, or the Long Audio attempt.
-- **Unknown outcomes are never resent.** Anything that may hide a submitted request becomes **Needs checking**. **Check again** asks the saved job through the engine's own review, which refuses to continue while a request still needs reconciliation.
+- **Unknown outcomes are never resent.** Anything that may hide a submitted request becomes **Needs checking**. **Check again** marks the saved job for rechecking when you choose **Resume**. The engine refuses to continue while reconciliation is required. Without a saved operation ID it cannot ask Google for that request's status; it does not create a replacement request. Completed replacement audio does not resolve an earlier unknown charge or release its retained hold.
 - **Success means verified output.** A file is marked done only after its MP3 in the output folder matches the reported size and SHA-256.
 - **Saved speech is never regenerated.** If only the local copy failed (folder full, file locked, a name appeared), the file shows "speech is saved". **Retry** copies the verified MP3 again with no new request.
 - **Failures stay local.** A failed file never removes or changes finished ones.
-- **Redacted logs.** Events 1640–1645 contain only IDs, counts, fixed reason codes and amounts. They contain no file names, text or paths.
+- **Redacted logs.** Events 1640–1650 retain IDs linking batches, items and jobs, counts, timings, fixed reason codes, safe failure categories/numeric error codes, queue recovery observations, user-action stages, and amounts with currency and decimal scale. They contain no file names, source text, paths, credentials or exception messages. These batch events persist in safe trend history; diagnostic observer failure cannot change narration or cause a retry.
+
+## Support diagnostics and retention
+
+Support ZIPs include regenerated allowlisted routine metadata and permanent safe trend history, including batch events. All records present within each source file's captured byte length are streamed; later appended records belong to a later export. There is no aggregate byte, record-count or recognized-log-file cutoff. `SupportBundleMaximumMiB` remains accepted for configuration compatibility but no longer limits safe exports. `SupportBundleMaximumFileCount` only guards an unexpectedly cluttered directory of non-exportable entries.
+
+This is safe metadata, not an archive of everything. Routine logs still rotate, and private provider captures keep their separate consent and 24-hour logical expiry. Private captures, article text, audio, credentials and databases are excluded from support ZIPs. Malformed, incomplete, unsafe or oversized individual records receive explicit omission markers; schema, record-size and nesting safeguards remain. Export is cancellable, disk errors are reported, and failed or cancelled exports do not publish a partial archive. Original local records are not rewritten by export.
 
 ## Spending authority
 

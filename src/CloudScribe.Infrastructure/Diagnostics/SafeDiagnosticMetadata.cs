@@ -132,6 +132,11 @@ internal static partial class SafeDiagnosticMetadata
         if (string.Equals(key, "DiagnosticCode", StringComparison.OrdinalIgnoreCase)
             && string.Equals(GoogleGenerationOutcomeDiagnostic.Sanitize(text), text, StringComparison.Ordinal))
         { safe = text; return true; }
+        if (string.Equals(key, "CurrencyCode", StringComparison.OrdinalIgnoreCase)
+            && text.Length == 3 && text.All(c => c is >= 'A' and <= 'Z'))
+        { safe = text; return true; }
+        if (string.Equals(key, "ReasonCode", StringComparison.OrdinalIgnoreCase) && BatchReasonCodes.Contains(text))
+        { safe = text; return true; }
         if (string.Equals(key, "CatalogErrorCategory", StringComparison.OrdinalIgnoreCase) && CatalogCategories.Contains(text)
             || string.Equals(key, "SafeCategory", StringComparison.OrdinalIgnoreCase) && StopCategories.Contains(text)
             || string.Equals(key, "Mode", StringComparison.OrdinalIgnoreCase) && text is "offline" or "online")

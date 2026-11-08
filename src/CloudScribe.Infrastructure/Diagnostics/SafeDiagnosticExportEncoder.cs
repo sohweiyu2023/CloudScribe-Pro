@@ -18,7 +18,8 @@ public static partial class SafeDiagnosticExportEncoder
             var root = document.RootElement;
             int nodes = 0;
             if (root.ValueKind != JsonValueKind.Object || !ValidateNode(root, ref nodes)) return Omitted("MalformedRecord");
-            return EncodeObject(root);
+            return !root.TryGetProperty("SchemaVersion", out _) && Integer(root, "Version") == 1
+                ? EncodeTrendObject(root) : EncodeObject(root);
         }
         catch (Exception error) when (error is JsonException or FormatException or InvalidOperationException or OverflowException)
         { return Omitted("MalformedOrLegacyText"); }

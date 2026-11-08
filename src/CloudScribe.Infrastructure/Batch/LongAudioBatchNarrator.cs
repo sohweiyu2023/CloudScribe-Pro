@@ -1,6 +1,8 @@
 using CloudScribe.Application.Batch;
 using CloudScribe.Application.Batch.Authority;
+using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Generation;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Batch;
 
@@ -8,7 +10,7 @@ namespace CloudScribe.Infrastructure.Batch;
 /// is exactly the approved request (attempt, binding) and within its approved ceiling, and records the attempt as the
 /// file's job. A file whose operation needs reconciliation is never resubmitted. A verified MP3 that is already saved is
 /// reused: a failed local copy is retried without new speech.</summary>
-public sealed class LongAudioBatchNarrator(BatchAuthorityGate gate, IBatchLongAudioWorkflow workflow) : IBatchNarrator
+public sealed class LongAudioBatchNarrator(BatchAuthorityGate gate, IBatchLongAudioWorkflow workflow, ILogger? logger = null) : IBatchNarrator
 {
     public Task<(bool Authorized, string Explanation)> CheckAuthorityAsync(NarrationBatch queue, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Use the batch router for authority.");
@@ -29,6 +31,7 @@ public sealed class LongAudioBatchNarrator(BatchAuthorityGate gate, IBatchLongAu
         try { review = await workflow.ReviewAsync(documentId, cancellationToken).ConfigureAwait(false); }
         catch (Exception error) when (error is InvalidOperationException or InvalidDataException or GoogleLongAudioBudgetExceededException)
         {
+            BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.Review, error);
             return started
                 ? new(BatchOutcomeKind.Uncertain, "batch.long-audio-needs-reconciliation", EstimatedMaximumMinorUnits: la.FamilyMaximumUsdCents)
                 : new(BatchOutcomeKind.Failed, "batch.long-audio-not-admitted-nothing-sent", EstimatedMaximumMinorUnits: la.FamilyMaximumUsdCents);
@@ -63,6 +66,7 @@ public sealed class LongAudioBatchNarrator(BatchAuthorityGate gate, IBatchLongAu
         try { await BatchOutputFiles.CopyVerifiedAsync(audio.Path, audio.Sha256, audio.Bytes, destination, cancellationToken).ConfigureAwait(false); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         {
+            BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.VerifyOutput, error);
             // Speech is saved and verified in the profile; Retry copies it again without any new request.
             return new(BatchOutcomeKind.Failed, "batch.local-copy-failed-speech-kept", EstimatedMaximumMinorUnits: la.FamilyMaximumUsdCents, ReservedMinorUnits: held);
         }

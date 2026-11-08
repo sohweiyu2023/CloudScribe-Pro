@@ -45,9 +45,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
 
     private static string LongAudioCompletedReviewText(GoogleLongAudioDocumentReview review) =>
         $"Article: {review.Title}\nSaved revision: {review.RevisionId:N}\nVoice: {review.Request.VoiceName}; {review.Request.LanguageCode}.\n" +
-        $"Retained provision, including prior usage and tax/FX allowance: US${(review.Cost.ProjectedProvisionUsdCents / 100m).ToString("0.00", CultureInfo.InvariantCulture)}. This is not a final invoice. Original WAVs and spending history are preserved.";
+        $"Retained provision, including prior usage and tax/FX allowance: US${(review.Cost.ProjectedProvisionUsdCents / 100m).ToString("0.00", CultureInfo.InvariantCulture)}. This is not a final invoice. Original WAVs and spending history are preserved." +
+        (review.DeferredUnknownRanges is { Count: > 0 } ? "\n" + LongAudioDialogPresentation.CompletedRequestNotice(true) : string.Empty);
 
-    private static string LongAudioProgressText(GoogleLongAudioDocumentProgress progress)
+    private static string LongAudioProgressText(GoogleLongAudioDocumentProgress progress, bool hasDeferredUnknown = false)
     {
         string text = progress.Stage switch
         {
@@ -58,12 +59,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             LongAudioWorkflowStage.JoiningArticle => "All sections are saved. Joining them in order into one MP3 on this computer. No more Google requests are needed.",
             LongAudioWorkflowStage.VerifyingArticle => "Checking the finished MP3 from start to end before enabling Play and Save.",
             LongAudioWorkflowStage.Completed => "Your MP3 is ready. Play it, save a copy or open its folder below. Nothing needs to be generated again.",
-            LongAudioWorkflowStage.Stopped => "Paused. Everything finished so far is saved, including spending records. Open this document again to continue.",
+            LongAudioWorkflowStage.Stopped => LongAudioDialogPresentation.StoppedGuidance,
             LongAudioWorkflowStage.DeferredGap => "One section's request never got an answer from Google, so it is kept aside and not re-sent. The other sections are saved, but the full MP3 needs that section first.",
             _ => "Long Audio stopped. " + LongAudioFailureAdvice(progress.Checkpoint?.FailureKind) + " Keep this job; do not start a duplicate." +
                 $"\nTechnical details: state {progress.Checkpoint?.State}; HTTP {progress.Checkpoint?.HttpStatus}; RPC {progress.Checkpoint?.RpcCode?.ToString(CultureInfo.InvariantCulture) ?? "none"}; " +
                 $"private response saved {progress.Checkpoint?.Observation?.ReadbackVerified}, truncated {progress.Checkpoint?.Observation?.Truncated}, details omitted {progress.Checkpoint?.Observation?.DetailsOmitted}."
         };
+        if (progress.Stage == LongAudioWorkflowStage.Completed && hasDeferredUnknown)
+            text += "\n" + LongAudioDialogPresentation.CompletedRequestNotice(true);
         return progress.VerifiedScalars is { } saved
             ? text + $"\nSaved so far: {saved:N0} of {progress.TotalScalars:N0} characters, in {progress.VerifiedRanges:N0} verified sections."
             : text;

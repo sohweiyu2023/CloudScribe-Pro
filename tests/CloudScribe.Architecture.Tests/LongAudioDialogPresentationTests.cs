@@ -34,4 +34,23 @@ public sealed class LongAudioDialogPresentationTests
     [InlineData(40003004L, "38.1 MB (40,003,004 bytes)")]
     public void SizesAreReadableAndKeepExactBytes(long bytes, string expected) =>
         Assert.Equal(expected, LongAudioDialogPresentation.ReadableSize(bytes));
+
+    [Fact]
+    public void StoppedJobDoesNotPromiseItCanResume()
+    {
+        Assert.Equal("Stopped: saved job preserved", LongAudioDialogPresentation.Headline(LongAudioWorkflowStage.Stopped));
+        Assert.Contains("only when safe", LongAudioDialogPresentation.StoppedGuidance, StringComparison.Ordinal);
+        Assert.Contains("uncertain request is not resent", LongAudioDialogPresentation.StoppedGuidance, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VerifiedOutputDoesNotResolveAnEarlierUnknownRequest()
+    {
+        string text = LongAudioDialogPresentation.CompletedRequestNotice(true);
+        Assert.Contains("outcome remains unknown", text, StringComparison.Ordinal);
+        Assert.Contains("safety hold stays reserved", text, StringComparison.Ordinal);
+        Assert.Contains("MP3 is verified; nothing needs to be generated again", text, StringComparison.Ordinal);
+        Assert.Contains("not a confirmed Google charge", text, StringComparison.Ordinal);
+        Assert.Empty(LongAudioDialogPresentation.CompletedRequestNotice(false));
+    }
 }

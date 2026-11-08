@@ -18,6 +18,12 @@ Use `-ValidatePackageOnly` to check just a clean package, without inspecting ins
 
 The executable and window icon are generated from the existing Studio four-point star by `scripts/New-AppIcon.ps1`. The checked-in multi-resolution ICO is embedded both as a Windows application resource and an Avalonia window resource.
 
+## Installations with Long Audio history
+
+The ordinary installer refuses to replace an installation that already carries Long Audio authority or history. This prevents an application update from silently discarding its scope, spending claims or unresolved request evidence. Use the supported, independently reviewed build-only maintenance path with the exact tested package and genuine candidate-native continuity evidence. Do not delete a scope, marker, ledger or pending guard to force an update.
+
+A build-only transition changes build/source bindings, not approved jobs, spending caps, expiry or permission. It preserves existing deferred evidence and any already-approved regeneration record, retains a closed-profile backup and previous application, and verifies the resulting installation. A historical expiry field alone does not determine validity when an existing completion-bound continuity policy applies; use the current policy validator. New narration or renewed authority remains a separate review.
+
 ## Backup and rollback limits
 
 The installer returns `PreviousInstall`, the exact retained previous application directory. Keep that path and a hash-verified closed-profile backup with the update record. It retains application binaries; it does not create a complete rollback of documents, account metadata, audio, authorizations or budget state. The profile and generated/exported audio remain outside the application directory.

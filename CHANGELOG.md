@@ -20,13 +20,15 @@ All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in
 - **Reliability.**
   - The queue survives restarts and recovers from a damaged queue file, which is kept aside.
   - Duplicate starts are refused.
-  - The job is recorded before any paid request; unknown outcomes are never resent (**Check again** reconciles the same job).
+  - The job is recorded before any paid request; unknown outcomes are never resent (**Check again** queues rechecking of the same job on Resume).
   - Success requires a verified MP3 in the output folder.
   - A failed local copy is retried without regenerating speech.
   - Pause, Stop now, Resume and New batch all work in the same window.
 - **Rehearse (no cost)** checks each file's real admission and exact maximum, a writable output folder, names, audio tools and the approval.
-- **Redacted diagnostics:** events 1640–1645 carry IDs, counts, reason codes and amounts only. The rolling ledger counts other batches' unstarted approved files as well as their holds.
+- **Redacted diagnostics:** events 1640–1650 retain safe IDs, counts, timings, fixed reason codes, failure category/numeric error, queue recovery and user-action stages, plus amount currency/scale. Batch events persist in trend history; each saved job is linked by IDs, and a logging failure cannot interrupt narration. The rolling ledger counts other batches' unstarted approved files as well as their holds.
+- **Complete safe support export:** stream all captured routine records and safe permanent trend history without aggregate byte, record-count or recognized-file limits. Unsafe, malformed or oversized individual records receive explicit omission markers; private captures remain excluded. Failed or cancelled exports do not publish partial archives.
 - **Independent handoff review:** renewing approval replaces only unstarted requests, preserves committed jobs, and counts completed files against batch and rolling limits. Retained jobs are not counted twice against Long Audio headroom. New LINEAR16 approvals include one extra cent for rounding the two children of one split; further recovery remains bounded by the approved family maximum. Malformed approvals are isolated so they cannot hide unrelated committed batch jobs.
+- **Clearer recovery guidance:** Check again marks a saved job for rechecking on Resume; it cannot poll Google without a saved operation ID. Completed replacement audio remains visibly separate from any earlier unknown outcome and retained safety hold.
 - See [docs/BATCH_NARRATION.md](docs/BATCH_NARRATION.md).
 
 ## 1.0.2 (7 November 2026)

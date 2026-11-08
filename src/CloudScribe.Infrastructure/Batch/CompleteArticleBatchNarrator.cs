@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using CloudScribe.Application.Batch;
 using CloudScribe.Application.Batch.Authority;
+using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Generation;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Batch;
 
@@ -9,7 +11,7 @@ namespace CloudScribe.Infrastructure.Batch;
 /// service's own exact review matches the approved plan and stays within the file's approved maximum. A file that
 /// already has a job is only continued through the same reviewed job; a new job is never created for it.</summary>
 public sealed class CompleteArticleBatchNarrator(BatchAuthorityGate gate, IBatchArticleWorkflow workflow,
-    Func<(string AccountStableId, string ProjectStableId)> identity) : IBatchNarrator
+    Func<(string AccountStableId, string ProjectStableId)> identity, ILogger? logger = null) : IBatchNarrator
 {
     public async Task<(bool Authorized, string Explanation)> CheckAuthorityAsync(NarrationBatch queue, CancellationToken cancellationToken = default)
     {
@@ -42,8 +44,9 @@ public sealed class CompleteArticleBatchNarrator(BatchAuthorityGate gate, IBatch
             progress?.Report(new(item.ItemId, "Reviewing the exact plan and maximum", 0, 0));
             ChirpWholeArticleReview review;
             try { review = await workflow.PrepareAsync(documentId, cancellationToken).ConfigureAwait(false); }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException error)
             {
+                BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.Review, error);
                 return existing is null
                     ? new(BatchOutcomeKind.Failed, "batch.article-review-refused-nothing-sent", EstimatedMaximumMinorUnits: approved.MaximumMinorUnits)
                     : new(BatchOutcomeKind.Uncertain, "batch.article-needs-reconciliation", EstimatedMaximumMinorUnits: approved.MaximumMinorUnits);
@@ -76,7 +79,11 @@ public sealed class CompleteArticleBatchNarrator(BatchAuthorityGate gate, IBatch
             string sha = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
             return string.Equals(sha, item.OutputSha256, StringComparison.Ordinal);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return false; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            BatchDiagnostics.Failure(logger, null, item.ItemId, BatchDiagnosticOperation.VerifyOutput, error);
+            return false;
+        }
     }
 
     // Nothing was reserved for this attempt. A file that already had a job keeps it for reconciliation.

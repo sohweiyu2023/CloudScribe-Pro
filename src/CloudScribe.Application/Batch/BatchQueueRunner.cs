@@ -27,7 +27,12 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
     public async Task<NarrationBatch> RunAsync(Guid batchId, string currentSettingsSha256, IProgress<NarrationBatch>? progress = null,
         IProgress<BatchItemProgress>? itemProgress = null, CancellationToken cancellationToken = default)
     {
-        if (!Active.TryAdd(batchId, 0)) throw new BatchAlreadyRunningException();
+        if (!Active.TryAdd(batchId, 0))
+        {
+            var error = new BatchAlreadyRunningException();
+            BatchDiagnostics.Failure(logger, batchId, null, BatchDiagnosticOperation.AcquireRunLock, error);
+            throw error;
+        }
         try
         {
             using var runLock = store.TryAcquireRunLock(batchId) ?? throw new BatchAlreadyRunningException();
@@ -47,7 +52,7 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
             var now = clock.GetUtcNow();
             queue = await SaveAsync(queue with { State = BatchQueueState.Running, ReasonCode = null, FirstStartedUtc = queue.FirstStartedUtc ?? now },
                 progress, cancellationToken).ConfigureAwait(false);
-            if (logger is not null) CloudScribeLog.BatchRunStarted(logger, batchId, queue.IncludedCount, queue.CompletedCount);
+            if (logger is not null) CloudScribeLog.Observe(() => CloudScribeLog.BatchRunStarted(logger, batchId, queue.IncludedCount, queue.CompletedCount));
             var runClock = Stopwatch.StartNew();
             string? stopReason = null;
             try
@@ -76,6 +81,11 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
             }
             return queue;
         }
+        catch (Exception error) when (BatchDiagnostics.NonFatal(error))
+        {
+            BatchDiagnostics.Failure(logger, batchId, null, BatchDiagnosticOperation.Run, error);
+            throw;
+        }
         finally { Active.TryRemove(batchId, out _); }
     }
 
@@ -90,7 +100,7 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
                 if (await narrator.VerifyOutputAsync(item, token).ConfigureAwait(false)) return (queue, null);
                 queue = await SaveAsync(queue.WithItem(item with { State = BatchItemState.Failed, ReasonCode = "batch.output-missing-or-changed" }),
                     progress, token).ConfigureAwait(false);
-                if (logger is not null) CloudScribeLog.BatchItemStopped(logger, queue.BatchId, item.Order, BatchItemState.Failed, "batch.output-missing-or-changed");
+                if (logger is not null) CloudScribeLog.Observe(() => CloudScribeLog.BatchItemStopped(logger, queue.BatchId, item.Order, BatchItemState.Failed, "batch.output-missing-or-changed"));
                 return (queue, queue.Settings.FailurePolicy == BatchFailurePolicy.StopBatch ? "batch.stopped-on-failure" : null);
         }
         if (item.DocumentId is null) throw new InvalidOperationException("A queued file has no imported document.");
@@ -103,7 +113,8 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
             StartedUtc = item.StartedUtc ?? clock.GetUtcNow(),
         };
         queue = await SaveAsync(queue.WithItem(item), progress, token).ConfigureAwait(false);
-        if (logger is not null) CloudScribeLog.BatchItemStarted(logger, queue.BatchId, item.Order, item.JobId is not null);
+        if (logger is not null) CloudScribeLog.Observe(() => CloudScribeLog.BatchItemStarted(logger, queue.BatchId, item.Order, item.JobId is not null));
+        LogJobLink(queue.BatchId, item);
         var clockForItem = Stopwatch.StartNew();
         BatchNarrationOutcome outcome;
         try
@@ -114,6 +125,7 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
                     throw new InvalidOperationException("The narrator reported a different job for a file that already has one.");
                 item = item with { JobId = jobId };
                 queue = await SaveAsync(queue.WithItem(item), progress, CancellationToken.None).ConfigureAwait(false);
+                LogJobLink(queue.BatchId, item);
             }, itemProgress, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested || _pauseRequested)
@@ -122,6 +134,7 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
+            BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.Narrate, error);
             // After a job identity exists, an unexpected failure may hide a submitted request: never assume it was not sent.
             outcome = new(item.JobId is null ? BatchOutcomeKind.Failed : BatchOutcomeKind.Uncertain,
                 item.JobId is null ? "batch.narration-failed-before-start" : "batch.narration-failed-after-start-reconcile");
@@ -132,7 +145,7 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
         if (updated.State == BatchItemState.Completed && !await narrator.VerifyOutputAsync(updated, CancellationToken.None).ConfigureAwait(false))
             updated = updated with { State = BatchItemState.Failed, ReasonCode = "batch.output-not-verified", FinishedUtc = null };
         queue = await SaveAsync(queue.WithItem(updated), progress, CancellationToken.None).ConfigureAwait(false);
-        LogOutcome(queue.BatchId, updated, outcome.ReasonCode, clockForItem.ElapsedMilliseconds);
+        LogOutcome(queue.BatchId, updated, clockForItem.ElapsedMilliseconds);
         string? stop = outcome.Kind switch
         {
             BatchOutcomeKind.Paused => "batch.paused",
@@ -143,11 +156,17 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
         return (queue, stop);
     }
 
-    private void LogOutcome(Guid batchId, BatchItem updated, string reasonCode, long elapsedMilliseconds)
+    private void LogJobLink(Guid batchId, BatchItem item)
+    {
+        if (logger is not null && item.JobId is { } jobId)
+            CloudScribeLog.Observe(() => CloudScribeLog.BatchItemJobLinked(logger, batchId, item.ItemId, item.Order, jobId));
+    }
+
+    private void LogOutcome(Guid batchId, BatchItem updated, long elapsedMilliseconds)
     {
         if (logger is null) return;
-        if (updated.State == BatchItemState.Completed) CloudScribeLog.BatchItemCompleted(logger, batchId, updated.Order, elapsedMilliseconds, updated.OutputBytes);
-        else CloudScribeLog.BatchItemStopped(logger, batchId, updated.Order, updated.State, reasonCode);
+        if (updated.State == BatchItemState.Completed) CloudScribeLog.Observe(() => CloudScribeLog.BatchItemCompleted(logger, batchId, updated.Order, elapsedMilliseconds, updated.OutputBytes));
+        else CloudScribeLog.Observe(() => CloudScribeLog.BatchItemStopped(logger, batchId, updated.Order, updated.State, updated.ReasonCode ?? "none"));
     }
 
     private static BatchItem Apply(BatchItem latest, BatchNarrationOutcome outcome, long elapsedMilliseconds, DateTimeOffset now)
@@ -209,12 +228,13 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
 
     private static void LogSummary(ILogger logger, NarrationBatch queue)
     {
-        if (!logger.IsEnabled(LogLevel.Information)) return;
+        if (!CloudScribeLog.ObserveIsEnabled(logger, LogLevel.Information)) return;
         int failed = queue.Items.Count(x => x.State == BatchItemState.Failed);
         int uncertain = queue.Items.Count(x => x.State == BatchItemState.Uncertain);
         int completed = queue.CompletedCount, included = queue.IncludedCount;
         long estimated = queue.EstimatedMaximumMinorUnits, reserved = queue.ReservedMinorUnits;
-        CloudScribeLog.BatchRunSummary(logger, queue.BatchId, queue.State, completed, failed, uncertain,
-            included, queue.ActiveMilliseconds, estimated, reserved, queue.ReasonCode ?? "none");
+        CloudScribeLog.Observe(() => CloudScribeLog.BatchCostDenomination(logger, queue.BatchId, queue.Currency, queue.CurrencyScale));
+        CloudScribeLog.Observe(() => CloudScribeLog.BatchRunSummary(logger, queue.BatchId, queue.State, completed, failed, uncertain,
+            included, queue.ActiveMilliseconds, estimated, reserved, queue.ReasonCode ?? "none"));
     }
 }

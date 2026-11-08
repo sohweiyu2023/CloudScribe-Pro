@@ -7,6 +7,8 @@ namespace CloudScribe.App.Composition;
 /// <summary>Plain-language text for the batch window. Amounts are estimates and holds, never a bill.</summary>
 public static class BatchDialogPresentation
 {
+    public const string CheckAgainGuidance = "Marks this saved job for rechecking when you resume the batch. It never repeats an uncertain request. Without a saved Google operation ID, CloudScribe cannot check that request with Google; review may still be needed.";
+
     public static string Row(BatchItem item, BatchAuthorityProfile? profile) => Title(item) + "\n      " + Detail(item, profile);
 
     public static string Title(BatchItem item)
@@ -82,10 +84,10 @@ public static class BatchDialogPresentation
     {
         "batch.article-review-refused-nothing-sent" => "this file is not admitted for narration yet; nothing was sent",
         "batch.long-audio-not-admitted-nothing-sent" => "Long Audio has not admitted this file (approval missing, expired or over the cap); nothing was sent",
-        "batch.long-audio-needs-reconciliation" => "its Long Audio request must be checked first; nothing new was sent",
-        "batch.long-audio-stopped-check-again" => "stopped while waiting; Check again continues the same request",
-        "batch.long-audio-failed-check-again" => "Long Audio reported a problem; Check again looks at the same request, it is never resent",
-        "batch.long-audio-output-not-verified" => "the audio is not verified yet; Check again downloads and checks it without new speech",
+        "batch.long-audio-needs-reconciliation" => "its Long Audio request needs review; nothing new was sent. Without a saved Google operation ID, its status cannot be checked with Google",
+        "batch.long-audio-stopped-check-again" => "stopped; saved job preserved. Check again marks it for rechecking when you resume",
+        "batch.long-audio-failed-check-again" => "Long Audio needs attention; Check again marks the saved job for rechecking when you resume. An uncertain request is not resent",
+        "batch.long-audio-output-not-verified" => "the audio is not verified yet; Check again marks the saved job for rechecking when you resume",
         "batch.long-audio-output-not-mp3-speech-kept" => "the saved audio is not an MP3; speech is kept, nothing was resent",
         "batch.local-copy-failed-speech-kept" => "the MP3 could not be copied to the output folder; speech is saved, Retry copies it again with no new request",
         "batch.output-not-verified" => "the MP3 in the output folder did not match; Retry copies the saved audio again",
@@ -150,7 +152,7 @@ public static class BatchDialogPresentation
 
     public static string Authority(BatchAuthorityProfile? profile)
     {
-        if (profile is null) return "Batch narration is not set up on this computer. You can still prepare, rehearse and save batches.";
+        if (profile is null) return "Batch narration is not set up on this computer. You can prepare files now; saving or rehearsing also requires a verified voice.";
         string limits = $"limit {BatchMoney.Format(profile.PerBatchCeilingMinorUnits, profile)} per batch and {BatchMoney.Format(profile.RollingCeilingMinorUnits, profile)} per {profile.RollingWindowDays} days";
         return profile.Mode switch
         {

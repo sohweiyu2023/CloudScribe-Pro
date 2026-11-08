@@ -106,4 +106,26 @@ public sealed class BatchDialogPresentationTests
         Assert.Equal(BatchEngines.LongAudioFirst, BatchDialogPresentation.EngineForChoice(0));
         Assert.Equal(BatchEngines.CompleteArticle, BatchDialogPresentation.EngineForChoice(1));
     }
+
+    [Theory]
+    [InlineData("batch.long-audio-stopped-check-again")]
+    [InlineData("batch.long-audio-failed-check-again")]
+    [InlineData("batch.long-audio-output-not-verified")]
+    public void CheckAgainDefersTheSavedJobCheckUntilResume(string reason)
+    {
+        Assert.Contains("when you resume", BatchDialogPresentation.Reason(reason), StringComparison.Ordinal);
+        Assert.Contains("when you resume the batch", BatchDialogPresentation.CheckAgainGuidance, StringComparison.Ordinal);
+        Assert.Contains("never repeats an uncertain request", BatchDialogPresentation.CheckAgainGuidance, StringComparison.Ordinal);
+        Assert.Contains("cannot check that request with Google", BatchDialogPresentation.CheckAgainGuidance, StringComparison.Ordinal);
+        Assert.Contains("Without a saved Google operation ID", BatchDialogPresentation.Reason("batch.long-audio-needs-reconciliation"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnconfiguredAuthorityDoesNotPromiseOfflineSaveOrRehearsal()
+    {
+        string text = BatchDialogPresentation.Authority(null);
+        Assert.Contains("prepare files now", text, StringComparison.Ordinal);
+        Assert.Contains("saving or rehearsing also requires a verified voice", text, StringComparison.Ordinal);
+    }
+
 }
