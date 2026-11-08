@@ -141,8 +141,14 @@ public static class CompositionRoot
 
     private static void RegisterLongAudio(IServiceCollection services)
     {
+        // Batch approvals may add Long Audio jobs within the installed scope and cap (see docs/BATCH_NARRATION.md).
+        services.AddSingleton(provider => new CloudScribe.Infrastructure.Batch.InstalledBatchAuthorityStore(AppContext.BaseDirectory,
+            provider.GetRequiredService<AppPaths>().RootDirectory));
+        services.AddSingleton(provider => new CloudScribe.Infrastructure.Batch.BatchLongAudioScopeExtensionSource(
+            provider.GetRequiredService<CloudScribe.Infrastructure.Batch.InstalledBatchAuthorityStore>(), provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton(provider => new InstalledGoogleLongAudioStore(AppContext.BaseDirectory,
-            provider.GetRequiredService<AppPaths>(), provider.GetRequiredService<TimeProvider>()));
+            provider.GetRequiredService<AppPaths>(), provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<CloudScribe.Infrastructure.Batch.BatchLongAudioScopeExtensionSource>()));
         services.AddSingleton<GoogleLongAudioAccountReadiness>();
         services.AddSingleton<GoogleLongAudioRuntimeFactory>();
         services.AddSingleton<GoogleLongAudioDocumentService>();

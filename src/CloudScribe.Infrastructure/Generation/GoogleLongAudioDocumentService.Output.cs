@@ -57,7 +57,7 @@ public sealed partial class GoogleLongAudioDocumentService
         GoogleLongAudioVerifiedArtifact artifact, CancellationToken token)
     {
         var admission = new GoogleLongAudioLedgerAdmission(context.ParentPolicyPath, context.ParentPolicySha256,
-            context.ScopePath, context.ScopeSha256, context.LedgerPath, (_, _, _) => ValueTask.CompletedTask, clock);
+            context.ScopePath, context.ScopeSha256, context.LedgerPath, (_, _, _) => ValueTask.CompletedTask, clock).WithExtension(context.Extension);
         await admission.RequireExistingCommitmentAsync(review.Request, token).ConfigureAwait(false);
         string extension = string.Equals(review.Request.AudioEncoding, "MP3", StringComparison.Ordinal) ? ".mp3" : ".wav";
         if (!Directory.Exists(context.OperationsDirectory)) throw new InvalidDataException("The original Long Audio operation journal is missing.");

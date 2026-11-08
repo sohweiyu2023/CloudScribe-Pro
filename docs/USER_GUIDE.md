@@ -1,4 +1,4 @@
-# CloudScribe Pro 1.0.2: setup and everyday use
+# CloudScribe Pro 1.0.3: setup and everyday use
 
 The local usability update adds saved voice setups, remembered choices, offline request inspection and local narration-part preparation. See [Saved setups and local recovery](SAVED_SETUPS_AND_LOCAL_RECOVERY.md) for the updated workflow and persistence details.
 
@@ -56,6 +56,17 @@ The detailed separate prepare/ceiling/approve/generate controls remain in **Adva
 For plain-text Chirp 3 HD requests, the estimate counts Unicode scalar values in the exact input (including whitespace and combining characters) using the admitted character rate. Each request reserves its estimate rounded up to a whole cent, so a multi-part reservation can exceed the unrounded article estimate. Other supported families retain their conservative UTF-8 byte upper bound. The separate 5,000-byte compiled-envelope limit includes JSON escaping and request fields; it is a transport safety limit, not the Chirp billing character count. It ignores free allowances and credits, and excludes tax and currency conversion. Your billing account may use a different currency. Review actual Google billing separately.
 
 Approval is single-use. A new prepared request needs fresh confirmation. Editing text or changing the voice requires a new review. The current synchronous workflow accepts short documents within a conservative 5,000-byte compiled-envelope ceiling; split longer passages into shorter documents. Unknown or unpriced voice families are rejected rather than assigned a guessed rate.
+
+## Many TXT files at once
+
+Use **Create MP3 → Batch MP3 from TXT files…** to make one MP3 per TXT file with one voice and one approval:
+1. Add the files or a folder.
+2. Check the order and the MP3 names.
+3. Choose **Add to library and save batch**.
+4. Get the batch approved.
+5. Choose **Start**.
+
+Finished files are kept if a later file fails, and nothing is ever sent twice. The batch survives closing the app; reopen it from **Open a saved batch**. Setup and approval details are in [BATCH_NARRATION.md](BATCH_NARRATION.md).
 
 ## Save, reopen and troubleshoot
 

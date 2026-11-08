@@ -12,6 +12,7 @@ public sealed partial class GoogleLongAudioLedgerAdmission
         var scope = ChirpPolicyFiles.Parse<GoogleLongAudioBudgetScope>(scopeBytes);
         var parent = ChirpPolicyFiles.Parse<ChirpArticleAdmissionPolicy>(parentBytes);
         ChirpPolicyValidation.RequireValid(parent, clock.GetUtcNow());
+        scope = await ExtendScopeAsync(scope, parent, token).ConfigureAwait(false);
         if (scope.Version != 1 || !Same(scope.ParentPolicySha256, parentSha) || !IsHash(scope.SourceApprovalSha256)
             || !Same(scope.ProjectNumber, request.ProjectNumber) || !Same(scope.CredentialReferenceId, request.CredentialReferenceId)
             || !Same(scope.VoiceName, request.VoiceName) || !Same(scope.LanguageCode, request.LanguageCode) || !Same(scope.AudioEncoding, request.AudioEncoding)
@@ -43,6 +44,17 @@ public sealed partial class GoogleLongAudioLedgerAdmission
             if (descriptor.ExplicitRegeneration is { } regeneration) allApproved = checked(allApproved + regeneration.MaximumUsdCents);
         RequireBudget(scope, parent, allApproved);
         return (scope, parent, ceiling, proof);
+    }
+
+    private async Task<GoogleLongAudioBudgetScope> ExtendScopeAsync(GoogleLongAudioBudgetScope scope, ChirpArticleAdmissionPolicy parent, CancellationToken token)
+    {
+        extensionInEffect = GoogleLongAudioScopeExtension.Empty;
+        if (extensionSource is null || parent.Budget is null || scope.ApprovedRequestCeilingsUsdCents is null) return scope;
+        long fixedCommitments = checked(parent.Budget.ProjectCeilingMinorUnits + scope.TaxFxProvisionUsdCents + GoogleLongAudioScopeExtension.InstalledApprovedUsdCents(scope));
+        var additions = await extensionSource.LoadAsync(scope, scopeSha, ledgerPath, fixedCommitments, token).ConfigureAwait(false);
+        var extended = additions.Apply(scope);
+        extensionInEffect = additions;
+        return extended;
     }
 
     private static long ResolveCeiling(GoogleLongAudioRequest request, GoogleLongAudioBudgetScope scope, GoogleLongAudioRecoveryProvenance? proof)

@@ -2,6 +2,32 @@
 
 All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in the app are estimates and safety holds, never a Google bill.
 
+## 1.0.3 (8 November 2026, not yet released)
+
+### Batch MP3 from TXT files (new)
+- **Create MP3 → Batch MP3 from TXT files…** turns several TXT files, or a folder, into one MP3 each. One voice, one review and one approval cover the batch. Source files are only read; each becomes its own library document, exactly like Import. Files are never merged, and no extra tracks are created.
+- **Long Audio first.** Each file is narrated by Google Long Audio when the installed Long Audio scope can take it (same voice and language, up to 1 MB, fits the cap). The whole file goes as one request and is split only after a confirmed sentence-length failure (existing adaptive recovery), giving one verified MP3. Other files use the ordinary engine. Each file's engine and maximum are shown before approval; an engine is never switched after a file starts.
+- **One approval for the batch.**
+  - In-app (one click) or reviewed (one exported request, installed once with `scripts/Install-BatchAuthority.ps1`).
+  - For Long Audio files, the approval admits each exact request within the installed Long Audio scope's voice, bucket, pricing and total cap, and its ledger. Installed jobs are never affected.
+  - Ordinary-engine files use the service's exact review when they are already admitted, and say clearly when they still need an article admission.
+  - Default limits of about S$25 per batch and S$100 per 30 days cap what an approval may cover; they are never an approval themselves.
+- **Order and names.**
+  - Natural order on first add; files added later keep the arranged order.
+  - Identical text is kept and only noted.
+  - Optional track numbers are never added twice.
+  - Clashing names are reported and resolved with `(n)`; nothing is ever overwritten.
+- **Reliability.**
+  - The queue survives restarts and recovers from a damaged queue file, which is kept aside.
+  - Duplicate starts are refused.
+  - The job is recorded before any paid request; unknown outcomes are never resent (**Check again** reconciles the same job).
+  - Success requires a verified MP3 in the output folder.
+  - A failed local copy is retried without regenerating speech.
+  - Pause, Stop now, Resume and New batch all work in the same window.
+- **Rehearse (no cost)** checks each file's real admission and exact maximum, a writable output folder, names, audio tools and the approval.
+- **Redacted diagnostics:** events 1640–1645 carry IDs, counts, reason codes and amounts only. The rolling ledger counts other batches' unstarted approved files as well as their holds.
+- See [docs/BATCH_NARRATION.md](docs/BATCH_NARRATION.md).
+
 ## 1.0.2 (7 November 2026)
 
 ### Long Audio and article MP3

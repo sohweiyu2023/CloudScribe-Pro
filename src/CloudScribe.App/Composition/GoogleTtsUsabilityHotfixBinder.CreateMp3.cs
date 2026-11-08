@@ -77,6 +77,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }, dialog);
         TextBlock document = Text(string.Empty);
         body.Children.Add(document);
+        AddBatchControl(dialog, body, model);
         bool IsLongArticle() => Encoding.UTF8.GetByteCount(model.DocumentText) >= 4_000;
         WrapPanel actionRow = new() { Orientation = Orientation.Horizontal };
         Button articleAction = AddWholeArticleControl(dialog, actionRow, model);
