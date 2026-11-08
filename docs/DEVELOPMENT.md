@@ -4,6 +4,10 @@ Use this guide for a **source checkout**. The public Windows ZIP contains the ru
 
 These commands target Windows and the current servicing source. They do not configure a provider, access a real profile, approve spending, install over an existing application, or publish a release. "Offline tests" means provider-free: installing tools and restoring NuGet/Python packages can still require Internet access.
 
+## Reusable checked entry points
+
+For a committed candidate, [Verification runners](VERIFICATION_RUNNERS.md) provides one full-suite command that records exact source/tool identity, per-stage logs, failures, skips and blocked checks. The separate native-evidence collector helps check package, process and synthetic fixture integrity; it never substitutes for actual UI, listening, screen-reader or display acceptance. The detailed manual commands below remain available for focused work and diagnosis.
+
 ## 1. Prerequisites and checkout
 
 - Windows. Current CI uses `windows-2025`; do not assume a non-Windows pass covers Windows behavior.
@@ -236,7 +240,7 @@ A runnable build can be published after the Release build using the manual proce
 
 For an actual handoff, follow [clean sharing](SHARING_WINDOWS.md) and [Windows installation/update](WINDOWS_INSTALLATION.md). Inspect the existing installation, close the app normally, preserve the profile and stable shortcut, and complete the required native launch/runtime checks. Never distribute profiles, databases, service-account JSON, credentials, documents, recordings, private admission evidence or rollback folders.
 
-The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.5 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
+The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.6 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
 
 Source verification, compiled tests, offline completion tests, real Windows/native behavior, live provider acceptance and formal certification are distinct evidence. None of these developer commands approves paid calls, retries, production profile changes, an upload or release promotion.
 

@@ -2,6 +2,22 @@
 
 All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in the app are estimates and safety holds, never a Google bill.
 
+## 1.0.6 (unreleased candidate)
+
+Connected voice workflow fixes, versioned bare-domain omission, and reusable verification tools. Existing approvals, expiry, provider limits, financial caps and retained jobs remain authoritative.
+
+### Connected voice identity
+- Opening Create MP3, loading connected comparison voices, applying filters and choosing saved setups retain matching, unexpired capability identity and its original expiry. Explicit refresh remains distinct; changed, missing or expired evidence cannot silently reuse earlier approval.
+- Validate account, project, capability/model metadata, authentication provenance and repeated catalog fingerprints before retaining evidence. Ordinary navigation cannot consume a separately admitted diagnostic refresh.
+- Apply locale before restoring a selected voice, use the real Google provider identity in comparison preparation, and restore cancelled selection only against current matching evidence.
+- Add composed tests using the production Google adapter, SQLite evidence store and synthetic admission/review flow, including reopen, filters, saved setups, expiry, changed metadata, cancellation and retained completed/uncertain work. These tests make no billed synthesis calls.
+
+### Narration copies and verification
+- New URL-omission copies use a versioned v2 policy for explicit web URLs and conservative bare ASCII domains. Existing v1 copies/drafts retain their exact policy and visibly explain when bare domains remain. Originals, copy identities, started jobs and historical approval are not rewritten.
+- Add an exact-commit developer-check runner and a separate read-only native evidence collector. Both record incomplete/blocked checks honestly; file hashes and mocked tests do not certify listening, keyboard, screen-reader or display behavior.
+- Add runner safety self-tests to current CI, including protected paths, package/runtime identity, required loaded modules, file locks, local-only MP3 decoding and environment restoration.
+- Application product/file versions move to 1.0.6/1.0.6.0. AssemblyVersion stays 1.0.0.0. Candidate status does not imply completed native acceptance or publication.
+
 ## 1.0.5 (8 November 2026)
 
 Full-document voice comparison and separately reviewed additive admissions. Exact source, voice, pricing and spending approvals remain required; selecting a voice or reviewing a document never starts synthesis.
