@@ -22,6 +22,8 @@ If Google was configured previously, do not create another account or paste the 
 
 In **Create MP3**, tick **Skip web addresses in narration (keep the original)** and choose **Preview and save narration copy**. Inspect the text, then choose **Save and use narration copy**. The original remains in Library; the new copy opens for its own cost review and approval. The copy is labeled with its omission count and offers **Open original in Studio**. Turning the preparation checkbox off does not restore URLs in an already-open copy. No audio is requested during preparation. If no URLs are found, closing the preview returns to the unchanged text without making a copy.
 
+Escape, **Close** or the window close button dismisses the preview and returns focus to its eligible opener. A copy save already in progress must finish before dismissal; closing alone does not save a copy or approve audio. Batch previews use the same dismissal choices.
+
 A long narration copy offers **Review this copy as a one-file batch** so it can use the existing Long Audio approval route. Choose the output folder and follow the batch review. Existing drafts are protected, and the copy cannot borrow the original's spending approval or article admission.
 
 For several TXT files, use the checkbox and **Preview selected narration text** in **Batch MP3** before saving. The batch keeps each original and reports how many URLs were omitted. A file with no spoken words after omission is skipped locally. Web address detection is conservative; always check the preview for unusual punctuation or ambiguous links. Inline Markdown labels are retained. Existing saved jobs and the separate **Simplify URLs** text-editing option are unchanged.

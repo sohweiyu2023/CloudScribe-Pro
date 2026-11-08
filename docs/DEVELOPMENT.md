@@ -285,6 +285,8 @@ See [Follow-up fixes](FOLLOW_UP_FIXES.md) for the implemented comparison-catalog
 
 Catalog cancellation regressions use a test-only Avalonia.Headless 12.1.4 host with matching transitive Inter fonts. The host is a plain test Application, not production startup. The nonparallel UI collection isolates process-wide Avalonia state; temporary sessions and log overrides are retired after each test. Delayed dependencies exercise Close, Escape, window close, late results, recreated windows, phase cancellation and separate generation/export guards. Production package dependencies are unchanged.
 
+Preview regressions also cover the actual Create MP3 and batch caller routes: focus returns after the caller re-enables its opener, while save-in-progress close guards and batch exclusive ownership remain intact. Both outline layouts assert current list-item automation-peer names after text replacement. These are automated control assertions, not actual screen-reader speech.
+
 Run focused regressions for changed behavior during development, then freeze all source/docs and the regenerated manifest before invoking the full exact-commit developer runner once. Retain its actual totals and skips. Do not report native keyboard, screen-reader, DPI, listening or six-family acceptance from headless and fake-provider tests.
 
 ## Troubleshooting

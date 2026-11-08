@@ -4,9 +4,9 @@
 
 Status: **implemented in an isolated follow-up; native acceptance pending**. The frozen sample-critical 1.0.6 candidate and its installed runtime are unchanged. This is a confirmed pre-existing UX defect, not a regression introduced by 1.0.6.
 
-### Reproduction and impact
+### Baseline reproduction and impact
 
-In the Voices comparison window, begin **Load connected voices / apply locale** or **Refresh connected voices (full verification)** with a delayed catalog dependency. While the operation is busy, Close is disabled and the window Closing handler vetoes dismissal. The generation Stop waiting control does not cancel this operation. The local 30-second timer only requests cooperative cancellation; it is not a guaranteed wall-clock return. The user cannot dismiss a slow lookup immediately.
+In the frozen 1.0.6 baseline Voices comparison window, begin **Load connected voices / apply locale** or **Refresh connected voices (full verification)** with a delayed catalog dependency. While the operation is busy, Close is disabled and the window Closing handler vetoes dismissal. The generation Stop waiting control does not cancel this operation. The local 30-second timer only requests cooperative cancellation; it is not a guaranteed wall-clock return. The user cannot dismiss a slow lookup immediately.
 
 Source: `GoogleTtsUsabilityHotfixBinder.VoiceComparison.cs`, the shared busy wrapper, catalog Load/Refresh handlers, UpdateControls and window Closing handler; `GoogleTtsUsabilityHotfixBinder.VoiceComparison.Presentation.cs`, generation-only Stop waiting binding. Behavior is also present in baseline `68d5b2b9287f52b0696617fd10349dd23140bf98`.
 

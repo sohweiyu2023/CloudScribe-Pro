@@ -11,6 +11,10 @@ Responsive comparison-catalog cancellation and broader offline regression covera
 - Reopened windows share the outstanding-operation guard until cleanup really finishes. Between-phase cancellation checks prevent later work after cancellation, without reclaiming diagnostic claims or automatically retrying.
 - Generation, sample preparation, replay and export retain their own busy-close and exact-approval safeguards. Closing a window does not imply rollback or an uncharged request.
 
+### Preview and outline accessibility
+- Single-document and batch narration previews handle Escape through the normal close path. Their actual callers restore eligible opener focus after re-enabling controls; saving retains its close guard, and save failures remain dismissible.
+- Wide and narrow outline list items expose current paragraph labels and numbers through their accessibility peers instead of view-model type strings. Native screen-reader speech remains to be checked.
+
 ### Offline verification scope
 - Add a bounded deterministic connected-workflow matrix: 27 cases cover 242 feasible pairs from 3,744 valid candidates, with additional rejection and source-edit controls. Tests compose real services over disposable state and fake-only transports; seeded accepted outcomes are not playable audio.
 - Add test-only production-control headless regressions for dismissal, reopen/late-response races, focus state, operation lifetime and cancellation boundaries. Headless focus is not native Windows or assistive-technology acceptance.
