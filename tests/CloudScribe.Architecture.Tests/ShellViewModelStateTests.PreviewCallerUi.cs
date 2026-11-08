@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using CloudScribe.App.Composition;
+using CloudScribe.App.ViewModels;
 using CloudScribe.Infrastructure.Batch;
 
 namespace CloudScribe.Architecture.Tests;
@@ -24,18 +25,7 @@ public sealed partial class ShellViewModelStateTests
         await model.OpenDocumentCommand.ExecuteAsync(document.Id).ConfigureAwait(true);
         model.ConfigureNarrationCopies(new FailingPreviewCopies());
         using var ui = new CatalogComparisonUi(f, model);
-        var shown = new TaskCompletionSource<Window>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var subscription = Window.WindowOpenedEvent.AddClassHandler<Window>((window, _) =>
-        {
-            if (string.Equals(window.Title, "Create MP3", StringComparison.Ordinal)) shown.TrySetResult(window);
-        });
-        Task createClosed = (Task)typeof(GoogleTtsUsabilityHotfixBinder).GetMethod("OpenCreateMp3Async", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(ui.Binder, [ui.Owner, model, false])!;
-        if (await Task.WhenAny(shown.Task, createClosed).WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken).ConfigureAwait(true) == createClosed)
-            await createClosed.ConfigureAwait(true);
-        Window create = await shown.Task.WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken).ConfigureAwait(true);
-        await CatalogIdleAsync(model).WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken).ConfigureAwait(true);
-        Assert.Same(create, Assert.Single(ui.Owner.OwnedWindows));
+        (Window create, Task createClosed) = await OpenCreateMp3ForPreviewAsync(ui, model).ConfigureAwait(true);
         Assert.Single(create.GetLogicalDescendants().OfType<CheckBox>(), check =>
             string.Equals(Avalonia.Automation.AutomationProperties.GetName(check), "Skip web addresses in narration", StringComparison.Ordinal)).IsChecked = true;
         var button = CatalogButton(create, "Preview and save narration copy");
@@ -60,6 +50,23 @@ public sealed partial class ShellViewModelStateTests
         create.Close();
         await createClosed.WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken).ConfigureAwait(true);
     });
+
+    private static async Task<(Window Dialog, Task Closed)> OpenCreateMp3ForPreviewAsync(CatalogComparisonUi ui, ShellViewModel model)
+    {
+        var shown = new TaskCompletionSource<Window>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = Window.WindowOpenedEvent.AddClassHandler<Window>((window, _) =>
+        {
+            if (string.Equals(window.Title, "Create MP3", StringComparison.Ordinal)) shown.TrySetResult(window);
+        });
+        Task closed = (Task)typeof(GoogleTtsUsabilityHotfixBinder).GetMethod("OpenCreateMp3Async", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(ui.Binder, [ui.Owner, model, false])!;
+        if (await Task.WhenAny(shown.Task, closed).WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken).ConfigureAwait(true) == closed)
+            await closed.ConfigureAwait(true);
+        Window dialog = await shown.Task.WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken).ConfigureAwait(true);
+        await CatalogIdleAsync(model).WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken).ConfigureAwait(true);
+        Assert.Same(dialog, Assert.Single(ui.Owner.OwnedWindows));
+        return (dialog, closed);
+    }
 
     [Theory]
     [InlineData("button")]
