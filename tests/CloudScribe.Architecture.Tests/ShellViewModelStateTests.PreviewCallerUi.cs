@@ -33,6 +33,7 @@ public sealed partial class ShellViewModelStateTests
         Assert.True(button.Focus());
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Window preview = Assert.Single(create.OwnedWindows);
+        await ConstrainCallerPreviewAsync(preview).ConfigureAwait(true);
         Assert.False(button.IsEnabled);
         if (saveFailure) CatalogButton(preview, "Save and use narration copy").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         await SettlePreviewFocusAsync(preview, text: true).ConfigureAwait(true);
@@ -93,6 +94,7 @@ public sealed partial class ShellViewModelStateTests
         Assert.True(button.Focus());
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Window preview = Assert.Single(owner.OwnedWindows);
+        await ConstrainCallerPreviewAsync(preview).ConfigureAwait(true);
         Assert.False(button.IsEnabled);
         Assert.True((bool)session.GetType().GetProperty("Busy")!.GetValue(session)!);
         await SettlePreviewFocusAsync(preview, text: true).ConfigureAwait(true);

@@ -12,6 +12,7 @@ Responsive comparison-catalog cancellation and broader offline regression covera
 - Generation, sample preparation, replay and export retain their own busy-close and exact-approval safeguards. Closing a window does not imply rollback or an uncharged request.
 
 ### Preview and outline accessibility
+- Both narration previews scroll their full content at reduced window sizes, keeping Save/Close reachable by keyboard and pointer even with long wrapped summaries. A 320-by-320 minimum prevents unusably small preview windows; native resize acceptance remains a separate check.
 - Single-document and batch narration previews handle Escape through the normal close path. Their actual callers restore eligible opener focus after re-enabling controls; saving retains its close guard, and save failures remain dismissible.
 - Wide and narrow outline list items expose current paragraph labels and numbers through their accessibility peers instead of view-model type strings. Native screen-reader speech remains to be checked.
 

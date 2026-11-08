@@ -41,3 +41,13 @@ The actual Create MP3 and batch callers own restoration after their preview butt
 Both the wide outline panel and narrow outline drawer explicitly bind each generated list item's accessible name to its current paragraph label and paragraph number. This avoids the record's default type/property string without changing navigation offsets or visible labels.
 
 Production controls are checked through the test-only headless host, including repeat preview opening, all three close routes, Escape from the read-only preview text, save-in-progress vetoes, save failure recovery, focus return with eligible versus disabled/detached invokers, and actual automation-peer names after text replacement. These checks do not certify native Windows focus or screen-reader speech. Actual Start Menu shortcut automation remains an operational computer-use limitation, not a source defect; no registry workaround is included.
+
+## Narration preview at reduced window sizes
+
+Status: **layout fix and headless regressions implemented; native retest pending**.
+
+Native inspection of frozen `19e3a4e940f1d7d6e95219614263856f3fb4179a` found that reducing the single-document preview from 623-by-511 to 623-by-447 clipped Close preview completely. Tab reached the invisible control, but the unscrollable stack could not reveal it. That baseline is not release-ready despite its earlier CI results.
+
+Single-document and batch previews now use one shared vertical scroll container around their complete content, with horizontal wrapping and a 320-by-320 minimum window size. Long summaries, save errors and localized action labels can grow without trapping actions below the viewport. Existing Escape, save-in-progress close veto, caller ownership and eligible focus-restoration paths are unchanged.
+
+Eight production-control headless layout cases cover both preview entry points at 623-by-447 and 320-by-320 with ordinary and long localized summaries/action labels. They assert actual control rectangles after Tab scroll-into-view, pointer-wheel access to Close, and a subsequent resize. All eight fail their geometry assertions when compiled against the exact old preview implementation, and pass with the shared scroll container. The seven existing actual Create MP3/batch caller cases also resize to 320-by-320 and check visible Close before exercising dismissal, save failure and restored caller focus. This is not a claim about Windows non-client sizing, OS DPI, native focus rendering or screen-reader speech. Both native entry points still require retesting on the final packaged candidate; earlier native evidence remains baseline evidence only.
