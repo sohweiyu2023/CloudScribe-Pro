@@ -331,7 +331,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
                 await AutoLoadConnectedVoicesAsync(viewModel, windowLifetime.Token).ConfigureAwait(true);
         }
         Update();
-        return RefreshAsync;
+        return ApplyAsync;
     }
 
     private void AddVoiceSelector(StackPanel host, ShellViewModel viewModel, Window? lifetime = null)

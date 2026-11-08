@@ -147,6 +147,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         void OnVoicePreferenceChanged(object? sender, PropertyChangedEventArgs args)
         {
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.VoiceLabLocaleFilter), StringComparison.Ordinal)) locale.Text = model.VoiceLabLocaleFilter;
+            if (string.Equals(args.PropertyName, nameof(ShellViewModel.VoiceLabSearchText), StringComparison.Ordinal)) search.Text = model.VoiceLabSearchText;
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.PreferredVoiceName), StringComparison.Ordinal))
                 remembered.Text = "Remembered voice: " + (model.PreferredVoiceName ?? "none chosen") + ". Loading checks that this voice is still available.";
         }

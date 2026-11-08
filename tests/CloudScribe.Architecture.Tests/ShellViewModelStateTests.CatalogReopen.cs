@@ -58,6 +58,8 @@ public sealed partial class ShellViewModelStateTests
         internal Guid DocumentId { get; } = Guid.NewGuid();
         internal Guid RevisionId { get; } = Guid.NewGuid();
         private readonly List<DocumentAutosaveCoordinator> _autosaves = [];
+        internal CompletionGateConfiguration? DiagnosticConfiguration { get; set; }
+        internal CatalogReopenGateRunner DiagnosticRunner { get; } = new();
 
         private CatalogReopenFixture(AutosaveDiskFixture disk)
         {
@@ -70,7 +72,8 @@ public sealed partial class ShellViewModelStateTests
             var resolver = new CatalogReopenCredential();
             var onboarding = new GoogleServiceAccountCredentialOnboardingService(Vault);
             var catalog = new GoogleVoiceCatalogClient(Http, resolver);
-            Bootstrap = new(onboarding, catalog, new(Http, resolver, Clock), Accounts, Capabilities, projects, Authorizations, Clock);
+            Bootstrap = new(onboarding, catalog, new(Http, resolver, Clock), Accounts, Capabilities, projects, Authorizations, Clock,
+                completionGate: new CompletionWorkflowGate(() => DiagnosticConfiguration, DiagnosticRunner));
             Loader = new(Bootstrap, Accounts);
             var evidence = new VoiceLabCatalogCurrentEvidenceResolver(Accounts, Capabilities, projects, Clock);
             var adapters = new VoiceLabProviderAdapterResolver(new ProviderFactoryRegistry(
