@@ -15,6 +15,8 @@ The **Official voice samples & catalog** link opens Google's prerecorded example
 
 The short MP3 sample flow is intentionally limited to Standard, WaveNet and Neural2. Chirp 3 HD uses the full-document route below rather than this short-sample box. Other catalog families remain visible with official sample links. A catalog name alone does not assert that its request settings, active pricing or synthesis capabilities are usable. The existing generation gates remain authoritative.
 
+While a catalog lookup is running, this comparison window disables **Close**. A slow lookup requests cancellation after 30 seconds, but completion can take longer; there is no separate catalog-cancel button. The generation **Stop waiting** action does not cancel catalog loading.
+
 ## Compare a longer saved document
 
 1. Save the common comparison passage as a **separate Studio document for each voice**, with distinct document identities and the same exact text. Copy the Studio editor text, open **Library > New document**, paste it, give it a different title, and press **Ctrl+S**. For example, compare `en-US-Neural2-D` with `en-US-Chirp3-HD-Aoede` only when those exact voices are in the current connected catalog. A passage intended to last about ten minutes may have different durations in the two voices.

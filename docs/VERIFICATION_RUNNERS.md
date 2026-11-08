@@ -195,6 +195,8 @@ and screen-reader announcements; and W09 real 100/125/150/200 percent scale,
 small/normal windows, long labels and high contrast. Unavailable configurations
 remain NOT RUN or BLOCKED, never assumed equivalent.
 
+Retained comparison-window limitation: catalog Load/Refresh keeps Close disabled while busy and has no user cancel action. Its 30-second timer requests cooperative cancellation, not a guaranteed wall-clock return. Do not report close-during-catalog-load as supported; Create MP3 has a separate cancellation path. Test eventual recovery and focus after completion without weakening generation or diagnostic guards.
+
 Logical library/queue/authorization state and app provider/vault counters are
 explicitly BLOCKED: no supported adapter/instrumentation is implemented. Those
 counts are **null/unknown, not zero**. No provider/vault operations exist in this

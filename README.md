@@ -2,7 +2,7 @@
 
 CloudScribe Pro is a Windows text-to-speech workspace for Google Cloud voices. Write or import a document, review the exact request and its estimated maximum cost, approve it, then create, play and export a verified MP3.
 
-This source contains **CloudScribe Pro 1.0.5**. See the [changelog](CHANGELOG.md) for the current features and [Windows installation guide](docs/WINDOWS_INSTALLATION.md) for preserving an existing setup.
+This source contains **CloudScribe Pro 1.0.6**. See the [changelog](CHANGELOG.md) for the current features and [Windows installation guide](docs/WINDOWS_INSTALLATION.md) for preserving an existing setup.
 
 **[Download for Windows x64](https://files.awakeningtoreality.com/CloudScribe-Windows-x64.zip)** · **[Setup and user guide](docs/USER_GUIDE.md)** · **[Source code](https://github.com/sohweiyu2023/CloudScribe-Pro)**
 
@@ -48,7 +48,7 @@ See [Uninstall and remove your data](docs/USER_GUIDE.md#uninstall-and-remove-you
 
 ## Build and validation
 
-For prerequisites, a first checkout, quick checks, the full test suite, and CI-equivalent offline safety checks, start with the [developer guide](docs/DEVELOPMENT.md).
+For prerequisites, a first checkout, quick checks, the full test suite, and CI-equivalent offline safety checks, start with the [developer guide](docs/DEVELOPMENT.md). The [verification runners](docs/VERIFICATION_RUNNERS.md) provide an exact-commit full-suite entry point and a separate native evidence collector with explicit incomplete-check status.
 
 Building requires the exact SDK in `global.json`, currently **.NET SDK 10.0.402**. See [Windows build and validation](BUILDING-WINDOWS.txt), [installation and updates](docs/WINDOWS_INSTALLATION.md), and [verified release uploads](docs/R2_RELEASE_UPLOADS.md).
 

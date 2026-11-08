@@ -269,11 +269,15 @@ After committing the intended source and manifest, rerun required checks on that
 
 `SESSION_STATE.json` deliberately retains Stage8 **1.0.0** governance while the app is a **1.0.x** servicing release. Do not change that identity to match the executable version.
 
-## URL omission compatibility checks (unreleased v2 servicing source)
+## URL omission compatibility checks (1.0.6)
 
-`NarrationUrlOmission.Transform(text, version)` dispatches only immutable supported policies. New preparations select v2; old copies, imports, settings hashes, provenance and saved previews replay their stored version. Do not migrate approved text, alter `BatchSettings.Sha256`/copy-key formats, update a frozen suffix policy in place or make a network suffix refresh. This branch does not change the published 1.0.5 release.
+`NarrationUrlOmission.Transform(text, version)` dispatches only immutable supported policies. New preparations select v2; old copies, imports, settings hashes, provenance and saved previews replay their stored version. Do not migrate approved text, alter `BatchSettings.Sha256`/copy-key formats, update a frozen suffix policy in place or make a network suffix refresh. The 1.0.5 package uses v1; the 1.0.6 source uses v2 for new preparations without rewriting older saved text.
 
 The original v1 recognition cases are retained with only a v1 type alias. A separate v2 compatibility suite repeats those explicit-URL/Markdown/Unicode/processing-budget cases, with bare-domain preservation differences (including a valid domain containing `www` inside a label) tested separately by version. Additional tests cover bare-domain false positives, adversarial inputs, exact v1/v2 copy reuse, interrupted imports, no-omission v1 identities, draft/session retention, version corruption, consent changes and existing-job recovery. Run focused `NarrationUrlOmission`, `NarrationCopyStoreTests`, `BatchNarrationTests`, `BatchDraftVersionTests` and narration architecture tests, then the full compiled/offline suites under the normal checks above. Focused success is not release certification.
+
+## Tracked follow-up defects
+
+See [Follow-up fixes](FOLLOW_UP_FIXES.md) for the scoped comparison-catalog cancellation defect and its pending test/acceptance requirements. It remains open independently of passing source or mocked tests.
 
 ## Troubleshooting
 

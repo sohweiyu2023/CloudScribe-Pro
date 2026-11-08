@@ -18,9 +18,9 @@ Preview is deliberately literal: recognized web addresses are omitted; inline Ma
 
 If an article has recoverable already-started work but its original has changed, a **Recover already-started work only** review can finish that admitted recovery. Unstarted parts remain blocked, and this action does not promise a complete article MP3.
 
-## Bare domains in the unreleased v2 source change
+## Bare domains in the v2 narration policy
 
-This section describes the draft servicing source, **not the published 1.0.5 Windows package**. New narration preparations use `url-omission-v2`, which also recognizes bare ASCII web addresses such as `84000.co`, `read.84000.co:443/translation?q=one%20two#part` and `example.org`. Explicit HTTP(S)/www handling, ordinary inline Markdown labels and literal whitespace/punctuation preservation remain covered by compatibility tests.
+From 1.0.6, new narration preparations use `url-omission-v2`, which also recognizes bare ASCII web addresses such as `84000.co`, `read.84000.co:443/translation?q=one%20two#part` and `example.org`. Explicit HTTP(S)/www handling, ordinary inline Markdown labels and literal whitespace/punctuation preservation remain covered by compatibility tests.
 
 The v2 bare-domain policy is deliberately small and local:
 
