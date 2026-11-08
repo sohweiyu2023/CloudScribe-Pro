@@ -48,6 +48,8 @@ See [Uninstall and remove your data](docs/USER_GUIDE.md#uninstall-and-remove-you
 
 ## Build and validation
 
+For prerequisites, a first checkout, quick checks, the full test suite, and CI-equivalent offline safety checks, start with the [developer guide](docs/DEVELOPMENT.md).
+
 Building requires the exact SDK in `global.json`, currently **.NET SDK 10.0.402**. See [Windows build and validation](BUILDING-WINDOWS.txt), [installation and updates](docs/WINDOWS_INSTALLATION.md), and [verified release uploads](docs/R2_RELEASE_UPLOADS.md).
 
 The source has 1,300+ compiled mocked/local test methods (2,100+ test cases including theories) plus strict Release build and formatting gates; check results on the exact commit you build. Earlier, as of 21 October 2026, CI passed 718 tests. These are separate from the historical 19 October live check: two short Google Standard MP3 requests passed decoding/export checks, with the first user-confirmed audible; that repair had 662 compiled tests. Neither result is a claim that every voice or long-document workflow has been live-tested. Historical stage certification details remain in the development records.

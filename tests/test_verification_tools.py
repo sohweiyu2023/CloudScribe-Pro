@@ -587,6 +587,22 @@ class DotnetSdkVersionPolicyTests(unittest.TestCase):
             "--msbuild", msbuild,
         )
 
+    def test_windows_launcher_requires_exact_source_sdk(self):
+        sdk = json.loads((ROOT / "global.json").read_text(encoding="utf-8-sig"))["sdk"]
+        launcher = (ROOT / "BUILD-CLOUDSCRIBE-WINDOWS.cmd").read_text(encoding="utf-8-sig")
+        declarations = [
+            line.strip() for line in launcher.splitlines()
+            if line.strip().startswith('set "REQUIRED_DOTNET=')
+        ]
+        self.assertEqual(declarations, [f'set "REQUIRED_DOTNET={sdk["version"]}"'])
+        self.assertEqual(sdk["rollForward"], "disable")
+        self.assertIs(sdk["allowPrerelease"], False)
+        self.assertEqual(
+            launcher.count('if not "%DOTNET_VERSION%"=="%REQUIRED_DOTNET%" goto :wrong_dotnet'),
+            2,
+            "Both installed-SDK and selected-SDK checks must remain fail-closed.",
+        )
+
     def test_accepts_exact_pinned_sdk_and_matching_msbuild(self):
         result = self.run_validator("10.0.302", "10.0.302", "18.6.11.33009")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

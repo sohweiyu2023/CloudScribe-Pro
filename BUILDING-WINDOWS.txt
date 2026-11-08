@@ -15,9 +15,13 @@ graph, builds CloudScribe.App in Release configuration, publishes a runnable
 Windows folder, verifies the expected runtime files, and opens the output folder.
 
 Prerequisites: Windows, exact .NET SDK 10.0.402 selected by global.json,
-PowerShell 7 (pwsh), and Python 3 on PATH. A newer SDK alone is insufficient
-because rollForward is disabled. The launcher builds the app only; it does not
-run the solution test suite or certify a release.
+PowerShell 7 (pwsh), and a working Python 3 on PATH. Python 3.13 is recommended
+because it is tested in current CI; only the .NET SDK is exactly pinned.
+A newer SDK alone is insufficient because rollForward is disabled.
+The launcher builds the app only; it does not run the solution test suite or
+certify a release. For complete developer checks, also install Git and use a
+Git checkout; the verifier self-tests cannot run fully from a source ZIP.
+See docs/DEVELOPMENT.md for tool selection, check scopes and troubleshooting.
 
 The launcher removes an existing sibling CloudScribe-Windows output folder.
 Keep personal files and working installations elsewhere. To preserve an existing
@@ -86,12 +90,17 @@ path characters such as parentheses and literal exclamation marks are preserved.
 
 MANUAL BUILD AND VALIDATION
 -------------------------------
-From the extracted source root:
+The complete step-by-step developer guide is docs/DEVELOPMENT.md. It separates
+quick checks, the compiled solution suite, source/verifier checks and all current
+CI offline completion/installer checks. The commands here are a short reference.
+
+Run from the source root. Use a Git checkout, not just an extracted source ZIP,
+when running the full verifier self-test runner. Stop after any failed command:
 
     dotnet restore CloudScribe.sln --locked-mode --disable-parallel --configfile NuGet.config
     dotnet format CloudScribe.sln --no-restore --verify-no-changes
     dotnet build CloudScribe.sln -c Release --no-restore --disable-build-servers -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
-    dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore
+    dotnet test --solution CloudScribe.sln -c Release --no-build --no-restore --output Detailed
 
 Run source and verifier checks separately:
 
@@ -103,6 +112,13 @@ Run source and verifier checks separately:
     python -B tools/verify_stage2_source.py
     python -B tools/run_python_regression_shards.py --all
     python -B tools/run_verifier_self_tests.py
+
+These source checks supplement the compiled suite. The exact-control verifier
+reports a deferred schema check if jsonschema is absent; exit code zero alone
+then covers identities and the supplied report, not executed schema validation.
+See docs/DEVELOPMENT.md for the isolated, pinned validator dependencies and
+complete current CI safety suites. Long suites can take tens of minutes or more;
+read and retain actual pass/fail/skip totals and do not treat a cancelled run as a pass.
 
 The self-test runner projects a temporary historical Stage4 fixture for its
 Stage4 contracts. Standalone Stage3/Stage4 verifiers expect their historical
@@ -130,7 +146,8 @@ SESSION_STATE.json retains historical Stage8 1.0.0 governance while the app is
 application.
 Historical batch records remain verifier inputs. Superseded handovers and unused
 transport fragments are recoverable from Git history and the external backup.
-Internal article integration additionally uses synthetic admission parser/outer-entry tests:
+For focused internal article integration, these synthetic admission parser/outer-entry tests
+are a subset of the current CI safety checks listed in docs/DEVELOPMENT.md:
   pwsh -NoProfile -File scripts/Test-RecoveryAdmissionPolicy-SelfTests.ps1
   pwsh -NoProfile -File scripts/Test-ChirpArticlePolicy-SelfTests.ps1
   pwsh -NoProfile -File scripts/Test-AdditiveArticleAdmission-SelfTests.ps1
