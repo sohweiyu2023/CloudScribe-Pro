@@ -169,6 +169,7 @@ public sealed partial class ShellViewModelStateTests
         private readonly object? _previousLogDirectory;
         internal MainWindow Owner { get; }
         internal Button Invoker { get; }
+        internal GoogleTtsUsabilityHotfixBinder Binder => _binder;
         internal Window Dialog => Assert.Single(Owner.OwnedWindows);
 
         internal CatalogComparisonUi(CatalogReopenFixture f, ShellViewModel model)

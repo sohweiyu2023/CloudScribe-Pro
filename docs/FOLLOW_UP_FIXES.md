@@ -29,3 +29,13 @@ Bootstrap phases recheck cancellation before the next request or persistence ste
 - Rebuild, run focused regressions and the final relevant full suite on the combined follow-up commit, then observe the actual Windows close/focus behavior. The full aggregate is held for combined review; do not mark W07 close-during-catalog-load PASS until native acceptance is complete.
 
 No provider calls, new credentials, spending increase or production data edits are authorized by this tracking entry.
+
+## Narration preview dismissal and outline accessibility names
+
+Status: **implemented in a separate reviewable follow-up; native acceptance pending**.
+
+Single-document and batch narration previews now handle Escape through their normal close path and restore the eligible control that opened the preview. The single-document copy-save guard still vetoes dismissal while a save is in progress. Closing a preview neither creates a narration copy nor approves or sends audio.
+
+Both the wide outline panel and narrow outline drawer explicitly bind each generated list item's accessible name to its current paragraph label and paragraph number. This avoids the record's default type/property string without changing navigation offsets or visible labels.
+
+Production controls are checked through the test-only headless host, including repeat preview opening, all three close routes, Escape from the read-only preview text, save-in-progress vetoes, save failure recovery, focus return with eligible versus disabled/detached invokers, and actual automation-peer names after text replacement. These checks do not certify native Windows focus or screen-reader speech. Actual Start Menu shortcut automation remains an operational computer-use limitation, not a source defect; no registry workaround is included.

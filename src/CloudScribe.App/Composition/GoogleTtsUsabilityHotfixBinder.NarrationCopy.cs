@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Batch;
 using CloudScribe.Application.Batch.Authority;
@@ -45,8 +46,21 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         };
         dialog.Content = body;
         DialogBounds.Fit(dialog, owner);
-        await dialog.ShowDialog(owner).ConfigureAwait(true);
+        await ShowNarrationPreviewAsync(dialog, owner).ConfigureAwait(true);
         return opened;
+    }
+
+    private static async Task ShowNarrationPreviewAsync(Window dialog, Window owner)
+    {
+        var invoker = owner.FocusManager?.GetFocusedElement() as Control;
+        dialog.KeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Escape) return;
+            args.Handled = true;
+            dialog.Close(); // Closing retains the narration-copy save guard.
+        };
+        try { await dialog.ShowDialog(owner).ConfigureAwait(true); }
+        finally { RestoreDialogInvoker(owner, invoker); }
     }
 
     private static bool BatchDiagnosticsNonFatal(Exception error) =>
@@ -105,7 +119,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             body.Children.Add(NewDescription("No spoken words remain. This file is excluded locally; no request is sent."));
         var close = NewButton("Close preview"); close.Click += (_, _) => dialog.Close(); body.Children.Add(close);
         dialog.Content = body; DialogBounds.Fit(dialog, ctx.Dialog);
-        await dialog.ShowDialog(ctx.Dialog).ConfigureAwait(true);
+        await ShowNarrationPreviewAsync(dialog, ctx.Dialog).ConfigureAwait(true);
     }
 
     private async Task AddSavedNarrationCopyNoticeAsync(Window owner, StackPanel body, ShellViewModel model)
