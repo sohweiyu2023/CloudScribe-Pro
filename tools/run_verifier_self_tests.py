@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_TEST_CLASSES = (
-    ("DotnetSdkVersionPolicyTests", 8),
+    ("DotnetSdkVersionPolicyTests", 9),
     ("PackageScanValidatorTests", 6),
     ("PhysicalDirectoryToolTests", 4),
     ("RepositoryVerifierTests", 5),
