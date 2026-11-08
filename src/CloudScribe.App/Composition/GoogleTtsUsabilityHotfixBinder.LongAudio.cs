@@ -27,6 +27,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
         if (installed?.Scope.DocumentJobs?.Any(x => x.DocumentId == document) != true) return; // No inert control for an unconfigured API.
         var button = NewButton("Review Long Audio and cost");
+        button.Classes.Add("original-document-review");
         button.Click += async (_, _) => await OpenLongAudioAsync(owner, model).ConfigureAwait(true);
         host.Children.Add(button);
     }

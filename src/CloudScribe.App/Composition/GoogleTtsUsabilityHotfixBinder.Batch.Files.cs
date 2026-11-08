@@ -200,6 +200,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         session.Name = draft.Name;
         session.OutputFolder = draft.OutputFolder;
         session.NumberTracks = draft.NumberTracks;
+        session.SkipUrls = draft.SkipUrls;
         session.Policy = draft.FailurePolicy;
         session.EngineChoice = Enumerable.Range(0, BatchDialogPresentation.EngineChoices.Count)
             .FirstOrDefault(i => string.Equals(BatchDialogPresentation.EngineForChoice(i), draft.Engine, StringComparison.Ordinal));
@@ -316,6 +317,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             token.ThrowIfCancellationRequested();
             ReportBatchWork(ctx, "Checking files", i, included.Length);
             var item = included[i];
+            if (item.DocumentId is not null)
+            {
+                await BatchNarrationIdentity.ValidateAsync(documentLibrary!, new("", "", "", "", session.Policy, session.SkipUrls,
+                    session.SkipUrls ? CloudScribe.Application.Documents.NarrationUrlOmission.CurrentVersion : null), item, token).ConfigureAwait(true);
+                continue;
+            }
             var fresh = await ctx.Importer.ReadDraftSourceAsync(item, session.Texts, BatchMaximumSourceBytes, token).ConfigureAwait(true);
             if (!string.IsNullOrWhiteSpace(fresh.Text))
             {
@@ -334,7 +341,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             ctx.Status.Text = $"{missing.Count} file(s) could not be read again: {string.Join(", ", missing.Take(5))}{(missing.Count > 5 ? ", …" : string.Empty)}. They may have been moved, renamed or deleted. Remove them or add them again, then save. Nothing was saved yet.";
             return;
         }
-        var settings = ShellViewModel.BatchSettingsFor(voice, session.Policy) with { Engine = BatchDialogPresentation.EngineForChoice(session.EngineChoice) };
+        var settings = ShellViewModel.BatchSettingsFor(voice, session.Policy) with
+        {
+            Engine = BatchDialogPresentation.EngineForChoice(session.EngineChoice),
+            SkipUrls = session.SkipUrls,
+            UrlTransformVersion = session.SkipUrls ? CloudScribe.Application.Documents.NarrationUrlOmission.CurrentVersion : null
+        };
         ReplaceDraft(session, BatchPlanner.AssignOutputNames(session.Draft, t => t + ".mp3", n => BatchOutputExists(session, n), session.NumberTracks));
         var batch = new NarrationBatch(NarrationBatch.CurrentVersion, Guid.NewGuid(), session.Name ?? "Batch", 0, BatchQueueState.Ready, settings, settings.Sha256(),
             session.OutputFolder, session.Profile?.Currency ?? "USD", session.Profile?.Scale ?? 2,
@@ -361,7 +373,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     private async Task ReviewBatchAsync(BatchContext ctx)
     {
         var session = ctx.Session;
-        session.Request = null; session.Decision = null; session.ReviewText = string.Empty; session.ApprovedMinorUnits = null;
+        session.Request = null; session.Decision = null; session.RunDecision = null; session.ReviewText = string.Empty; session.ApprovedMinorUnits = null;
         session.RehearsalText = string.Empty; // A rehearsal describes the batch as it was; any change needs a new one.
         if (session.Batch is not { } batch) return;
         var consent = await session.Gate.LoadConsentAsync(batch.BatchId).ConfigureAwait(true);
@@ -372,13 +384,22 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         if (!string.Equals(voice.VoiceStableId, batch.Settings.VoiceStableId, StringComparison.Ordinal))
         { session.ReviewText = $"Select this batch's voice ({batch.Settings.VoiceLabel}) to review costs and approval."; return; }
         session.Decision = await session.Gate.CheckAsync(batch, voice.AccountStableId, voice.ProjectStableId).ConfigureAwait(true);
+        session.RunDecision = await session.Gate.CheckRunAsync(batch, voice.AccountStableId, voice.ProjectStableId).ConfigureAwait(true);
+        if (!session.Decision.Allowed && session.Decision.ReasonCode.StartsWith("batch.narration-", StringComparison.Ordinal))
+        {
+            session.ReviewText = session.Decision.Explanation + (session.RunDecision.Allowed
+                ? " Resume can still check selected existing jobs first. Changed files cannot start a new request."
+                : " Existing uncertain jobs remain saved. Select one and choose Check again to check it without starting changed files.");
+            return;
+        }
         if (session.Profile is not { } profile || session.Decision.Allowed || batch.State == BatchQueueState.Finished) return;
         ctx.Status.Text = "Reviewing each file's engine and maximum (no request is sent)…";
         var request = await BatchRequestBuilder(voice).BuildAsync(batch, profile, voice.AccountStableId, voice.ProjectStableId, consent).ConfigureAwait(true);
         session.Request = request;
         session.Batch = await SaveReviewedEnginesAsync(session.Store, batch, request).ConfigureAwait(true);
         int la = request.Items.Count(x => x.LongAudio is not null), ordinary = request.Items.Count(x => string.Equals(x.Engine, BatchEngines.CompleteArticle, StringComparison.Ordinal));
-        session.ReviewText = BatchDialogPresentation.ReviewSummary(la, ordinary, request.NeedingArticleAdmission.Count(), request.Unnarratable.Count(),
+        session.ReviewText = (batch.Settings.SkipUrls ? $"Skip web addresses: {batch.Items.Sum(x => x.NarrationSource?.OmittedUrlCount ?? 0)} URL(s) omitted. Originals are kept; the costs below use the saved narration text. Preview any selected row before approval.\n" : string.Empty)
+            + BatchDialogPresentation.ReviewSummary(la, ordinary, request.NeedingArticleAdmission.Count(), request.Unnarratable.Count(),
             request.TotalEstimatedMaximumMinorUnits, request.LongAudioMaximumUsdCents, request.LongAudioHeadroomUsdCents, profile);
         ctx.Status.Text = "Review ready. Check each row's engine and maximum, then approve.";
     }

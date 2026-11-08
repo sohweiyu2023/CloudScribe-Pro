@@ -18,6 +18,16 @@ Choose **Studio**. Press **Ctrl+N** to create a new document, give it a title, a
 
 If Google was configured previously, do not create another account or paste the key again. Opening **Create MP3** automatically checks the saved connection and loads verified voices; choosing a saved setup reloads and validates its voice too. Wait for loading to finish, then select the exact voice you want. Use the **Language** dropdown to choose a plain-English language name (with its exact code alongside it). Search the language list locally by name or code; open **Voice search (optional)** only when needed, and use **Refresh real Google voices** after changing filters, when evidence becomes stale, or to retry a failed load. This renews the saved connection's authenticated evidence without generating speech.
 
+## Keep URLs in text, skip them in audio
+
+In **Create MP3**, tick **Skip web addresses in narration (keep the original)** and choose **Preview and save narration copy**. Inspect the text, then choose **Save and use narration copy**. The original remains in Library; the new copy opens for its own cost review and approval. The copy is labeled with its omission count and offers **Open original in Studio**. Turning the preparation checkbox off does not restore URLs in an already-open copy. No audio is requested during preparation. If no URLs are found, closing the preview returns to the unchanged text without making a copy.
+
+A long narration copy offers **Review this copy as a one-file batch** so it can use the existing Long Audio approval route. Choose the output folder and follow the batch review. Existing drafts are protected, and the copy cannot borrow the original's spending approval or article admission.
+
+For several TXT files, use the checkbox and **Preview selected narration text** in **Batch MP3** before saving. The batch keeps each original and reports how many URLs were omitted. A file with no spoken words after omission is skipped locally. Web address detection is conservative; always check the preview for unusual punctuation or ambiguous links. Inline Markdown labels are retained. Existing saved jobs and the separate **Simplify URLs** text-editing option are unchanged.
+
+Editing the original blocks fresh requests from its old narration copy, while already-started jobs retain their exact text. A recovery-only article review can recover admitted work but will not complete an MP3 while fresh parts remain blocked. Editing the narration copy itself may also block article progress or export; keep its receipts and accepted audio. To prepare a replacement, save the original text as a new document and preview URL skipping again, or start a new batch from the original TXT. Turning the checkbox off does not restore or repair an edited copy.
+
 ## Set up Google Cloud once
 
 You need your own Google Cloud account, an enabled billing account, a project with Cloud Text-to-Speech enabled, and a service-account JSON key. Google charges your Cloud account; a ChatGPT subscription does not pay these charges.
@@ -59,7 +69,7 @@ Short-request approval is single-use. A new prepared short request needs fresh c
 
 ## Many TXT files at once
 
-Use **Create MP3 → Batch MP3 from TXT files…** to make one MP3 per TXT file with one voice and one approval. The window shows five steps and a **Next:** line:
+Open **Queue** to see the TXT file/folder drop area immediately, or choose **Batch MP3** beside **Create MP3** in the main window. Dropping into Queue opens the batch window and appends to your existing draft without generating audio. The same window is also available from **Create MP3** via **Batch MP3 from TXT files…**. No text in the current Studio document is needed. Make one MP3 per TXT file with one voice and one approval. The window shows five steps and a **Next:** line:
 1. **Files:** drag TXT files or folders into the list (or use **Add TXT files…** / **Add a folder…**). Drag rows, or use Alt+Up / Alt+Down, to set the order; select several rows to move them together. **Undo** (Ctrl+Z) reverses a change. Until you choose **Add to library and save batch**, the list is an unsaved draft that is autosaved locally. Successfully autosaved drafts return after reopening; check the status line for any save error.
 2. **Voice and output:** choose the voice in the window (or **Refresh voices**) and the output folder. Names are never overwritten.
 3. **Review:** choose **Add to library and save batch**, check each file's engine and maximum, then approve the exact batch within its installed authority. For Long Audio files, read and select the separate private-response consent. **Rehearse (no cost)** checks everything and names every problem.

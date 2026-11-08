@@ -1,18 +1,20 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
+using CloudScribe.Application.Documents;
 using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Configuration;
 using CloudScribe.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CloudScribe.Infrastructure.Generation;
 
 /// <summary>Durable request authorization and ordered whole-article execution. Provider access stays in the supplied runtime; accepted or uncertain submissions are never blindly repeated.</summary>
 public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbContext> factory,
     IChirpArticleAdmissionStore admission, AppPaths paths, TimeProvider clock, IChirpReservationResumeAdmissionStore? resumeAdmission = null,
-    CompletionWorkflowGate? completionGate = null)
+    CompletionWorkflowGate? completionGate = null, ILogger<ChirpArticleService>? logger = null, INarrationCopyStore? narrationCopies = null)
 {
     public const string KeyPrefix = "chirp-article:";
     private readonly ConcurrentDictionary<Guid, Pending> _pending = new();
@@ -30,7 +32,7 @@ public sealed partial class ChirpArticleService(IDbContextFactory<CloudScribeDbC
         var connection = (SqliteConnection)context.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: false);
-        var current = await CurrentAsync(connection, transaction, policy, intent, cancellationToken).ConfigureAwait(false);
+        var current = await CurrentFreshArticleAsync(connection, transaction, policy, intent, cancellationToken).ConfigureAwait(false);
         var existing = await FindExistingAsync(connection, transaction, policy, current.Article.Proposal.PlanSha256, intent.CoverageOrdinal, cancellationToken).ConfigureAwait(false);
         var financial = await ReadFinancialAsync(connection, transaction, policy, cancellationToken).ConfigureAwait(false);
         await RequireReadyAsync(connection, transaction, financial, existing?.AuthorizationId, cancellationToken).ConfigureAwait(false);

@@ -9,4 +9,6 @@ public sealed record ChirpWholeArticleReview(Guid PreviewId, string ReviewSha256
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
     long MaximumRecoveryMinorUnits = 0,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
-    bool CompletionBound = false);
+    bool CompletionBound = false,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    int BlockedOrdinaryRequests = 0);

@@ -42,7 +42,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     CloudScribe.Application.Documents.ILocalDocumentImporter? documentImporter = null,
     CloudScribe.Application.Documents.DocumentPreprocessor? documentPreprocessor = null,
     CloudScribe.Infrastructure.Batch.InstalledBatchAuthorityStore? batchAuthority = null,
-    CloudScribe.Infrastructure.Batch.BatchLongAudioScopeExtensionSource? batchLongAudioExtension = null)
+    CloudScribe.Infrastructure.Batch.BatchLongAudioScopeExtensionSource? batchLongAudioExtension = null,
+    CloudScribe.Application.Documents.INarrationCopyStore? narrationCopies = null)
 {
     private static readonly string[] ProviderControlHostNames =
     [
@@ -70,6 +71,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(viewModel);
+        viewModel.ConfigureNarrationCopies(narrationCopies);
         ConfigurePrivateDiagnostics(window, viewModel);
         if (TryMount(window, viewModel))
             return;
@@ -103,10 +105,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             settings.Click += async (_, _) => await OpenWorkspaceSettingsAsync(window, viewModel).ConfigureAwait(true);
         if (mounted && window.FindControl<Button>("CreateMp3Button") is { } create)
             create.Click += async (_, _) => await OpenCreateMp3Async(window, viewModel).ConfigureAwait(true);
+        if (mounted && window.FindControl<Button>("BatchMp3Button") is { } batch)
+            batch.Click += async (_, _) => await OpenBatchAsync(window, viewModel).ConfigureAwait(true);
         if (mounted && window.FindControl<Button>("QuickStartHelpButton") is { } help)
             help.Click += async (_, _) => await OpenQuickStartObservedAsync(window, viewModel).ConfigureAwait(true);
         if (mounted && window.FindControl<Button>("AboutButton") is { } about)
             about.Click += async (_, _) => await CloudScribeAbout.ShowAsync(window).ConfigureAwait(true);
+        if (mounted) MountQueueBatchEntries(window, viewModel);
         if (mounted) AnchoredWalkthrough.Prepare(window);
         if (mounted) viewModel.ArticleExportRequested += (_, _) => _ = OpenArticleExportAsync(window, viewModel);
         if (mounted && preferences.IsFreshProfile && !preferences.State.QuickStartSeen)

@@ -55,6 +55,7 @@ public sealed partial class ChirpArticleService
         {
             PolicySha256 = ChirpPolicyValidation.Hash(policy),
             ReviewSha256 = review.ReviewSha256,
+            NarrationRecoveryOnly = previous.NarrationRecoveryOnly || review.BlockedOrdinaryRequests > 0,
             State = ChirpWholeArticleState.Executing,
             ReasonCode = samePolicy ? "article.reviewed-capture-resume" : "article.reviewed-build-continuation",
             LastObservedAtUtc = clock.GetUtcNow()

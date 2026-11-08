@@ -41,11 +41,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         public string? OutputFolder { get; set; }
         public string? Name { get; set; }
         public bool NumberTracks { get; set; }
+        public bool SkipUrls { get; set; }
         public int EngineChoice { get; set; }
         public BatchFailurePolicy Policy { get; set; } = BatchFailurePolicy.SkipAndContinue;
         public BatchAuthorityProfile? Profile { get; set; }
         public BatchAdmissionRequest? Request { get; set; }
         public BatchAuthorityDecision? Decision { get; set; }
+        public BatchAuthorityDecision? RunDecision { get; set; }
         public long? ApprovedMinorUnits { get; set; }
         public string ReviewText { get; set; } = string.Empty;
         public string RehearsalText { get; set; } = string.Empty;
@@ -68,7 +70,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         public bool AnyStarted => Batch is { } b && b.Items.Any(x => x.JobId is not null || x.State == BatchItemState.Completed);
 
         public BatchDraft ToDraft() => new(BatchDraft.CurrentVersion, Name, OutputFolder, NumberTracks,
-            BatchDialogPresentation.EngineForChoice(EngineChoice), Policy, Draft.ToArray(), DateTimeOffset.UtcNow);
+            BatchDialogPresentation.EngineForChoice(EngineChoice), Policy, Draft.ToArray(), DateTimeOffset.UtcNow, SkipUrls);
 
         public void Dispose() { Store.Dispose(); Work?.Dispose(); }
     }
@@ -102,7 +104,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         public TextBlock Current { get; } = NewDescription(string.Empty);
         public TextBlock Results { get; } = NewDescription(string.Empty);
         public TextBlock DropHint { get; } = NewDescription("Drop TXT files or folders here");
-        public TextBlock EmptyHint { get; } = NewDescription("No files yet. Drag TXT files or folders here, or choose Add TXT files… or Add a folder…. A saved batch opens from the list above.");
+        public StackPanel EmptyHint { get; } = CreateBatchEmptyHint();
         public ProgressBar Overall { get; } = new() { Minimum = 0, Maximum = 100, Height = 12 };
         public ProgressBar Work { get; } = new() { Minimum = 0, Maximum = 100, Height = 8, IsVisible = false };
         public ListBox List { get; } = new()
@@ -125,6 +127,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         public ComboBox Engine { get; } = new() { ItemsSource = BatchDialogPresentation.EngineChoices, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 260 };
         public ComboBox Policy { get; } = new() { ItemsSource = new[] { "If a file fails, skip it and continue", "If a file fails, stop the batch" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 260 };
         public CheckBox Numbering { get; } = new() { Content = NewDescription("Number the MP3 files in this order (01, 02, …). Titles that already start with a number are not numbered twice.") };
+        public CheckBox SkipUrls { get; } = new() { Content = NewDescription("Skip web addresses in narration. Keep the original text and save a separate narration copy when needed.") };
+        public Button PreviewNarration { get; } = NewButton("Preview selected narration text");
         public CheckBox Subfolders { get; } = new() { Content = NewDescription("Include subfolders when adding a folder") };
         public CheckBox Capture { get; } = new() { Content = NewDescription("For Long Audio files: save bounded, encrypted, redacted provider responses privately for each job (required by Long Audio). They may contain article fragments; they are excluded from normal logs and exports, expire logically after 24 hours and are deleted on next access; encrypted remnants may remain while closed or in backups.") };
         public Button AddFiles { get; } = NewButton("Add TXT files…");
@@ -162,9 +166,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "Builds and shows the window; each behaviour lives in its own method below.")]
-    private async Task OpenBatchAsync(Window owner, ShellViewModel model)
+    private async Task OpenBatchAsync(Window owner, ShellViewModel model, IStorageItem[]? dropped = null, bool openingReserved = false)
     {
-        if (_batchDialogOpen) return;
+        if (_batchDialogOpen && !openingReserved)
+        {
+            BatchDiagnostics.Action(catalogLogger, null, null, dropped is null ? BatchDiagnosticOperation.Window : BatchDiagnosticOperation.Drop, BatchDiagnosticPhase.Rejected);
+            model.StatusMessage = "The batch window is already opening or open. Add files there when it is ready.";
+            return;
+        }
         if (documentLibrary is null || documentImporter is null || documentPreprocessor is null)
         { model.StatusMessage = "Batch import is unavailable in this build."; return; }
         _batchDialogOpen = true;
@@ -174,7 +183,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             Store = store,
             Drafts = new FileBatchDraftStore(paths.RootDirectory, catalogLogger),
-            Gate = new BatchAuthorityGate(authority, store, TimeProvider.System),
+            Gate = new BatchAuthorityGate(authority, store, TimeProvider.System, documentLibrary, narrationCopies, catalogLogger),
         };
         try
         {
@@ -182,7 +191,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             session.Profile = await session.Gate.LoadProfileAsync().ConfigureAwait(true);
             var dialog = CreateArticleExportDialog();
             dialog.Title = "Batch MP3 from TXT files"; dialog.Width = 960; dialog.Height = 820; dialog.MinWidth = 560; dialog.MinHeight = 480;
-            var ctx = new BatchContext { Dialog = dialog, Model = model, Session = session, Importer = new BatchDocumentImporter(documentImporter, documentPreprocessor, documentLibrary, store, catalogLogger) };
+            var ctx = new BatchContext { Dialog = dialog, Model = model, Session = session, Importer = new BatchDocumentImporter(documentImporter, documentPreprocessor, documentLibrary, store, catalogLogger, narrationCopies) };
             BuildBatchLayout(ctx);
             WireBatchHandlers(ctx);
             WireBatchRows(ctx);
@@ -194,6 +203,9 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             clock.Start();
             model.PropertyChanged += OnModelChanged;
             RefreshBatch(ctx);
+            if (dropped is { Length: > 0 })
+                dialog.Opened += async (_, _) => await GuardBatchAsync(ctx, BatchDiagnosticOperation.Drop,
+                    () => AddStorageItemsAsync(ctx, dropped, null)).ConfigureAwait(true);
             try { await dialog.ShowDialog(owner).ConfigureAwait(true); }
             finally { model.PropertyChanged -= OnModelChanged; clock.Stop(); }
             if (session.Active is { } active) await active.ConfigureAwait(true);
@@ -260,7 +272,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         body.Children.Add(Wrap(ctx.AddFiles, ctx.AddFolder, ctx.Subfolders, ctx.NewBatch, ctx.Discard));
         var listHost = new Grid();
         listHost.Children.Add(ctx.List);
-        ctx.EmptyHint.Margin = new Thickness(16); ctx.EmptyHint.IsHitTestVisible = false;
+        ctx.EmptyHint.Margin = new Thickness(24, 16);
         listHost.Children.Add(ctx.EmptyHint);
         ctx.Overlay.Children.Add(ctx.Indicator);
         listHost.Children.Add(ctx.Overlay);
@@ -281,6 +293,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         body.Children.Add(ctx.OutputText);
         body.Children.Add(Wrap(ctx.Engine, ctx.Policy));
         body.Children.Add(ctx.Numbering);
+        body.Children.Add(ctx.SkipUrls);
+        body.Children.Add(ctx.PreviewNarration);
         body.Children.Add(Section("3  Review and approval"));
         body.Children.Add(ctx.ReviewText);
         body.Children.Add(ctx.Rehearsal);
@@ -318,6 +332,25 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             FontSize = 15,
             Margin = new Thickness(0, 6, 0, 0),
             Foreground = CosmicDialogTheme.Solid(CosmicDialogTheme.TextOnDark),
+        };
+    }
+
+    private static StackPanel CreateBatchEmptyHint()
+    {
+        var heading = NewDescription("Drop TXT files or folders here");
+        heading.FontSize = 20;
+        heading.FontWeight = Avalonia.Media.FontWeight.SemiBold;
+        heading.TextAlignment = Avalonia.Media.TextAlignment.Center;
+        AutomationProperties.SetName(heading, "Drop TXT files or folders here");
+        var alternative = NewDescription("Or use Add TXT files or Add a folder above. Each TXT file becomes one MP3.");
+        alternative.FontSize = 14;
+        alternative.TextAlignment = Avalonia.Media.TextAlignment.Center;
+        return new StackPanel
+        {
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false,
+            Children = { heading, alternative },
         };
     }
 
@@ -440,6 +473,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 await ReviewBatchAsync(ctx).ConfigureAwait(true);
             }).ConfigureAwait(true);
         };
+        OnBatch(ctx, ctx.PreviewNarration, BatchDiagnosticOperation.Rehearse, () => PreviewBatchNarrationAsync(ctx));
+        ctx.SkipUrls.IsCheckedChanged += async (_, _) => await DraftSettingChangedAsync(ctx, () => session.SkipUrls = ctx.SkipUrls.IsChecked == true).ConfigureAwait(true);
         ctx.Engine.SelectionChanged += async (_, _) => await DraftSettingChangedAsync(ctx, () => session.EngineChoice = Math.Max(0, ctx.Engine.SelectedIndex)).ConfigureAwait(true);
         ctx.Policy.SelectionChanged += async (_, _) => await DraftSettingChangedAsync(ctx, () => session.Policy = ctx.Policy.SelectedIndex == 1 ? BatchFailurePolicy.StopBatch : BatchFailurePolicy.SkipAndContinue).ConfigureAwait(true);
         ctx.Numbering.IsCheckedChanged += async (_, _) => await DraftSettingChangedAsync(ctx, () =>
@@ -580,8 +615,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 ? $"This batch uses {saved.Settings.VoiceLabel}: choose Use this batch's voice" + (ctx.Model.BatchVoiceChoices.Count == 0 ? " (choose Refresh voices first, or connect Google in the main window)." : ".")
                 : voice is null && ctx.Model.BatchVoiceChoices.Count == 0 ? "No verified voice yet: choose Refresh voices (or connect Google in the main window). Your draft is kept." : voiceProblem,
             session.Batch is null || voice is not null && string.Equals(voice.VoiceStableId, session.Batch.Settings.VoiceStableId, StringComparison.Ordinal),
-            session.Folder is not null, session.Batch is not null, session.Request is not null || session.Decision is { Allowed: true },
-            session.Decision is { Allowed: true }, session.Profile?.Mode, session.Profile is not null, session.Request?.Unnarratable.Count() ?? 0,
+            session.Folder is not null, session.Batch is not null, session.Request is not null || session.RunDecision is { Allowed: true },
+            session.RunDecision is { Allowed: true }, session.Profile?.Mode, session.Profile is not null, session.Request?.Unnarratable.Count() ?? 0,
             longAudioFiles, ctx.Capture.IsChecked == true, session.Running, session.Busy,
             counts.Completed, counts.Failed, counts.Uncertain, counts.Waiting, session.Batch?.State == BatchQueueState.Finished,
             session.Batch?.Items.Count(BatchDocumentImporter.NeedsImport) ?? 0);
@@ -636,6 +671,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             ctx.Engine.SelectedIndex = session.EngineChoice;
             ctx.Policy.SelectedIndex = session.Policy == BatchFailurePolicy.StopBatch ? 1 : 0;
             ctx.Numbering.IsChecked = session.NumberTracks;
+            ctx.SkipUrls.IsChecked = session.Batch?.Settings.SkipUrls ?? session.SkipUrls;
+            ctx.SkipUrls.IsEnabled = draft && idle && !session.Draft.Any(x => x.DocumentId is not null);
+            ctx.PreviewNarration.IsEnabled = idle && selected.Count == 1;
+            ToolTip.SetTip(ctx.SkipUrls, draft ? "Preview the selected narration text before saving. Originals stay unchanged." : "This saved batch keeps its reviewed option. Start a new batch to choose differently.");
 
             // Files
             bool canAdd = idle && session.Batch?.State is null or BatchQueueState.Ready or BatchQueueState.Paused;
@@ -676,7 +715,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             ctx.Capture.IsEnabled = !running;
             ctx.Start.IsVisible = !draft;
             ctx.Start.IsEnabled = idle && guide.StartBlockers.Count == 0;
-            ToolTip.SetTip(ctx.Start, BatchGuide.Explain("Narrates the files one at a time, in the order shown. Finished MP3s are kept if a later file fails.", guide.StartBlockers));
+            ToolTip.SetTip(ctx.Start, BatchGuide.Explain("Checks selected existing jobs first, then narrates new files in their shown order. Finished MP3s are kept if a later file fails.", guide.StartBlockers));
             ctx.Start.Content = NewDescription(session.Batch?.FirstStartedUtc is null ? "Start" : "Resume");
             ctx.Pause.IsVisible = ctx.StopNow.IsVisible = !draft;
             ctx.Pause.IsEnabled = ctx.StopNow.IsEnabled = running;

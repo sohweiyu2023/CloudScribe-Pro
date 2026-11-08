@@ -13,7 +13,8 @@ public sealed record BatchDraft(
     string Engine,
     BatchFailurePolicy FailurePolicy,
     IReadOnlyList<BatchItem> Items,
-    DateTimeOffset UpdatedUtc)
+    DateTimeOffset UpdatedUtc,
+    bool SkipUrls = false)
 {
     public const int CurrentVersion = 1;
 

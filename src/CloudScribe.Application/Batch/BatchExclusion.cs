@@ -11,4 +11,7 @@ public enum BatchExclusion
     Duplicate = 5,
     Unsupported = 6,
     RemovedByUser = 7,
+    NoSpeakableText = 8,
+    NarrationTooLarge = 9,
+    NarrationAnalysisLimit = 10,
 }

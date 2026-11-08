@@ -52,7 +52,9 @@ public sealed class BatchQueueRunner(IBatchQueueStore store, IBatchNarrator narr
             string? stopReason = null;
             try
             {
-                foreach (var itemId in queue.Items.OrderBy(x => x.Order).Select(x => x.ItemId).ToArray())
+                // Reconcile explicitly selected existing jobs before starting new files. Output/track ordering is unchanged.
+                foreach (var itemId in queue.Items.OrderBy(x => x.JobId is not null && x.State is BatchItemState.Ready or BatchItemState.Running ? 0 : 1)
+                    .ThenBy(x => x.Order).Select(x => x.ItemId).ToArray())
                 {
                     if (_pauseRequested || cancellationToken.IsCancellationRequested) { stopReason = "batch.paused"; break; }
                     var item = queue.Items.Single(x => x.ItemId == itemId);

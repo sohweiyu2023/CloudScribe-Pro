@@ -44,7 +44,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         };
         var text = new StackPanel { Spacing = 2 };
         text.Children.Add(new TextBlock { Text = BatchDialogPresentation.Title(item), Foreground = CosmicDialogTheme.Solid(item.IsIncluded ? CosmicDialogTheme.TextOnDark : "#A79DB3"), FontWeight = Avalonia.Media.FontWeight.SemiBold, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis });
-        string detail = row.Text;
+        string detail = row.Text + (item.NarrationSource is { } source ? $"\n{source.OmittedUrlCount} URL(s) skipped in a separate narration copy; original retained." : string.Empty);
         text.Children.Add(new TextBlock { Text = detail, Foreground = CosmicDialogTheme.Solid("#C6BCCF"), TextWrapping = Avalonia.Media.TextWrapping.Wrap });
         var grip = new TextBlock
         {

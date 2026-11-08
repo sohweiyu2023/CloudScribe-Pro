@@ -65,7 +65,7 @@ public sealed partial class NarrationPartGroupTests
     }
 
     private static async Task<(GenerationProviderRequest Request, GoogleGenerationQueueOutcome Outcome)> AcceptChirpAsync(Fixture f,
-        ChirpArticleService service, ChirpRequestIntent intent, int marker, ChirpApprovedAttempt? existingApproval = null)
+        ChirpArticleService service, ChirpRequestIntent intent, int marker, ChirpApprovedAttempt? existingApproval = null, Action<GenerationProviderRequest>? observeProvider = null)
     {
         var approved = existingApproval;
         if (approved is null)
@@ -77,8 +77,8 @@ public sealed partial class NarrationPartGroupTests
         var request = new GenerationProviderRequest(GoogleGenerationProvider.StableProviderId, GoogleGenerationProvider.SynthesizeOperationStableId,
             intent.Envelope.AccountId, approved.IdempotencyKey, intent.CompiledPayload, "mp3");
         var persisted = new GoogleGenerationPersistedQueueStateStore(f); int fakeCalls = 0;
-        var queue = new GoogleGenerationQueueCoordinator((_, _, _) =>
-        { fakeCalls++; return Task.FromResult(new GenerationProviderResponse(SubmissionDisposition.Accepted, null, audio, "audio/mpeg", null, "google-accepted")); });
+        var queue = new GoogleGenerationQueueCoordinator((submitted, _, _) =>
+        { fakeCalls++; observeProvider?.Invoke(submitted); return Task.FromResult(new GenerationProviderResponse(SubmissionDisposition.Accepted, null, audio, "audio/mpeg", null, "google-accepted")); });
         var bound = new GoogleGenerationBoundQueueCoordinator(queue, persisted.LoadAsync, persisted.SaveAsync,
             (claim, token) => service.TryClaimAuthorizedAsync(intent.Envelope with { ChirpAuthorizationId = approved.AuthorizationId }, intent.ProjectId,
                 intent.Currency, intent.Scale, intent.EstimateMinorUnits, claim, token), persisted.SaveOutcomeAsync);

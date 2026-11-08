@@ -20,7 +20,7 @@ public sealed class BatchBinderRegressionTests
     [Fact]
     public void SourceDiagnosticsAreWiredAndKeyboardDeleteUsesRemoveOperation()
     {
-        Assert.Contains("documentLibrary, store, catalogLogger)", BinderSource(null), StringComparison.Ordinal);
+        Assert.Contains("documentLibrary, store, catalogLogger, narrationCopies)", BinderSource(null), StringComparison.Ordinal);
         Assert.Contains("e.Key == Key.Delete ? BatchDiagnosticOperation.Remove", BinderSource("Rows"), StringComparison.Ordinal);
     }
 
@@ -54,6 +54,43 @@ public sealed class BatchBinderRegressionTests
         Assert.Contains("if (listHadFocus) RestoreBatchListFocus(ctx);", source, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.SetName(ctx.Subfolders, \"Include subfolders when adding a folder\")", source, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.SetName(ctx.Numbering, \"Number the MP3 files in this order\")", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StaleSiblingKeepsSeparateRecoveryDecisionAndBlocksNewApproval()
+    {
+        string review = BinderSource("Files");
+        Assert.Contains("session.RunDecision = await session.Gate.CheckRunAsync", review, StringComparison.Ordinal);
+        Assert.Contains("Resume can still check selected existing jobs first", review, StringComparison.Ordinal);
+        Assert.Contains("session.RunDecision = null", review, StringComparison.Ordinal);
+        string controls = BinderSource(null);
+        Assert.Contains("session.RunDecision is { Allowed: true }, session.Profile?.Mode", controls, StringComparison.Ordinal);
+        Assert.Contains("session.Request is not null && decision is { Allowed: false }", controls, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NarrationCopyPreparationGuardsCloseAndReservesSharedBatchEntry()
+    {
+        string source = NarrationBinderSource();
+        Assert.Contains("dialog.Closing += (_, args) => args.Cancel = saving", source, StringComparison.Ordinal);
+        int start = source.IndexOf("private async Task OpenNarrationCopyBatchAsync", StringComparison.Ordinal);
+        string opening = source[start..];
+        Assert.True(opening.IndexOf("_batchDialogOpen = true", StringComparison.Ordinal) < opening.IndexOf("await ", StringComparison.Ordinal));
+        Assert.Contains("openingReserved: true", opening, StringComparison.Ordinal);
+        Assert.Contains("finally { _batchDialogOpen = false; }", opening, StringComparison.Ordinal);
+        Assert.Contains("if (_batchDialogOpen && !openingReserved)", BinderSource(null), StringComparison.Ordinal);
+    }
+
+    private static string NarrationBinderSource()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "CloudScribe.sln")))
+                return File.ReadAllText(Path.Combine(directory.FullName, "src", "CloudScribe.App", "Composition", "GoogleTtsUsabilityHotfixBinder.NarrationCopy.cs"));
+            directory = directory.Parent;
+        }
+        throw new DirectoryNotFoundException("CloudScribe repository root was not found.");
     }
 
     private static string BinderSource(string? part)

@@ -23,6 +23,20 @@ public sealed class WholeArticleReviewPresentationTests
         Assert.Contains("first failing response", WholeArticleReviewPresentation.CaptureDescription(Review()), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RecoveryOnlyReviewDoesNotPromiseACompleteMp3OrAuthorizeBlockedParts()
+    {
+        var review = Review() with { BlockedOrdinaryRequests = 3, RemainingRequests = 1, MaximumRecoveryRequests = 2 };
+        string estimate = WholeArticleReviewPresentation.Estimate(review);
+        Assert.Equal("Recover already-started work only", WholeArticleReviewPresentation.ActionLabel(review));
+        Assert.Equal("Generate complete article MP3", WholeArticleReviewPresentation.ActionLabel(Review()));
+        Assert.Contains("3 unstarted part(s) are blocked", estimate, StringComparison.Ordinal);
+        Assert.Contains("will not complete the article MP3", estimate, StringComparison.Ordinal);
+        Assert.Contains("does not authorize the blocked parts", estimate, StringComparison.Ordinal);
+        Assert.DoesNotContain("without separate confirmations", estimate, StringComparison.Ordinal);
+        Assert.Contains("recovered audio is retained", BatchDialogPresentation.Reason("article.narration-copy-recovery-only"), StringComparison.Ordinal);
+    }
+
     private static ChirpWholeArticleReview Review(int scale = 2) => new(Guid.NewGuid(), new string('a', 64), Guid.NewGuid(),
         new string('b', 64), "synthetic-voice", "USD", scale, 23, 25, 2, 17, 175,
         DateTimeOffset.UnixEpoch.AddHours(1), 2, DateTimeOffset.UnixEpoch.AddMinutes(10));

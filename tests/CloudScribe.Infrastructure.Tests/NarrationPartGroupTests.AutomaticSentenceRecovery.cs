@@ -255,6 +255,7 @@ public sealed partial class NarrationPartGroupTests
         public int Calls { get; private set; }
         public bool Exported { get; private set; }
         public List<ChirpArticleRecoveryChild> Children { get; } = [];
+        public Action<ChirpArticleRecoveryChild, CloudScribe.Providers.Abstractions.GenerationProviderRequest>? ObserveRecoveryProvider { get; init; }
 
         public async Task GenerateAsync(ChirpWholeArticleJob job, int ordinal, CancellationToken token)
         {
@@ -292,7 +293,8 @@ public sealed partial class NarrationPartGroupTests
                 await RejectAsync(intent, approved, false, true, token).ConfigureAwait(false);
                 throw new InvalidOperationException("Synthetic confirmed child sentence length rejection.");
             }
-            var accepted = await AcceptChirpAsync(fixture, evidence.Service, intent, child.CoverageOrdinal, approved).ConfigureAwait(false);
+            var accepted = await AcceptChirpAsync(fixture, evidence.Service, intent, child.CoverageOrdinal, approved,
+                submitted => ObserveRecoveryProvider?.Invoke(child, submitted)).ConfigureAwait(false);
             await evidence.Service.PersistAcceptedAsync(accepted.Request, accepted.Outcome, token).ConfigureAwait(false);
         }
 

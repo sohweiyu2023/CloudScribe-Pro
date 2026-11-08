@@ -2,13 +2,29 @@
 
 Make one MP3 for each of several TXT files with one voice, one review and one approval. Source files are only read. Each file becomes its own library document (exactly like **Import…**) and its own MP3, in the order you set. Files are never merged, and no extra tracks are created.
 
+## Skip web addresses without changing your originals
+
+In an unsaved batch, tick **Skip web addresses in narration** under **Voice and output**. Select a row and choose **Preview selected narration text** to inspect what will be spoken. On **Add to library and save batch**, CloudScribe keeps the imported original and saves a separate narration copy only when URLs were found. Each row reports its omission count; the review and estimate use that copy's actual text. URL-only files are skipped locally with a reason, never submitted as empty requests. Files without recognized URLs keep the normal single-document path.
+
+The option is locked for a saved batch; prepare a new batch to choose differently. Editing the original or its narration copy invalidates approval for requests that have not started. Editing the original does not change the text bound to an existing job: **Check again**, then **Resume**, checks recorded jobs before unstarted files, even when a different file needs a fresh review. Never regenerate merely to reconcile an uncertain result. Editing the narration copy itself can block article progress or export under its existing revision checks; receipts and accepted audio are retained, but this is not automatic recovery of every historical revision.
+
+The original TXT bytes, normalized original document and narration copy have separate integrity pins. A restart or a queue-save failure reuses the same verified imported document and copy rather than duplicating them. An edited or damaged copy is not silently reused or repaired by clearing the checkbox. To prepare a replacement, start a new batch from the original TXT, or put the original text in a new saved document and preview URL skipping there. Keep existing jobs and accepted audio for reconciliation.
+
+For an existing long document, **Create MP3** offers the same preview and **Save and use narration copy** action. Then choose **Review this copy as a one-file batch**. Choose an output folder and review the normal batch approval. This requires the existing batch/Long Audio setup; it does not inherit the original's admission. If an unsaved draft already exists, it is kept and you are asked to finish or discard it first.
+
+URL skipping has a local safety bound of 16,777,216 UTF-16 text units per document; larger files are kept as originals and excluded from that batch. Split them or prepare a new batch with the option off.
+
+Preview is deliberately literal: recognized web addresses are omitted; inline Markdown link labels remain; punctuation and whitespace are retained. Ambiguous strings may remain. This feature does not change the older text-editing **Simplify URLs** option.
+
+If an article has recoverable already-started work but its original has changed, a **Recover already-started work only** review can finish that admitted recovery. Unstarted parts remain blocked, and this action does not promise a complete article MP3.
+
 ## Using it
 
 The window walks through five steps, shown at the top with a **Next:** line that always says what to do now:
 **1 Files → 2 Voice and output → 3 Review and approval → 4 Run → 5 Results**. A button that is not available yet explains why when you point at it (or focus it with the keyboard).
 
-1. Open **Create MP3** and choose **Batch MP3 from TXT files…** near the top.
-2. **Files.** Drag TXT files or whole folders from File Explorer into the list, or choose **Add TXT files…** (multi-select) or **Add a folder…** (several folders allowed). Tick **Include subfolders** to look inside subfolders too.
+1. Open **Queue** in the navigation or player strip to see **Drop TXT files or folders here** immediately. Dropping there opens the batch window and appends the files to your existing draft. You can also choose **Batch MP3** beside **Create MP3** in the main window, or **Batch MP3 from TXT files…** near the top of **Create MP3**. No text in the current Studio document is needed.
+2. **Files.** Drag TXT files or whole folders from File Explorer anywhere in the batch list, whether empty or populated, or choose **Add TXT files…** (multi-select) or **Add a folder…** (several folders allowed). Tick **Include subfolders** to look inside subfolders too.
    - The drop area lights up while you drag; anything that is not a `.txt` file is left out and the status line says how many.
    - New files go **after** the current list, so an order you arranged is kept. Among themselves they are sorted naturally by folder and then name (`2` before `10`, full-width digits included).
    - One TXT always makes one MP3. Adding the same file twice is ignored (and reported). Two different files with identical text stay two tracks; the later one is marked "same text as file NN (*name*), kept as its own track", and this note follows the current order after any move or removal.

@@ -33,7 +33,9 @@ public sealed record BatchItem(
     int? SameTextAs = null,
     string? Engine = null,
     string? SourcePath = null,
-    int UncertainOutcomes = 0)
+    int UncertainOutcomes = 0,
+    string? NarrationTextSha256 = null,
+    BatchNarrationSource? NarrationSource = null)
 {
     public bool IsIncluded => State is not BatchItemState.Excluded and not BatchItemState.Skipped;
 

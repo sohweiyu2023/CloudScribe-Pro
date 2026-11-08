@@ -9,4 +9,4 @@ namespace CloudScribe.Infrastructure.Batch;
 /// need an installed article admission; they stop with nothing sent until they have one.</summary>
 public sealed record BatchAdmissionRequestItem(Guid ItemId, int Order, string SourceSha256, int Characters, Guid DocumentId, Guid RevisionId,
     string? Engine, string PlanSha256, int Parts, long EstimatedMaximumMinorUnits, bool ExactMaximum, bool NeedsArticleAdmission, string? Note,
-    ChirpArticlePlanProposal? Plan, BatchLongAudioApproval? LongAudio);
+    ChirpArticlePlanProposal? Plan, BatchLongAudioApproval? LongAudio, string? NarrationTextSha256 = null, CloudScribe.Application.Batch.BatchNarrationSource? NarrationSource = null);

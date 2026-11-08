@@ -12,11 +12,15 @@ public sealed partial class GoogleLongAudioRuntimeFactory(InstalledGoogleLongAud
     public async Task<GoogleLongAudioRuntimeSession> OpenAsync(GoogleLongAudioRequest request,
         GoogleLongAudioMediaTools tools, GoogleLongAudioOutputAllowance readAllowance, bool protectedCaptureConfirmed,
         CancellationToken cancellationToken = default) =>
-        await OpenCoreAsync(request, tools, readAllowance, protectedCaptureConfirmed, null, cancellationToken).ConfigureAwait(false);
+        await OpenCoreAsync(request, tools, readAllowance, protectedCaptureConfirmed, null, null, cancellationToken).ConfigureAwait(false);
+
+    internal Task<GoogleLongAudioRuntimeSession> OpenDocumentAsync(GoogleLongAudioRequest request, GoogleLongAudioMediaTools tools,
+        GoogleLongAudioOutputAllowance readAllowance, bool captureConfirmed, Func<CancellationToken, Task> freshSourceCheck, CancellationToken token) =>
+        OpenCoreAsync(request, tools, readAllowance, captureConfirmed, null, (_, ct) => new ValueTask(freshSourceCheck(ct)), token);
 
     private async Task<GoogleLongAudioRuntimeSession> OpenCoreAsync(GoogleLongAudioRequest request,
         GoogleLongAudioMediaTools tools, GoogleLongAudioOutputAllowance readAllowance, bool protectedCaptureConfirmed,
-        GoogleLongAudioRecoveryAuthority? recovery, CancellationToken cancellationToken)
+        GoogleLongAudioRecoveryAuthority? recovery, Func<GoogleLongAudioRequest, CancellationToken, ValueTask>? freshSourceCheck, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(tools);
@@ -32,7 +36,7 @@ public sealed partial class GoogleLongAudioRuntimeFactory(InstalledGoogleLongAud
             await RequireLocalReadyAsync(currentRequest, context, tools, readAllowance, token).ConfigureAwait(false);
         }
         var admission = new GoogleLongAudioLedgerAdmission(context.ParentPolicyPath, context.ParentPolicySha256,
-            context.ScopePath, context.ScopeSha256, context.LedgerPath, RequireCurrent, clock).WithExtension(context.Extension);
+            context.ScopePath, context.ScopeSha256, context.LedgerPath, RequireCurrent, clock).WithExtension(context.Extension).WithFreshSubmissionCheck(freshSourceCheck);
         if (recovery is not null) admission.WithRecovery(recovery);
         var review = await admission.ReviewAsync(request, cancellationToken).ConfigureAwait(false);
         if (!review.IsAlreadyCommitted) recovery?.RequireNoOtherPending(request);

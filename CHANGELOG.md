@@ -4,9 +4,17 @@ All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in
 
 ## 1.0.4 (8 November 2026)
 
-Batch window usability and safety follow-up. No change to spending rules, caps, approvals or provider requests.
+Batch window usability, optional URL skipping and safety follow-up. Spending rules, caps and explicit approvals stay unchanged.
+
+### Skip web addresses in narration
+- Optional **Skip web addresses in narration** keeps the original document and TXT file unchanged. **Create MP3** previews the result, then saves and opens a separate narration copy before a new cost review. Batch drafts offer the same option and a selected-row preview.
+- Costs, request size checks, payloads and recovery use the actual saved narration text. Long copies use **Review this copy as a one-file batch**, with their own approval under the existing installed setup; an original's admission is never inherited. Existing drafts are not replaced.
+- URL-only inputs are excluded locally. Text without recognized URLs needs no extra copy. The recognizer covers HTTP/HTTPS and www links and preserves inline Markdown labels. Preview the result: it intentionally avoids guessing at ambiguous text and preserves surrounding punctuation and whitespace.
+- Durable source/copy provenance makes repeated preparation and interrupted imports idempotent. Changed originals, copies or options invalidate unstarted approval. Started and uncertain jobs retain their original exact identity for reconciliation. Legacy URL simplification and unchecked requests are unchanged.
+- Raw TXT hashes remain separate from normalized saved-text and narration hashes, including BOM/CRLF inputs. Fixed safe preparation/reuse/failure/invalidation diagnostics contain no URLs, article text or paths.
 
 ### Windows review fixes
+- **Queue** now shows a TXT file/folder drop area immediately in both the page and player drawer. Dropping opens the existing batch window and appends to the saved draft without generating audio. **Batch MP3** also opens directly beside **Create MP3**. Empty-document guidance points to Batch, and the empty batch has a prominent drop heading with picker alternatives. Existing queue inspection and spending checks are unchanged.
 - Draft autosave failures keep a clear warning instead of being replaced by a success message. The window stays open, and Undo remains available for the in-memory edit so files can be restored before retrying the save.
 - Source checks now record fixed diagnostic outcomes for fresh, changed, missing or refused sources and completed imports. Safe history and support exports retain these events without file names, paths or text; logging failures remain advisory.
 - The user and batch guides now match subfolder import, keyboard Undo, source recovery and the exact editing and approval rules.

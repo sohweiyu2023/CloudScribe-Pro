@@ -38,7 +38,8 @@ public sealed partial class GoogleLongAudioDocumentService
             var rootState = journal.Load(current.Request.AttemptId); Observe(LongAudioWorkflowStage.Completed, rootState);
             return new(LongAudioWorkflowStage.Completed, new(rootState, null), saved);
         }
-        var runner = await runtime.CreateRecoveryRunnerAsync(current.Request, tools, current.OutputAllowance, captureConfirmed, trendHistory, token).ConfigureAwait(false);
+        var runner = await runtime.CreateDocumentRecoveryRunnerAsync(current.Request, tools, current.OutputAllowance, captureConfirmed, trendHistory,
+            ct => RequireFreshNarrationCopyAsync(current.DocumentId, ct), token).ConfigureAwait(false);
         Observe(LongAudioWorkflowStage.SubmittingOrResuming, null);
         var run = await runner.RunAsync(current.Request, control, progress, token).ConfigureAwait(false);
         var state = run.StoppedOutcome ?? journal.Load(current.Request.AttemptId);

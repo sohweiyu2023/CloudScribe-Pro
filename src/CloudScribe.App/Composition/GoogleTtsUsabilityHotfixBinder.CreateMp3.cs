@@ -78,6 +78,26 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         TextBlock document = Text(string.Empty);
         body.Children.Add(document);
         AddBatchControl(dialog, body, model);
+        await AddSavedNarrationCopyNoticeAsync(dialog, body, model).ConfigureAwait(true);
+        var skipUrls = new CheckBox { Content = NewDescription("Skip web addresses in narration (keep the original)") };
+        AutomationProperties.SetName(skipUrls, "Skip web addresses in narration");
+        var previewNarration = NewButton("Preview and save narration copy");
+        body.Children.Add(skipUrls); body.Children.Add(previewNarration);
+        bool reopenForCopy = false;
+        previewNarration.Click += async (_, _) =>
+        {
+            previewNarration.IsEnabled = false;
+            try
+            {
+                if (await PreviewNarrationCopyAsync(dialog, model).ConfigureAwait(true))
+                { reopenForCopy = true; dialog.Close(); }
+                else if (CloudScribe.Application.Documents.NarrationUrlOmission.Transform(model.DocumentText).OmittedUrlCount == 0)
+                    skipUrls.IsChecked = false;
+            }
+            catch (Exception error) when (BatchDiagnosticsNonFatal(error))
+            { model.StatusMessage = "Could not preview narration: " + error.Message; }
+            finally { previewNarration.IsEnabled = true; }
+        };
         bool IsLongArticle() => Encoding.UTF8.GetByteCount(model.DocumentText) >= 4_000;
         WrapPanel actionRow = new() { Orientation = Orientation.Horizontal };
         Button articleAction = AddWholeArticleControl(dialog, actionRow, model);
@@ -87,7 +107,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         TextBlock articleStatus = Text(model.StatusMessage);
         articleReview.Children.Add(articleStatus);
         void UpdateDocument() => document.Text = string.IsNullOrWhiteSpace(model.DocumentText)
-            ? "No text in the current document. Close this window and type or import text in Studio."
+            ? "No text in the current document. For TXT files or folders, choose Batch MP3 from TXT files below. For this document, close this window and write or import text in Studio."
             : $"Current document: {model.DocumentText.Length} characters. Editing it will clear any prepared cost or approval." +
                 (IsLongArticle()
                     ? " This is a complete article: use Review full article and cost below. The single-request controls do not apply to this long text."
@@ -160,6 +180,13 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         void Refresh()
         {
             bool longArticle = IsLongArticle();
+            bool needsCopy = skipUrls.IsChecked == true;
+            previewNarration.IsVisible = needsCopy;
+            previewNarration.IsEnabled = !busy && !reviewing && model.HasOpenDocument && !string.IsNullOrWhiteSpace(model.DocumentText);
+            skipUrls.IsEnabled = !busy && !reviewing;
+            articleAction.IsEnabled = !needsCopy;
+            foreach (var action in actionRow.Children.OfType<Button>().Where(x => x.Classes.Contains("original-document-review")))
+                action.IsEnabled = !needsCopy;
             articleReview.IsVisible = longArticle;
             articleAction.IsVisible = longArticle;
             review.IsVisible = estimate.IsVisible = nextStep.IsVisible = consent.IsVisible = create.IsVisible = !longArticle;
@@ -173,17 +200,23 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 ? "First click Review cost (no audio). Approval becomes available after this exact text and voice have a current estimate."
                 : $"Exact request: {FormatEstimate(current)} maximum list estimate before taxes, credits and conversion. Voice: {current.VoiceName}. Each request needs new approval.";
             review.IsEnabled = !busy && !reviewing && !model.IsConnectedVoiceCatalogLoading && model.CanPrepareGoogleGenerationSpend
-                && model.SelectedVoiceLabVoice is not null && !string.IsNullOrWhiteSpace(model.DocumentText);
+                && model.SelectedVoiceLabVoice is not null && !string.IsNullOrWhiteSpace(model.DocumentText) && !needsCopy;
             setups.IsEnabled = !busy && !reviewing && !model.IsConnectedVoiceCatalogLoading;
             create.IsEnabled = !busy && !model.IsConnectedVoiceCatalogLoading && !model.GenerateWithGoogleCommand.IsRunning
-                && current is not null && consent.IsChecked == true && model.CanApproveGoogleGenerationSpend;
-            consent.IsEnabled = current is not null && !busy;
+                && current is not null && consent.IsChecked == true && model.CanApproveGoogleGenerationSpend && !needsCopy;
+            consent.IsEnabled = current is not null && !busy && !needsCopy;
             nextStep.Text = CreateMp3NextStep.Describe(busy, reviewing, !string.IsNullOrWhiteSpace(model.DocumentText),
                 model.IsConnectedVoiceCatalogLoading, model.SelectedVoiceLabVoice is not null,
                 model.CanPrepareGoogleGenerationSpend, current is not null, consent.IsChecked == true, model.CanApproveGoogleGenerationSpend);
-            if (!longArticle && current is null && model.SelectedVoiceLabVoice is not null && model.CanPrepareGoogleGenerationSpend)
+            if (needsCopy)
+            {
+                estimate.Text = "Save the narration copy before reviewing its cost. Any earlier estimate belongs to the original text.";
+                nextStep.Text = "Next: preview and save the narration copy before reviewing its cost. Your original stays unchanged.";
+            }
+            if (!needsCopy && !longArticle && current is null && model.SelectedVoiceLabVoice is not null && model.CanPrepareGoogleGenerationSpend)
                 nextStep.Text = "Next: click Review cost (no audio), then approve the displayed maximum. Selecting a voice alone does not prepare a cost review.";
         }
+        skipUrls.IsCheckedChanged += (_, _) => { consent.IsChecked = false; Refresh(); };
         review.Click += async (_, _) =>
         {
             if (reviewing) return;
@@ -284,5 +317,6 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             model.PropertyChanged -= OnReviewChanged;
             model.PropertyChanged -= OnStatusChanged;
         }
+        if (reopenForCopy) await OpenCreateMp3Async(owner, model).ConfigureAwait(true);
     }
 }

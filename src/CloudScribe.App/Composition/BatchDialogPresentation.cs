@@ -73,6 +73,9 @@ public static class BatchDialogPresentation
 
     public static string Exclusion(BatchExclusion exclusion) => exclusion switch
     {
+        BatchExclusion.NarrationAnalysisLimit => "URL analysis reached its safety limit; simplify malformed links or prepare a new batch with the option off",
+        BatchExclusion.NarrationTooLarge => "URL skipping supports up to 16 million text units; split this file or prepare a new batch with the option off",
+        BatchExclusion.NoSpeakableText => "no spoken words remain after skipping web addresses; original kept, no request sent",
         BatchExclusion.Empty => "the file has no text",
         BatchExclusion.NotUnicodeText => "not UTF-8 or UTF-16 text; save it as UTF-8 and add it again",
         BatchExclusion.TooLarge => "larger than 32 MB",
@@ -99,6 +102,9 @@ public static class BatchDialogPresentation
         "batch.plan-changed-nothing-sent" => "its narration plan differs from the approved one; nothing was sent",
         "batch.file-over-approved-maximum-nothing-sent" => "its exact maximum is above the approved amount; nothing was sent",
         "batch.currency-mismatch-nothing-sent" => "currency differs from the approval; nothing was sent",
+        "batch.narration-changed" => "the original or narration copy changed; prepare and review a new batch, nothing sent",
+        "batch.narration-validation-unavailable" => "the saved narration copy cannot be verified in this build",
+        "batch.narration-version" => "the URL skipping version is unsupported; prepare a new batch",
         "batch.file-not-approved" => "not covered by the batch approval",
         "batch.output-missing-or-changed" => "the finished MP3 is missing or changed; it was not regenerated",
         "batch.import-interrupted-add-again" => "the app closed while adding it; add the file again",
@@ -108,6 +114,7 @@ public static class BatchDialogPresentation
         "batch.narration-failed-after-start-reconcile" => "stopped after it started; check it before retrying",
         "batch.paused" => "paused",
         "batch.not-authorized" => "not approved",
+        "article.narration-copy-recovery-only" => "recovered audio is retained; remaining fresh parts are blocked because the original changed. Prepare a new batch from the original TXT or save its text as a new document for a new narration copy",
         "article.provider-rejected-no-retry" => "Google rejected a request",
         "article.provider-outcome-uncertain-no-retry" => "Google's answer was not received; it will not be resent automatically",
         _ when code.EndsWith("-reconcile", StringComparison.Ordinal) => "stopped; check it before retrying",

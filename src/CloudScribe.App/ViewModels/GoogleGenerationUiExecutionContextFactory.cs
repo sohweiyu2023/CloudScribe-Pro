@@ -159,6 +159,6 @@ public static class GoogleGenerationUiExecutionContextFactory
             persistedQueueStateStore.SaveOutcomeAsync);
         var uiQueue = new GoogleGenerationUiQueueCoordinator(boundQueue);
 
-        return new GoogleGenerationUiExecutionContext(uiQueue, evidence.Snapshot);
+        return new GoogleGenerationUiExecutionContext(uiQueue, evidence.Snapshot, evidence.SpendAuthorization.Envelope);
     }
 }

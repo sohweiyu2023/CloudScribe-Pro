@@ -252,6 +252,7 @@ public sealed class DatabaseRecoveryTests
                 ChirpReservationCatalogMappings.MigrationId,
                 ChirpWholeArticleJobs.MigrationId,
                 ChirpBoundedSentenceRecovery.MigrationId,
+                NarrationCopies.MigrationId,
             ],
             currentMigrations);
     }

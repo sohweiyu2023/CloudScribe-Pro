@@ -1,3 +1,4 @@
+using CloudScribe.Application.Batch;
 using CloudScribe.Application.Batch.Authority;
 using CloudScribe.Infrastructure.Generation;
 
@@ -14,7 +15,8 @@ namespace CloudScribe.Infrastructure.Batch;
 /// approval order, so a later approval can never displace an earlier one or an installed job.</item>
 /// </list>
 /// It never throws; any problem means fewer (or no) additions.</summary>
-public sealed class BatchLongAudioScopeExtensionSource(InstalledBatchAuthorityStore authority, TimeProvider clock) : IGoogleLongAudioScopeExtensionSource
+public sealed class BatchLongAudioScopeExtensionSource(InstalledBatchAuthorityStore authority, TimeProvider clock,
+    CloudScribe.Application.Documents.INarrationCopyStore? narrationCopies = null, IBatchQueueStore? queues = null, Application.Documents.IDocumentLibrary? library = null) : IGoogleLongAudioScopeExtensionSource
 {
     public async ValueTask<GoogleLongAudioScopeExtension> LoadAsync(GoogleLongAudioBudgetScope scope, string scopeSha256, string ledgerPath,
         long fixedCommitmentsUsdCents, CancellationToken cancellationToken)
@@ -44,19 +46,43 @@ public sealed class BatchLongAudioScopeExtensionSource(InstalledBatchAuthoritySt
                     var la = item.LongAudio!;
                     bool committed = claimed.Contains(la.RequestBindingSha256);
                     if (committed != committedPass || !Fits(scope, la) || Collides(scope, jobs, item, la)) continue;
-                    if (!committed && (latest[consent.BatchId] != consent.ConsentId || !Current(profile, consent, now))) continue;
+                    if (!committed && (latest[consent.BatchId] != consent.ConsentId || !Current(profile, consent, now)
+                        || !await CurrentNarrationAsync(consent, item, cancellationToken).ConfigureAwait(false))) continue;
                     long next = checked(used + la.FamilyMaximumUsdCents);
                     if (!committed && checked(fixedCommitmentsUsdCents + next) > scope.TotalGoogleCapUsdCents) continue;
                     used = next;
                     jobs.Add(new(consent.BatchId, item.ItemId, item.DocumentId, item.RevisionId, item.SourceSha256, la.AttemptId, la.OutputGcsUri,
                         la.MaximumOutputBytes, la.ExpectedSampleRate, la.ExpectedChannels, la.RequestBindingSha256, la.CeilingUsdCents,
-                        la.FamilyMaximumUsdCents, la.AdaptiveRecovery, committed));
+                        la.FamilyMaximumUsdCents, la.AdaptiveRecovery, committed, item.NarrationTextSha256));
                 }
             }
             return new(jobs);
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException and not OperationCanceledException)
         { return GoogleLongAudioScopeExtension.Empty; }
+    }
+
+    private async Task<bool> CurrentNarrationAsync(BatchConsent consent, BatchConsentItem item, CancellationToken token)
+    {
+        // Legacy approvals keep their historical identity. Every new-format approval must match the current queue.
+        if (item.NarrationTextSha256 is null && item.NarrationSource is null) return true;
+        if (narrationCopies is null || queues is null || library is null) return false;
+        try
+        {
+            var batch = await queues.LoadAsync(consent.BatchId, token).ConfigureAwait(false);
+            if (batch is null || !string.Equals(batch.SettingsSha256, consent.SettingsSha256, StringComparison.Ordinal)
+                || !string.Equals(batch.Settings.Sha256(), consent.SettingsSha256, StringComparison.Ordinal)) return false;
+            var queued = batch.Included.SingleOrDefault(x => x.ItemId == item.ItemId);
+            if (queued is null || queued.DocumentId != item.DocumentId || queued.RevisionId != item.RevisionId
+                || !string.Equals(queued.SourceSha256, item.SourceSha256, StringComparison.Ordinal)
+                || !string.Equals(queued.NarrationTextSha256, item.NarrationTextSha256, StringComparison.Ordinal)
+                || queued.NarrationSource != item.NarrationSource) return false;
+            // A recorded queue JobId is not a ledger commitment. Until commitment the complete fresh-text checks apply.
+            await BatchNarrationIdentity.ValidateAsync(library, batch.Settings, queued with { JobId = null, State = BatchItemState.Ready },
+                narrationCopies, token).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException and not OperationCanceledException) { return false; }
     }
 
     /// <summary>Room left in the installed cap for new batch approvals, after installed approvals and current batch jobs.</summary>

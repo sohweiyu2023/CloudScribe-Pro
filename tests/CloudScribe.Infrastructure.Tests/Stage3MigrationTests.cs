@@ -269,6 +269,7 @@ public sealed partial class Stage3MigrationTests
                 ChirpReservationCatalogMappings.MigrationId,
                 ChirpWholeArticleJobs.MigrationId,
                 ChirpBoundedSentenceRecovery.MigrationId,
+                NarrationCopies.MigrationId,
             ],
             migrations);
     }

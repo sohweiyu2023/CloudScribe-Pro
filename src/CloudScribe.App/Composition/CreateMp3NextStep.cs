@@ -7,7 +7,7 @@ public static class CreateMp3NextStep
     {
         if (busy) return "Creating your MP3. Wait for the result. If you stop waiting, inspect Setups before retrying; a sent request may still be charged.";
         if (reviewing) return "Checking this exact request and its price. This review does not generate speech.";
-        if (!hasText) return "Next: close this window, then write or import text in Studio. You can still browse the public voice samples here.";
+        if (!hasText) return "Next: choose Batch MP3 from TXT files for files or folders, or close this window and write or import text in Studio. You can still browse the public voice samples here.";
         if (loading) return "Next: wait for your saved voices to load. Closing this window stops the wait; no speech is generated.";
         if (!hasVoice) return "Next: load and choose a verified voice above. If the list is empty, read its connection/filter message or clear the voice search.";
         if (!canPrepare) return "Next: wait for the current Google operation to finish before reviewing another request.";

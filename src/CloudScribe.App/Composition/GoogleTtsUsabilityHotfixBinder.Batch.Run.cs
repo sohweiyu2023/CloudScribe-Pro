@@ -19,7 +19,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         var articles = chirpArticles is not null && documentLibrary is not null
             ? new BatchArticleWorkflow(chirpArticles, documentLibrary, (_, _, _) => throw new InvalidOperationException("Review only."), voice)
             : null;
-        return new BatchAdmissionRequestBuilder(documentLibrary!, TimeProvider.System, planner, articles);
+        return new BatchAdmissionRequestBuilder(documentLibrary!, TimeProvider.System, planner, articles, narrationCopies);
     }
 
     /// <summary>Shows each not-yet-started file's reviewed engine and maximum in the saved batch.</summary>

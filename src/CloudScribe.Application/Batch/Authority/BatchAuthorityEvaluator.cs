@@ -23,6 +23,11 @@ public static class BatchAuthorityEvaluator
         string accountStableId, string projectStableId, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(batch);
+        if (!string.Equals(batch.Settings.Sha256(), batch.SettingsSha256, StringComparison.Ordinal))
+            return BatchAuthorityDecision.Deny("batch.consent-settings-changed", "The narration settings changed. Review the batch again.");
+        if (batch.Settings.SkipUrls && !string.Equals(batch.Settings.UrlTransformVersion, Documents.NarrationUrlOmission.CurrentVersion, StringComparison.Ordinal)
+            || !batch.Settings.SkipUrls && batch.Settings.UrlTransformVersion is not null)
+            return BatchAuthorityDecision.Deny("batch.narration-version", "The URL skipping version is not supported. Prepare a new batch.");
         if (profile is null) return BatchAuthorityDecision.Deny("batch.authority-not-configured", "Batch narration is not set up on this computer. An administrator can install a batch authority profile.");
         if (profile.Problem() is { } problem) return BatchAuthorityDecision.Deny(problem, "The installed batch authority profile is not valid.");
         if (profile.Mode == BatchAuthorityMode.Off) return BatchAuthorityDecision.Deny("batch.authority-off", "Batch narration is turned off in the installed profile. You can still prepare and rehearse batches.");
@@ -59,7 +64,9 @@ public static class BatchAuthorityEvaluator
         foreach (var item in included)
         {
             if (!byId.TryGetValue(item.ItemId, out var approved) || !string.Equals(approved.SourceSha256, item.SourceSha256, StringComparison.Ordinal)
-                || approved.DocumentId != item.DocumentId || approved.RevisionId != item.RevisionId)
+                || approved.DocumentId != item.DocumentId || approved.RevisionId != item.RevisionId
+                || !string.Equals(approved.NarrationTextSha256, item.NarrationTextSha256, StringComparison.Ordinal)
+                || approved.NarrationSource != item.NarrationSource)
                 return BatchAuthorityDecision.Deny("batch.consent-files-changed", "The files in the batch changed after approval. Approve the batch again.");
             if (!profile.AllowsEngine(approved.Engine)
                 || item.JobId is not null && item.Engine is { } chosen && !string.Equals(chosen, approved.Engine, StringComparison.Ordinal))

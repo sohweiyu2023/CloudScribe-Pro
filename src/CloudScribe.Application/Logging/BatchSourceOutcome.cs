@@ -4,4 +4,5 @@ namespace CloudScribe.Application.Logging;
 public enum BatchSourceOutcome
 {
     DraftSourceReady, DraftSourceRefreshed, SourceUnavailable, SourceChanged, ImportInterrupted, Imported, ImportRefused,
+    NarrationPrepared, NarrationReused, NarrationUnchanged, NarrationEmpty, NarrationInvalidated,
 }

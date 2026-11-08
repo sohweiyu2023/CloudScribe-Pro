@@ -11,8 +11,11 @@ namespace CloudScribe.Infrastructure.Generation;
 /// <summary>Reopens immutable saved source and exact durable job, never inventing a new attempt on restart.</summary>
 public sealed partial class GoogleLongAudioDocumentService(InstalledGoogleLongAudioStore installed,
     IDbContextFactory<CloudScribeDbContext> database, DocumentContentStore contents, GoogleLongAudioRuntimeFactory runtime, TimeProvider clock,
-    ILogger<GoogleLongAudioDocumentService> logger, IGoogleTrendHistoryHealth trendHistory, INativeMediaTool? articleNative = null)
+    ILogger<GoogleLongAudioDocumentService> logger, IGoogleTrendHistoryHealth trendHistory, INativeMediaTool? articleNative = null,
+    CloudScribe.Application.Documents.INarrationCopyStore? narrationCopies = null)
 {
+    private readonly CloudScribe.Application.Documents.INarrationCopyStore _narrationCopies = narrationCopies ?? new EfNarrationCopyStore(database, contents, clock);
+
     public async Task<GoogleLongAudioDocumentReview> ReviewAsync(Guid documentId, CancellationToken token = default)
     {
         var context = await installed.LoadVerifiedAsync(token).ConfigureAwait(false)
@@ -43,11 +46,23 @@ public sealed partial class GoogleLongAudioDocumentService(InstalledGoogleLongAu
         bool historical = document.CurrentRevisionId != job.RevisionId;
         if (historical && !cost.IsAlreadyCommitted)
             throw new InvalidOperationException("The document changed before this job started. Review its current revision instead of generating older text.");
+        if (!cost.IsAlreadyCommitted) await RequireFreshNarrationCopyAsync(documentId, token).ConfigureAwait(false);
         return new(documentId, job.RevisionId, document.Title, job.SourceSha256, historical, context.ScopeSha256,
             job, request, cost, GoogleLongAudioDocumentCompiler.OutputAllowance(context.Scope, job),
             context.Scope.AdaptiveRecoveryRootBindings?.Contains(request.BindingSha256, StringComparer.Ordinal) == true,
             replacements.Count, replacements.Additional,
             context.Scope.DeferredUnknownRanges?.Where(x => string.Equals(x.RootBindingSha256, request.BindingSha256, StringComparison.Ordinal)).ToArray());
+    }
+
+    private async Task RequireFreshNarrationCopyAsync(Guid documentId, CancellationToken token)
+    {
+        try { _ = await _narrationCopies.FindAsync(documentId, token).ConfigureAwait(false); }
+        catch (Exception error) when (error is InvalidOperationException or IOException or ArgumentException)
+        {
+            CloudScribe.Application.Logging.BatchDiagnostics.Source(logger, documentId, documentId,
+                CloudScribe.Application.Logging.BatchSourceOutcome.NarrationInvalidated);
+            throw;
+        }
     }
 
     public async Task<GoogleLongAudioRuntimeSession> OpenAsync(GoogleLongAudioDocumentReview review, GoogleLongAudioMediaTools tools,
@@ -57,6 +72,6 @@ public sealed partial class GoogleLongAudioDocumentService(InstalledGoogleLongAu
         if (!string.Equals(current.ScopeSha256, review.ScopeSha256, StringComparison.Ordinal)
             || !string.Equals(current.Request.BindingSha256, review.Request.BindingSha256, StringComparison.Ordinal))
             throw new InvalidOperationException("The Long Audio source or configuration changed after review. Nothing was submitted.");
-        return await runtime.OpenAsync(current.Request, tools, current.OutputAllowance, captureConfirmed, token).ConfigureAwait(false);
+        return await runtime.OpenDocumentAsync(current.Request, tools, current.OutputAllowance, captureConfirmed, ct => RequireFreshNarrationCopyAsync(current.DocumentId, ct), token).ConfigureAwait(false);
     }
 }

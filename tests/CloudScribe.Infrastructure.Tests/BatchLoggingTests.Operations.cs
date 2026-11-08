@@ -8,6 +8,36 @@ namespace CloudScribe.Infrastructure.Tests;
 public sealed partial class BatchLoggingTests
 {
     [Fact]
+    public void NarrationPreparationFailureAndInvalidationKeepOnlySafeFields()
+    {
+        using var fixture = new LoggingFixture();
+        string path;
+        Guid source = Guid.NewGuid();
+        using (var ordinary = new BoundedJsonFileLoggerProvider(fixture.Paths, fixture.Options, TimeProvider.System))
+        using (var history = new GoogleTrendHistoryLoggerProvider(fixture.Paths, TimeProvider.System))
+        using (var factory = LoggerFactory.Create(builder => builder.AddProvider(ordinary).AddProvider(history)))
+        {
+            path = ordinary.CurrentLogPath;
+            var logger = factory.CreateLogger("PRIVATE_URL_SOURCE_TEXT_PATH");
+            BatchDiagnostics.Source(logger, null, source, BatchSourceOutcome.NarrationPrepared);
+            BatchDiagnostics.Source(logger, null, source, BatchSourceOutcome.NarrationReused);
+            BatchDiagnostics.Source(logger, null, source, BatchSourceOutcome.NarrationInvalidated);
+            BatchDiagnostics.Failure(logger, null, source, BatchDiagnosticOperation.PrepareNarration,
+                new IOException("https://private.example/PRIVATE_URL_SOURCE_TEXT_PATH"));
+        }
+        string text = File.ReadAllText(path), retained = ReadHistory(fixture.History), exported = Export(text);
+        Assert.DoesNotContain("PRIVATE_URL", text + retained + exported, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://", text + retained + exported, StringComparison.Ordinal);
+        foreach (var rows in new[] { Rows(text), Rows(exported), Rows(retained).Where(x => string.Equals(x.GetProperty("Kind").GetString(), "Event", StringComparison.Ordinal)).ToArray() })
+        {
+            Assert.Equal(4, rows.Length);
+            Assert.All(rows, row => Assert.True(row.GetProperty("FieldsComplete").GetBoolean()));
+            Assert.Equal("PrepareNarration", rows[^1].GetProperty("SafeFields").GetProperty("Operation").GetString());
+            Assert.Equal("NarrationInvalidated", rows[2].GetProperty("SafeFields").GetProperty("SourceOutcome").GetString());
+        }
+    }
+
+    [Fact]
     public void SourceOutcomesSurviveBothSinksAndExportWithoutUnreviewedValues()
     {
         using var fixture = new LoggingFixture();

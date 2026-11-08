@@ -7,5 +7,5 @@ public enum BatchDiagnosticOperation
     Skip, SaveAndImport, Rehearse, ExportApproval, Approve, WriteManifest, Pause, Stop, Close,
     NewBatch, Review, Refresh,
     SaveDraft, LoadDraft, DiscardDraft, Undo, Drop, DragReorder, ChooseVoice, RefreshVoices, OpenOutput, OpenFile,
-    CancelWork, ImportSaved, ChangeSettings,
+    CancelWork, ImportSaved, ChangeSettings, PrepareNarration,
 }
