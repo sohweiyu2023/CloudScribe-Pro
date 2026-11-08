@@ -26,6 +26,7 @@ All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in
   - Pause, Stop now, Resume and New batch all work in the same window.
 - **Rehearse (no cost)** checks each file's real admission and exact maximum, a writable output folder, names, audio tools and the approval.
 - **Redacted diagnostics:** events 1640–1645 carry IDs, counts, reason codes and amounts only. The rolling ledger counts other batches' unstarted approved files as well as their holds.
+- **Independent handoff review:** renewing approval replaces only unstarted requests, preserves committed jobs, and counts completed files against batch and rolling limits. Retained jobs are not counted twice against Long Audio headroom. New LINEAR16 approvals include one extra cent for rounding the two children of one split; further recovery remains bounded by the approved family maximum.
 - See [docs/BATCH_NARRATION.md](docs/BATCH_NARRATION.md).
 
 ## 1.0.2 (7 November 2026)

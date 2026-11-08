@@ -230,7 +230,7 @@ public sealed partial class BatchNarrationTests
         Assert.StartsWith($"gs://private-bucket/cloudscribe-batch/{batch.BatchId:N}/", la.OutputGcsUri, StringComparison.Ordinal);
         Assert.EndsWith(la.AttemptId.ToString("N") + ".wav", la.OutputGcsUri, StringComparison.Ordinal);
         Assert.Equal((long)decimal.Ceiling(text.Length * 30m / 10_000m), la.CeilingUsdCents); // the scope's own pricing formula
-        Assert.Equal(la.CeilingUsdCents * 2, la.FamilyMaximumUsdCents); // room for one adaptive split of the whole text
+        Assert.Equal(la.CeilingUsdCents * 2 + 1, la.FamilyMaximumUsdCents); // room for one adaptive split of the whole text
         Assert.True(la.AdaptiveRecovery);
         Assert.Null(BatchLongAudioPlanner.Plan(context with { Unsupported = "other voice" }, batch, item, text).Approval);
         Assert.Contains("1 MB", BatchLongAudioPlanner.Plan(context, batch, item, new string('字', 400_000)).Unsupported, StringComparison.Ordinal);

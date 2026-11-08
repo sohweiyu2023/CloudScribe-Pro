@@ -72,9 +72,15 @@ public static class BatchAuthorityEvaluator
                     || !string.Equals(approved.PlanSha256, approved.LongAudio.RequestBindingSha256, StringComparison.Ordinal)))
                 return BatchAuthorityDecision.Deny("batch.consent-invalid", "The batch approval is damaged. Approve the batch again.");
         }
-        if (consent.TotalMaximumMinorUnits > profile.PerBatchCeilingMinorUnits)
+        long batchMaximum = consent.TotalMaximumMinorUnits;
+        foreach (var completed in batch.Items.Where(x => x.State == BatchItemState.Completed && x.JobId is not null))
+        {
+            long alreadyApproved = byId.TryGetValue(completed.ItemId, out var approved) ? approved.MaximumMinorUnits : 0;
+            batchMaximum = checked(batchMaximum + Math.Max(0, completed.ReservedMinorUnits - alreadyApproved));
+        }
+        if (batchMaximum > profile.PerBatchCeilingMinorUnits)
             return BatchAuthorityDecision.Deny("batch.ceiling-batch", "The approved maximum is above the per-batch limit.");
-        if (checked(otherBatchesCommittedMinorUnits + consent.TotalMaximumMinorUnits) > profile.RollingCeilingMinorUnits)
+        if (checked(otherBatchesCommittedMinorUnits + batchMaximum) > profile.RollingCeilingMinorUnits)
             return BatchAuthorityDecision.Deny("batch.ceiling-rolling", $"This batch would go over the {profile.RollingWindowDays}-day limit, counting other batches' holds.");
         return null;
     }

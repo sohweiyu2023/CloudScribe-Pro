@@ -27,6 +27,8 @@ public sealed class BatchLongAudioScopeExtensionSource(InstalledBatchAuthoritySt
             var profile = await authority.LoadProfileAsync(cancellationToken).ConfigureAwait(false);
             var claimed = ReadClaimedBindings(ledgerPath, scopeSha256);
             var now = clock.GetUtcNow();
+            var latest = consents.GroupBy(c => c.BatchId).ToDictionary(g => g.Key,
+                g => g.OrderByDescending(c => c.Source == BatchConsentSource.ReviewedInstall).ThenByDescending(c => c.CreatedUtc).First().ConsentId);
             var candidates = consents
                 .Where(c => c.SchemaVersion == BatchConsent.CurrentSchemaVersion && string.Equals(c.ComputeSha256(), c.ConsentSha256, StringComparison.Ordinal)
                     && string.Equals(c.Currency, "USD", StringComparison.Ordinal) && c.Scale == 2)
@@ -43,7 +45,7 @@ public sealed class BatchLongAudioScopeExtensionSource(InstalledBatchAuthoritySt
                     var la = item.LongAudio!;
                     bool committed = claimed.Contains(la.RequestBindingSha256);
                     if (committed != committedPass || !Fits(scope, la) || Collides(scope, jobs, item, la)) continue;
-                    if (!committed && !Current(profile, consent, now)) continue;
+                    if (!committed && (latest[consent.BatchId] != consent.ConsentId || !Current(profile, consent, now))) continue;
                     long next = checked(used + la.FamilyMaximumUsdCents);
                     if (!committed && checked(fixedCommitmentsUsdCents + next) > scope.TotalGoogleCapUsdCents) continue;
                     used = next;

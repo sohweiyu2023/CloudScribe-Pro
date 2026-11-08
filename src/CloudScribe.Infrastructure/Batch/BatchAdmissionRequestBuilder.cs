@@ -32,11 +32,14 @@ public sealed class BatchAdmissionRequestBuilder(IDocumentLibrary library, TimeP
                 laUnavailable = "Long Audio is not set up on this computer.";
         }
         var items = new List<BatchAdmissionRequestItem>();
+        long retainedLongAudio = 0;
         foreach (var item in batch.Included.Where(x => x.State != BatchItemState.Completed).OrderBy(x => x.Order))
         {
             if (item.DocumentId is not { } documentId) throw new InvalidOperationException("Add every file to the library before approval.");
             if (item.JobId is not null && previous?.Items.SingleOrDefault(x => x.ItemId == item.ItemId) is { } kept)
             {
+                if (kept.LongAudio is { } retained && la is not null)
+                    retainedLongAudio = checked(retainedLongAudio + la.RetainedCredit(retained, item.JobId));
                 items.Add(new(item.ItemId, item.Order, item.SourceSha256, item.Characters, documentId, kept.RevisionId, kept.Engine, kept.PlanSha256, 0,
                     kept.MaximumMinorUnits, true, false, "Already started: keeps its original approval.", null, kept.LongAudio));
                 continue;
@@ -53,7 +56,7 @@ public sealed class BatchAdmissionRequestBuilder(IDocumentLibrary library, TimeP
         var consent = BatchConsent.Create(Guid.NewGuid(), batch, BatchConsentSource.ReviewedInstall, profile, accountStableId, projectStableId, consentItems, clock.GetUtcNow());
         return new(BatchAdmissionRequest.CurrentFormat, batch.BatchId, profile.Sha256(), batch.SettingsSha256, accountStableId, projectStableId,
             batch.Settings.LanguageCode, batch.Settings.VoiceStableId, profile.Currency, profile.Scale, items, consent.TotalMaximumMinorUnits, consent,
-            la?.HeadroomUsdCents, la?.CapUsdCents);
+            la is null ? null : checked(la.HeadroomUsdCents + retainedLongAudio), la?.CapUsdCents);
     }
 
     private async Task<BatchAdmissionRequestItem> PlanItemAsync(NarrationBatch batch, BatchAuthorityProfile profile, string[] engines,
@@ -66,7 +69,7 @@ public sealed class BatchAdmissionRequestBuilder(IDocumentLibrary library, TimeP
             if (plan.Approval is { } approval)
                 return new(item.ItemId, item.Order, item.SourceSha256, item.Characters, document.Id, item.RevisionId!.Value, BatchEngines.LongAudio,
                     approval.RequestBindingSha256, 1, approval.FamilyMaximumUsdCents, true, false,
-                    approval.AdaptiveRecovery ? "Whole file in one Long Audio request; split only if Google reports a sentence too long." : "Whole file in one Long Audio request.",
+                    approval.AdaptiveRecovery ? "Whole file in one Long Audio request; room for one split if Google reports a sentence too long." : "Whole file in one Long Audio request.",
                     null, approval);
             why = plan.Unsupported;
         }
