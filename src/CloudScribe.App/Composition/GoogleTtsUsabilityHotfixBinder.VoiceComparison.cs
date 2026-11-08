@@ -30,8 +30,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         _sampleSession ??= new GoogleVoiceSampleSession(
             (spec, identity, token) =>
             {
-                model.SelectedVoiceLabVoice = spec.Voice;
-                model.VoiceLabLocaleFilter = spec.LanguageCode;
+                new GoogleVoiceComparisonSelection(spec.Voice, spec.LanguageCode).ApplyToStudio(model);
                 return model.PrepareGoogleVoiceSampleAsync(spec.Text, identity, token);
             }, model.ApproveGoogleGenerationSpendAsync, model.GeneratePreparedGoogleVoiceSampleAsync,
             _acceptedMp3OutputService.VerifyAcceptedAsync, _acceptedMp3OutputService.PlayAsync,
@@ -82,8 +81,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         AutomationProperties.SetName(locale, "Voice comparison locale");
         TextBox filter = NewTextBox("Filter names or families");
         AutomationProperties.SetName(filter, "Filter comparison voices");
-        Button refresh = NewButton("Refresh connected voices (no speech)");
-        content.Children.Add(Info("Refresh your connected catalog to enable eligible samples. Reference-only entries can use the official demos."));
+        Button load = NewButton("Load connected voices / apply locale");
+        Button refresh = NewButton("Refresh connected voices (full verification)");
+        content.Children.Add(Info("Load connected voices to validate current evidence and apply the locale. Explicit Refresh can replace current verification evidence. Neither action generates speech. Reference-only entries can use the official demos."));
+        content.Children.Add(load);
         Grid filters = new() { ColumnDefinitions = new ColumnDefinitions("120,*,Auto"), ColumnSpacing = 10 };
         filters.Children.Add(locale); Grid.SetColumn(filter, 1); filters.Children.Add(filter); Grid.SetColumn(refresh, 2); filters.Children.Add(refresh);
         content.Children.Add(filters);
@@ -161,7 +162,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             reviewDocument.IsEnabled = !busy && selected is not null && model.CurrentDocumentId is not null
                 && !model.IsDocumentDirty && !model.IsDocumentSaving && !string.IsNullOrWhiteSpace(model.DocumentText)
                 && GoogleFullDocumentVoiceSupport.Supports(selected.LanguageCode, selected.Voice.VoiceStableId);
-            close.IsEnabled = !busy; refresh.IsEnabled = !busy;
+            close.IsEnabled = !busy; refresh.IsEnabled = !busy; load.IsEnabled = !busy;
             locale.IsEnabled = !busy; filter.IsEnabled = !busy; sample.IsEnabled = !busy; voices.IsEnabled = !busy;
         }
 
@@ -212,15 +213,19 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         filter.TextChanged += (_, _) => { if (!busy) Populate((voices.SelectedItem as ComparisonVoice)?.Name); };
         locale.TextChanged += (_, _) => Changed();
         consent.IsCheckedChanged += (_, _) => Update();
-        refresh.Click += async (_, _) => await Run(async () =>
+        Task LoadVoicesAsync(bool explicitRefresh) => Run(async () =>
         {
             session.InvalidateReview(); consent.IsChecked = false;
             model.VoiceLabLocaleFilter = locale.Text?.Trim(); model.VoiceLabSearchText = null;
             using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
-            bool loaded = await RefreshConnectedVoicesAsync(model, timeout.Token).ConfigureAwait(true);
+            bool loaded = explicitRefresh
+                ? await RefreshConnectedVoicesAsync(model, timeout.Token).ConfigureAwait(true)
+                : await _connectedVoiceCatalog.ApplyFiltersAsync(model, timeout.Token).ConfigureAwait(true);
             Populate((voices.SelectedItem as ComparisonVoice)?.Name);
             status.Text = loaded ? model.ConnectedVoiceCatalogStatus : "Voice catalog not loaded. " + model.ConnectedVoiceCatalogStatus;
-        }).ConfigureAwait(true);
+        });
+        load.Click += async (_, _) => await LoadVoicesAsync(false).ConfigureAwait(true);
+        refresh.Click += async (_, _) => await LoadVoicesAsync(true).ConfigureAwait(true);
         prepare.Click += async (_, _) => await Run(async () =>
         {
             GoogleVoiceSampleSpec spec = Spec() ?? throw new InvalidOperationException("Select a connected supported voice and 1 to 500 characters.");
@@ -261,8 +266,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         void SelectForStudio(bool review)
         {
             if (busy || Selection() is not { } selected) return;
-            model.SelectedVoiceLabVoice = selected.Voice; model.VoiceLabLocaleFilter = selected.LanguageCode;
-            model.VoiceLabSearchText = null; useSelected = true; reviewCurrentDocument = review; dialog.Close();
+            selected.ApplyToStudio(model);
+            useSelected = true; reviewCurrentDocument = review; dialog.Close();
             model.RememberSelectedVoiceSetup();
         }
         use.Click += (_, _) => SelectForStudio(review: false);
@@ -283,8 +288,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             session.InvalidateReview();
             if (!useSelected)
             {
-                model.SelectedVoiceLabVoice = originalVoice;
+                var restored = model.HasCurrentVoiceLanguageCatalog
+                    ? model.VoiceLabCatalogResults.FirstOrDefault(candidate => SameVoice(candidate, originalVoice)) : null;
                 model.VoiceLabLocaleFilter = originalLocale; model.VoiceLabSearchText = originalSearch;
+                model.SelectedVoiceLabVoice = restored;
             }
         }
         if (reviewCurrentDocument) await OpenWholeArticleAsync(owner, model).ConfigureAwait(true);

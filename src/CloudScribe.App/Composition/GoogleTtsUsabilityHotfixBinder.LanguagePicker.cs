@@ -38,7 +38,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     ? "Languages come from the verified Google catalog. "
                     : "Language availability is not currently verified. Refresh the connection to load available languages. ")
                     + "Selected: " + (model.VoiceLabLocaleFilter is { } selected ? LanguageDisplayNames.WithCode(selected) : "all languages")
-                    + ". Searching this list is local. Choose a language, then refresh voices to apply it. Saved voices are never replaced automatically.";
+                    + ". Searching this list is local. Choose a language, then apply voice filters. Saved voices are never replaced automatically.";
             }
             finally { rebuilding = false; }
         }

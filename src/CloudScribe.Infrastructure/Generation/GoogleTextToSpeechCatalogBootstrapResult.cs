@@ -8,4 +8,7 @@ public sealed record GoogleTextToSpeechCatalogBootstrapResult(
     string ProjectId,
     string CatalogProvenanceId,
     IReadOnlyList<GoogleVoiceCatalogEntry> Voices,
-    DateTimeOffset ExpiresAtUtc);
+    DateTimeOffset ExpiresAtUtc)
+{
+    public bool RetainedCurrentEvidence { get; init; }
+}

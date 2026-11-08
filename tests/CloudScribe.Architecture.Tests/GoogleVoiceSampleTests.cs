@@ -1,6 +1,7 @@
 using CloudScribe.App.Composition;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Infrastructure.Pricing;
 
 namespace CloudScribe.Architecture.Tests;
@@ -122,7 +123,7 @@ public sealed class GoogleVoiceSampleTests
     }
 
     private static GoogleVoiceSampleSpec Spec() => new(new VoiceLabCatalogSelection(
-        "en-US-Standard-C", "google-cloud", "account", "project", "capability", "fingerprint",
+        "en-US-Standard-C", GoogleGenerationProvider.StableProviderId, "account", "project", "capability", "fingerprint",
         true, true, true, ["en-US", "en-GB"], "FEMALE", 24000), "en-US", "A short shared sample.");
 
     private sealed class SampleHarness

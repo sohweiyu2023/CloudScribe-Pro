@@ -1,5 +1,6 @@
 using CloudScribe.App.Composition;
 using CloudScribe.Domain.Generation;
+using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.Architecture.Tests;
 
@@ -68,6 +69,16 @@ public sealed class GoogleVoiceComparisonSelectionTests
         Assert.DoesNotContain("const decimal planningRate = 30m", planning, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ComparisonLabelsKeepTheirUtf8Punctuation()
+    {
+        string source = BinderSource("VoiceComparison");
+        Assert.Contains("CloudScribe \u2014 Voices and short samples", source, StringComparison.Ordinal);
+        Assert.Contains(" \u00b7 Provider gender label: ", source, StringComparison.Ordinal);
+        foreach (string corrupt in new[] { "\u00e2\u20ac", "\u00c2\u00b7", "\ufffd" })
+            Assert.DoesNotContain(corrupt, source, StringComparison.Ordinal);
+    }
+
     private static string BinderSource(string part)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
@@ -82,5 +93,5 @@ public sealed class GoogleVoiceComparisonSelectionTests
     }
 
     private static VoiceLabCatalogSelection Voice(string name = "en-US-Neural2-D") =>
-        new(name, "google-cloud", "account", "project", "capability", "fingerprint", true, true, true, ["en-US"]);
+        new(name, GoogleGenerationProvider.StableProviderId, "account", "project", "capability", "fingerprint", true, true, true, ["en-US"]);
 }

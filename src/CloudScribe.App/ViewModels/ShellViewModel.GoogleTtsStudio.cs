@@ -24,7 +24,7 @@ public sealed partial class ShellViewModel
             SelectedVoiceLabVoice = null;
             VoiceLabCatalogResults.Clear();
             VoiceLabCatalogLastRefreshSucceeded = false;
-            ConnectedVoiceCatalogStatus = "Language changed. Refresh verified voices before choosing a voice or reviewing cost. Saved voice preferences are retained.";
+            ConnectedVoiceCatalogStatus = "Language changed. Apply voice filters before choosing a voice or reviewing cost. Saved voice preferences are retained.";
         }
     }
 

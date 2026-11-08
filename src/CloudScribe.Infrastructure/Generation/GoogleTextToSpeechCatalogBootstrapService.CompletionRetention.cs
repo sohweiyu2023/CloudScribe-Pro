@@ -27,6 +27,6 @@ public sealed partial class GoogleTextToSpeechCatalogBootstrapService
             || policy.ExecutionEnvelope is null
             || !string.Equals(policy.ExecutionEnvelope.CapabilityProvenanceId, observedProvenance, StringComparison.Ordinal)) return null;
         new GoogleGenerationProductionEvidence(account, current).Validate(now);
-        return new(account, current, identity.ProjectId, observed.ProvenanceId, observed.Voices, current.ExpiresAtUtc);
+        return new(account, current, identity.ProjectId, observed.ProvenanceId, observed.Voices, current.ExpiresAtUtc) { RetainedCurrentEvidence = true };
     }
 }

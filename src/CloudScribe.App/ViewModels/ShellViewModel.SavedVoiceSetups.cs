@@ -44,7 +44,7 @@ public sealed partial class ShellViewModel
         // Remember intent, never adopt cached authorization or select a provider implicitly.
         SelectedVoiceLabVoice = null;
         OnPropertyChanged(nameof(PreferredVoiceName));
-        StatusMessage = "Saved voice setup loaded. Refresh real Google voices to validate it before use.";
+        StatusMessage = "Saved voice setup loaded. Open the voice list or apply voice filters to validate it before use.";
     }
 
     public void RememberSelectedVoiceSetup()
