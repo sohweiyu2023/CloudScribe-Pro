@@ -54,6 +54,7 @@ public sealed class BatchBinderRegressionTests
         Assert.Contains("if (listHadFocus) RestoreBatchListFocus(ctx);", source, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.SetName(ctx.Subfolders, \"Include subfolders when adding a folder\")", source, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.SetName(ctx.Numbering, \"Number the MP3 files in this order\")", source, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.SetName(ctx.SkipUrls, \"Skip web addresses in narration; keep the original text\")", source, StringComparison.Ordinal);
     }
 
     [Fact]

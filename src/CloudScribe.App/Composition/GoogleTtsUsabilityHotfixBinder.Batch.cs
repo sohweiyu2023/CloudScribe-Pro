@@ -244,6 +244,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         AutomationProperties.SetName(ctx.Results, "Batch results");
         AutomationProperties.SetName(ctx.Subfolders, "Include subfolders when adding a folder");
         AutomationProperties.SetName(ctx.Numbering, "Number the MP3 files in this order");
+        AutomationProperties.SetName(ctx.SkipUrls, "Skip web addresses in narration; keep the original text");
         ctx.Next.FontWeight = Avalonia.Media.FontWeight.SemiBold;
         ctx.Steps.Foreground = CosmicDialogTheme.Solid(CosmicDialogTheme.Cyan);
         ctx.Start.Classes.Add("primary"); ctx.Approve.Classes.Add("primary"); ctx.Save.Classes.Add("primary");
