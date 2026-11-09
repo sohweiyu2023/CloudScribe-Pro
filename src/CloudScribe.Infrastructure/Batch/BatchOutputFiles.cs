@@ -21,7 +21,9 @@ public static class BatchOutputFiles
         }
         string folder = Path.GetDirectoryName(Path.GetFullPath(destination)) ?? throw new IOException("The output folder is not valid.");
         Directory.CreateDirectory(folder);
-        string temporary = Path.Combine(folder, "." + Path.GetFileName(destination) + "." + Guid.NewGuid().ToString("N") + ".partial");
+        // Independent of the destination basename: a legal 255-unit output must not overflow the component limit
+        // merely because its verified copy needs a unique temporary sibling.
+        string temporary = Path.Combine(folder, ".cloudscribe-" + Guid.NewGuid().ToString("N") + ".partial");
         try
         {
             var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous);
