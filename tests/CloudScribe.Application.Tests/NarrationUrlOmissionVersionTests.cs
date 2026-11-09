@@ -22,11 +22,14 @@ public sealed class NarrationUrlOmissionVersionTests
     [InlineData("\u300884000.co\u3009", "\u3008\u3009", 1)]
     public void RecognizesConservativeBareDomains(string source, string expected, int count)
     {
-        var result = NarrationUrlOmission.Transform(source);
+        // v2 is replayed unchanged for saved copies; v3 (current) recognises the same real domains.
+        var result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
         Assert.Equal(expected, result.OutputText);
         Assert.Equal(count, result.OmittedUrlCount);
         Assert.Equal("url-omission-v2", result.TransformVersion);
-        Assert.Equal(result, NarrationUrlOmission.Transform(source, NarrationUrlOmission.CurrentVersion));
+        var current = NarrationUrlOmission.Transform(source);
+        Assert.Equal(result with { TransformVersion = "url-omission-v3" }, current);
+        Assert.Equal(current, NarrationUrlOmission.Transform(source, NarrationUrlOmission.CurrentVersion));
     }
 
     [Theory]
@@ -62,7 +65,7 @@ public sealed class NarrationUrlOmissionVersionTests
         Assert.Equal("Read 84000.co and .", legacy.OutputText);
         Assert.Equal("url-omission-v1", legacy.TransformVersion);
         Assert.Equal("Read  and .", NarrationUrlOmission.Transform(source).OutputText);
-        foreach (string? version in new string?[] { null, "", "url-omission-v3", "URL-OMISSION-V1" })
+        foreach (string? version in new string?[] { null, "", "url-omission-v4", "URL-OMISSION-V1" })
         {
             Assert.False(NarrationUrlOmission.IsSupportedVersion(version));
             Assert.Throws<InvalidOperationException>(() => NarrationUrlOmission.Transform(source, version));

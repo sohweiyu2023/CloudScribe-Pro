@@ -1,10 +1,12 @@
-# CloudScribe Pro 1.0.7: setup and everyday use
+# CloudScribe Pro 1.0.8: setup and everyday use
 
 The local usability update adds saved voice setups, remembered choices, offline request inspection and local narration-part preparation. See [Saved setups and local recovery](SAVED_SETUPS_AND_LOCAL_RECOVERY.md) for the updated workflow and persistence details.
 
 CloudScribe turns written text into spoken MP3 audio using your Google Cloud Text-to-Speech account. Cosmic Transcriber does the reverse: it turns recordings into text. The two apps use separate providers, credentials and bills.
 
 ## Help inside the application
+
+A new profile shows a **First time here?** card. **Start tutorial** opens the guided tour; **Skip for now** dismisses the invitation. The choice is remembered, and **Help** always reopens the tour. You can keep using the workspace without answering the invitation.
 
 **Help** opens a live walkthrough that points to actual controls, opens the relevant screens and scrolls targets into view. It has 15 steps for first-time setup and 11 for a saved connection, plus labeled Google setup illustrations. **Back**, **Next**, **Skip guide**, **Finish guide** and **Show control** keep navigation simple; Escape skips, and Help replays it. Guide navigation never approves costs or generates speech. See [Visual walkthrough](VISUAL_WALKTHROUGH.md). **About** shows the maintainer, website and optional support email.
 
@@ -30,7 +32,7 @@ For several TXT files, use the checkbox and **Preview selected narration text** 
 
 Editing the original blocks fresh requests from its old narration copy, while already-started jobs retain their exact text. A recovery-only article review can recover admitted work but will not complete an MP3 while fresh parts remain blocked. Editing the narration copy itself may also block article progress or export; keep its receipts and accepted audio. To prepare a replacement, save the original text as a new document and preview URL skipping again, or start a new batch from the original TXT. Turning the checkbox off does not restore or repair an edited copy.
 
-New narration preparations in **1.0.6** also skip conservative bare addresses such as `84000.co` using the v2 policy. The older 1.0.5 package uses v1. Existing copies and saved batches keep their original v1 text and approvals; they are not silently upgraded. The exact suffix list, exclusions and preview limitations are in [Batch narration: bare-domain policy](BATCH_NARRATION.md#bare-domains-in-the-v2-narration-policy).
+New narration preparations skip conservative bare addresses such as `84000.co`. The current v3 policy keeps several sentence forms that only look like an address (for example `awareness.In this state` with a missing space), which the 1.0.6–1.0.7 v2 policy could delete. The older 1.0.5 package uses v1. Existing copies and saved batches keep their recorded v1 or v2 text and approvals; they are not silently upgraded. Ambiguous lowercase tokens such as `nothing.ai` can still be read as domains and omitted, so inspect the narration preview before approving audio. The exact suffix list, exclusions and preview limitations are in [Batch narration: bare-domain policy](BATCH_NARRATION.md#bare-domains-in-the-v3-narration-policy-current).
 
 ## Set up Google Cloud once
 

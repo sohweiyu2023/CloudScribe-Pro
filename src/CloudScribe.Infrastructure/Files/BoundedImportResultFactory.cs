@@ -61,7 +61,8 @@ internal static class BoundedImportResultFactory
             title = "Imported document";
         }
 
-        return title.Length <= 200 ? title : title[..200];
+        // Never cut a surrogate pair or combining sequence in half (CJK Extension B names are common in this library).
+        return CloudScribe.Application.Documents.DocumentTitleText.Fit(title, 200);
     }
 
     private static string BuildProvenance(string kind, string displayName) =>

@@ -20,7 +20,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     [InlineData("https://a.test\r\nhttps://b.test", "\r\n", 2)]
     public void OmitsExplicitUrlsAndKeepsOtherText(string source, string expected, int count)
     {
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal(expected, result.OutputText);
         Assert.Equal(count, result.OmittedUrlCount);
@@ -43,7 +43,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     [InlineData("One\r\n\thttps://example.com\r\n\r\nTwo", "One\r\n\t\r\n\r\nTwo")]
     public void PreservesSentencePunctuationAndParagraphBoundaries(string source, string expected)
     {
-        Assert.Equal(expected, NarrationUrlOmission.Transform(source).OutputText);
+        Assert.Equal(expected, NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version).OutputText);
     }
 
     [Theory]
@@ -64,7 +64,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     [InlineData("😀https://example.com 𐐀", "😀 𐐀")]
     public void KeepsUnicodeProseAndOmitsUnicodeUrls(string source, string expected)
     {
-        Assert.Equal(expected, NarrationUrlOmission.Transform(source).OutputText);
+        Assert.Equal(expected, NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version).OutputText);
     }
 
     [Theory]
@@ -83,7 +83,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     [InlineData("[guide](https://example.com extra text)", "[guide]( extra text)", 1)]
     public void PreservesMarkdownLabelsAndDoesNotConsumeMalformedProse(string source, string expected, int count)
     {
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal(expected, result.OutputText);
         Assert.Equal(count, result.OmittedUrlCount);
@@ -107,7 +107,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     [InlineData(@"[guide](https://example.com/a,http://other.test/b\(c\))")]
     public void PreservesMarkdownLabelsWithEscapedDestinations(string source)
     {
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal("guide", result.OutputText);
         Assert.Equal(1, result.OmittedUrlCount);
@@ -121,7 +121,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
         {
             string source = $"[guide](https://example.com/a\\{character}b)";
 
-            NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+            NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
             Assert.Equal("guide", result.OutputText);
             Assert.Equal(1, result.OmittedUrlCount);
@@ -139,7 +139,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     [InlineData(@"Read https://example.com/a\(b\) now.", @"Read \(b\) now.")]
     public void MarkdownEscapesDoNotConsumeMalformedEndingsOrChangePlainUrlRules(string source, string expected)
     {
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal(expected, result.OutputText);
         Assert.Equal(1, result.OmittedUrlCount);
@@ -167,11 +167,11 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     [InlineData("https://example\ud800.test/path")]
     public void NoRecognizedUrlReturnsSameStringWithoutNormalization(string source)
     {
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Same(source, result.OutputText);
         Assert.Equal(0, result.OmittedUrlCount);
-        Assert.Equal(NarrationUrlOmission.CurrentVersion, result.TransformVersion);
+        Assert.Equal(NarrationUrlOmission.BareDomainV2Version, result.TransformVersion);
     }
 
     [Theory]
@@ -189,16 +189,16 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     [InlineData("123", true)]
     public void ReportsLocalSpeakableContent(string source, bool expected)
     {
-        Assert.Equal(expected, NarrationUrlOmission.Transform(source).HasSpeakableContent);
+        Assert.Equal(expected, NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version).HasSpeakableContent);
     }
 
     [Fact]
     public void NullAndOversizedInputFailWithoutTruncation()
     {
-        Assert.Throws<ArgumentNullException>(() => NarrationUrlOmission.Transform(null!));
+        Assert.Throws<ArgumentNullException>(() => NarrationUrlOmission.Transform(null!, NarrationUrlOmission.BareDomainV2Version));
         string source = new('a', NarrationUrlOmission.MaximumSourceLength + 1);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => NarrationUrlOmission.Transform(source));
+        Assert.Throws<ArgumentOutOfRangeException>(() => NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version));
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     {
         string source = new('a', NarrationUrlOmission.MaximumSourceLength);
 
-        Assert.Same(source, NarrationUrlOmission.Transform(source).OutputText);
+        Assert.Same(source, NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version).OutputText);
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     {
         string source = string.Concat("Before https://example.com/", new string('a', 1_000_000), "?q=%20#part. After");
 
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal("Before . After", result.OutputText);
         Assert.Equal(1, result.OmittedUrlCount);
@@ -226,7 +226,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
         string source = string.Concat("https://", string.Concat(Enumerable.Repeat("http://", 100_000)));
 
         // The first authority is a host with an invalid port; embedded prefixes are not retried.
-        Assert.Same(source, NarrationUrlOmission.Transform(source).OutputText);
+        Assert.Same(source, NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version).OutputText);
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     {
         string source = string.Concat("name@", string.Concat(Enumerable.Repeat("中www.", 100_000)), "example.com");
 
-        Assert.Same(source, NarrationUrlOmission.Transform(source).OutputText);
+        Assert.Same(source, NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version).OutputText);
     }
 
     [Fact]
@@ -242,7 +242,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     {
         string source = string.Concat("[guide](https://example.com/", string.Concat(Enumerable.Repeat(@"a\(b\)", 100_000)), ")");
 
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal("guide", result.OutputText);
         Assert.Equal(1, result.OmittedUrlCount);
@@ -257,8 +257,8 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     {
         string source = string.Concat(Enumerable.Repeat(@"[x](https://a/\(", repetitions));
 
-        InvalidOperationException first = Assert.Throws<InvalidOperationException>(() => NarrationUrlOmission.Transform(source));
-        InvalidOperationException second = Assert.Throws<InvalidOperationException>(() => NarrationUrlOmission.Transform(source));
+        InvalidOperationException first = Assert.Throws<InvalidOperationException>(() => NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version));
+        InvalidOperationException second = Assert.Throws<InvalidOperationException>(() => NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version));
 
         // Deterministic budget rejection, not a machine-speed timeout or a partially omitted copy.
         Assert.Equal(first.Message, second.Message);
@@ -274,7 +274,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
         const string after = "\r\nKeep this ending.";
         string source = string.Concat(before, string.Concat(Enumerable.Repeat(@"[x](https://a/\(", 512)), after);
 
-        Assert.Throws<InvalidOperationException>(() => NarrationUrlOmission.Transform(source));
+        Assert.Throws<InvalidOperationException>(() => NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version));
         Assert.StartsWith(before, source, StringComparison.Ordinal);
         Assert.EndsWith(after, source, StringComparison.Ordinal);
         Assert.Equal("Still usable", NarrationUrlOmission.Transform("[Still usable](https://example.com)").OutputText);
@@ -288,7 +288,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     {
         string source = string.Concat(Enumerable.Repeat(@"[x](https://a/\(b\)) ", repetitions));
 
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal(repetitions, result.OmittedUrlCount);
         Assert.Equal(string.Concat(Enumerable.Repeat("x ", repetitions)), result.OutputText);
@@ -300,7 +300,7 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
         const int links = 10_000;
         string source = string.Concat(new string('[', links), "Label", string.Concat(Enumerable.Repeat("](https://example.com)", links)));
 
-        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult result = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal("Label", result.OutputText);
         Assert.Equal(links, result.OmittedUrlCount);
@@ -311,8 +311,8 @@ public sealed class NarrationUrlOmissionV2CompatibilityTests
     {
         const string source = "A [guide](https://example.com/path?q=1#x)\r\nwww.example.com";
 
-        NarrationUrlOmissionResult first = NarrationUrlOmission.Transform(source);
-        NarrationUrlOmissionResult second = NarrationUrlOmission.Transform(source);
+        NarrationUrlOmissionResult first = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
+        NarrationUrlOmissionResult second = NarrationUrlOmission.Transform(source, NarrationUrlOmission.BareDomainV2Version);
 
         Assert.Equal(first, second);
         Assert.Equal("A [guide](https://example.com/path?q=1#x)\r\nwww.example.com", source);

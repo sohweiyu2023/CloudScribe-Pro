@@ -1,3 +1,4 @@
+using CloudScribe.Application.Logging;
 using CloudScribe.Infrastructure.Generation;
 
 namespace CloudScribe.Infrastructure.Tests;
@@ -59,6 +60,21 @@ public sealed partial class NarrationPartGroupTests
         };
         await Assert.ThrowsAsync<InvalidOperationException>(() => e.Service.PrepareAsync(intent, TestContext.Current.CancellationToken));
         Assert.Empty(await FinancialRowsAsync(f, "chirp_article_attempts"));
+    }
+
+    [Fact]
+    public async Task AdditiveNullPolicyFailsClosedBeforeCreatingAuthority()
+    {
+        using var f = new Fixture(); await f.InitializeAsync(); var e = await AdditiveEvidenceAsync(f, 2);
+        var family = Assert.Single(e.Store.Catalog.Families) with { Policy = null! };
+        e.Store.Catalog = e.Store.Catalog with { Families = [family] };
+        Assert.Throws<InvalidDataException>(() => ChirpAdditionalAdmissionValidation.RequireValid(e.Store.Catalog, e.Legacy.Clock.GetUtcNow()));
+        Assert.Throws<InvalidDataException>(() => ChirpAdditionalAdmissionValidation.RequireValid(family, e.Legacy.Clock.GetUtcNow()));
+        // The service keeps its established sanitized no-policy boundary; direct validation above must reject malformed data.
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => e.Service.PrepareAsync(FullDocumentIntent(e.First, 1), TestContext.Current.CancellationToken));
+        Assert.Equal(LocalRequestReason.AdmissionChanged, LocalRequestDiagnostics.Describe(error, e.Legacy.Clock.GetUtcNow()).Reason);
+        Assert.Empty(await FinancialRowsAsync(f, "chirp_article_attempts"));
+        Assert.Empty(await FinancialRowsAsync(f, "chirp_whole_article_jobs"));
     }
 
     [Fact]

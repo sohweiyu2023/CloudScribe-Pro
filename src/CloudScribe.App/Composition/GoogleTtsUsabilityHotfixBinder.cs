@@ -114,13 +114,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         if (mounted) MountQueueBatchEntries(window, viewModel);
         if (mounted) AnchoredWalkthrough.Prepare(window);
         if (mounted) viewModel.ArticleExportRequested += (_, _) => _ = OpenArticleExportAsync(window, viewModel);
-        if (mounted && preferences.IsFreshProfile && !preferences.State.QuickStartSeen)
-        {
-            if (window.IsVisible)
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = OpenQuickStartObservedAsync(window, viewModel));
-            else
-                window.Opened += (_, _) => _ = OpenQuickStartObservedAsync(window, viewModel);
-        }
+        if (mounted) MountFirstRunInvitation(window, viewModel);
         return mounted;
     }
 

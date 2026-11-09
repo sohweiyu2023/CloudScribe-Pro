@@ -87,13 +87,7 @@ public sealed partial class ArticleAudioExportService
     /// <summary>Read-only local path checks. Repeated by export because preflight cannot prevent later filesystem changes.</summary>
     public static (string Destination, string Ffmpeg, string Ffprobe) PreflightExport(string destination, string ffmpegPath)
     {
-        destination = Path.GetFullPath(destination);
-        RejectLinks(destination);
-        if (!string.Equals(Path.GetExtension(destination), ".mp3", StringComparison.OrdinalIgnoreCase)
-            || File.Exists(destination) || Directory.Exists(destination))
-            throw new InvalidOperationException("Choose a new MP3 filename; existing files are never replaced.");
-        string directory = Path.GetDirectoryName(destination)!;
-        if (!Directory.Exists(directory)) throw new InvalidOperationException("Choose an existing export folder.");
+        destination = PreflightDestination(destination);
         ffmpegPath = Path.GetFullPath(ffmpegPath);
         string ffprobePath = Path.Combine(Path.GetDirectoryName(ffmpegPath)!, "ffprobe.exe");
         if (!string.Equals(Path.GetFileName(ffmpegPath), "ffmpeg.exe", StringComparison.OrdinalIgnoreCase)

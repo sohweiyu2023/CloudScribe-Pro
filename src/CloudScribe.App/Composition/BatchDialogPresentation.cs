@@ -88,6 +88,8 @@ public static class BatchDialogPresentation
 
     public static string Reason(string code) => code switch
     {
+        "batch.article-output-preflight-nothing-sent" => "output folder, filename or approved audio tools are not ready; choose a new MP3 name in a physical folder and check audio setup, then Retry. No article job or speech request started",
+        "batch.article-output-preflight-reconcile" => "local output or audio-tool checks stopped the next speech request. Earlier audio, jobs and holds are kept; fix output/audio setup, then Check again to reconcile before continuing",
         "batch.article-review-refused-nothing-sent" => "this file is not admitted for narration yet; nothing was sent",
         "batch.long-audio-not-admitted-nothing-sent" => "Long Audio has not admitted this file (approval missing, expired or over the cap); nothing was sent",
         "batch.long-audio-needs-reconciliation" => "its Long Audio request needs review; nothing new was sent. Without a saved Google operation ID, its status cannot be checked with Google",
@@ -110,6 +112,7 @@ public static class BatchDialogPresentation
         "batch.import-interrupted-add-again" => "the app closed while adding it; add the file again",
         "batch.source-changed-add-again" => "the TXT file changed after it was listed; remove it and add it again so the new text is reviewed",
         "batch.source-missing-add-again" => "the TXT file could not be read again (moved, renamed or deleted); add it again",
+        "batch.source-import-refused" => "the library could not accept this file; remove it, or rename the TXT and add it again (other files were added normally)",
         "batch.narration-failed-before-start" => "stopped before anything was sent",
         "batch.narration-failed-after-start-reconcile" => "stopped after it started; check it before retrying",
         "batch.paused" => "paused",

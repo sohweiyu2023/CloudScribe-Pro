@@ -8,7 +8,7 @@ public static class WalkthroughPlan
         List<WalkthroughStep> steps =
         [
             new(WalkthroughScreen.Studio, "DocumentEditor|Create a new local document from empty workspace",
-                "Start with a short paragraph", "This outline marks the real control. If the page is empty, choose New document, then type or paste two sentences in the editor. Your text saves locally. You can do the step now, or use Next to look ahead. Tab moves between controls; Escape skips the guide."),
+                "Add your text", "This outline marks the real control. If the page is empty, choose New document, then type or paste text in the editor. A short paragraph is an easy way to explore, not a document limit. Your text saves locally. You can do the step now, or use Next to look ahead. Tab moves between controls; Escape skips the guide."),
             new(WalkthroughScreen.Studio, "CreateMp3Button", "This opens your MP3 workspace",
                 "Create MP3 is where you choose a voice and check the price. Next opens the relevant screen for you. The guide never clicks a billable control or ticks approval for you."),
         ];
@@ -30,15 +30,15 @@ public static class WalkthroughPlan
             new(WalkthroughScreen.Create, "GuideConnectionStatus", savedConnection ? "Your saved connection is ready to check" : "Check your connection status",
                 savedConnection ? "CloudScribe found one enabled Google connection. Keep it: you do not need to paste your key again. You may choose a saved voice setup below. A remembered voice still needs a fresh catalog check. If access fails, close this screen and inspect Setups or Advanced tools."
                 : "Read the connection status here. If setup is incomplete, Back returns to the connection form. You can still explore the remaining steps. A missing connection prevents generation; the guide does not create one automatically."),
-            new(WalkthroughScreen.Create, "Refresh real Google voices", "Refresh the available voices",
-                "Choose Refresh real Google voices to check access and load the voices your account can use. This does not generate speech. For another language, expand Language and voice filters first; for example en-US means US English. If the list is empty, clear the search and check the connection. Access checks expire, so refresh when prompted."),
+            new(WalkthroughScreen.Create, "Refresh real Google voices", "Check the available voices",
+                "Opening this workspace loads voices for your saved connection without generating speech. Wait for loading, then choose a returned voice. Use Language and Apply voice filters to narrow the list. If access has expired, choose Refresh real Google voices; this can replace earlier verification and review evidence. If the list is empty, clear the search and check the connection."),
             new(WalkthroughScreen.Create, "Voice", "Choose a voice from this list",
                 "Open the highlighted Voice list and select a returned voice. The name includes its language and voice family. Start with a Standard voice if suitable, then check its actual price in the next step. A remembered name alone is not verification. Voice samples elsewhere in the app can be billable."),
             new(WalkthroughScreen.Create, "Review pricing source if pricing is unavailable", "Check the price source",
                 "If pricing is unavailable, open this section. Follow the official pricing link, compare the voice family's rates with the included catalog, then tick the match box only if they agree and choose Fetch current pricing evidence and activate. Fetching does not compare rates for you. Never confirm a mismatch.",
                 "https://cloud.google.com/text-to-speech/pricing"),
-            new(WalkthroughScreen.Create, "Review current text, voice and cost", "Review this exact paragraph and voice",
-                "Choose Review current text, voice and cost. Read the estimate below. This prepares a local review without generating audio. If the text is too long, return to Studio and use Advanced tools to create local parts; each part needs separate review and approval."),
+            new(WalkthroughScreen.Create, "Review current text, voice and cost", "Review this exact text and voice",
+                "Choose Review current text, voice and cost. Read the estimate below. This prepares a local review without generating audio. For long TXT documents or several files, close this workspace and choose Batch MP3. Review its narration plan and total maximum cost before approving the batch. The batch guide explains available routes and any setup needed."),
             new(WalkthroughScreen.Create, "I approve this exact request and its displayed maximum cost.", "Read the maximum before approving",
                 "Read the exact voice, currency and maximum estimate above this box. Tick it yourself only if you accept this request. Editing text or changing the voice clears the review. Taxes, credits and conversion can change your Google bill. The guide never checks this box."),
             new(WalkthroughScreen.Create, "GuideGenerateButton", "Create once when you are ready",

@@ -2,9 +2,33 @@
 
 All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in the app are estimates and safety holds, never a Google bill.
 
-## 1.0.7 (candidate)
+## 1.0.8 (candidate)
 
-Responsive comparison-catalog cancellation and broader offline regression coverage. This separate candidate does not change the frozen 1.0.6 package, installed profile or existing spending authority. Full combined verification and native acceptance remain separate gates.
+Independent review fixes and optional first-run guidance on top of released 1.0.7. Exact combined Windows, package, installation and publication checks remain release gates. No change to spending rules, caps, approvals, credentials or provider requests.
+
+### Optional first-run guidance
+- A fresh profile shows a non-modal **Start tutorial / Skip for now** invitation instead of automatically opening the guide. Returning and previously seen profiles are not invited again.
+- **Help** continues to replay the existing walkthrough, including its first-time and saved-connection paths. Guide navigation never approves a cost or generates speech.
+- Keyboard focus moves into the guide when requested and returns to Help on dismissal. Wording now explains current voice filtering, explicit refresh and long-document batch routes.
+
+### Narration text integrity
+- **Fixed: URL skipping could delete ordinary sentence text.** The v2 bare-domain policy treated prose such as `awareness.In this state` (a missing space after a full stop), `for us.Us and them`, `section 3.in the appendix` and `2024.de facto` as web addresses and removed them from the narration copy. New preparations now use `url-omission-v3`, which still skips real addresses (`84000.co`, `EXAMPLE.COM`, explicit HTTP(S)/www links) but keeps mixed-case suffixes, number-only names on most suffixes and two-label `.in`/`.us` words. Saved v1/v2 copies and batches replay their recorded policy unchanged; the preview explains the older v2 policy's risk.
+- **Fixed: imported titles could split a character.** Single-document import cut long titles at exactly 200 UTF-16 units, which could leave half of a surrogate pair (for example a CJK Extension B character) in the title. Titles are now shortened on a complete text-element boundary. If even one text element exceeds the title limit, a short placeholder is used; source text is unchanged.
+
+### Batch import robustness
+- **Fixed: OneDrive input folders were mistaken for links.** Batch folder scans accept known Windows Cloud Files placeholders, including nested folders, while still skipping junctions, symbolic links and unknown reparse points. Unavailable cloud folders are counted as unreadable. This input-only change does not relax output or recovery path checks.
+- **Fixed: a long TXT file name stopped the whole batch import.** Windows allows names longer than the library's 240-character title limit; the library refused the title and the import aborted, leaving every later file unimported on each retry. The document title is now fitted on a character boundary (the MP3 name keeps the full stem when it fits the filesystem).
+- One file the library refuses no longer stops the files after it: it is marked "the library could not accept this file" and can be removed or added again. Batch-wide problems still stop the add.
+- **Fixed: Include subfolders could loop or fail.** Folder scans followed junctions and directory links (a link back to an ancestor never ended) and one unreadable subfolder failed the whole add. Local folders are now scanned iteratively on a worker thread, links are reported instead of followed, and unreadable folders are counted and skipped.
+- **Fixed: valid long names could fail during MP3 export.** Temporary copies now use a short unique name independent of the output name. Numbering and collision suffixes fit within Windows' filename-component limit without splitting text elements; original text and started-job names are unchanged.
+- Checking new files against an existing list is now linear (thousands of files no longer re-normalise every listed path for every new file), and a malformed saved path can no longer break adding files.
+
+### Defensive validation
+- Null additive-admission policies fail closed with controlled validation errors. The service retains its sanitized missing-policy error and creates no authority or jobs for this case.
+
+## 1.0.7 (9 November 2026)
+
+Responsive comparison-catalog cancellation and broader offline regression coverage. This release preserves existing profiles and spending authority. Automated, native, assistive-technology and real-audio acceptance remain distinct evidence.
 
 ### Comparison window lifetime
 - Close, Escape and normal window close dismiss a pending catalog load or refresh without waiting for an uncooperative dependency. Late results cannot replace a newer selection or publish into a retired window; eligible opener focus is restored.
@@ -19,7 +43,7 @@ Responsive comparison-catalog cancellation and broader offline regression covera
 ### Offline verification scope
 - Add a bounded deterministic connected-workflow matrix: 27 cases cover 242 feasible pairs from 3,744 valid candidates, with additional rejection and source-edit controls. Tests compose real services over disposable state and fake-only transports; seeded accepted outcomes are not playable audio.
 - Add test-only production-control headless regressions for dismissal, reopen/late-response races, focus state, operation lifetime and cancellation boundaries. Headless focus is not native Windows or assistive-technology acceptance.
-- Application product/file versions move to 1.0.7/1.0.7.0. AssemblyVersion stays 1.0.0.0, and historical Stage8 governance is unchanged. No six-family, real-audio, installation or publication pass is claimed.
+- Application product/file versions move to 1.0.7/1.0.7.0. AssemblyVersion stays 1.0.0.0, and historical Stage8 governance is unchanged. Source changes alone do not establish all six human-acceptance families, real-audio quality, installation or publication.
 
 ## 1.0.6
 

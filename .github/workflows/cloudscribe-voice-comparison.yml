@@ -18,9 +18,7 @@ on:
       - 'THIRD-PARTY-NOTICES.md'
       - 'licenses/**'
       - 'scripts/**'
-      - 'tools/completion_workflow/**'
-      - 'tools/article-admission/**'
-      - 'tools/long-audio/**'
+      - 'tools/**'
       - '.gitattributes'
       - '.github/triggers/**'
       - '.github/workflows/cloudscribe-voice-comparison.yml'
@@ -112,6 +110,13 @@ jobs:
           if ((git rev-parse HEAD).Trim() -ne $env:CANDIDATE_SHA) { throw 'Checkout does not match the triggering candidate.' }
           python -B tools/update_sha256_manifest.py --check
           if ($LASTEXITCODE -ne 0) { throw 'Source manifest check failed.' }
+      - name: Source material regressions and verifier self-tests
+        shell: pwsh
+        run: |
+          python -B tools/run_python_regression_shards.py --all
+          if ($LASTEXITCODE -ne 0) { throw 'Source material regressions failed.' }
+          python -B tools/run_verifier_self_tests.py
+          if ($LASTEXITCODE -ne 0) { throw 'Auxiliary verifier self-tests failed.' }
       - name: Offline durable completion gate and isolated bridge
         shell: pwsh
         run: |

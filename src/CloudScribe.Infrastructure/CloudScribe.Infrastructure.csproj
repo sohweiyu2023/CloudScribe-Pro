@@ -21,4 +21,7 @@
   <ItemGroup>
     <EmbeddedResource Include="../../controls/v2.22/clean-carrier/*.b64" LogicalName="CloudScribe.V222Carrier.%(Filename)%(Extension)" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="CloudScribe.Infrastructure.Tests" />
+  </ItemGroup>
 </Project>

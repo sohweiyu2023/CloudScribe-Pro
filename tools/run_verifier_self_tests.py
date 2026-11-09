@@ -16,6 +16,7 @@ BASE_TEST_CLASSES = (
     ("PackageScanValidatorTests", 6),
     ("PhysicalDirectoryToolTests", 4),
     ("RepositoryVerifierTests", 5),
+    ("ServicingReleaseIdentityTests", 15),
     ("SourceArchiveCliTests", 2),
     ("SourceManifestToolTests", 3),
     ("Stage2EvidenceInventoryCliTests", 4),
@@ -26,7 +27,7 @@ BASE_TEST_CLASSES = (
 # Process-tree teardown semantics are host-specific. Run these as part of the
 # certification suite on Windows, where CloudScribe ships and where taskkill /T
 # gives a deterministic descendant cleanup primitive. Linux/macOS still execute
-# the 45 portable verifier tests without leaving orphan/zombie children in CI.
+# the portable verifier tests without leaving orphan/zombie children in CI.
 TEST_CLASSES = BASE_TEST_CLASSES + (("ZBoundedProcessRunnerTests", 10),) if os.name == "nt" else BASE_TEST_CLASSES
 RAN_RE = re.compile(r"Ran\s+(\d+)\s+tests?\s+in")
 
@@ -78,7 +79,7 @@ def _stage4_contract_root() -> tempfile.TemporaryDirectory[str]:
             f"<Version>{servicing}</Version>",
             f"<InformationalVersion>{servicing}</InformationalVersion>",
             f"<FileVersion>{servicing}.0</FileVersion>",
-        )) for servicing in ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7")):
+        )) for servicing in ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7", "1.0.8")):
             temporary.cleanup()
             raise RuntimeError("A servicing SDK may only project an exact 1.0.x servicing patch source")
     state["current_stage"] = 4

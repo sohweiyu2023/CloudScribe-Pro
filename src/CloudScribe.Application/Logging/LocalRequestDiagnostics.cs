@@ -50,6 +50,7 @@ public static partial class LocalRequestDiagnostics
 
     public static string UserMessage(LocalRequestFailure failure) => failure.Reason switch
     {
+        LocalRequestReason.ArticleOutputPreflight => "The article output path or approved audio tools failed the local check before the next speech reservation. Choose a new MP3 filename in an existing physical folder and verify audio setup. Earlier accepted audio and holds are preserved; reconcile any saved job before continuing.",
         LocalRequestReason.TrendHistoryUnavailable => "Durable request trend history is unavailable. Saved audio and holds are preserved; inspect history storage health before another reservation. No automatic paid retry was made.",
         LocalRequestReason.CaptureEvidenceRequired => "Required private error evidence is not ready or its bounded capture scope has ended. Saved audio and holds are preserved. Check private diagnostics, then review the remaining job before enabling a fresh capture scope. No automatic paid retry was made.",
         LocalRequestReason.ProviderRejected => "Google rejected this article request. The exact internal part and safe HTTP/error metadata are in local diagnostics. Keep its hold and all accepted audio; do not repeat the request automatically. Full provider wording is available only if private capture was active.",

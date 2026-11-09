@@ -21,6 +21,7 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
     [InlineData("accepted-children")]
     [InlineData("uncertain-child")]
     [InlineData("generic-root")]
+    [InlineData("output-changed-before-child")]
     public async Task ActualAppRuntimeRoutesBoundedChildrenThroughNativeApprovalClaimSaveAndExport(string mode)
     {
         using var f = new Fixture();
@@ -38,7 +39,13 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         await File.WriteAllBytesAsync(tool, [0], TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(Path.Combine(f.WholeRoot, "ffprobe.exe"), [0], TestContext.Current.CancellationToken);
         var runtime = new ChirpWholeArticleRuntime(preparation, articles, requests,
-            (request, _) => RecoveryExecutionContext(articles, persisted, request, observations), exporter, f.Selection, destination, tool);
+            (request, _) => RecoveryExecutionContext(articles, persisted, request, observations), exporter, f.Selection, destination, tool,
+            observeStage: (stage, _) =>
+            {
+                if (string.Equals(mode, "output-changed-before-child", StringComparison.Ordinal)
+                    && stage == CloudScribe.Application.Logging.ArticleExecutionStage.Preparing && observations.RootFailures > 0)
+                    Directory.CreateDirectory(destination);
+            });
         var review = await articles.PrepareWholeArticleAsync(f.Selection.DocumentId, TestContext.Current.CancellationToken);
         var job = await articles.StartWholeArticleAsync(new(review.PreviewId, review.ReviewSha256, review.MaximumAdditionalMinorUnits, true, true), TestContext.Current.CancellationToken);
         if (string.Equals(mode, "accepted-children", StringComparison.Ordinal))
@@ -53,7 +60,13 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         {
             await Assert.ThrowsAnyAsync<Exception>(() => articles.RunWholeArticleAsync(job.JobId, runtime, token: TestContext.Current.CancellationToken));
             Assert.False(File.Exists(destination));
-            Assert.Equal(string.Equals(mode, "generic-root", StringComparison.Ordinal) ? 0 : 1, observations.ChildCalls);
+            Assert.Equal(mode is "generic-root" or "output-changed-before-child" ? 0 : 1, observations.ChildCalls);
+            if (string.Equals(mode, "output-changed-before-child", StringComparison.Ordinal))
+            {
+                using var db = f.CreateDbContext();
+                Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM chirp_article_split_attempts").SingleAsync(TestContext.Current.CancellationToken));
+                Assert.Equal(1, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM chirp_article_attempts").SingleAsync(TestContext.Current.CancellationToken));
+            }
             Assert.Equal(ChirpWholeArticleState.Stopped, (await articles.ReadWholeArticleJobAsync(job.JobId, TestContext.Current.CancellationToken)).State);
         }
         Assert.Equal(observations.Keys.Count, observations.Keys.Distinct(StringComparer.Ordinal).Count());

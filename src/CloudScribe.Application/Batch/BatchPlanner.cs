@@ -86,7 +86,8 @@ public static class BatchPlanner
         string title = TitleOf(sourceFileName);
         if (numberTracks && !StartsWithTrackNumber(title))
             title = track.ToString(new string('0', Math.Max(1, width)), CultureInfo.InvariantCulture) + " " + title;
-        return outputNameFor(title);
+        string name = outputNameFor(title);
+        return FitOutputName(Path.GetFileNameWithoutExtension(name), Path.GetExtension(name));
     }
 
     /// <summary>Files whose output name had to change because the preferred name was taken (in this folder or batch).</summary>
@@ -138,6 +139,12 @@ public static class BatchPlanner
         return title.Length == 0 ? "Untitled" : title;
     }
 
+    /// <summary>The library document title for a batch file: its name without extension, fitted to the library's title
+    /// limit on a character boundary. Output MP3 names have their own filesystem-component limit, including numbering
+    /// and collision suffixes; neither fitted name changes the source or narration text.</summary>
+    public static string DocumentTitleOf(string fileName) =>
+        CloudScribe.Application.Documents.DocumentTitleText.Fit(TitleOf(fileName), CloudScribe.Application.Documents.DocumentTitleText.LibraryMaximum);
+
     /// <summary>Unicode scalar count, shown to the user. The exact billable maximum comes from the provider-specific review.</summary>
     public static int CountCharacters(string text) => text.EnumerateRunes().Count();
 
@@ -148,7 +155,17 @@ public static class BatchPlanner
         string stem = Path.GetFileNameWithoutExtension(candidate), extension = Path.GetExtension(candidate);
         string name = candidate;
         for (int n = 2; used.Contains(name) || exists(name); n++)
-            name = string.Create(CultureInfo.InvariantCulture, $"{stem} ({n}){extension}");
+            name = FitOutputName(stem, extension, string.Create(CultureInfo.InvariantCulture, $" ({n})"));
         return name;
+    }
+
+    private static string FitOutputName(string stem, string extension, string suffix = "")
+    {
+        // NTFS limits each component to 255 UTF-16 code units. Reserve the extension and collision suffix
+        // before fitting whole text elements, so numbering/clashes cannot create an unexportable name.
+        int available = 255 - extension.Length - suffix.Length;
+        if (available < 1) throw new ArgumentException("The audio extension and suffix leave no room for a filename.", nameof(extension));
+        string fitted = CloudScribe.Application.Documents.DocumentTitleText.Fit(stem, available);
+        return (fitted.Length == 0 ? "\u2026" : fitted) + suffix + extension;
     }
 }

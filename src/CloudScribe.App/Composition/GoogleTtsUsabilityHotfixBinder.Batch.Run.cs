@@ -17,7 +17,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     {
         var planner = longAudioInstalled is not null && batchLongAudioExtension is not null ? new BatchLongAudioPlanner(longAudioInstalled, batchLongAudioExtension) : null;
         var articles = chirpArticles is not null && documentLibrary is not null
-            ? new BatchArticleWorkflow(chirpArticles, documentLibrary, (_, _, _) => throw new InvalidOperationException("Review only."), voice)
+            ? new BatchArticleWorkflow(chirpArticles, documentLibrary, (_, _, _) => throw new InvalidOperationException("Review only."), voice, null)
             : null;
         return new BatchAdmissionRequestBuilder(documentLibrary!, TimeProvider.System, planner, articles, narrationCopies);
     }
@@ -62,7 +62,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                     (selection, destination, observe) => new ChirpWholeArticleRuntime(chirpPreparation, chirpArticles, wholeArticleRequests, wholeArticleResolver,
                         articleAudio, selection, destination, tools.EncoderPath, () => !model.HasCurrentVoiceLanguageCatalog,
                         token => RefreshBatchSelectionOnUiAsync(model, selection, token), null, catalogLogger, observe, trendHistory, approvedMediaTools: tools),
-                    voice);
+                    voice, tools);
                 engines[BatchEngines.CompleteArticle] = new CompleteArticleBatchNarrator(session.Gate, workflow, () => (voice.AccountStableId, voice.ProjectStableId), catalogLogger);
             }
             if (longAudioDocuments is not null)
@@ -150,7 +150,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         else if (!string.Equals(voice.VoiceStableId, batch.Settings.VoiceStableId, StringComparison.Ordinal))
             report.Block($"Select the batch voice {batch.Settings.VoiceLabel} (Use this batch's voice).");
         else report.Pass("The batch voice is selected and verified.");
-        var (writable, folderText) = ProbeWritable(batch.OutputFolder);
+        var (writable, folderText) = ProbeWritable(batch.OutputFolder, batch.Included.Any(x => x.State is BatchItemState.Ready or BatchItemState.Running
+            && string.Equals(x.Engine ?? batch.Settings.Engine, BatchEngines.CompleteArticle, StringComparison.Ordinal)));
         if (writable) report.Pass(folderText); else report.Block(folderText);
         var clashes = batch.Included.Where(x => BatchEditor.CanArrange(x) && File.Exists(Path.Combine(batch.OutputFolder, x.OutputFileName))).ToArray();
         if (clashes.Length == 0) report.Pass("No output name clashes with an existing file.");
@@ -159,7 +160,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         if (pending > 0) report.Block($"{pending} file(s) are not in the library yet; reopen the batch to finish adding them, or remove them.");
         var tools = await MediaToolsStore.InspectAsync().ConfigureAwait(true);
         if (tools.Selection is not null) report.Pass("Your saved audio tools are ready.");
-        else report.Note("Audio tools (ffmpeg.exe with ffprobe.exe) will be asked for when you start.");
+        else report.Block("Audio tools are not verified. Choose ffmpeg.exe with ffprobe.exe when you start, then rehearse again.");
         if (session.Profile is null)
             report.Block("Batch spending is not set up on this computer, so a paid batch cannot start. Preparing and rehearsing cost nothing.");
         var consent = await session.Gate.LoadConsentAsync(batch.BatchId).ConfigureAwait(true);
@@ -183,13 +184,20 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 }
                 else if (string.Equals(approved.Engine, BatchEngines.CompleteArticle, StringComparison.Ordinal) && chirpArticles is not null)
                 {
+                    if (item.JobId is null)
+                    {
+                        string destination = item.OutputPath ?? Path.Combine(batch.OutputFolder, item.OutputFileName);
+                        _ = ArticleAudioExportService.PreflightDestination(destination);
+                        if (tools.Selection is { } approvedTools)
+                            await ArticleAudioExportService.PreflightGenerationAsync(destination, approvedTools.EncoderPath, approvedTools).ConfigureAwait(true);
+                    }
                     var review = await chirpArticles.PrepareWholeArticleAsync(item.DocumentId!.Value).ConfigureAwait(true);
                     bool fits = string.Equals(review.PlanSha256, approved.PlanSha256, StringComparison.Ordinal) && review.MaximumAdditionalMinorUnits <= approved.MaximumMinorUnits;
                     report.File(fits, fits ? $"{label}: admitted; exact maximum within its approval." : $"{label}: its exact plan or maximum differs from its approval.");
                 }
                 else report.File(false, $"{label}: this engine is not available in this window.");
             }
-            catch (Exception error) when (error is InvalidOperationException or InvalidDataException or GoogleLongAudioBudgetExceededException)
+            catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or GoogleLongAudioBudgetExceededException)
             { report.File(false, $"{label}: not admitted ({error.Message})"); }
         }
         if (voice is not null)
@@ -200,16 +208,19 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         return report;
     }
 
-    private static (bool Writable, string Text) ProbeWritable(string folder)
+    private static (bool Writable, string Text) ProbeWritable(string folder, bool requirePhysicalArticleOutput)
     {
         if (!Directory.Exists(folder)) return (false, "The output folder is missing. Choose another output folder.");
         string probe = Path.Combine(folder, ".cloudscribe-write-check-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
+            if (requirePhysicalArticleOutput) _ = ArticleAudioExportService.PreflightDestination(Path.ChangeExtension(probe, ".mp3"));
             using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose)) { }
             return (true, "The output folder exists and is writable.");
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        { return (false, "The output folder cannot be written: " + AudioOutputPresentation.RecoveryAdvice(error)); }
+        catch (InvalidOperationException)
+        { return (false, "Complete-article output requires an existing physical folder. Linked or cloud-placeholder output paths are not supported; choose another folder."); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { return (false, "The output folder could not pass its local check: " + AudioOutputPresentation.RecoveryAdvice(error)); }
     }
 }

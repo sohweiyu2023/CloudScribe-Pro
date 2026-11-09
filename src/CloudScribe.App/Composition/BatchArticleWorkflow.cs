@@ -13,8 +13,13 @@ internal sealed class BatchArticleWorkflow(
     ChirpArticleService articles,
     IDocumentLibrary library,
     Func<ShellViewModel.GoogleTtsStudioRequestSelection, string, Action<ArticleExecutionStage, int>, IChirpWholeArticleRuntime> runtimeFor,
-    ShellViewModel.GoogleTtsStudioRequestSelection voice) : IBatchArticleWorkflow
+    ShellViewModel.GoogleTtsStudioRequestSelection voice, TrustedMediaToolSelection? mediaTools) : IBatchArticleWorkflow
 {
+    public Task PreflightAsync(string destination, CancellationToken cancellationToken) =>
+        ArticleAudioExportService.PreflightGenerationAsync(destination,
+            (mediaTools ?? throw new InvalidOperationException("Choose approved audio tools before starting.")).EncoderPath,
+            mediaTools, cancellationToken);
+
     public Task<ChirpWholeArticleReview> PrepareAsync(Guid documentId, CancellationToken cancellationToken) =>
         articles.PrepareWholeArticleAsync(documentId, cancellationToken);
 

@@ -12,6 +12,8 @@ import tempfile
 import time
 import unittest
 import zlib
+import xml.etree.ElementTree as ET
+from unittest import mock
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -32,6 +34,8 @@ def _load_module(name: str, path: Path):
 
 
 _VISUAL = _load_module("cloudscribe_visual_validator", TOOLS / "verify_stage2_visual_evidence.py")
+_REGRESSIONS = _load_module("cloudscribe_material_regressions", TOOLS / "run_python_regression_shards.py")
+_SELF_TESTS = _load_module("cloudscribe_verifier_self_tests", TOOLS / "run_verifier_self_tests.py")
 _MANIFEST = _load_module("cloudscribe_source_manifest", TOOLS / "update_sha256_manifest.py")
 _PHYSICAL_DIRECTORY = _load_module("cloudscribe_physical_directory_policy", TOOLS / "prepare_physical_directory.py")
 
@@ -641,6 +645,176 @@ class DotnetSdkVersionPolicyTests(unittest.TestCase):
         result = self.run_validator("10.0.302", "10.0.302", "Microsoft Build Engine")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("MSBuild version is not parseable", result.stderr)
+
+
+class ServicingReleaseIdentityTests(unittest.TestCase):
+    """Exercise all three servicing gates without rewriting the source checkpoint."""
+
+    UNSUPPORTED_VERSIONS = ("1.0.9", "1.1.0", "2.0.0", "1.0.8-preview.1")
+    MIXED_VERSIONS = (
+        {"informational": "1.0.7"},
+        {"file_version": "1.0.7.0"},
+        {"informational": ""},
+        {"file_version": ""},
+    )
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="cloudscribe-servicing-identity-")
+        self.addCleanup(temporary.cleanup)
+        self.root = _copy_source(Path(temporary.name))
+        self.set_identity()
+
+    def set_identity(self, version="1.0.8", informational=None, file_version=None,
+                     sdk="10.0.402", global_sdk=None, stage=8, repository_version="1.0.0"):
+        project_path = self.root / "src/CloudScribe.App/CloudScribe.App.csproj"
+        project = ET.parse(project_path)
+        values = {
+            "Version": version,
+            "InformationalVersion": version if informational is None else informational,
+            "FileVersion": version + ".0" if file_version is None else file_version,
+        }
+        for name, value in values.items():
+            node = project.find(f"./PropertyGroup/{name}")
+            self.assertIsNotNone(node)
+            node.text = value
+        project.write(project_path, encoding="utf-8")
+        state_path = self.root / "SESSION_STATE.json"
+        state = json.loads(state_path.read_text(encoding="utf-8-sig"))
+        state.update(current_stage=stage, repository_version=repository_version, required_dotnet_sdk=sdk)
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        global_path = self.root / "global.json"
+        global_state = json.loads(global_path.read_text(encoding="utf-8-sig"))
+        global_state["sdk"]["version"] = sdk if global_sdk is None else global_sdk
+        global_path.write_text(json.dumps(global_state), encoding="utf-8")
+
+    def session_checks(self):
+        checks = _REGRESSIONS.build_checks(self.root)
+        self.assertEqual(len(checks), 153)
+        return {check.name: check for check in checks if check.name.startswith("session state:")}
+
+    def assert_session_passes(self):
+        for check in self.session_checks().values():
+            check.run()
+
+    def assert_session_rejects(self, label="required SDK"):
+        with self.assertRaisesRegex(AssertionError, label):
+            self.session_checks()[f"session state: {label}"].run()
+
+    def project_stage4(self):
+        # Replace only source transport. Exercise the real projection validation,
+        # temporary-file writes and cleanup, without requiring a fixture Git index.
+        with mock.patch.object(_SELF_TESTS, "_copy_tracked_source",
+                               side_effect=lambda destination: shutil.copytree(self.root, destination, dirs_exist_ok=True)):
+            return _SELF_TESTS._stage4_contract_root()
+
+    def capture_version(self):
+        state = json.loads((self.root / "SESSION_STATE.json").read_text(encoding="utf-8"))
+        return _VISUAL.expected_capture_repository_version(state, self.root)
+
+    def test_material_accepts_exact_108_servicing_sdk(self):
+        self.assert_session_passes()
+
+    def test_material_rejects_unsupported_or_future_versions(self):
+        for version in self.UNSUPPORTED_VERSIONS:
+            with self.subTest(version=version):
+                self.set_identity(version=version)
+                self.assert_session_rejects()
+
+    def test_material_rejects_mixed_or_missing_assembly_versions(self):
+        for identity in self.MIXED_VERSIONS:
+            with self.subTest(identity=identity):
+                self.set_identity(**identity)
+                self.assert_session_rejects()
+
+    def test_material_rejects_wrong_or_inconsistent_sdk(self):
+        for identity, label in (
+            ({"sdk": "10.0.400"}, "required SDK"),
+            ({"sdk": "10.0.401"}, "required SDK"),
+            ({"sdk": "10.0.403"}, "required SDK"),
+            ({"global_sdk": "10.0.400"}, "global/session SDK consistency"),
+        ):
+            with self.subTest(identity=identity):
+                self.set_identity(**identity)
+                self.assert_session_rejects(label)
+
+    def test_material_preserves_original_100_checkpoint(self):
+        self.set_identity(version="1.0.0", sdk="10.0.400")
+        self.assert_session_passes()
+
+    def test_projection_accepts_108_without_mutating_source(self):
+        paths = ("SESSION_STATE.json", "global.json", "src/CloudScribe.App/CloudScribe.App.csproj")
+        before = {path: (self.root / path).read_bytes() for path in paths}
+        with self.project_stage4() as temporary:
+            root = Path(temporary)
+            state = json.loads((root / "SESSION_STATE.json").read_text(encoding="utf-8"))
+            sdk = json.loads((root / "global.json").read_text(encoding="utf-8"))["sdk"]
+            self.assertEqual(state["current_stage"], 4)
+            self.assertEqual(state["repository_version"], "0.5.0-stage4-preservation-self-test")
+            self.assertEqual(state["required_dotnet_sdk"], "10.0.400")
+            self.assertEqual(sdk["version"], "10.0.400")
+            self.assertEqual(sdk["rollForward"], "disable")
+            self.assertIs(sdk["allowPrerelease"], False)
+            self.assertEqual((root / paths[2]).read_bytes(), before[paths[2]])
+        self.assertFalse(root.exists())
+        self.assertEqual({path: (self.root / path).read_bytes() for path in paths}, before)
+
+    def test_projection_rejects_unsupported_or_future_versions(self):
+        for version in self.UNSUPPORTED_VERSIONS:
+            with self.subTest(version=version):
+                self.set_identity(version=version)
+                with self.assertRaisesRegex(RuntimeError, "exact 1.0.x servicing patch"):
+                    self.project_stage4()
+
+    def test_projection_rejects_mixed_or_missing_assembly_versions(self):
+        for identity in self.MIXED_VERSIONS:
+            with self.subTest(identity=identity):
+                self.set_identity(**identity)
+                with self.assertRaisesRegex(RuntimeError, "exact 1.0.x servicing patch"):
+                    self.project_stage4()
+
+    def test_projection_rejects_sdk_or_governance_mismatch(self):
+        for identity, message in (
+            ({"global_sdk": "10.0.401"}, "supported source SDK identity"),
+            ({"sdk": "10.0.403"}, "supported source SDK identity"),
+            ({"stage": 4}, "exact Final Stage8 1.0.0"),
+            ({"repository_version": "1.0.8"}, "exact Final Stage8 1.0.0"),
+        ):
+            with self.subTest(identity=identity):
+                self.set_identity(**identity)
+                with self.assertRaisesRegex(RuntimeError, message):
+                    self.project_stage4()
+
+    def test_projection_preserves_original_100_checkpoint(self):
+        self.set_identity(version="1.0.0", sdk="10.0.400")
+        with self.project_stage4() as temporary:
+            state = json.loads((Path(temporary) / "SESSION_STATE.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["current_stage"], 4)
+            self.assertEqual(state["required_dotnet_sdk"], "10.0.400")
+
+    def test_visual_uses_exact_108_assembly_identity(self):
+        self.assertEqual(self.capture_version(), "1.0.8")
+
+    def test_visual_does_not_admit_unsupported_or_future_versions(self):
+        for version in self.UNSUPPORTED_VERSIONS:
+            with self.subTest(version=version):
+                self.set_identity(version=version)
+                self.assertEqual(self.capture_version(), "1.0.0")
+
+    def test_visual_does_not_admit_mixed_or_missing_assembly_versions(self):
+        for identity in self.MIXED_VERSIONS:
+            with self.subTest(identity=identity):
+                self.set_identity(**identity)
+                self.assertEqual(self.capture_version(), "1.0.0")
+
+    def test_visual_does_not_admit_sdk_or_governance_mismatch(self):
+        for identity in ({"global_sdk": "10.0.401"}, {"sdk": "10.0.403"}, {"stage": 4}):
+            with self.subTest(identity=identity):
+                self.set_identity(**identity)
+                self.assertEqual(self.capture_version(), "1.0.0")
+
+    def test_visual_preserves_original_100_checkpoint(self):
+        self.set_identity(version="1.0.0", sdk="10.0.400")
+        self.assertEqual(self.capture_version(), "1.0.0")
 
 
 class RepositoryVerifierTests(unittest.TestCase):

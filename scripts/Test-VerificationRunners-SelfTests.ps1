@@ -47,15 +47,34 @@ try {
         (New-CheckStage 'dependent' $pwsh @('-NoProfile', '-Command', 'throw "must not execute"') $root @('nonzero')),
         (New-CheckStage 'missing-dependency' $pwsh @('-NoProfile', '-Command', 'exit 3') $root -Prerequisite),
         (New-CheckStage 'deferred' $pwsh @('-NoProfile', '-Command', 'Write-Output "validation deferred"; exit 0') $root @() 'complete validator PASS'),
-        (New-CheckStage 'success' $pwsh @('-NoProfile', '-Command', 'Write-Output "Skipped: synthetic unsupported fixture"; Write-Output "passed: 1"; exit 0') $root)
+        (New-CheckStage 'success' $pwsh @('-NoProfile', '-Command', 'Write-Output "Skipped: synthetic unsupported fixture"; Write-Output "passed: 1"; [Console]::Error.WriteLine("stderr success evidence"); [Console]::Error.WriteLine("total: 1"); exit 0') $root)
     )
-    Invoke-CheckStages $stages $root {}
+    $stageEvidencePath = Join-Path $root 'stage-evidence.json'
+    Invoke-CheckStages $stages $root { Write-EvidenceJson $stageEvidencePath @{ stages = $stages } }
+    $recordedStages = (Get-Content -LiteralPath $stageEvidencePath -Raw | ConvertFrom-Json).stages
+    foreach ($stage in @($stages[0], $stages[2], $stages[3], $stages[4])) {
+        $expectedLogs = @(($stage.id + '.stdout.log'), ($stage.id + '.stderr.log'))
+        Assert-True ($stage.logs.Count -eq 2 -and $stage.logs[0] -ceq $expectedLogs[0] -and $stage.logs[1] -ceq $expectedLogs[1]) "Separate exact stdout/stderr filenames for $($stage.id)"
+        foreach ($name in $expectedLogs) {
+            Assert-True (Test-Path -LiteralPath (Join-Path $root $name) -PathType Leaf) "Recorded log file exists: $name"
+        }
+        $combined = $expectedLogs -join ' '
+        Assert-True ($stage.logs -cnotcontains $combined -and -not (Test-Path -LiteralPath (Join-Path $root $combined))) "No combined log pseudo-path for $($stage.id)"
+        $recorded = @($recordedStages | Where-Object id -CEQ $stage.id)
+        Assert-True ($recorded.Count -eq 1 -and $recorded[0].logs.Count -eq 2 -and $recorded[0].logs[0] -ceq $expectedLogs[0] -and $recorded[0].logs[1] -ceq $expectedLogs[1]) "Checkpoint JSON preserves both log filenames for $($stage.id)"
+    }
+    Assert-True ($stages[1].logs.Count -eq 0 -and $recordedStages[1].logs.Count -eq 0) 'Blocked dependent has no invented log references'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'dependent.stdout.log')) -and -not (Test-Path -LiteralPath (Join-Path $root 'dependent.stderr.log'))) 'Blocked dependent creates neither output stream'
     Assert-True ($stages[0].status -eq 'FAIL' -and $stages[0].exit_code -eq 7) 'Nonzero child exit is never swallowed'
     Assert-True ($stages[1].status -eq 'BLOCKED' -and $null -eq $stages[1].started_utc) 'Dependent command was not started'
     Assert-True ($stages[2].status -eq 'BLOCKED') 'Unavailable dependency is blocked'
     Assert-True ($stages[3].status -eq 'BLOCKED') 'Deferred zero exit cannot certify schema validation'
     Assert-True ($stages[4].status -eq 'PASS' -and $stages[4].skip_lines.Count -eq 1) 'Independent success and exact skip evidence retained'
     Assert-True ((Get-Content (Join-Path $root 'nonzero.stderr.log') -Raw).Contains('failure retained')) 'Stderr retained'
+    Assert-True ((Get-Content -LiteralPath (Join-Path $root $stages[4].logs[0]) -Raw).Contains('passed: 1')) 'Recorded stdout reference resolves to retained stdout'
+    Assert-True ((Get-Content -LiteralPath (Join-Path $root $stages[4].logs[1]) -Raw).Contains('stderr success evidence')) 'Recorded stderr reference resolves to retained stderr'
+    Assert-True ($recordedStages[4].skip_lines.Count -eq 1 -and $recordedStages[4].skip_lines[0] -ceq 'Skipped: synthetic unsupported fixture') 'Checkpoint retains the exact skip evidence'
+    Assert-True ($recordedStages[4].summary_lines.Count -eq 3 -and $recordedStages[4].summary_lines[0] -ceq 'Skipped: synthetic unsupported fixture' -and $recordedStages[4].summary_lines[1] -ceq 'passed: 1' -and $recordedStages[4].summary_lines[2] -ceq 'total: 1') 'Checkpoint retains summary evidence from both streams'
     Assert-True ((Get-EvidenceExitCode $stages) -eq 1) 'Failure exit takes priority'
     Assert-True ((Get-EvidenceExitCode @((New-NativeCase 'pending' 'W08' 'Pending'))) -eq 2) 'Unobserved case is incomplete'
     Assert-True ((Get-EvidenceExitCode @($stages[4])) -eq 0) 'Only completed command returns zero'

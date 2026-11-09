@@ -122,7 +122,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Material regression inventory failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Verifier self-tests failed.' }
 ```
 
-The current inventory expects **153 material checks** and **87 verifier self-tests on Windows**, including process-tree defenses. The runner itself checks its expected counts. Non-Windows verifier scope is smaller and is not Windows certification.
+The current inventory expects **153 material checks** and **102 verifier self-tests on Windows**, including process-tree defenses. The runner itself checks its expected counts. The **92 portable verifier self-tests** include servicing-release identity acceptance and rejection checks. Non-Windows execution is not Windows certification.
 
 The self-test runner projects its Stage4 contract tests into a disposable historical fixture. Do **not** edit the real source to make it look like Stage4, and do not run standalone historical Stage3/Stage4 source verifiers as acceptance for the current Stage8/1.0.x tree.
 
@@ -241,7 +241,7 @@ A runnable build can be published after the Release build using the manual proce
 
 For an actual handoff, follow [clean sharing](SHARING_WINDOWS.md) and [Windows installation/update](WINDOWS_INSTALLATION.md). Inspect the existing installation, close the app normally, preserve the profile and stable shortcut, and complete the required native launch/runtime checks. Never distribute profiles, databases, service-account JSON, credentials, documents, recordings, private admission evidence or rollback folders.
 
-The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.7 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
+The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.8 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
 
 Source verification, compiled tests, offline completion tests, real Windows/native behavior, live provider acceptance and formal certification are distinct evidence. None of these developer commands approves paid calls, retries, production profile changes, an upload or release promotion.
 
@@ -274,6 +274,10 @@ After committing the intended source and manifest, rerun required checks on that
 `NarrationUrlOmission.Transform(text, version)` dispatches only immutable supported policies. New preparations select v2; old copies, imports, settings hashes, provenance and saved previews replay their stored version. Do not migrate approved text, alter `BatchSettings.Sha256`/copy-key formats, update a frozen suffix policy in place or make a network suffix refresh. The 1.0.5 package uses v1; the 1.0.6 source uses v2 for new preparations without rewriting older saved text.
 
 The original v1 recognition cases are retained with only a v1 type alias. A separate v2 compatibility suite repeats those explicit-URL/Markdown/Unicode/processing-budget cases, with bare-domain preservation differences (including a valid domain containing `www` inside a label) tested separately by version. Additional tests cover bare-domain false positives, adversarial inputs, exact v1/v2 copy reuse, interrupted imports, no-omission v1 identities, draft/session retention, version corruption, consent changes and existing-job recovery. Run focused `NarrationUrlOmission`, `NarrationCopyStoreTests`, `BatchNarrationTests`, `BatchDraftVersionTests` and narration architecture tests, then the full compiled/offline suites under the normal checks above. Focused success is not release certification.
+
+## URL omission v3 (independent review, November 2026)
+
+`url-omission-v3` is the current policy for new preparations. It reuses the v2 engine with stricter bare-domain acceptance (`NarrationUrlOmissionV3.IsConfidentBareDestination`), so v2 output stays byte-for-byte identical for saved copies. `NarrationUrlOmissionV2CompatibilityTests` and `NarrationUrlOmissionVersionTests` pin v2 explicitly and check that v3 recognises the same real domains; `NarrationUrlOmissionV3Tests` covers the prose cases v2 deleted. The frozen workflow matrix's `v2` axis exercises the replayed v2 policy.
 
 ## Tracked follow-up defects
 

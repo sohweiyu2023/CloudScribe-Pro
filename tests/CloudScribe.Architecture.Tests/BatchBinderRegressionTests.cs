@@ -83,6 +83,19 @@ public sealed class BatchBinderRegressionTests
         Assert.Contains("if (_batchDialogOpen && !openingReserved)", BinderSource(null), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RehearsalUsesCurrentExportChecksAndDoesNotPromiseReadyForUnverifiedTools()
+    {
+        string source = BinderSource("Run");
+        Assert.Contains("report.Block(\"Audio tools are not verified.", source, StringComparison.Ordinal);
+        Assert.Contains("ArticleAudioExportService.PreflightGenerationAsync(destination, approvedTools.EncoderPath, approvedTools)", source, StringComparison.Ordinal);
+        Assert.Contains("ArticleAudioExportService.PreflightDestination(destination)", source, StringComparison.Ordinal);
+        int probe = source.IndexOf("private static (bool Writable, string Text) ProbeWritable", StringComparison.Ordinal);
+        string check = source[probe..];
+        Assert.True(check.IndexOf("PreflightDestination", StringComparison.Ordinal) < check.IndexOf("new FileStream", StringComparison.Ordinal));
+        Assert.Contains("requirePhysicalArticleOutput", check, StringComparison.Ordinal);
+    }
+
     private static string NarrationBinderSource()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
