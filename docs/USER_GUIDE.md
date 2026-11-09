@@ -1,4 +1,4 @@
-# CloudScribe Pro 1.0.7: setup and everyday use
+# CloudScribe Pro 1.0.8: setup and everyday use
 
 The local usability update adds saved voice setups, remembered choices, offline request inspection and local narration-part preparation. See [Saved setups and local recovery](SAVED_SETUPS_AND_LOCAL_RECOVERY.md) for the updated workflow and persistence details.
 
@@ -32,7 +32,7 @@ For several TXT files, use the checkbox and **Preview selected narration text** 
 
 Editing the original blocks fresh requests from its old narration copy, while already-started jobs retain their exact text. A recovery-only article review can recover admitted work but will not complete an MP3 while fresh parts remain blocked. Editing the narration copy itself may also block article progress or export; keep its receipts and accepted audio. To prepare a replacement, save the original text as a new document and preview URL skipping again, or start a new batch from the original TXT. Turning the checkbox off does not restore or repair an edited copy.
 
-New narration preparations skip conservative bare addresses such as `84000.co`. The current v3 policy keeps sentence text that only looks like an address (for example `awareness.In this state` with a missing space), which the 1.0.6–1.0.7 v2 policy could delete. The older 1.0.5 package uses v1. Existing copies and saved batches keep their original v1 text and approvals; they are not silently upgraded. The exact suffix list, exclusions and preview limitations are in [Batch narration: bare-domain policy](BATCH_NARRATION.md#bare-domains-in-the-v3-narration-policy-current).
+New narration preparations skip conservative bare addresses such as `84000.co`. The current v3 policy keeps several sentence forms that only look like an address (for example `awareness.In this state` with a missing space), which the 1.0.6–1.0.7 v2 policy could delete. The older 1.0.5 package uses v1. Existing copies and saved batches keep their recorded v1 or v2 text and approvals; they are not silently upgraded. Ambiguous lowercase tokens such as `nothing.ai` can still be read as domains and omitted, so inspect the narration preview before approving audio. The exact suffix list, exclusions and preview limitations are in [Batch narration: bare-domain policy](BATCH_NARRATION.md#bare-domains-in-the-v3-narration-policy-current).
 
 ## Set up Google Cloud once
 

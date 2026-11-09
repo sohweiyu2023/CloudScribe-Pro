@@ -241,7 +241,7 @@ A runnable build can be published after the Release build using the manual proce
 
 For an actual handoff, follow [clean sharing](SHARING_WINDOWS.md) and [Windows installation/update](WINDOWS_INSTALLATION.md). Inspect the existing installation, close the app normally, preserve the profile and stable shortcut, and complete the required native launch/runtime checks. Never distribute profiles, databases, service-account JSON, credentials, documents, recordings, private admission evidence or rollback folders.
 
-The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.7 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
+The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.8 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
 
 Source verification, compiled tests, offline completion tests, real Windows/native behavior, live provider acceptance and formal certification are distinct evidence. None of these developer commands approves paid calls, retries, production profile changes, an upload or release promotion.
 
