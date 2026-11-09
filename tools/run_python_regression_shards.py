@@ -71,7 +71,7 @@ class Check:
 
 
 # Windows 1.0.x servicing releases that keep the certified Stage 8 1.0.0 governance identity.
-SERVICING_RELEASES = ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7")
+SERVICING_RELEASES = ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7", "1.0.8")
 
 def assert_true(condition: bool, message: str) -> None:
     if not condition:
@@ -180,9 +180,9 @@ def build_checks(root: Path) -> list[Check]:
         and state.get("stage2_user_clicked_editor_retest") is True
     )
     # Preserve the exact Stage 2-8 10.0.400 contract for the certified 1.0.0
-    # baseline; the explicit 1.0.1 Windows dependency refresh intentionally pins 10.0.402.
+    # baseline; the explicitly listed Windows servicing releases pin 10.0.402.
     app_project_text = (root / "src/CloudScribe.App/CloudScribe.App.csproj").read_text(encoding="utf-8-sig")
-    is_release_101_patch = (
+    is_servicing_release = (
         current_stage == 8
         and version == "1.0.0"
         and any(
@@ -192,7 +192,7 @@ def build_checks(root: Path) -> list[Check]:
             for servicing in SERVICING_RELEASES
         )
     )
-    required_sdk_for_checkpoint = "10.0.402" if is_release_101_patch else "10.0.400"
+    required_sdk_for_checkpoint = "10.0.402" if is_servicing_release else "10.0.400"
 
     session_specs = (
         (state.get("project") == "CloudScribe Pro", "project identity"),
@@ -256,7 +256,7 @@ def build_checks(root: Path) -> list[Check]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run CloudScribe's deterministic 151-check Stage 2 Python/material regression inventory in 15 stable shards.")
+    parser = argparse.ArgumentParser(description="Run CloudScribe's deterministic 153-check Stage 2 Python/material regression inventory in 15 stable shards.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--all", action="store_true", help="run all 15 shards")
     group.add_argument("--shard", type=int, choices=range(1, SHARD_COUNT + 1), metavar="1..15")

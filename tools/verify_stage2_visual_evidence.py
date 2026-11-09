@@ -55,15 +55,15 @@ class EvidenceError(ValueError):
 
 def expected_capture_repository_version(state: dict[str, object], source_root: pathlib.Path) -> object:
     version = state.get("repository_version")
-    # Stage 8 retains the certified 1.0.0 checkpoint identity. The explicit
-    # Windows 1.0.1 patch captures its actual assembly identity instead.
+    # Stage 8 retains the certified 1.0.0 checkpoint identity. Explicitly supported
+    # Windows servicing releases capture their actual assembly identity instead.
     if (state.get("current_stage") == 8 and version == "1.0.0"
             and state.get("required_dotnet_sdk") in ("10.0.401", "10.0.402")):
         sdk = json.loads((source_root / "global.json").read_text(encoding="utf-8-sig"))
         project = ET.parse(source_root / "src/CloudScribe.App/CloudScribe.App.csproj").getroot()
         servicing = project.findtext("./PropertyGroup/Version")
         if (sdk.get("sdk", {}).get("version") == state.get("required_dotnet_sdk")
-                and servicing in ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7")
+                and servicing in ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7", "1.0.8")
                 and project.findtext("./PropertyGroup/InformationalVersion") == servicing
                 and project.findtext("./PropertyGroup/FileVersion") == servicing + ".0"):
             return servicing

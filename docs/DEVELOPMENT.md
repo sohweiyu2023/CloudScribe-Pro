@@ -122,7 +122,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Material regression inventory failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Verifier self-tests failed.' }
 ```
 
-The current inventory expects **153 material checks** and **87 verifier self-tests on Windows**, including process-tree defenses. The runner itself checks its expected counts. Non-Windows verifier scope is smaller and is not Windows certification.
+The current inventory expects **153 material checks** and **102 verifier self-tests on Windows**, including process-tree defenses. The runner itself checks its expected counts. The **92 portable verifier self-tests** include servicing-release identity acceptance and rejection checks. Non-Windows execution is not Windows certification.
 
 The self-test runner projects its Stage4 contract tests into a disposable historical fixture. Do **not** edit the real source to make it look like Stage4, and do not run standalone historical Stage3/Stage4 source verifiers as acceptance for the current Stage8/1.0.x tree.
 
