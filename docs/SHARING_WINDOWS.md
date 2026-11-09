@@ -1,6 +1,6 @@
 # Give a clean copy to another person
 
-The **Help** button opens the in-app Quick Start. A new profile opens it automatically; Skip, Done and Escape return to the editor. Your friend connects their own Google Cloud project and billing account.
+A new profile shows an optional **First time here?** invitation. **Start tutorial** opens the in-app Quick Start; **Skip for now** dismisses the invitation. The workspace remains usable, and **Help** always reopens the walkthrough. The tutorial does not generate audio or authorize spending. Your friend connects their own Google Cloud project and billing account.
 
 Distribute only a clean application build and a compatible private .NET runtime. Do not copy your installation workspace, app-data profile, database, documents, MP3s, service-account JSON, Windows credentials or a launcher that points to your personal data.
 
