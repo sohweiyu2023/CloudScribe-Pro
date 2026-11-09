@@ -5,7 +5,7 @@ public static class ChirpAdditionalAdmissionValidation
     public static void RequireValid(ChirpArticleAdmissionCatalog catalog, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        if (catalog.Families is null || catalog.Families.Any(x => x is null)
+        if (catalog.Families is null || catalog.Families.Any(x => x is null || x.Policy is null)
             || catalog.Families.Select(x => x.FamilyId).Distinct().Count() != catalog.Families.Count
             || catalog.Families.Select(x => x.Policy.SourceApprovalSha256).Distinct(StringComparer.Ordinal).Count() != catalog.Families.Count)
             throw new InvalidDataException("Additional article families are absent or ambiguous.");
@@ -23,7 +23,7 @@ public static class ChirpAdditionalAdmissionValidation
     public static void RequireValid(ChirpAdditionalAdmissionFamily family, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(family);
-        var p = family.Policy;
+        var p = family.Policy ?? throw new InvalidDataException("The additional article family policy is absent.");
         ChirpPolicyValidation.RequireValid(p, now);
         var b = p.Budget;
         if (family.FamilyId == Guid.Empty || family.AllInCeilingMinorUnits < 1

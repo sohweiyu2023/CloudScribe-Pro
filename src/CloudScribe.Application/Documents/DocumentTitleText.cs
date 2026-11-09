@@ -25,7 +25,8 @@ public static class DocumentTitleText
             end = next;
         }
         string fitted = trimmed[..end].TrimEnd();
-        // A single text element longer than the limit is kept whole rather than broken.
-        return fitted.Length > 0 ? fitted : StringInfo.GetNextTextElement(trimmed);
+        // No whole text element fits: use a one-code-unit placeholder rather than break a grapheme or exceed
+        // the library limit. This only changes the suggested title, never the source or narration text.
+        return fitted.Length > 0 ? fitted : "\u2026";
     }
 }

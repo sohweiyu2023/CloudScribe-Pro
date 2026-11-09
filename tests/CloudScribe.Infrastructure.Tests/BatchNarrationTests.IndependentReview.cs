@@ -21,11 +21,83 @@ public sealed partial class BatchNarrationTests
         Assert.False(char.IsHighSurrogate(fitted[^1]));
         Assert.Equal("short", DocumentTitleText.Fit("  short  ", 200));
         Assert.Equal("é", DocumentTitleText.Fit("éx", 2)); // a combining sequence stays whole
-        Assert.Equal(ExtensionB, DocumentTitleText.Fit(ExtensionB + "a", 1)); // one element longer than the limit is kept whole
+        Assert.Equal("\u2026", DocumentTitleText.Fit(ExtensionB + "a", 1)); // a bounded placeholder when no whole element fits
 
         string longName = new string('a', 245) + ".txt"; // valid on Windows (up to 255 characters)
         Assert.Equal(240, BatchPlanner.DocumentTitleOf(longName).Length);
         Assert.Equal(245, BatchPlanner.TitleOf(longName).Length); // output MP3 names keep the full name
+    }
+
+    [Theory]
+    [InlineData("e\u0301x", 1, "\u2026")]
+    [InlineData("e\u0301x", 2, "e\u0301")]
+    [InlineData("\U0001F600x", 1, "\u2026")]
+    [InlineData("\U0001F600x", 2, "\U0001F600")]
+    [InlineData("  x  ", 1, "x")]
+    [InlineData("   ", 1, "")]
+    [InlineData("a e\u0301", 2, "a")]
+    public void TitleLimitsRespectWholeGraphemesAndWhitespace(string title, int limit, string expected)
+    {
+        Assert.Equal(expected, DocumentTitleText.Fit(title, limit));
+        Assert.True(expected.Length <= limit);
+    }
+
+    [Fact]
+    public async Task OversizedGraphemeFilenameUsesBoundedTitleWithoutChangingTextOrOutputName()
+    {
+        string stem = "e" + new string('\u0301', 240);
+        string name = stem + ".txt";
+        Assert.Equal("\u2026", DocumentTitleText.Fit(stem, 240));
+        Assert.Equal("\u2026", BatchPlanner.DocumentTitleOf(name));
+        Assert.Equal(stem, BatchPlanner.TitleOf(name));
+        using var source = new MemoryStream("source text"u8.ToArray());
+        var result = await new BoundedLocalDocumentImporter().ImportAsync(new(LocalDocumentImportKind.PlainText, name, source, 11), Token);
+        Assert.Equal("\u2026", result.SuggestedTitle);
+        using var w = new Workspace();
+        var library = new StrictTitleLibrary();
+        var importer = new BatchDocumentImporter(new BoundedLocalDocumentImporter(), new DocumentPreprocessor(), library, w.Store);
+        var items = BatchPlanner.Plan([new BatchSourceFile(name, Sha("source text"), 11, "source text")], t => t + ".mp3", _ => false);
+        var batch = await w.Store.SaveAsync(new NarrationBatch(NarrationBatch.CurrentVersion, Guid.NewGuid(), "b", 0, BatchQueueState.Ready,
+            Settings, Settings.Sha256(), w.Output, "USD", 2, items, DateTimeOffset.UnixEpoch), Token);
+        var imported = await importer.ImportAsync(batch, items.ToDictionary(x => x.ItemId, _ => "source text"), Token);
+        Assert.Equal("\u2026", Assert.Single(library.Created).Title);
+        Assert.Equal("source text", Assert.Single(library.Created).Text);
+        Assert.Equal(stem + ".mp3", Assert.Single(imported.Items).OutputFileName);
+        Assert.Equal(BatchItemState.Ready, Assert.Single(imported.Items).State);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FolderScanRejectsALinkAsItsRootAndAnAncestorLoop(bool junction)
+    {
+        using var w = new Workspace();
+        string target = System.IO.Path.Combine(w.Root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(System.IO.Path.Combine(target, "kept.txt"), "x");
+        string link = System.IO.Path.Combine(w.Root, "link");
+        if (!(junction ? TryJunction(link, target) : TryLink(link, target)))
+        { Assert.Skip("Host did not permit this temporary directory link; no security setting was changed."); return; }
+        try
+        {
+            foreach (bool recursive in new[] { false, true })
+            {
+                var scan = BatchFolderScanner.Scan(link, recursive, Token);
+                Assert.Empty(scan.Files);
+                Assert.Equal(1, scan.SkippedLinks);
+                Assert.Equal(0, scan.UnreadableFolders);
+            }
+            string loop = System.IO.Path.Combine(target, "loop");
+            Assert.True(junction ? TryJunction(loop, target) : TryLink(loop, target));
+            try
+            {
+                var scan = BatchFolderScanner.Scan(target, recursive: true, Token);
+                Assert.Single(scan.Files);
+                Assert.Equal(1, scan.SkippedLinks);
+            }
+            finally { Directory.Delete(loop); }
+        }
+        finally { Directory.Delete(link); }
     }
 
     [Fact]
@@ -122,6 +194,21 @@ public sealed partial class BatchNarrationTests
     {
         try { Directory.CreateSymbolicLink(link, target); return true; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or PlatformNotSupportedException) { return false; }
+    }
+
+    private static bool TryJunction(string link, string target)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        var start = new System.Diagnostics.ProcessStartInfo("pwsh") { UseShellExecute = false, CreateNoWindow = true };
+        start.ArgumentList.Add("-NoProfile");
+        start.ArgumentList.Add("-NonInteractive");
+        start.ArgumentList.Add("-Command");
+        start.ArgumentList.Add("$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:CLOUDSCRIBE_TEST_LINK -Target $env:CLOUDSCRIBE_TEST_TARGET | Out-Null");
+        start.Environment["CLOUDSCRIBE_TEST_LINK"] = link;
+        start.Environment["CLOUDSCRIBE_TEST_TARGET"] = target;
+        using var process = System.Diagnostics.Process.Start(start)!;
+        process.WaitForExit();
+        return process.ExitCode == 0;
     }
 
     /// <summary>A library that enforces the real 240-character title limit and can refuse one named title.</summary>

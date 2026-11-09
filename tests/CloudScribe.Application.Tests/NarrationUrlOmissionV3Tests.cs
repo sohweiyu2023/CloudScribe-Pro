@@ -46,6 +46,16 @@ public sealed class NarrationUrlOmissionV3Tests
     }
 
     [Fact]
+    public void LowercaseRunOnThatLooksLikeADomainRemainsAmbiguous()
+    {
+        const string source = "There is nothing.ai follows.";
+        var result = NarrationUrlOmission.Transform(source);
+        Assert.Equal("There is  follows.", result.OutputText);
+        Assert.Equal(1, result.OmittedUrlCount);
+        Assert.Equal(source, NarrationUrlOmission.Transform(source, NarrationUrlOmission.LegacyVersion).OutputText);
+    }
+
+    [Fact]
     public void AllThreePoliciesStaySupportedAndDistinct()
     {
         Assert.Equal("url-omission-v3", NarrationUrlOmission.CurrentVersion);

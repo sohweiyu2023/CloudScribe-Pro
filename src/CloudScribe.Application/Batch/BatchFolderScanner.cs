@@ -9,8 +9,7 @@ public static class BatchFolderScanner
     public static BatchFolderScan Scan(string root, bool recursive, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var visited = new HashSet<string>(comparer);
+        var visited = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var files = new List<string>();
         int links = 0, unreadable = 0;
         var pending = new Stack<string>();
@@ -21,7 +20,12 @@ public static class BatchFolderScanner
             string folder = pending.Pop();
             if (!visited.Add(Path.TrimEndingDirectorySeparator(folder))) continue;
             string[] entries;
-            try { entries = Directory.GetFileSystemEntries(folder); }
+            try
+            {
+                // Recheck when popped, including the root: a queued folder may have become a link.
+                if (File.GetAttributes(folder).HasFlag(FileAttributes.ReparsePoint)) { links++; continue; }
+                entries = Directory.GetFileSystemEntries(folder);
+            }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
                 unreadable++;
@@ -30,9 +34,10 @@ public static class BatchFolderScanner
             var children = new List<string>();
             foreach (string entry in entries)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 FileAttributes attributes;
                 try { attributes = File.GetAttributes(entry); }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException)
                 {
                     continue; // Vanished or unreadable entry: nothing to add.
                 }

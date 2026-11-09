@@ -2,7 +2,8 @@ namespace CloudScribe.Application.Documents;
 
 /// <summary>
 /// v3: the same recognition as v2 for explicit HTTP(S)/www addresses and Markdown links, with a stricter bare-domain
-/// rule so ordinary prose is never deleted from the narration. In v2, a missing space after a full stop ("awareness.In
+/// rule that reduces mistaken deletion of ordinary prose. Lowercase run-on text that looks like a real domain
+/// (for example "nothing.ai") remains ambiguous and can still be omitted. In v2, a missing space after a full stop ("awareness.In
 /// this state", "for us.Us"), and numbers before a word ("2024.de facto", "section 3.in") were read as bare domains and
 /// silently removed. v3 omits a bare domain only when:
 /// <list type="bullet">

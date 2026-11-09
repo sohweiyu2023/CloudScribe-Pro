@@ -158,15 +158,22 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     private static async Task<int> CollectTextFilesAsync(IStorageFolder folder, string key, bool recursive, List<BatchPick> files, CancellationToken token)
     {
         int unreadable = 0;
+        // Storage paths can be absolute content: URIs or relative provider URIs. Preserve path case and
+        // fragments rather than treating them as local Windows paths; provider objects can be recreated.
+        var visited = new HashSet<string>(StringComparer.Ordinal);
         var pending = new Stack<(IStorageFolder Folder, string Key)>();
         pending.Push((folder, key));
         while (pending.Count > 0)
         {
+            token.ThrowIfCancellationRequested();
             var (current, currentKey) = pending.Pop();
+            if (!visited.Add(current.Path.IsAbsoluteUri ? current.Path.AbsoluteUri : current.Path.OriginalString)) continue;
             try
             {
                 await foreach (var entry in current.GetItemsAsync().WithCancellation(token).ConfigureAwait(true))
                 {
+                    // Not every provider observes WithCancellation; also check after each yielded entry.
+                    token.ThrowIfCancellationRequested();
                     if (entry is IStorageFile file && file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
                         files.Add(new(file.Name, file.TryGetLocalPath(), file.OpenReadAsync, file.TryGetLocalPath() ?? currentKey + "/" + file.Name));
                     else if (recursive && entry is IStorageFolder child)
