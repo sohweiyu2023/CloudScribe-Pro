@@ -15,7 +15,7 @@ The **Official voice samples & catalog** link opens Google's prerecorded example
 
 The short MP3 sample flow is intentionally limited to Standard, WaveNet and Neural2. Chirp 3 HD uses the full-document route below rather than this short-sample box. Other catalog families remain visible with official sample links. A catalog name alone does not assert that its request settings, active pricing or synthesis capabilities are usable. The existing generation gates remain authoritative.
 
-While a catalog lookup is running, this comparison window disables **Close**. A slow lookup requests cancellation after 30 seconds, but completion can take longer; there is no separate catalog-cancel button. The generation **Stop waiting** action does not cancel catalog loading.
+While a catalog lookup is running, **Close**, **Escape** and the window close control remain responsive. Closing retires that lookup's UI publication before requesting cancellation, so a late result cannot update the closed comparison or overwrite a newer selection. An uncooperative lookup may continue in the background and retains its loading/diagnostic lease until it unwinds; reopening does not start a duplicate lookup or reclaim that lease. A slow lookup also requests cancellation after 30 seconds, but this is not a deadline for completion or cleanup. There is no separate catalog-cancel button. The generation **Stop waiting** action does not cancel catalog loading.
 
 ## Compare a longer saved document
 

@@ -94,7 +94,7 @@ function Invoke-CheckStages([object[]]$Stages, [string]$OutputDirectory, [script
             $stage.reason = 'Execution interrupted or not completed.'
             & $Checkpoint
             $base = Join-Path $OutputDirectory $stage.id
-            $stage.logs = @($stage.id + '.stdout.log', $stage.id + '.stderr.log')
+            $stage.logs = @(($stage.id + '.stdout.log'), ($stage.id + '.stderr.log'))
             try {
                 $stage.exit_code = Invoke-LoggedProcess $stage.executable $stage.arguments $stage.working_directory $base
                 $lines = @(Get-Content -LiteralPath ($base + '.stdout.log'), ($base + '.stderr.log'))
