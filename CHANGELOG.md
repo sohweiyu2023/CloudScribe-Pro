@@ -16,9 +16,10 @@ Independent review fixes and optional first-run guidance on top of released 1.0.
 - **Fixed: imported titles could split a character.** Single-document import cut long titles at exactly 200 UTF-16 units, which could leave half of a surrogate pair (for example a CJK Extension B character) in the title. Titles are now shortened on a complete text-element boundary. If even one text element exceeds the title limit, a short placeholder is used; source text is unchanged.
 
 ### Batch import robustness
-- **Fixed: a long TXT file name stopped the whole batch import.** Windows allows names longer than the library's 240-character title limit; the library refused the title and the import aborted, leaving every later file unimported on each retry. The document title is now fitted on a character boundary (the MP3 name keeps the full name).
+- **Fixed: a long TXT file name stopped the whole batch import.** Windows allows names longer than the library's 240-character title limit; the library refused the title and the import aborted, leaving every later file unimported on each retry. The document title is now fitted on a character boundary (the MP3 name keeps the full stem when it fits the filesystem).
 - One file the library refuses no longer stops the files after it: it is marked "the library could not accept this file" and can be removed or added again. Batch-wide problems still stop the add.
 - **Fixed: Include subfolders could loop or fail.** Folder scans followed junctions and directory links (a link back to an ancestor never ended) and one unreadable subfolder failed the whole add. Local folders are now scanned iteratively on a worker thread, links are reported instead of followed, and unreadable folders are counted and skipped.
+- **Fixed: valid long names could fail during MP3 export.** Temporary copies now use a short unique name independent of the output name. Numbering and collision suffixes fit within Windows' filename-component limit without splitting text elements; original text and started-job names are unchanged.
 - Checking new files against an existing list is now linear (thousands of files no longer re-normalise every listed path for every new file), and a malformed saved path can no longer break adding files.
 
 ### Defensive validation
