@@ -110,6 +110,7 @@ public static class BatchDialogPresentation
         "batch.import-interrupted-add-again" => "the app closed while adding it; add the file again",
         "batch.source-changed-add-again" => "the TXT file changed after it was listed; remove it and add it again so the new text is reviewed",
         "batch.source-missing-add-again" => "the TXT file could not be read again (moved, renamed or deleted); add it again",
+        "batch.source-import-refused" => "the library could not accept this file; remove it, or rename the TXT and add it again (other files were added normally)",
         "batch.narration-failed-before-start" => "stopped before anything was sent",
         "batch.narration-failed-after-start-reconcile" => "stopped after it started; check it before retrying",
         "batch.paused" => "paused",

@@ -2,6 +2,20 @@
 
 All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in the app are estimates and safety holds, never a Google bill.
 
+## Unreleased (independent review, 9 November 2026)
+
+Review fixes on top of 1.0.7 (main `80ad8b9`). Not packaged, installed or published. No change to spending rules, caps, approvals, credentials or provider requests.
+
+### Narration text integrity
+- **Fixed: URL skipping could delete ordinary sentence text.** The v2 bare-domain policy treated prose such as `awareness.In this state` (a missing space after a full stop), `for us.Us and them`, `section 3.in the appendix` and `2024.de facto` as web addresses and removed them from the narration copy. New preparations now use `url-omission-v3`, which still skips real addresses (`84000.co`, `EXAMPLE.COM`, explicit HTTP(S)/www links) but keeps mixed-case suffixes, number-only names on most suffixes and two-label `.in`/`.us` words. Saved v1/v2 copies and batches replay their recorded policy unchanged; the preview explains the older v2 policy's risk.
+- **Fixed: imported titles could split a character.** Single-document import cut long titles at exactly 200 UTF-16 units, which could leave half of a surrogate pair (for example a CJK Extension B character) in the title. Titles are now shortened on a character boundary.
+
+### Batch import robustness
+- **Fixed: a long TXT file name stopped the whole batch import.** Windows allows names longer than the library's 240-character title limit; the library refused the title and the import aborted, leaving every later file unimported on each retry. The document title is now fitted on a character boundary (the MP3 name keeps the full name).
+- One file the library refuses no longer stops the files after it: it is marked "the library could not accept this file" and can be removed or added again. Batch-wide problems still stop the add.
+- **Fixed: Include subfolders could loop or fail.** Folder scans followed junctions and directory links (a link back to an ancestor never ended) and one unreadable subfolder failed the whole add. Local folders are now scanned iteratively on a worker thread, links are reported instead of followed, and unreadable folders are counted and skipped.
+- Checking new files against an existing list is now linear (thousands of files no longer re-normalise every listed path for every new file), and a malformed saved path can no longer break adding files.
+
 ## 1.0.7 (candidate)
 
 Responsive comparison-catalog cancellation and broader offline regression coverage. This separate candidate does not change the frozen 1.0.6 package, installed profile or existing spending authority. Full combined verification and native acceptance remain separate gates.

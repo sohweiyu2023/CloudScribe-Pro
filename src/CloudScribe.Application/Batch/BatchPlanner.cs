@@ -138,6 +138,12 @@ public static class BatchPlanner
         return title.Length == 0 ? "Untitled" : title;
     }
 
+    /// <summary>The library document title for a batch file: its name without extension, fitted to the library's title
+    /// limit on a character boundary. Output MP3 names keep the full file name; only the document title is shortened, so
+    /// a long Windows file name can no longer stop the whole import.</summary>
+    public static string DocumentTitleOf(string fileName) =>
+        CloudScribe.Application.Documents.DocumentTitleText.Fit(TitleOf(fileName), CloudScribe.Application.Documents.DocumentTitleText.LibraryMaximum);
+
     /// <summary>Unicode scalar count, shown to the user. The exact billable maximum comes from the provider-specific review.</summary>
     public static int CountCharacters(string text) => text.EnumerateRunes().Count();
 

@@ -52,30 +52,42 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         var session = ctx.Session;
         var token = BeginBatchWork(ctx);
         bool recursive = ctx.Subfolders.IsChecked == true;
-        var files = new List<(IStorageFile File, string SortKey)>();
-        int ignored = 0, foldersWithout = 0;
+        var files = new List<BatchPick>();
+        int ignored = 0, foldersWithout = 0, skippedLinks = 0, unreadableFolders = 0;
         foreach (var entry in picked)
         {
             token.ThrowIfCancellationRequested();
             if (entry is IStorageFile file)
             {
-                if (file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) files.Add((file, file.TryGetLocalPath() ?? file.Name));
+                if (file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) files.Add(new(file.Name, file.TryGetLocalPath(), file.OpenReadAsync, file.TryGetLocalPath() ?? file.Name));
                 else ignored++;
             }
             else if (entry is IStorageFolder folder)
             {
                 int found = files.Count;
-                await CollectTextFilesAsync(folder, folder.TryGetLocalPath() ?? folder.Name, recursive, files, token).ConfigureAwait(true);
+                if (folder.TryGetLocalPath() is { } localFolder)
+                {
+                    // Local folders are scanned on a worker thread without following junctions or symbolic links, and
+                    // an unreadable subfolder is counted instead of failing the whole add.
+                    var scan = await Task.Run(() => BatchFolderScanner.Scan(localFolder, recursive, token), token).ConfigureAwait(true);
+                    files.AddRange(scan.Files.Select(LocalPick));
+                    skippedLinks += scan.SkippedLinks;
+                    unreadableFolders += scan.UnreadableFolders;
+                }
+                else unreadableFolders += await CollectTextFilesAsync(folder, folder.Name, recursive, files, token).ConfigureAwait(true);
                 if (files.Count == found) foldersWithout++;
                 session.OutputFolder ??= session.IsDraft && session.Draft.Count == 0 ? folder.TryGetLocalPath() : null;
                 folderName ??= picked.Length == 1 ? folder.Name : null;
             }
         }
         string notes = (ignored > 0 ? $" {ignored} item(s) that are not .txt files were left out." : string.Empty)
-            + (foldersWithout > 0 ? $" {foldersWithout} folder(s) had no .txt files{(recursive ? string.Empty : " (tick Include subfolders to look inside subfolders)")}." : string.Empty);
+            + (foldersWithout > 0 ? $" {foldersWithout} folder(s) had no .txt files{(recursive ? string.Empty : " (tick Include subfolders to look inside subfolders)")}." : string.Empty)
+            + (skippedLinks > 0 ? $" {skippedLinks} linked folder(s) (shortcut-like junctions) were not followed; drop their target folder directly if you want them." : string.Empty)
+            + (unreadableFolders > 0 ? $" {unreadableFolders} folder(s) could not be opened (no permission or unavailable) and were skipped." : string.Empty);
         // The same TXT added twice is still one MP3; two different files with the same words stay two tracks.
-        var already = files.Where(x => BatchEditor.IsAlreadyListed(session.Items, x.File.TryGetLocalPath())).ToArray();
-        files = files.Except(already).GroupBy(x => x.File.TryGetLocalPath() ?? Guid.NewGuid().ToString(), StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
+        var listed = BatchEditor.ListedPaths(session.Items);
+        var already = files.Where(x => BatchEditor.Normalize(x.LocalPath) is { } full && listed.Contains(full)).ToArray();
+        files = files.Except(already).GroupBy(x => x.LocalPath ?? Guid.NewGuid().ToString(), StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
         if (already.Length > 0) notes += $" {already.Length} file(s) were already in the list and were not added twice.";
         if (files.Count == 0) { ctx.Status.Text = "No new TXT files to add." + notes; return; }
         files.Sort((a, b) => BatchNaturalOrder.Instance.Compare(a.SortKey, b.SortKey));
@@ -85,11 +97,11 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             token.ThrowIfCancellationRequested();
             ReportBatchWork(ctx, "Reading files", i, files.Count);
-            var file = files[i].File;
-            string? local = file.TryGetLocalPath();
+            var file = files[i];
+            string? local = file.LocalPath;
             try
             {
-                var stream = await file.OpenReadAsync().ConfigureAwait(true);
+                var stream = await file.Open().ConfigureAwait(true);
                 await using (stream.ConfigureAwait(true))
                     read.Add(await ctx.Importer.ReadAsync(file.Name, stream, BatchMaximumSourceBytes, token).ConfigureAwait(true) with { SourcePath = local });
             }
@@ -136,15 +148,37 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         static ShellViewModel model(BatchContext c) => c.Model;
     }
 
-    private static async Task CollectTextFilesAsync(IStorageFolder folder, string key, bool recursive, List<(IStorageFile, string)> files, CancellationToken token)
+    /// <summary>A TXT chosen, dropped or found in a folder: its name, local path when there is one, and how to open it.</summary>
+    private sealed record BatchPick(string Name, string? LocalPath, Func<Task<Stream>> Open, string SortKey);
+
+    private static BatchPick LocalPick(string path) => new(System.IO.Path.GetFileName(path), path,
+        () => Task.FromResult<Stream>(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan)), path);
+
+    /// <summary>Fallback for folders without a local path (rare storage providers). Returns how many folders could not be read.</summary>
+    private static async Task<int> CollectTextFilesAsync(IStorageFolder folder, string key, bool recursive, List<BatchPick> files, CancellationToken token)
     {
-        await foreach (var entry in folder.GetItemsAsync().WithCancellation(token).ConfigureAwait(true))
+        int unreadable = 0;
+        var pending = new Stack<(IStorageFolder Folder, string Key)>();
+        pending.Push((folder, key));
+        while (pending.Count > 0)
         {
-            if (entry is IStorageFile file && file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-                files.Add((file, file.TryGetLocalPath() ?? key + "/" + file.Name));
-            else if (recursive && entry is IStorageFolder child)
-                await CollectTextFilesAsync(child, child.TryGetLocalPath() ?? key + "/" + child.Name, recursive, files, token).ConfigureAwait(true);
+            var (current, currentKey) = pending.Pop();
+            try
+            {
+                await foreach (var entry in current.GetItemsAsync().WithCancellation(token).ConfigureAwait(true))
+                {
+                    if (entry is IStorageFile file && file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                        files.Add(new(file.Name, file.TryGetLocalPath(), file.OpenReadAsync, file.TryGetLocalPath() ?? currentKey + "/" + file.Name));
+                    else if (recursive && entry is IStorageFolder child)
+                        pending.Push((child, currentKey + "/" + child.Name));
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                unreadable++;
+            }
         }
+        return unreadable;
     }
 
     private async Task ChooseBatchOutputAsync(BatchContext ctx)

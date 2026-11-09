@@ -106,12 +106,25 @@ public static class BatchEditor
 
     /// <summary>Files whose source path is already in the list (the same TXT dropped or picked twice). Each TXT makes
     /// exactly one MP3; two different files with identical text are still two tracks.</summary>
-    public static bool IsAlreadyListed(IReadOnlyList<BatchItem> items, string? sourcePath)
+    public static bool IsAlreadyListed(IReadOnlyList<BatchItem> items, string? sourcePath) =>
+        Normalize(sourcePath) is { } full && ListedPaths(items).Contains(full);
+
+    /// <summary>The listed source paths, normalised once, so checking thousands of new files against thousands of
+    /// listed ones stays linear instead of re-normalising every listed path for every new file.</summary>
+    public static IReadOnlySet<string> ListedPaths(IReadOnlyList<BatchItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
-        if (string.IsNullOrEmpty(sourcePath)) return false;
-        string full = Path.GetFullPath(sourcePath);
-        return items.Any(x => x.SourcePath is { } path && x.Exclusion != BatchExclusion.RemovedByUser
-            && string.Equals(Path.GetFullPath(path), full, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        var paths = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (var item in items)
+            if (item.Exclusion != BatchExclusion.RemovedByUser && Normalize(item.SourcePath) is { } full) paths.Add(full);
+        return paths;
+    }
+
+    /// <summary>The full path, or null for an empty or malformed path (which then simply cannot match).</summary>
+    public static string? Normalize(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
+        try { return Path.GetFullPath(path); }
+        catch (Exception error) when (error is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
     }
 }

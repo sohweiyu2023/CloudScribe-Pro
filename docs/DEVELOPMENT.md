@@ -275,6 +275,10 @@ After committing the intended source and manifest, rerun required checks on that
 
 The original v1 recognition cases are retained with only a v1 type alias. A separate v2 compatibility suite repeats those explicit-URL/Markdown/Unicode/processing-budget cases, with bare-domain preservation differences (including a valid domain containing `www` inside a label) tested separately by version. Additional tests cover bare-domain false positives, adversarial inputs, exact v1/v2 copy reuse, interrupted imports, no-omission v1 identities, draft/session retention, version corruption, consent changes and existing-job recovery. Run focused `NarrationUrlOmission`, `NarrationCopyStoreTests`, `BatchNarrationTests`, `BatchDraftVersionTests` and narration architecture tests, then the full compiled/offline suites under the normal checks above. Focused success is not release certification.
 
+## URL omission v3 (independent review, November 2026)
+
+`url-omission-v3` is the current policy for new preparations. It reuses the v2 engine with stricter bare-domain acceptance (`NarrationUrlOmissionV3.IsConfidentBareDestination`), so v2 output stays byte-for-byte identical for saved copies. `NarrationUrlOmissionV2CompatibilityTests` and `NarrationUrlOmissionVersionTests` pin v2 explicitly and check that v3 recognises the same real domains; `NarrationUrlOmissionV3Tests` covers the prose cases v2 deleted. The frozen workflow matrix's `v2` axis exercises the replayed v2 policy.
+
 ## Tracked follow-up defects
 
 See [Follow-up fixes](FOLLOW_UP_FIXES.md) for the implemented comparison-catalog cancellation fix and its pending combined-suite/native acceptance requirements. Headless success does not close the Windows acceptance gate.
