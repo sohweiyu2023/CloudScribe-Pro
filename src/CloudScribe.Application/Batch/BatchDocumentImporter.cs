@@ -150,7 +150,19 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
                 progress?.Report((++done, pending.Length));
                 continue;
             }
-            var prepared = await PrepareImportedItemAsync(queue, item, text).ConfigureAwait(false);
+            BatchItem prepared;
+            try { prepared = await PrepareImportedItemAsync(queue, item, text).ConfigureAwait(false); }
+            catch (Exception error) when (error is ArgumentException or InvalidDataException)
+            {
+                // One file the library refuses must not stop the files after it: it is marked with a reason and can be
+                // removed and added again. Batch-wide problems (unsupported settings, store failures) still stop the add.
+                queue = await store.SaveAsync(queue.WithItem(item with { State = BatchItemState.Failed, ReasonCode = "batch.source-import-refused" }),
+                    CancellationToken.None).ConfigureAwait(false);
+                BatchDiagnostics.Source(logger, queue.BatchId, item.ItemId, BatchSourceOutcome.ImportRefused);
+                BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.SaveAndImport, error);
+                progress?.Report((++done, pending.Length));
+                continue;
+            }
             queue = await store.SaveAsync(queue.WithItem(prepared), CancellationToken.None).ConfigureAwait(false);
             BatchDiagnostics.Source(logger, queue.BatchId, item.ItemId, BatchSourceOutcome.Imported);
             progress?.Report((++done, pending.Length));
@@ -162,7 +174,7 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
     {
         var preview = preprocessor.Preview(text, new(NormalizeLineEndings: true, CollapseHorizontalWhitespace: false,
             CollapseExcessBlankLines: false, SimplifyUrls: false));
-        string title = BatchPlanner.TitleOf(item.SourceFileName);
+        string title = BatchPlanner.DocumentTitleOf(item.SourceFileName);
         if (queue.Settings.SkipUrls && narrationCopies is null)
             throw new InvalidOperationException("Durable narration copies are unavailable; nothing was changed.");
         DocumentSnapshot saved;
@@ -248,6 +260,6 @@ public sealed class BatchDocumentImporter(ILocalDocumentImporter importer, Docum
         ArgumentNullException.ThrowIfNull(item);
         if (item.DocumentId is not null || item.JobId is not null) return false;
         return item.State == BatchItemState.Ready
-            || item.State == BatchItemState.Failed && item.ReasonCode is "batch.import-interrupted-add-again" or "batch.source-changed-add-again" or "batch.source-missing-add-again";
+            || item.State == BatchItemState.Failed && item.ReasonCode is "batch.import-interrupted-add-again" or "batch.source-changed-add-again" or "batch.source-missing-add-again" or "batch.source-import-refused";
     }
 }

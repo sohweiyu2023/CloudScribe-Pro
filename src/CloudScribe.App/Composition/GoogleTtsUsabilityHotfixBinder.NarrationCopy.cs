@@ -93,7 +93,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     private static string BatchUrlPolicyText(string? version) => version switch
     {
         NarrationUrlOmission.LegacyVersion => "Legacy URL policy: only HTTP(S) and www addresses are skipped. Bare addresses such as 84000.co remain. Prepare a new copy or draft from the original text to use bare-domain skipping.",
-        NarrationUrlOmission.CurrentVersion => "Bare-domain skipping is enabled for the supported suffixes, including 84000.co. Check the narration preview before approval.",
+        NarrationUrlOmission.BareDomainV2Version => "Earlier bare-domain policy (v2): it can also remove sentence text that only looks like a domain, such as \"awareness.In\" with a missing space. Check the narration preview, or prepare a new copy or draft from the original text to use the safer current policy.",
+        NarrationUrlOmission.CurrentVersion => "Bare-domain skipping is enabled for the supported suffixes, including 84000.co. Sentence text such as \"awareness.In\" (a missing space) or \"3.in\" is kept. Check the narration preview before approval.",
         _ => "Unsupported URL policy. This saved narration cannot be prepared or upgraded automatically.",
     };
 

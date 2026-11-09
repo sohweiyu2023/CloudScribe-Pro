@@ -20,7 +20,11 @@ internal static partial class NarrationUrlOmissionV2
     /// <exception cref="InvalidOperationException">
     /// The input exceeds the shared processing budget. No partial transform is returned.
     /// </exception>
-    public static NarrationUrlOmissionResult Transform(string sourceText)
+    public static NarrationUrlOmissionResult Transform(string sourceText) => Transform(sourceText, strictBareDomains: false, CurrentVersion);
+
+    /// <summary>Shared engine. <paramref name="strictBareDomains"/> is false for v2 (unchanged, replayed for saved
+    /// copies) and true for v3, which keeps sentence text that only looks like a bare domain.</summary>
+    internal static NarrationUrlOmissionResult Transform(string sourceText, bool strictBareDomains, string version)
     {
         ArgumentNullException.ThrowIfNull(sourceText);
         if (sourceText.Length > MaximumSourceLength)
@@ -30,12 +34,12 @@ internal static partial class NarrationUrlOmissionV2
         }
 
         List<(int Start, int End)> removals = [];
-        int count = FindRemovals(sourceText, removals);
+        int count = FindRemovals(sourceText, removals, strictBareDomains);
         string output = count == 0 ? sourceText : ApplyRemovals(sourceText, removals);
-        return new(output, count, CurrentVersion, ContainsLetterOrNumber(output));
+        return new(output, count, version, ContainsLetterOrNumber(output));
     }
 
-    private static int FindRemovals(string source, List<(int Start, int End)> removals)
+    private static int FindRemovals(string source, List<(int Start, int End)> removals, bool strictBareDomains)
     {
         ProcessingBudget budget = new(source.Length);
         Stack<int> labelStarts = new();
@@ -81,7 +85,7 @@ internal static partial class NarrationUrlOmissionV2
             if (!bareTokenBlocked && char.IsAsciiLetterOrDigit(current) && IsBareStartBoundary(source, index))
             {
                 examinedEnd = ReadBareUrl(source, index, budget, out int bareEnd);
-                bareTokenBlocked = bareEnd <= index;
+                bareTokenBlocked = !AcceptsBare(source, index, bareEnd, strictBareDomains);
                 if (!bareTokenBlocked) count += AddRemoval(removals, index, bareEnd);
                 // Invalid tokens are consumed once; do not retry a domain-shaped tail.
                 index = Math.Max(index + 1, examinedEnd);
@@ -94,6 +98,10 @@ internal static partial class NarrationUrlOmissionV2
 
         return count;
     }
+
+    // v2 accepts every bare destination it recognised; v3 additionally requires a confident domain.
+    private static bool AcceptsBare(string source, int start, int end, bool strict) => end > start
+        && (!strict || NarrationUrlOmissionV3.IsConfidentBareDestination(source.AsSpan(start, end - start)));
 
     private static int AddRemoval(List<(int Start, int End)> removals, int start, int end)
     {

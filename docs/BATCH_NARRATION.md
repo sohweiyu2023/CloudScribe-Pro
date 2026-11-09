@@ -18,7 +18,17 @@ Preview is deliberately literal: recognized web addresses are omitted; inline Ma
 
 If an article has recoverable already-started work but its original has changed, a **Recover already-started work only** review can finish that admitted recovery. Unstarted parts remain blocked, and this action does not promise a complete article MP3.
 
-## Bare domains in the v2 narration policy
+## Bare domains in the v3 narration policy (current)
+
+New narration preparations use `url-omission-v3`. It recognizes the same explicit HTTP(S)/www addresses, Markdown links and real bare domains as v2 (for example `84000.co`, `EXAMPLE.COM`, `read.84000.co:443/translation`), but no longer deletes sentence text that only looks like a bare domain. In v2, ordinary prose such as `awareness.In this state` (a missing space after a full stop), `for us.Us and them`, `section 3.in the appendix` or `2024.de facto` was silently removed from the narration. v3 omits a bare domain only when:
+
+- its suffix is not mixed case (`com` and `COM` are domains; `In` or `Net` is the capitalised first word of a sentence typed without a space);
+- the label before the suffix contains a letter, except all-digit names on `com`, `org`, `net`, `co` or `io` (such as `84000.co`);
+- it is not a two-label name ending in `in` or `us` with no path or port (`end.in` is far more common in prose than a bare `.in` or `.us` domain; such an address is spoken instead).
+
+Keeping a doubtful token only means it is spoken; deleting words changes what was narrated and what was paid for, so v3 keeps doubtful cases. Copies, drafts and batches that recorded v2 keep replaying v2 exactly (they are never upgraded silently); the preview says so and recommends preparing a new copy from the original text. The v2 rules below still apply to v3, which adds only the conditions above.
+
+### The v2 policy (1.0.6–1.0.7, replayed for saved copies)
 
 From 1.0.6, new narration preparations use `url-omission-v2`, which also recognizes bare ASCII web addresses such as `84000.co`, `read.84000.co:443/translation?q=one%20two#part` and `example.org`. Explicit HTTP(S)/www handling, ordinary inline Markdown labels and literal whitespace/punctuation preservation remain covered by compatibility tests.
 
@@ -31,7 +41,7 @@ The v2 bare-domain policy is deliberately small and local:
 
 Every saved copy and batch retains its own immutable transform version. Old v1 copies still contain bare domains exactly as originally prepared. Reopening, interrupted import, copy-to-batch, preview and recovery do not upgrade them or reuse their approval for new text. Old enabled drafts without a version infer it from consistent saved-copy provenance; otherwise they conservatively retain v1. The batch window and preview explicitly explain that this legacy policy leaves bare domains intact. An old unprepared draft with skipping still off selects v2 when skipping is newly enabled, as does a newly started draft. Mixed, missing or unsupported saved identities fail closed. To use v2 for old material, prepare a new copy from the original and review its own cost.
 
-The policy is frozen in `NarrationUrlOmissionV2.BareDomains.cs`; changing its suffixes, limits or output rules requires a new version. V1 remains a separate frozen implementation. There are no new dependencies, runtime suffix refreshes or third-party policy data. Both versions use the existing document-size and deterministic work-budget bounds; complexity failures never return a partial copy.
+The v2 policy is frozen in `NarrationUrlOmissionV2.BareDomains.cs`, and v3's extra conditions in `NarrationUrlOmissionV3.cs`; changing suffixes, limits or output rules requires a new version. V1 remains a separate frozen implementation. There are no new dependencies, runtime suffix refreshes or third-party policy data. Both versions use the existing document-size and deterministic work-budget bounds; complexity failures never return a partial copy.
 
 ## Using it
 

@@ -205,7 +205,9 @@ public sealed partial class ShellViewModelStateTests
         var store = new EfNarrationCopyStore(f.Factory, new(f.Disk.Paths), f.Clock);
         var prepared = await store.PrepareAsync(source.Id, source.CurrentRevisionId!.Value,
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(source.Text))),
-            string.Equals(policy, "v1", StringComparison.Ordinal) ? NarrationUrlOmission.LegacyVersion : NarrationUrlOmission.CurrentVersion,
+            // The frozen pairwise inventory exercises the saved v1/v2 policies that existing copies replay; the current
+            // v3 policy is covered by its own unit and copy-store tests.
+            string.Equals(policy, "v1", StringComparison.Ordinal) ? NarrationUrlOmission.LegacyVersion : NarrationUrlOmission.BareDomainV2Version,
             TestContext.Current.CancellationToken).ConfigureAwait(false);
         Assert.Equal("url-omission-" + policy, prepared.TransformVersion);
         return prepared.Narration;
