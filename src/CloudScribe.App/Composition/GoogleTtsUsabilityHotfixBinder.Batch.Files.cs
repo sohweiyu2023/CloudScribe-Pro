@@ -82,7 +82,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         }
         string notes = (ignored > 0 ? $" {ignored} item(s) that are not .txt files were left out." : string.Empty)
             + (foldersWithout > 0 ? $" {foldersWithout} folder(s) had no .txt files{(recursive ? string.Empty : " (tick Include subfolders to look inside subfolders)")}." : string.Empty)
-            + (skippedLinks > 0 ? $" {skippedLinks} linked folder(s) (shortcut-like junctions) were not followed; drop their target folder directly if you want them." : string.Empty)
+            + (skippedLinks > 0 ? $" {skippedLinks} linked or unsupported reparse folder(s) were not followed; for a link, drop its target folder directly if you want it." : string.Empty)
             + (unreadableFolders > 0 ? $" {unreadableFolders} folder(s) could not be opened (no permission or unavailable) and were skipped." : string.Empty);
         // The same TXT added twice is still one MP3; two different files with the same words stay two tracks.
         var listed = BatchEditor.ListedPaths(session.Items);

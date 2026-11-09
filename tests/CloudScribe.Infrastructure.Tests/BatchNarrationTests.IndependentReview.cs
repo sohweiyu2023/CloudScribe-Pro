@@ -2,6 +2,7 @@
 using CloudScribe.Application.Batch;
 using CloudScribe.Application.Documents;
 using CloudScribe.Domain.Documents;
+using CloudScribe.Infrastructure.Batch;
 using CloudScribe.Infrastructure.Files;
 
 namespace CloudScribe.Infrastructure.Tests;
