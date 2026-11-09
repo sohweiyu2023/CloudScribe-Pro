@@ -89,14 +89,18 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             previewNarration.IsEnabled = false;
             try
             {
-                if (await PreviewNarrationCopyAsync(dialog, model).ConfigureAwait(true))
+                if (await PreviewNarrationCopyAsync(dialog, model, restoreInvoker: false).ConfigureAwait(true))
                 { reopenForCopy = true; dialog.Close(); }
                 else if (CloudScribe.Application.Documents.NarrationUrlOmission.Transform(model.DocumentText).OmittedUrlCount == 0)
                     skipUrls.IsChecked = false;
             }
             catch (Exception error) when (BatchDiagnosticsNonFatal(error))
             { model.StatusMessage = "Could not preview narration: " + error.Message; }
-            finally { previewNarration.IsEnabled = true; }
+            finally
+            {
+                previewNarration.IsEnabled = true;
+                if (!reopenForCopy) RestoreDialogInvoker(dialog, previewNarration);
+            }
         };
         bool IsLongArticle() => Encoding.UTF8.GetByteCount(model.DocumentText) >= 4_000;
         WrapPanel actionRow = new() { Orientation = Orientation.Horizontal };

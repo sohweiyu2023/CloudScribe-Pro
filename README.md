@@ -2,7 +2,7 @@
 
 CloudScribe Pro is a Windows text-to-speech workspace for Google Cloud voices. Write or import a document, review the exact request and its estimated maximum cost, approve it, then create, play and export a verified MP3.
 
-This source contains **CloudScribe Pro 1.0.6**. See the [changelog](CHANGELOG.md) for the current features and [Windows installation guide](docs/WINDOWS_INSTALLATION.md) for preserving an existing setup.
+This source contains **CloudScribe Pro 1.0.7**. See the [changelog](CHANGELOG.md) for the current features and [Windows installation guide](docs/WINDOWS_INSTALLATION.md) for preserving an existing setup.
 
 **[Download for Windows x64](https://files.awakeningtoreality.com/CloudScribe-Windows-x64.zip)** · **[Setup and user guide](docs/USER_GUIDE.md)** · **[Source code](https://github.com/sohweiyu2023/CloudScribe-Pro)**
 

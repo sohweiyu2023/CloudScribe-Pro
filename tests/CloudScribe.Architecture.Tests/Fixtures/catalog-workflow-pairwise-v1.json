@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "seed": 20261108,
+  "algorithm": "bounded-valid-space-greedy-sha256-v1",
+  "axes": {
+    "voice": [
+      "neural2",
+      "aoede"
+    ],
+    "omission": [
+      "off",
+      "v1",
+      "v2"
+    ],
+    "text": [
+      "plain",
+      "explicit-url",
+      "bare-domain",
+      "unicode",
+      "url-only"
+    ],
+    "observation": [
+      "open",
+      "filter",
+      "refresh"
+    ],
+    "evidence": [
+      "unchanged",
+      "missing",
+      "expired",
+      "metadata"
+    ],
+    "lifetime": [
+      "same-session",
+      "reopen-english",
+      "reopen-chinese"
+    ],
+    "work": [
+      "pending",
+      "approved",
+      "completed",
+      "uncertain"
+    ]
+  },
+  "constraints": [
+    {
+      "excluded": "text=url-only with omission=v1 or v2",
+      "reason": "Explicit URL omission leaves no speakable content; separate negative production-store tests assert rejection before review."
+    }
+  ],
+  "validCandidates": 3744,
+  "excludedCandidates": 576,
+  "validPairs": 242,
+  "cases": [
+    "neural2|off|plain|open|expired|reopen-chinese|pending",
+    "aoede|v1|unicode|filter|missing|same-session|approved",
+    "aoede|off|explicit-url|refresh|metadata|reopen-english|uncertain",
+    "neural2|v2|bare-domain|filter|unchanged|reopen-english|completed",
+    "aoede|v2|plain|refresh|unchanged|same-session|pending",
+    "neural2|v1|bare-domain|refresh|missing|reopen-chinese|uncertain",
+    "aoede|v1|explicit-url|open|expired|same-session|completed",
+    "neural2|v2|unicode|open|metadata|reopen-chinese|approved",
+    "aoede|off|url-only|filter|unchanged|reopen-chinese|uncertain",
+    "neural2|off|url-only|refresh|metadata|same-session|completed",
+    "neural2|v1|plain|filter|metadata|reopen-english|pending",
+    "aoede|off|unicode|refresh|expired|reopen-english|approved",
+    "neural2|v2|explicit-url|open|missing|reopen-english|uncertain",
+    "aoede|v1|bare-domain|open|unchanged|same-session|approved",
+    "neural2|off|url-only|open|missing|reopen-english|pending",
+    "aoede|v2|explicit-url|filter|expired|reopen-chinese|completed",
+    "neural2|off|bare-domain|refresh|expired|same-session|uncertain",
+    "aoede|off|plain|filter|missing|same-session|completed",
+    "aoede|off|unicode|filter|unchanged|reopen-chinese|completed",
+    "neural2|v1|bare-domain|open|metadata|same-session|pending",
+    "aoede|v2|explicit-url|open|unchanged|reopen-english|pending",
+    "aoede|off|url-only|filter|expired|reopen-chinese|approved",
+    "aoede|v1|unicode|refresh|missing|same-session|pending",
+    "aoede|off|unicode|filter|unchanged|same-session|uncertain",
+    "aoede|off|explicit-url|filter|expired|same-session|approved",
+    "neural2|off|plain|refresh|missing|same-session|uncertain",
+    "neural2|v2|plain|refresh|unchanged|reopen-chinese|approved"
+  ]
+}

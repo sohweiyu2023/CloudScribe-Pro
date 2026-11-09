@@ -19,6 +19,12 @@ public sealed partial class ShellViewModel
 
     public bool VoiceLabCatalogLastRefreshSucceeded { get; private set; }
 
+    // Captured before bootstrap as well as before the UI query. A saved setup can
+    // change while either await is outstanding, including another setup in the same locale.
+    internal int VoiceCatalogFilterVersion => Volatile.Read(ref _voiceCatalogFilterVersion);
+
+    internal int RetireVoiceCatalogPresentation() => Interlocked.Increment(ref _voiceCatalogFilterVersion);
+
     public Task RefreshVoiceCatalogForUiAsync(CancellationToken token) => RefreshVoiceLabCatalogAsync(token);
 
     public Task RefreshVoiceCatalogForUiAsync(Guid refreshId, CancellationToken token) => RefreshVoiceLabCatalogObservedAsync(refreshId, token);

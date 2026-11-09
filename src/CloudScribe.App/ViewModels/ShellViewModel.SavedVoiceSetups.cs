@@ -38,6 +38,7 @@ public sealed partial class ShellViewModel
     public void ApplySavedVoiceSetup(VoiceSetup setup)
     {
         ArgumentNullException.ThrowIfNull(setup);
+        Interlocked.Increment(ref _voiceCatalogFilterVersion);
         VoiceLabLocaleFilter = setup.Locale;
         VoiceLabSearchText = null;
         PreferredVoiceName = setup.VoiceName;

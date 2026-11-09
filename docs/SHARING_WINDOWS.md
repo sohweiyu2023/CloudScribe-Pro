@@ -4,7 +4,7 @@ The **Help** button opens the in-app Quick Start. A new profile opens it automat
 
 Distribute only a clean application build and a compatible private .NET runtime. Do not copy your installation workspace, app-data profile, database, documents, MP3s, service-account JSON, Windows credentials or a launcher that points to your personal data.
 
-The 1.0.6 source is a release candidate until its exact build and package are verified and publication is authorized. A version label or successful package creation is not release acceptance. The clean package carries no permission for arbitrary full-document narration. Exclude private additive article catalogs, reviewed plans, native/source proofs, receipts and journals along with the existing private policies; use a fresh publish, never a used installation as a package source.
+The 1.0.7 source is a release candidate until its exact build and package are verified and publication is authorized. A version label or successful package creation is not release acceptance. The clean package carries no permission for arbitrary full-document narration. Exclude private additive article catalogs, reviewed plans, native/source proofs, receipts and journals along with the existing private policies; use a fresh publish, never a used installation as a package source.
 
 From a clean publish and a compatible Windows x64 runtime folder, create a new package:
 

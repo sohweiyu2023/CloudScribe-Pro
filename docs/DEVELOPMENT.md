@@ -241,7 +241,7 @@ A runnable build can be published after the Release build using the manual proce
 
 For an actual handoff, follow [clean sharing](SHARING_WINDOWS.md) and [Windows installation/update](WINDOWS_INSTALLATION.md). Inspect the existing installation, close the app normally, preserve the profile and stable shortcut, and complete the required native launch/runtime checks. Never distribute profiles, databases, service-account JSON, credentials, documents, recordings, private admission evidence or rollback folders.
 
-The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.6 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
+The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.7 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
 
 Source verification, compiled tests, offline completion tests, real Windows/native behavior, live provider acceptance and formal certification are distinct evidence. None of these developer commands approves paid calls, retries, production profile changes, an upload or release promotion.
 
@@ -277,7 +277,17 @@ The original v1 recognition cases are retained with only a v1 type alias. A sepa
 
 ## Tracked follow-up defects
 
-See [Follow-up fixes](FOLLOW_UP_FIXES.md) for the scoped comparison-catalog cancellation defect and its pending test/acceptance requirements. It remains open independently of passing source or mocked tests.
+See [Follow-up fixes](FOLLOW_UP_FIXES.md) for the implemented comparison-catalog cancellation fix and its pending combined-suite/native acceptance requirements. Headless success does not close the Windows acceptance gate.
+
+## Bounded workflow and cancellation checks (1.0.7)
+
+[The connected-workflow matrix](WORKFLOW_PAIRWISE_TESTS.md) covers 27 deterministic cases and 242 feasible pairs within seven documented axes, plus targeted rejection and source-edit controls. It composes production services over disposable SQLite and fake-only transports. It does not cover every higher-order sequence, all voice families or real audio.
+
+Catalog cancellation regressions use a test-only Avalonia.Headless 12.1.4 host with matching transitive Inter fonts. The host is a plain test Application, not production startup. The nonparallel UI collection isolates process-wide Avalonia state; temporary sessions and log overrides are retired after each test. Delayed dependencies exercise Close, Escape, window close, late results, recreated windows, phase cancellation and separate generation/export guards. Production package dependencies are unchanged.
+
+Preview regressions also cover the actual Create MP3 and batch caller routes: focus returns after the caller re-enables its opener, while save-in-progress close guards and batch exclusive ownership remain intact. Both outline layouts assert current list-item automation-peer names after text replacement. These are automated control assertions, not actual screen-reader speech.
+
+Run focused regressions for changed behavior during development, then freeze all source/docs and the regenerated manifest before invoking the full exact-commit developer runner once. Retain its actual totals and skips. Do not report native keyboard, screen-reader, DPI, listening or six-family acceptance from headless and fake-provider tests.
 
 ## Troubleshooting
 

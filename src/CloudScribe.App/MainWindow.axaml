@@ -464,6 +464,11 @@
               Background="Transparent"
               BorderThickness="0"
               AutomationProperties.Name="Document outline">
+            <ListBox.Styles>
+              <Style Selector="ListBoxItem" x:DataType="vm:OutlineEntryViewModel">
+                <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+              </Style>
+            </ListBox.Styles>
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:OutlineEntryViewModel">
                 <Grid ColumnDefinitions="*,Auto" Margin="3,7" ToolTip.Tip="Jump to and highlight this paragraph">
@@ -877,6 +882,11 @@
           </Grid>
           <TextBlock Grid.Row="1" Text="{Binding OutlineHelpText}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" TextWrapping="Wrap" />
           <ListBox x:Name="OutlineDrawerList" Grid.Row="2" Classes="outline-list" ItemsSource="{Binding OutlineEntries}" SelectedIndex="{Binding SelectedOutlineIndex, Mode=TwoWay}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Document outline drawer list">
+            <ListBox.Styles>
+              <Style Selector="ListBoxItem" x:DataType="vm:OutlineEntryViewModel">
+                <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+              </Style>
+            </ListBox.Styles>
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:OutlineEntryViewModel">
                 <Grid ColumnDefinitions="*,Auto" Margin="4,8">

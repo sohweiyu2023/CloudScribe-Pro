@@ -195,7 +195,7 @@ and screen-reader announcements; and W09 real 100/125/150/200 percent scale,
 small/normal windows, long labels and high contrast. Unavailable configurations
 remain NOT RUN or BLOCKED, never assumed equivalent.
 
-Retained comparison-window limitation: catalog Load/Refresh keeps Close disabled while busy and has no user cancel action. Its 30-second timer requests cooperative cancellation, not a guaranteed wall-clock return. Do not report close-during-catalog-load as supported; Create MP3 has a separate cancellation path. Test eventual recovery and focus after completion without weakening generation or diagnostic guards.
+The isolated catalog-cancellation follow-up makes comparison Close/Escape/native close responsive by retiring UI publication before requesting cancellation. An uncooperative background lookup still owns its loading/diagnostic lease until it unwinds, and a reopened window blocks another catalog request meanwhile. The 30-second timer is not a guaranteed cleanup deadline. Native close/focus acceptance remains pending; headless controls do not certify W07. See [Follow-up fixes](FOLLOW_UP_FIXES.md). Generation/export and diagnostic guards must remain intact.
 
 Logical library/queue/authorization state and app provider/vault counters are
 explicitly BLOCKED: no supported adapter/instrumentation is implemented. Those

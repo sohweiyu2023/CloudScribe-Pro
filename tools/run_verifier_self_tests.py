@@ -78,7 +78,7 @@ def _stage4_contract_root() -> tempfile.TemporaryDirectory[str]:
             f"<Version>{servicing}</Version>",
             f"<InformationalVersion>{servicing}</InformationalVersion>",
             f"<FileVersion>{servicing}.0</FileVersion>",
-        )) for servicing in ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6")):
+        )) for servicing in ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7")):
             temporary.cleanup()
             raise RuntimeError("A servicing SDK may only project an exact 1.0.x servicing patch source")
     state["current_stage"] = 4

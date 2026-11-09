@@ -67,6 +67,7 @@ public sealed partial class ShellViewModelStateTests
             _ => Task.FromResult(CatalogState(accountAuthorized: true)));
         Task refresh = model.RefreshVoiceCatalogForUiAsync(TestContext.Current.CancellationToken);
         model.ApplySavedVoiceSetup(new VoiceSetup("Chinese", "cmn-CN", "cmn-CN-Chirp3-HD-Alnilam"));
+        string newerStatus = model.StatusMessage;
         pending.SetResult([VoiceSelection()]);
         await refresh;
         Assert.Empty(model.VoiceLabCatalogResults);
@@ -74,7 +75,7 @@ public sealed partial class ShellViewModelStateTests
         Assert.False(model.VoiceLabCatalogLastRefreshSucceeded);
         Assert.Equal("cmn-CN", model.VoiceLabLocaleFilter);
         Assert.Equal("cmn-CN-Chirp3-HD-Alnilam", model.PreferredVoiceName);
-        Assert.Contains("changed while loading", model.StatusMessage, StringComparison.Ordinal);
+        Assert.Equal(newerStatus, model.StatusMessage);
     }
 
     private sealed class LanguageClock : TimeProvider

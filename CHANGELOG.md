@@ -2,6 +2,25 @@
 
 All notable changes to CloudScribe Pro. Dates are Singapore time. Costs shown in the app are estimates and safety holds, never a Google bill.
 
+## 1.0.7 (candidate)
+
+Responsive comparison-catalog cancellation and broader offline regression coverage. This separate candidate does not change the frozen 1.0.6 package, installed profile or existing spending authority. Full combined verification and native acceptance remain separate gates.
+
+### Comparison window lifetime
+- Close, Escape and normal window close dismiss a pending catalog load or refresh without waiting for an uncooperative dependency. Late results cannot replace a newer selection or publish into a retired window; eligible opener focus is restored.
+- Reopened windows share the outstanding-operation guard until cleanup really finishes. Between-phase cancellation checks prevent later work after cancellation, without reclaiming diagnostic claims or automatically retrying.
+- Generation, sample preparation, replay and export retain their own busy-close and exact-approval safeguards. Closing a window does not imply rollback or an uncharged request.
+
+### Preview and outline accessibility
+- Both narration previews scroll their full content at reduced window sizes, keeping Save/Close reachable by keyboard and pointer even with long wrapped summaries. A 320-by-320 minimum prevents unusably small preview windows; native resize acceptance remains a separate check.
+- Single-document and batch narration previews handle Escape through the normal close path. Their actual callers restore eligible opener focus after re-enabling controls; saving retains its close guard, and save failures remain dismissible.
+- Wide and narrow outline list items expose current paragraph labels and numbers through their accessibility peers instead of view-model type strings. Native screen-reader speech remains to be checked.
+
+### Offline verification scope
+- Add a bounded deterministic connected-workflow matrix: 27 cases cover 242 feasible pairs from 3,744 valid candidates, with additional rejection and source-edit controls. Tests compose real services over disposable state and fake-only transports; seeded accepted outcomes are not playable audio.
+- Add test-only production-control headless regressions for dismissal, reopen/late-response races, focus state, operation lifetime and cancellation boundaries. Headless focus is not native Windows or assistive-technology acceptance.
+- Application product/file versions move to 1.0.7/1.0.7.0. AssemblyVersion stays 1.0.0.0, and historical Stage8 governance is unchanged. No six-family, real-audio, installation or publication pass is claimed.
+
 ## 1.0.6
 
 Connected voice workflow fixes, versioned bare-domain omission, and reusable verification tools. Existing approvals, expiry, provider limits, financial caps and retained jobs remain authoritative.

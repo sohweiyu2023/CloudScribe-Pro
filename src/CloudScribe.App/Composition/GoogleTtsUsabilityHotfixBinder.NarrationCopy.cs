@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
 using CloudScribe.App.ViewModels;
 using CloudScribe.Application.Batch;
 using CloudScribe.Application.Batch.Authority;
@@ -11,7 +12,7 @@ namespace CloudScribe.App.Composition;
 
 public sealed partial class GoogleTtsUsabilityHotfixBinder
 {
-    private static async Task<bool> PreviewNarrationCopyAsync(Window owner, ShellViewModel model)
+    private static async Task<bool> PreviewNarrationCopyAsync(Window owner, ShellViewModel model, bool restoreInvoker = true)
     {
         string original = model.DocumentText;
         var result = NarrationUrlOmission.Transform(original);
@@ -43,14 +44,41 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             { status.Text = "The narration copy could not be prepared: " + error.Message + " Your original is retained; no audio was requested. If an earlier copy was edited, save the original text as a new document, then preview URL skipping again."; }
             finally { saving = false; close.IsEnabled = true; }
         };
-        dialog.Content = body;
+        SetNarrationPreviewContent(dialog, body);
         DialogBounds.Fit(dialog, owner);
-        await dialog.ShowDialog(owner).ConfigureAwait(true);
+        await ShowNarrationPreviewAsync(dialog, owner, restoreInvoker).ConfigureAwait(true);
         return opened;
+    }
+
+    private static async Task ShowNarrationPreviewAsync(Window dialog, Window owner, bool restoreInvoker)
+    {
+        var invoker = restoreInvoker ? owner.FocusManager?.GetFocusedElement() as Control : null;
+        dialog.KeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Escape) return;
+            args.Handled = true;
+            dialog.Close(); // Closing retains the narration-copy save guard.
+        };
+        try { await dialog.ShowDialog(owner).ConfigureAwait(true); }
+        finally { RestoreDialogInvoker(owner, invoker); }
     }
 
     private static bool BatchDiagnosticsNonFatal(Exception error) =>
         error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException;
+
+    private static void SetNarrationPreviewContent(Window dialog, StackPanel body)
+    {
+        // The full preview must remain reachable when Windows reduces the client area,
+        // or wrapped status/error text grows. Keep keyboard bring-into-view enabled.
+        dialog.MinWidth = 320;
+        dialog.MinHeight = 320;
+        dialog.Content = new ScrollViewer
+        {
+            Content = body,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+        };
+    }
 
     private static TextBox NarrationPreviewText(string text) => new()
     {
@@ -69,7 +97,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         _ => "Unsupported URL policy. This saved narration cannot be prepared or upgraded automatically.",
     };
 
-    private async Task PreviewBatchNarrationAsync(BatchContext ctx)
+    private async Task PreviewBatchNarrationAsync(BatchContext ctx, bool restoreInvoker = true)
     {
         if (SelectedBatchRows(ctx) is not [var item]) return;
         string text;
@@ -104,8 +132,8 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         if (skip && !text.EnumerateRunes().Any(System.Text.Rune.IsLetterOrDigit))
             body.Children.Add(NewDescription("No spoken words remain. This file is excluded locally; no request is sent."));
         var close = NewButton("Close preview"); close.Click += (_, _) => dialog.Close(); body.Children.Add(close);
-        dialog.Content = body; DialogBounds.Fit(dialog, ctx.Dialog);
-        await dialog.ShowDialog(ctx.Dialog).ConfigureAwait(true);
+        SetNarrationPreviewContent(dialog, body); DialogBounds.Fit(dialog, ctx.Dialog);
+        await ShowNarrationPreviewAsync(dialog, ctx.Dialog, restoreInvoker).ConfigureAwait(true);
     }
 
     private async Task AddSavedNarrationCopyNoticeAsync(Window owner, StackPanel body, ShellViewModel model)

@@ -151,8 +151,12 @@ public sealed partial class ShellViewModelStateTests
         internal int BlockCatalogAt { get; set; }
         internal int DriftCatalogAt { get; set; }
         internal bool ChangedMetadata { get; set; }
+        internal bool IgnoreBlockedCancellation { get; set; }
+        internal bool ThrowCancellationCallback { get; set; }
+        internal string? BlockedOutcome { get; set; }
         internal int AdditionalVoices { get; set; }
         internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource CancellationObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
@@ -163,8 +167,15 @@ public sealed partial class ShellViewModelStateTests
                 CatalogRequests++;
                 if (CatalogRequests == BlockCatalogAt)
                 {
+                    using var registration = token.Register(() =>
+                    {
+                        CancellationObserved.TrySetResult();
+                        if (ThrowCancellationCallback) throw new InvalidOperationException("Synthetic cancellation callback failure.");
+                    });
                     Entered.TrySetResult();
-                    await Release.Task.WaitAsync(token).ConfigureAwait(false);
+                    await Release.Task.WaitAsync(IgnoreBlockedCancellation ? CancellationToken.None : token).ConfigureAwait(false);
+                    if (string.Equals(BlockedOutcome, "failure", StringComparison.Ordinal)) throw new HttpRequestException("Synthetic delayed failure.");
+                    if (string.Equals(BlockedOutcome, "cancel", StringComparison.Ordinal)) throw new OperationCanceledException(token);
                 }
                 string catalogBody = """
                     {"voices":[{"name":"cmn-CN-Chirp3-HD-Alnilam","languageCodes":["cmn-CN"],"ssmlGender":"MALE","naturalSampleRateHertz":24000},

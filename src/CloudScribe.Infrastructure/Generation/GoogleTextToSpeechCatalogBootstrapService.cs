@@ -101,6 +101,7 @@ public sealed partial class GoogleTextToSpeechCatalogBootstrapService(
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.AccountLookup;
         void At(GoogleCatalogRefreshPhase next)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             phase = next;
             GoogleCatalogRefreshDiagnostics.Phase(logger, refreshId, phase);
         }
@@ -202,6 +203,7 @@ public sealed partial class GoogleTextToSpeechCatalogBootstrapService(
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.EvidenceWindow;
         void At(GoogleCatalogRefreshPhase next)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             phase = next;
             GoogleCatalogRefreshDiagnostics.Phase(logger, refreshId, phase);
         }

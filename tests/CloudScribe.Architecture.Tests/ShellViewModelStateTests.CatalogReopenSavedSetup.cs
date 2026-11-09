@@ -65,10 +65,16 @@ public sealed partial class ShellViewModelStateTests
     private sealed class CatalogReopenGateRunner : ICompletionGateCommandRunner
     {
         internal int Commands { get; private set; }
+        internal bool PermitOneRefresh { get; set; }
+        internal int Claims { get; private set; }
+        internal List<string> Outcomes { get; } = [];
         public void Run(CompletionGateConfiguration configuration, string command, Guid id, string identity, IReadOnlyDictionary<string, object?>? receipt)
         {
             Commands++;
-            throw new InvalidOperationException("Saved setup selection must not execute diagnostic commands.");
+            if (!PermitOneRefresh) throw new InvalidOperationException("Saved setup selection must not execute diagnostic commands.");
+            if (string.Equals(command, "claim-refresh", StringComparison.Ordinal) && ++Claims > 1)
+                throw new CompletionGateException(CompletionGateFailure.Limit);
+            if (string.Equals(command, "complete", StringComparison.Ordinal)) Outcomes.Add((string)receipt!["outcome"]!);
         }
     }
 }
