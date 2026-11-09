@@ -31,6 +31,8 @@ internal static partial class SafeDiagnosticMetadata
         "article.storage-denied-reconcile",
         "article.storage-failed-reconcile",
         "article.unexpected-failure-reconcile",
+        "batch.article-output-preflight-nothing-sent",
+        "batch.article-output-preflight-reconcile",
         "batch.article-needs-reconciliation",
         "batch.article-review-refused-nothing-sent",
         "batch.currency-mismatch-nothing-sent",

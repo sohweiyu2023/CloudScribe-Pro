@@ -88,6 +88,8 @@ public static class BatchDialogPresentation
 
     public static string Reason(string code) => code switch
     {
+        "batch.article-output-preflight-nothing-sent" => "output folder, filename or approved audio tools are not ready; choose a new MP3 name in a physical folder and check audio setup, then Retry. No article job or speech request started",
+        "batch.article-output-preflight-reconcile" => "local output or audio-tool checks stopped the next speech request. Earlier audio, jobs and holds are kept; fix output/audio setup, then Check again to reconcile before continuing",
         "batch.article-review-refused-nothing-sent" => "this file is not admitted for narration yet; nothing was sent",
         "batch.long-audio-not-admitted-nothing-sent" => "Long Audio has not admitted this file (approval missing, expired or over the cap); nothing was sent",
         "batch.long-audio-needs-reconciliation" => "its Long Audio request needs review; nothing new was sent. Without a saved Google operation ID, its status cannot be checked with Google",

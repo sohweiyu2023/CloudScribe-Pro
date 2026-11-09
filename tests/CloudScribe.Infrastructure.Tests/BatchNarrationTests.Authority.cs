@@ -305,6 +305,8 @@ public sealed partial class BatchNarrationTests
     /// <summary>Fake complete-article workflow: one job per document, like the real service; writes a synthetic MP3.</summary>
     private sealed class FakeWorkflow(string output) : IBatchArticleWorkflow
     {
+        public Func<string, CancellationToken, Task>? Preflight { get; set; }
+        public Task PreflightAsync(string destination, CancellationToken cancellationToken) => Preflight?.Invoke(destination, cancellationToken) ?? Task.CompletedTask;
         public Dictionary<Guid, string> Plans { get; } = [];
         public Dictionary<Guid, long> Maxima { get; } = [];
         public Dictionary<Guid, ChirpWholeArticleJob> Jobs { get; } = [];

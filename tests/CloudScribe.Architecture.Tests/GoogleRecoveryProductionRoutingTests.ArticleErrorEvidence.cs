@@ -56,8 +56,11 @@ public sealed partial class GoogleRecoveryProductionRoutingTests
         var job = await articles.StartWholeArticleAsync(new(review.PreviewId, review.ReviewSha256, review.MaximumAdditionalMinorUnits, true, true), TestContext.Current.CancellationToken);
         using var capture = new PrivateArticleErrorCaptureScope(diagnostics, TimeProvider.System, job, f.Selection.RevisionId!.Value,
             f.Selection.AccountStableId, f.Selection.ProjectStableId, f.Selection.VoiceStableId, review.RemainingRequests, explicitlyConfirmed: true);
+        string tool = Path.Combine(f.WholeRoot, "ffmpeg.exe");
+        await File.WriteAllBytesAsync(tool, [0], TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(Path.Combine(f.WholeRoot, "ffprobe.exe"), [0], TestContext.Current.CancellationToken);
         var runtime = new ChirpWholeArticleRuntime(preparation, articles, source, ResolveAsync, exporter, f.Selection,
-            Path.Combine(f.WholeRoot, "not-complete.mp3"), Path.Combine(f.WholeRoot, "not-run-ffmpeg.exe"), privateCapture: capture,
+            Path.Combine(f.WholeRoot, "not-complete.mp3"), tool, privateCapture: capture,
             diagnosticLogger: loggers.CreateLogger<ChirpWholeArticleRuntime>());
         await Assert.ThrowsAsync<InvalidOperationException>(() => articles.RunWholeArticleAsync(job.JobId, runtime, token: TestContext.Current.CancellationToken));
         await AssertStoppedArticleAndPrivateEvidenceAsync(f, articles, job, runtime, handler, diagnostics, privateRoot, loggers, sink);

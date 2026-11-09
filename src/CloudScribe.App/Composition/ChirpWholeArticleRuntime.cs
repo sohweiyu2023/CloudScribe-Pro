@@ -95,6 +95,8 @@ public sealed class ChirpWholeArticleRuntime : IChirpWholeArticleRuntime
             RequireTrendHistoryReady();
             privateCapture?.RequireReady(job);
             RequireSelectedDocument(job);
+            // Recheck after rehearsal and before every fresh or recovery reservation. Existing accepted parts never enter here.
+            await ArticleAudioExportService.PreflightGenerationAsync(destination, ffmpeg, approvedMediaTools, cancellationToken).ConfigureAwait(false);
             await PreparePartAsync(job, ordinal, recovery, Enter, cancellationToken).ConfigureAwait(false);
             Enter(ArticleExecutionStage.Resolving);
             var request = await requests.ResolveAsync(CancellationToken.None).ConfigureAwait(false);

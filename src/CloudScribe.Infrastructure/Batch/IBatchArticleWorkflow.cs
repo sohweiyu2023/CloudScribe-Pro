@@ -7,6 +7,9 @@ namespace CloudScribe.Infrastructure.Batch;
 /// unchanged <see cref="ChirpArticleService"/>, so every installed admission, budget and dispatch check still applies.</summary>
 public interface IBatchArticleWorkflow
 {
+    /// <summary>Checks the current destination and approved media tools without creating a job or reserving speech.</summary>
+    Task PreflightAsync(string destination, CancellationToken cancellationToken);
+
     Task<ChirpWholeArticleReview> PrepareAsync(Guid documentId, CancellationToken cancellationToken);
 
     Task<ChirpWholeArticleJob> StartAsync(ChirpWholeArticleConfirmation confirmation, CancellationToken cancellationToken);

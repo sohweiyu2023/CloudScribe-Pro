@@ -36,6 +36,9 @@ public sealed class CompleteArticleBatchNarrator(BatchAuthorityGate gate, IBatch
         var approved = consent?.Items.SingleOrDefault(x => x.ItemId == item.ItemId);
         if (approved is null || item.DocumentId is not { } documentId || approved.DocumentId != documentId)
             return new(BatchOutcomeKind.NotAuthorized, "batch.file-not-approved");
+        string destination = item.OutputPath ?? Path.Combine(queue.OutputFolder, item.OutputFileName);
+        if (item.JobId is null && await CheckOutputBeforeStartAsync(queue, item, destination, approved, cancellationToken).ConfigureAwait(false) is { } blocked)
+            return blocked;
         ChirpWholeArticleJob job;
         var existing = item.JobId is { } saved ? await workflow.ReadAsync(saved, cancellationToken).ConfigureAwait(false) : null;
         if (existing is not null && existing.State != ChirpWholeArticleState.Stopped)
@@ -65,9 +68,26 @@ public sealed class CompleteArticleBatchNarrator(BatchAuthorityGate gate, IBatch
         }
         // Recorded before any paid request; the runner refuses a job identity that differs from one already saved.
         if (item.JobId != job.JobId) await recordJob(job.JobId).ConfigureAwait(false);
-        string destination = item.OutputPath ?? Path.Combine(queue.OutputFolder, item.OutputFileName);
-        var result = await workflow.RunAsync(job.JobId, queue, item, destination, progress, cancellationToken).ConfigureAwait(false);
+        ChirpWholeArticleJob result;
+        try { result = await workflow.RunAsync(job.JobId, queue, item, destination, progress, cancellationToken).ConfigureAwait(false); }
+        catch (Exception error) when (LocalRequestDiagnostics.Describe(error, DateTimeOffset.UtcNow).Reason == LocalRequestReason.ArticleOutputPreflight)
+        {
+            BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.VerifyOutput, error);
+            return new(BatchOutcomeKind.Uncertain, "batch.article-output-preflight-reconcile", EstimatedMaximumMinorUnits: approved.MaximumMinorUnits,
+                ReservedMinorUnits: Math.Max(job.MaximumAdditionalMinorUnits, approved.MaximumMinorUnits));
+        }
         return BatchArticleOutcomes.FromJob(result, approved.MaximumMinorUnits, cancellationToken.IsCancellationRequested);
+    }
+
+    private async Task<BatchNarrationOutcome?> CheckOutputBeforeStartAsync(NarrationBatch queue, BatchItem item,
+        string destination, BatchConsentItem approved, CancellationToken token)
+    {
+        try { await workflow.PreflightAsync(destination, token).ConfigureAwait(false); return null; }
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            BatchDiagnostics.Failure(logger, queue.BatchId, item.ItemId, BatchDiagnosticOperation.VerifyOutput, error);
+            return new(BatchOutcomeKind.Failed, "batch.article-output-preflight-nothing-sent", EstimatedMaximumMinorUnits: approved.MaximumMinorUnits);
+        }
     }
 
     public async Task<bool> VerifyOutputAsync(BatchItem item, CancellationToken cancellationToken = default)

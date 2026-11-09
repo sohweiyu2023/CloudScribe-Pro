@@ -17,4 +17,5 @@ public enum LocalRequestReason
     ProviderRejected, ProviderOutcomeUncertain,
     CaptureEvidenceRequired,
     TrendHistoryUnavailable,
+    ArticleOutputPreflight,
 }

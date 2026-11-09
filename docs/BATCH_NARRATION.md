@@ -18,6 +18,14 @@ Preview is deliberately literal: recognized web addresses are omitted; inline Ma
 
 If an article has recoverable already-started work but its original has changed, a **Recover already-started work only** review can finish that admitted recovery. Unstarted parts remain blocked, and this action does not promise a complete article MP3.
 
+## Complete-article output checks before spending
+
+The ordinary complete-article engine checks the destination and the approved FFmpeg/ffprobe bytes before creating a new batch article job, and checks them again before each fresh or recovery speech reservation. Rehearsal uses the same local export rules, but does not replace the checks at run time. Use an existing physical output folder and a new MP3 filename. Linked/reparse output paths, including cloud placeholders with reparse attributes, remain unsupported even when they appear writable. OneDrive input support does not authorize OneDrive output.
+
+A failure before a new job is clearly marked as nothing sent. A file with a saved job retains that identity, its accepted audio and every hold; use **Check again** after fixing output/audio setup so the existing job is reconciled, never reset or blindly resent. Repairing output setup does not grant continuation authority: an ordinary stopped job can still require independent reviewed continuation, while an admitted completion-bound job can resume under its existing checks. Completed jobs verify their existing output without demanding a new filename or re-running speech. Final export still validates the current paths and tool bytes because a preflight cannot prevent later filesystem changes.
+
+Long Audio retains its separate pipeline: tools are checked before submission, audio is verified in the profile, and the final batch copy happens afterward. Its copy routine reuses an identical destination, refuses a different existing file, creates a missing destination directory, and verifies a temporary sibling before moving it without overwrite. It does not apply the complete-article reparse-path guard. A final-copy failure retains the verified speech for a local copy retry; this change does not promise all destination failures can be detected before Long Audio spending.
+
 ## Bare domains in the v3 narration policy (current)
 
 New narration preparations use `url-omission-v3`. It recognizes explicit HTTP(S)/www addresses, Markdown links and selected bare domains from v2 (for example `84000.co`, `EXAMPLE.COM`, `read.84000.co:443/translation`), and keeps the sentence forms described below instead of treating them as bare domains. In v2, ordinary prose such as `awareness.In this state` (a missing space after a full stop), `for us.Us and them`, `section 3.in the appendix` or `2024.de facto` was silently removed from the narration. v3 omits a bare domain only when:
