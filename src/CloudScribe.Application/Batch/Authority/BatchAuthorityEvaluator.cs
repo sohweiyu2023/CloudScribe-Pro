@@ -25,7 +25,7 @@ public static class BatchAuthorityEvaluator
         ArgumentNullException.ThrowIfNull(batch);
         if (!string.Equals(batch.Settings.Sha256(), batch.SettingsSha256, StringComparison.Ordinal))
             return BatchAuthorityDecision.Deny("batch.consent-settings-changed", "The narration settings changed. Review the batch again.");
-        if (batch.Settings.SkipUrls && !string.Equals(batch.Settings.UrlTransformVersion, Documents.NarrationUrlOmission.CurrentVersion, StringComparison.Ordinal)
+        if (batch.Settings.SkipUrls && !Documents.NarrationUrlOmission.IsSupportedVersion(batch.Settings.UrlTransformVersion)
             || !batch.Settings.SkipUrls && batch.Settings.UrlTransformVersion is not null)
             return BatchAuthorityDecision.Deny("batch.narration-version", "The URL skipping version is not supported. Prepare a new batch.");
         if (profile is null) return BatchAuthorityDecision.Deny("batch.authority-not-configured", "Batch narration is not set up on this computer. An administrator can install a batch authority profile.");

@@ -10,11 +10,12 @@ namespace CloudScribe.Infrastructure.Tests;
 
 public sealed partial class NarrationPartGroupTests
 {
-    private static async Task<NarrationArticleFixture> NarrationArticleAsync(Fixture f, bool whole = false, bool recovery = false, bool mixedRecovery = false)
+    private static async Task<NarrationArticleFixture> NarrationArticleAsync(Fixture f, bool whole = false, bool recovery = false, bool mixedRecovery = false, bool bare = false)
     {
         var prior = await ChirpEvidenceAsync(f, 8).ConfigureAwait(false);
         string text = recovery ? string.Concat(Enumerable.Repeat(mixedRecovery ? "Alpha, beta, gamma, delta, epsilon, zeta.\u3002 " : "Alpha, beta, gamma, delta, epsilon, zeta. ", mixedRecovery ? 12 : 1)) + "https://example.test/private"
             : prior.Document.Text + "Read https://example.test/private and finish.";
+        if (bare) text = text.Replace("https://example.test/private", "84000.co/translation", StringComparison.Ordinal);
         var source = await f.Library.CreateAsync("Private source", text, TestContext.Current.CancellationToken).ConfigureAwait(false);
         var store = new EfNarrationCopyStore(f, new(f.Paths), prior.Clock);
         var copy = await store.PrepareAsync(source.Id, source.CurrentRevisionId!.Value, Hash(source.Text), TestContext.Current.CancellationToken).ConfigureAwait(false);

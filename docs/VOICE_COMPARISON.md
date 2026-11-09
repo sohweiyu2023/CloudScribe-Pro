@@ -7,7 +7,7 @@ The **Official voice samples & catalog** link opens Google's prerecorded example
 ## Discover and compare
 
 1. Set an English locale such as `en-US`, `en-GB`, `en-AU` or `en-IN`.
-2. Choose **Refresh connected voices (no speech)**. This uses the existing saved connection and its normal authenticated catalog/capability checks; it generates no audio. No credentials are pasted or changed.
+2. Choose **Load connected voices / apply locale**. Normal loading and filter changes check the saved connection while retaining matching, unexpired capability identity and its original expiry. **Refresh connected voices (full verification)** is a separate explicit refresh that can replace verification evidence and invalidate an earlier exact review. Neither action generates audio or changes credentials.
 3. Filter the names or families and select a voice. Suggested entries that have not been returned for the connected account are clearly **reference only**. The provider's gender label is displayed when available, not guessed from the final letter of a voice name.
 4. The list and details show the authenticated catalog rate, a short-sample estimate and a planning estimate for the current document. Planning estimates do not approve or send anything. Actual sample preparation independently rechecks current pricing, account/project authorization, capabilities, exact compiled bytes and queue state.
 
@@ -15,10 +15,12 @@ The **Official voice samples & catalog** link opens Google's prerecorded example
 
 The short MP3 sample flow is intentionally limited to Standard, WaveNet and Neural2. Chirp 3 HD uses the full-document route below rather than this short-sample box. Other catalog families remain visible with official sample links. A catalog name alone does not assert that its request settings, active pricing or synthesis capabilities are usable. The existing generation gates remain authoritative.
 
+While a catalog lookup is running, this comparison window disables **Close**. A slow lookup requests cancellation after 30 seconds, but completion can take longer; there is no separate catalog-cancel button. The generation **Stop waiting** action does not cancel catalog loading.
+
 ## Compare a longer saved document
 
 1. Save the common comparison passage as a **separate Studio document for each voice**, with distinct document identities and the same exact text. Copy the Studio editor text, open **Library > New document**, paste it, give it a different title, and press **Ctrl+S**. For example, compare `en-US-Neural2-D` with `en-US-Chirp3-HD-Aoede` only when those exact voices are in the current connected catalog. A passage intended to last about ten minutes may have different durations in the two voices.
-2. Open **Voices**, refresh the connected catalog and choose the voice.
+2. Open **Voices**, load the connected catalog and choose the voice. Use explicit refresh only when needed; expired or changed evidence requires fresh review rather than reuse of old approval.
 3. Choose **Review full document with this voice**. Neural2 and Chirp 3 HD use their supported full-document planner, which splits losslessly at internal request boundaries and assembles one MP3. The 500-character short-sample box is not used.
 4. Review the exact document, voice, saved audio, request count and cost. Each document needs its own valid installed admission and exact approval. Choosing this action does not itself reserve money or send speech.
 5. For the other voice, open its separate saved document and repeat the review. Do not change an existing document's authority or regenerate its saved audio just to compare voices.

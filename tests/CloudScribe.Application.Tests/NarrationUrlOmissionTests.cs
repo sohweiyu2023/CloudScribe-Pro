@@ -1,4 +1,5 @@
 using CloudScribe.Application.Documents;
+using NarrationUrlOmission = CloudScribe.Application.Documents.NarrationUrlOmissionV1;
 
 namespace CloudScribe.Application.Tests;
 

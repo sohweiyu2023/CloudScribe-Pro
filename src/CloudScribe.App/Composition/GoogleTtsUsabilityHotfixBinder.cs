@@ -262,7 +262,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
             if (string.Equals(args.PropertyName, nameof(ShellViewModel.VoiceLabSearchText), StringComparison.Ordinal))
                 search.Text = viewModel.VoiceLabSearchText;
         });
-        host.Children.Add(NewDescription("Apply language and search filters with Refresh voices."));
+        host.Children.Add(NewDescription("Apply language and search with Apply voice filters. Refresh real Google voices can replace current verification evidence."));
         AddLanguagePicker(host, viewModel, locale, lifetime);
         AddField(host, "Search voices", search);
         AddRefreshControl(host, viewModel, locale, search, lifetime);
@@ -281,38 +281,45 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         Button refresh = NewButton("Refresh real Google voices");
         AutomationProperties.SetName(locale, "Voice language filter");
         AutomationProperties.SetName(search, "Voice name search");
+        Button apply = NewButton("Apply voice filters");
         Button clear = NewButton("Clear voice search and reload");
         TextBlock status = NewDescription(viewModel.ConnectedVoiceCatalogStatus);
         TextBlock applied = NewDescription(string.Empty);
         CancellationTokenSource windowLifetime = new();
         bool closed = false;
-        async Task RefreshAsync()
+        async Task LoadAsync(bool explicitRefresh)
         {
             if (closed || viewModel.IsConnectedVoiceCatalogLoading) return;
             using CancellationTokenSource request = CancellationTokenSource.CreateLinkedTokenSource(windowLifetime.Token);
             request.CancelAfter(TimeSpan.FromSeconds(30));
             viewModel.VoiceLabLocaleFilter = locale.Text;
             viewModel.VoiceLabSearchText = search.Text;
-            await RefreshConnectedVoicesAsync(viewModel, request.Token).ConfigureAwait(true);
+            if (explicitRefresh) await RefreshConnectedVoicesAsync(viewModel, request.Token).ConfigureAwait(true);
+            else await _connectedVoiceCatalog.ApplyFiltersAsync(viewModel, request.Token).ConfigureAwait(true);
         }
+        Task RefreshAsync() => LoadAsync(true);
+        Task ApplyAsync() => LoadAsync(false);
         void Update()
         {
             bool loading = viewModel.IsConnectedVoiceCatalogLoading;
             refresh.IsEnabled = !closed && !loading && viewModel.CanRefreshVoiceLabCatalog;
+            apply.IsEnabled = refresh.IsEnabled;
             clear.IsEnabled = refresh.IsEnabled;
             locale.IsEnabled = !loading;
             search.IsEnabled = !loading;
             status.Text = viewModel.ConnectedVoiceCatalogStatus;
             applied.Text = "Applied language: " + (string.IsNullOrWhiteSpace(viewModel.VoiceLabLocaleFilter) ? "all languages" : LanguageDisplayNames.WithCode(viewModel.VoiceLabLocaleFilter)) +
-                ". Search: " + (string.IsNullOrWhiteSpace(viewModel.VoiceLabSearchText) ? "none" : viewModel.VoiceLabSearchText) + ". Change filters above, then refresh to apply them.";
+                ". Search: " + (string.IsNullOrWhiteSpace(viewModel.VoiceLabSearchText) ? "none" : viewModel.VoiceLabSearchText) + ". Change filters above, then apply voice filters. Explicit refresh can replace current verification evidence.";
         }
         refresh.Click += async (_, _) => await RefreshAsync().ConfigureAwait(true);
-        clear.Click += async (_, _) => { search.Text = string.Empty; await RefreshAsync().ConfigureAwait(true); };
+        apply.Click += async (_, _) => await ApplyAsync().ConfigureAwait(true);
+        clear.Click += async (_, _) => { search.Text = string.Empty; await ApplyAsync().ConfigureAwait(true); };
         Observe(host, viewModel, (_, args) =>
         {
             if (args.PropertyName is nameof(ShellViewModel.CanRefreshVoiceLabCatalog) or nameof(ShellViewModel.IsConnectedVoiceCatalogLoading)
                 or nameof(ShellViewModel.ConnectedVoiceCatalogStatus) or nameof(ShellViewModel.VoiceLabLocaleFilter) or nameof(ShellViewModel.VoiceLabSearchText)) Update();
         }, lifetime);
+        host.Children.Add(apply);
         host.Children.Add(refresh);
         host.Children.Add(status);
         host.Children.Add(applied);
@@ -321,10 +328,10 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder(
         {
             lifetime.Closed += (_, _) => { closed = true; windowLifetime.Cancel(); windowLifetime.Dispose(); };
             if (autoLoad) lifetime.Opened += async (_, _) =>
-                await AutoLoadConnectedVoicesAsync(viewModel, RefreshAsync, windowLifetime.Token).ConfigureAwait(true);
+                await AutoLoadConnectedVoicesAsync(viewModel, windowLifetime.Token).ConfigureAwait(true);
         }
         Update();
-        return RefreshAsync;
+        return ApplyAsync;
     }
 
     private void AddVoiceSelector(StackPanel host, ShellViewModel viewModel, Window? lifetime = null)

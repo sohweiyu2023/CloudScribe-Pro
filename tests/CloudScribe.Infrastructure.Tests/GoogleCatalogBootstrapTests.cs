@@ -121,10 +121,13 @@ public sealed partial class GoogleCatalogBootstrapTests
     private sealed class Stores(Clock clock) : IProviderAccountStore, IProviderCapabilitySnapshotStore, IVoiceLabProjectAuthorizationStore, IGoogleGenerationProjectAuthorizationStore
     {
         private ProviderAccountSnapshot? _account;
-        public StoredProviderCapabilitySnapshot? Capability { get; private set; }
-        public GoogleGenerationProjectAuthorizationEvidence? Authorization { get; private set; }
+        public StoredProviderCapabilitySnapshot? Capability { get; set; }
+        public GoogleGenerationProjectAuthorizationEvidence? Authorization { get; set; }
+        public VoiceLabProjectAuthorizationEvidence? Project { get; set; }
+        public ProviderAccountSnapshot? Account { get => _account; set => _account = value; }
         public int Creates { get; private set; }
         public string? FailAt { get; set; }
+        public Action? BeforeVoiceLoad { get; set; }
         public Task<ProviderAccountSnapshot> CreateAsync(ProviderAccountReference account, bool isEnabled, CancellationToken cancellationToken = default)
         { Creates++; clock.Now = DateTimeOffset.UtcNow.AddSeconds(1); _account = new(account, isEnabled, 1, clock.Now, clock.Now); return Task.FromResult(_account); }
         public Task<ProviderAccountSnapshot> UpdateAsync(ProviderAccountReference account, bool isEnabled, long expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -134,9 +137,11 @@ public sealed partial class GoogleCatalogBootstrapTests
         { if (string.Equals(FailAt, "capability", StringComparison.Ordinal)) throw new InvalidOperationException("private-storage-detail"); Capability = new(Guid.NewGuid(), snapshot, expiresAtUtc); return Task.FromResult(Capability); }
         public Task<StoredProviderCapabilitySnapshot?> GetLatestAsync(string providerStableId, string accountId, CancellationToken cancellationToken = default) => Task.FromResult(Capability);
         public Task<IReadOnlyList<StoredProviderCapabilitySnapshot>> ListRecentAsync(string providerStableId, string accountId, int maximumCount = 20, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        Task<VoiceLabProjectAuthorizationEvidence?> IVoiceLabProjectAuthorizationStore.LoadCurrentAsync(string providerId, string accountId, string projectId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task SaveVerifiedAsync(VoiceLabProjectAuthorizationEvidence evidence, CancellationToken cancellationToken = default) => string.Equals(FailAt, "project", StringComparison.Ordinal) ? Task.FromException(new InvalidOperationException("private-storage-detail")) : Task.CompletedTask;
-        public Task<GoogleGenerationProjectAuthorizationEvidence?> LoadCurrentAsync(string accountId, string projectId, string modelId, CancellationToken cancellationToken = default) => Task.FromResult(Authorization);
+        Task<VoiceLabProjectAuthorizationEvidence?> IVoiceLabProjectAuthorizationStore.LoadCurrentAsync(string providerId, string accountId, string projectId, CancellationToken cancellationToken) => Task.FromResult(Project);
+        public Task SaveVerifiedAsync(VoiceLabProjectAuthorizationEvidence evidence, CancellationToken cancellationToken = default)
+        { if (string.Equals(FailAt, "project", StringComparison.Ordinal)) throw new InvalidOperationException("private-storage-detail"); Project = evidence; return Task.CompletedTask; }
+        public Task<GoogleGenerationProjectAuthorizationEvidence?> LoadCurrentAsync(string accountId, string projectId, string modelId, CancellationToken cancellationToken = default)
+        { BeforeVoiceLoad?.Invoke(); return Task.FromResult(Authorization); }
         public Task<GoogleGenerationProjectAuthorizationEvidence?> LoadSingleCurrentForProjectAsync(string accountId, string projectId, DateTimeOffset nowUtc, CancellationToken cancellationToken = default) => Task.FromResult(Authorization);
         public Task SaveVerifiedAsync(GoogleGenerationProjectAuthorizationEvidence evidence, CancellationToken cancellationToken = default)
         { if (string.Equals(FailAt, "voices", StringComparison.Ordinal)) throw new InvalidOperationException("private-storage-detail"); Authorization = evidence; return Task.CompletedTask; }

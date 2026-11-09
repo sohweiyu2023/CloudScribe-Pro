@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using CloudScribe.Application.Providers;
 using CloudScribe.Infrastructure.Generation;
 using CloudScribe.Providers.Abstractions;
@@ -107,7 +105,7 @@ public sealed class GoogleVoiceLabProviderAdapterFactory(
             return candidates
                 .Select(voice => new VoiceLabProviderCatalogVoice(
                     voice.Name,
-                    CreateVoiceFingerprint(snapshot.ProvenanceId, voice),
+                    GoogleVoiceCatalogIdentity.CreateFingerprint(snapshot.ProvenanceId, voice),
                     VoiceEnabled: true,
                     // Google voices:list does not return a project-authorization assertion.
                     // The outer production catalog transport derives final project trust only from
@@ -146,18 +144,6 @@ public sealed class GoogleVoiceLabProviderAdapterFactory(
             languageCode.StartsWith(requestedLocale + "-", StringComparison.OrdinalIgnoreCase) ||
             requestedLocale.StartsWith(languageCode + "-", StringComparison.OrdinalIgnoreCase);
 
-        private static string CreateVoiceFingerprint(
-            string provenanceId,
-            GoogleVoiceCatalogEntry voice)
-        {
-            string canonical = string.Join("\n",
-                provenanceId,
-                voice.Name,
-                string.Join(",", voice.LanguageCodes.Order(StringComparer.OrdinalIgnoreCase)),
-                voice.SsmlGender,
-                voice.NaturalSampleRateHertz.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
-            return $"google-voice:sha256:{hash}";
-        }
+
     }
 }

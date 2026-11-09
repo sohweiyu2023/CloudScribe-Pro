@@ -7,5 +7,5 @@ public enum GoogleCatalogRefreshPhase
     OAuthTokenRequest, OAuthTokenRead,
     CapabilityProbe, ProbeToken, ProbeRequest, ProbeRead, ProbeValidation,
     AccountRevalidation, EvidencePersistence, EvidenceWindow, CapabilitySave, ProjectSave,
-    VoiceAuthorizationsSave, Complete, UiBootstrap, UiQuery, UiAccountLookup,
+    VoiceAuthorizationsSave, Complete, UiBootstrap, UiQuery, UiAccountLookup, RetainedEvidence, NewEvidence,
 }

@@ -86,9 +86,18 @@ public sealed partial class GoogleTextToSpeechCatalogBootstrapService(
     public Task<GoogleTextToSpeechCatalogBootstrapResult> RefreshConfiguredAsync(CancellationToken cancellationToken = default) =>
         RefreshConfiguredAsync(Guid.NewGuid(), cancellationToken);
 
-    public async Task<GoogleTextToSpeechCatalogBootstrapResult> RefreshConfiguredAsync(Guid refreshId, CancellationToken cancellationToken = default)
+    public Task<GoogleTextToSpeechCatalogBootstrapResult> RefreshConfiguredAsync(Guid refreshId, CancellationToken cancellationToken = default) =>
+        ObserveConfiguredAsync(refreshId, retainCurrentEvidence: false, cancellationToken);
+
+    /// <summary>Reobserves the connection for ordinary navigation without renewing coherent evidence.</summary>
+    public Task<GoogleTextToSpeechCatalogBootstrapResult> LoadConfiguredForOpeningAsync(Guid refreshId, CancellationToken cancellationToken = default) =>
+        ObserveConfiguredAsync(refreshId, retainCurrentEvidence: true, cancellationToken);
+
+    private async Task<GoogleTextToSpeechCatalogBootstrapResult> ObserveConfiguredAsync(Guid refreshId, bool retainCurrentEvidence, CancellationToken cancellationToken)
     {
-        using var completion = BeginUiRefresh(refreshId);
+        // An implicit open/filter load must never claim a diagnostic refresh, even if mode changes.
+        if (retainCurrentEvidence) completionGate?.RequireOutsideRun();
+        using var completion = retainCurrentEvidence ? null : BeginUiRefresh(refreshId);
         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.AccountLookup;
         void At(GoogleCatalogRefreshPhase next)
         {
@@ -98,12 +107,7 @@ public sealed partial class GoogleTextToSpeechCatalogBootstrapService(
         try
         {
             At(phase);
-            IReadOnlyList<ProviderAccountSnapshot> savedAccounts = await _accounts.ListAsync(cancellationToken).ConfigureAwait(false);
-            ProviderAccountSnapshot[] candidates = savedAccounts.Where(item => item.IsEnabled &&
-                string.Equals(item.Reference.ProviderStableId, GoogleGenerationProvider.StableProviderId, StringComparison.Ordinal)).ToArray();
-            if (candidates.Length != 1)
-                throw new InvalidOperationException("Refreshing the saved Google connection requires exactly one enabled Google account.");
-            ProviderAccountSnapshot account = candidates[0];
+            ProviderAccountSnapshot account = await LoadConfiguredAccountAsync(cancellationToken).ConfigureAwait(false);
             completionGate?.RequireAccount(account.Reference);
             string credential = account.Reference.CredentialReference?.TargetName
                 ?? throw new InvalidOperationException("The saved Google account has no credential binding.");
@@ -126,9 +130,10 @@ public sealed partial class GoogleTextToSpeechCatalogBootstrapService(
             if (!Equals(current, account))
                 throw new InvalidOperationException("The Google account changed during connection refresh; no refreshed evidence was admitted.");
             At(GoogleCatalogRefreshPhase.EvidencePersistence);
-            var result = await PersistObservedEvidenceAsync(account, identity, catalog, probe, refreshId, cancellationToken).ConfigureAwait(false);
+            var result = await PersistConfiguredEvidenceAsync(account, identity, catalog, probe, refreshId, retainCurrentEvidence, cancellationToken).ConfigureAwait(false);
+            At(result.RetainedCurrentEvidence ? GoogleCatalogRefreshPhase.RetainedEvidence : GoogleCatalogRefreshPhase.NewEvidence);
             completionGate?.PersistenceObserved(result);
-            completion.Succeed();
+            completion?.Succeed();
             return result;
         }
         catch (Exception exception) when (GoogleCatalogRefreshDiagnostics.IsNonFatal(exception))
@@ -136,6 +141,16 @@ public sealed partial class GoogleTextToSpeechCatalogBootstrapService(
             GoogleCatalogRefreshDiagnostics.Failure(logger, refreshId, phase, exception);
             throw;
         }
+    }
+
+    private async Task<ProviderAccountSnapshot> LoadConfiguredAccountAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ProviderAccountSnapshot> savedAccounts = await _accounts.ListAsync(cancellationToken).ConfigureAwait(false);
+        ProviderAccountSnapshot[] candidates = savedAccounts.Where(item => item.IsEnabled &&
+            string.Equals(item.Reference.ProviderStableId, GoogleGenerationProvider.StableProviderId, StringComparison.Ordinal)).ToArray();
+        if (candidates.Length != 1)
+            throw new InvalidOperationException("Refreshing the saved Google connection requires exactly one enabled Google account.");
+        return candidates[0];
     }
 
     private async Task<GoogleTextToSpeechCatalogBootstrapResult> ObserveAndPersistAsync(

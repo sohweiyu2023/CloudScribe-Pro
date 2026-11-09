@@ -10,12 +10,14 @@ namespace CloudScribe.Architecture.Tests;
 
 public sealed class NarrationCopyRequestTests
 {
-    [Fact]
-    public async Task GenuineCopySelectionUsesFilteredTextAndDistinctRequestIdentityAndCost()
+    [Theory]
+    [InlineData("https://example.org/")]
+    [InlineData("84000.co/")]
+    public async Task GenuineCopySelectionUsesFilteredTextAndDistinctRequestIdentityAndCost(string address)
     {
         var now = new DateTimeOffset(2026, 11, 8, 12, 0, 0, TimeSpan.Zero);
         const string voice = "en-US-Standard-C";
-        string original = "Read this. https://example.org/" + new string('x', 2500);
+        string original = "Read this. " + address + new string('x', 2500);
         string narration = NarrationUrlOmission.Transform(original).OutputText;
         var selection = new ShellViewModel.GoogleTtsStudioRequestSelection(Guid.NewGuid(), Guid.NewGuid(), original,
             "google", "account", "project", voice, "catalog", "voice-fingerprint", "en-US", "en-US", now);
@@ -31,6 +33,7 @@ public sealed class NarrationCopyRequestTests
         var narrationRequest = GoogleSpeechPlanCompiler.Compile(after.Plan, after.CompilationOptions);
         using var wire = JsonDocument.Parse(narrationRequest.Payload);
         Assert.Equal(narration, wire.RootElement.GetProperty("input").GetProperty("text").GetString());
+        Assert.DoesNotContain("84000.co", narration, StringComparison.Ordinal);
         Assert.NotEqual(before.IdempotencyKey, after.IdempotencyKey, StringComparer.Ordinal);
         Assert.NotEqual(before.RequestRevision, after.RequestRevision);
         Assert.Equal(original, selection.ExactText);

@@ -61,6 +61,11 @@ jobs:
         run: dotnet build CloudScribe.sln -c Release --no-restore
       - name: Formatting
         run: dotnet format CloudScribe.sln --no-restore --verify-no-changes
+      - name: Verification runner safety self-tests
+        shell: pwsh
+        run: |
+          ./scripts/Test-VerificationRunners-SelfTests.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Verification runner self-tests failed.' }
       - name: Windows dependency notices and rejection tests
         shell: pwsh
         run: |

@@ -63,7 +63,7 @@ def expected_capture_repository_version(state: dict[str, object], source_root: p
         project = ET.parse(source_root / "src/CloudScribe.App/CloudScribe.App.csproj").getroot()
         servicing = project.findtext("./PropertyGroup/Version")
         if (sdk.get("sdk", {}).get("version") == state.get("required_dotnet_sdk")
-                and servicing in ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5")
+                and servicing in ("1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6")
                 and project.findtext("./PropertyGroup/InformationalVersion") == servicing
                 and project.findtext("./PropertyGroup/FileVersion") == servicing + ".0"):
             return servicing

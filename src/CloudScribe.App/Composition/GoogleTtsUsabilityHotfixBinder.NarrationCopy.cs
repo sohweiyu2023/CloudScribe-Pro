@@ -62,12 +62,20 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
     };
 
+    private static string BatchUrlPolicyText(string? version) => version switch
+    {
+        NarrationUrlOmission.LegacyVersion => "Legacy URL policy: only HTTP(S) and www addresses are skipped. Bare addresses such as 84000.co remain. Prepare a new copy or draft from the original text to use bare-domain skipping.",
+        NarrationUrlOmission.CurrentVersion => "Bare-domain skipping is enabled for the supported suffixes, including 84000.co. Check the narration preview before approval.",
+        _ => "Unsupported URL policy. This saved narration cannot be prepared or upgraded automatically.",
+    };
+
     private async Task PreviewBatchNarrationAsync(BatchContext ctx)
     {
         if (SelectedBatchRows(ctx) is not [var item]) return;
         string text;
         int count;
         bool skip = ctx.Session.Batch?.Settings.SkipUrls ?? ctx.Session.SkipUrls;
+        string? version = ctx.Session.Batch is { } saved ? saved.Settings.UrlTransformVersion : ctx.Session.ToDraft().ResolveUrlTransformVersion();
         if (item.DocumentId is { } documentId)
         {
             var document = await documentLibrary!.OpenAsync(documentId).ConfigureAwait(true)
@@ -76,7 +84,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             text = document.Text; count = item.NarrationSource?.OmittedUrlCount ?? 0;
             if (skip && item.Exclusion == BatchExclusion.NoSpeakableText)
             {
-                var omitted = NarrationUrlOmission.Transform(text);
+                var omitted = NarrationUrlOmission.Transform(text, version);
                 text = omitted.OutputText; count = omitted.OmittedUrlCount;
             }
         }
@@ -84,13 +92,14 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         {
             var source = await ctx.Importer.ReadDraftSourceAsync(item, ctx.Session.Texts, BatchMaximumSourceBytes).ConfigureAwait(true);
             if (source.Text is null) throw new InvalidOperationException("The original file cannot be read for preview.");
-            var result = skip ? NarrationUrlOmission.Transform(source.Text) : null;
+            var result = skip ? NarrationUrlOmission.Transform(source.Text, version) : null;
             text = result?.OutputText ?? source.Text; count = result?.OmittedUrlCount ?? 0;
         }
         var dialog = CreateArticleExportDialog(); dialog.Title = "Narration text preview";
         var body = new StackPanel { Margin = new Thickness(20), Spacing = 12 };
         body.Children.Add(NewDescription($"{item.SourceFileName}: {count} URL(s) skipped. " +
             (skip ? "Original text and files are kept unchanged. Costs use this narration text after saving." : "URL skipping is off; this is the original text.")));
+        if (skip) body.Children.Add(NewDescription(BatchUrlPolicyText(version)));
         body.Children.Add(NarrationPreviewText(text));
         if (skip && !text.EnumerateRunes().Any(System.Text.Rune.IsLetterOrDigit))
             body.Children.Add(NewDescription("No spoken words remain. This file is excluded locally; no request is sent."));
@@ -108,6 +117,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
         { body.Children.Add(NewDescription("This narration copy or its original changed. Keep existing audio. To prepare another copy, put the original text in a new document, save it, then preview URL skipping again.")); return; }
         if (copy is null) return;
         body.Children.Add(NewDescription($"Narration copy: {copy.OmittedUrlCount} web address(es) skipped. Original unchanged in Library. Any cost review below uses this saved copy. The checkbox prepares a copy; turning it off does not restore links in the open copy."));
+        body.Children.Add(NewDescription(BatchUrlPolicyText(copy.TransformVersion)));
         var original = NewButton("Open original in Studio");
         original.Click += async (_, _) =>
         {
@@ -154,7 +164,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
                 NarrationSource: new(copy.SourceDocumentId, copy.SourceRevisionId, copy.SourceTextSha256, copy.TransformVersion, copy.OmittedUrlCount));
             // This is an existing saved library document, not a fabricated TXT import. The draft keeps its real identity.
             await drafts.SaveAsync(new(BatchDraft.CurrentVersion, title, null, false, BatchEngines.LongAudioFirst,
-                BatchFailurePolicy.SkipAndContinue, [item], DateTimeOffset.UtcNow, SkipUrls: true)).ConfigureAwait(true);
+                BatchFailurePolicy.SkipAndContinue, [item], DateTimeOffset.UtcNow, SkipUrls: true, UrlTransformVersion: copy.TransformVersion)).ConfigureAwait(true);
             await OpenBatchAsync(owner, model, openingReserved: true).ConfigureAwait(true);
         }
         finally { _batchDialogOpen = false; }

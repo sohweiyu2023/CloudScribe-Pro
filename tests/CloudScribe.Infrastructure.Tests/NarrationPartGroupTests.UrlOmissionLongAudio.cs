@@ -12,11 +12,13 @@ namespace CloudScribe.Infrastructure.Tests;
 
 public sealed partial class NarrationPartGroupTests
 {
-    [Fact]
-    public async Task NarrationCopyLongAudioDispatchUsesActualSavedCopyTextAndPreservesOriginal()
+    [Theory]
+    [InlineData("https://example.org/private")]
+    [InlineData("84000.co/translation?q=one%20two")]
+    public async Task NarrationCopyLongAudioDispatchUsesActualSavedCopyTextAndPreservesOriginal(string address)
     {
         using var f = new Fixture(); await f.InitializeAsync(); var e = await ChirpEvidenceAsync(f);
-        var original = await f.Library.CreateAsync("Original links", "Read https://example.org/private then continue.", TestContext.Current.CancellationToken);
+        var original = await f.Library.CreateAsync("Original links", "Read " + address + " then continue.", TestContext.Current.CancellationToken);
         var copy = await new EfNarrationCopyStore(f, new DocumentContentStore(f.Paths), e.Clock).PrepareAsync(original.Id,
             original.CurrentRevisionId!.Value, Hash(original.Text), TestContext.Current.CancellationToken);
         var p = await PrepareLongInstalledAsync(f, e, longDocument: copy.Narration);
@@ -34,6 +36,10 @@ public sealed partial class NarrationPartGroupTests
         using var wire = JsonDocument.Parse(posted);
         Assert.Equal(copy.Narration.Text, wire.RootElement.GetProperty("input").GetProperty("text").GetString());
         Assert.DoesNotContain("https://", posted, StringComparison.Ordinal);
+        Assert.DoesNotContain("84000.co", posted, StringComparison.Ordinal);
+        Assert.Equal(NarrationUrlOmission.CurrentVersion, copy.TransformVersion);
+        Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(copy.Narration.Text), review.Cost.InputUtf8Bytes);
+        Assert.Equal(review.Request.BindingSha256, review.Cost.RequestBindingSha256);
         Assert.Equal(copy.Narration.Id, review.DocumentId); Assert.Equal(copy.Narration.CurrentRevisionId, review.RevisionId);
         Assert.Equal(Hash(copy.Narration.Text), review.SourceSha256);
         Assert.Equal(original.Text, (await f.Library.OpenAsync(original.Id, TestContext.Current.CancellationToken))!.Text);

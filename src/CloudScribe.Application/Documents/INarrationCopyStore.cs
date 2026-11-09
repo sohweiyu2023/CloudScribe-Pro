@@ -17,5 +17,12 @@ public interface INarrationCopyStore
         Guid sourceDocumentId,
         Guid sourceRevisionId,
         string sourceTextSha256,
+        string transformVersion,
+        CancellationToken cancellationToken = default);
+
+    Task<NarrationCopyPreparation> PrepareAsync(
+        Guid sourceDocumentId,
+        Guid sourceRevisionId,
+        string sourceTextSha256,
         CancellationToken cancellationToken = default);
 }

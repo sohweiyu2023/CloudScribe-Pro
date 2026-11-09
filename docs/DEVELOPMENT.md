@@ -4,6 +4,10 @@ Use this guide for a **source checkout**. The public Windows ZIP contains the ru
 
 These commands target Windows and the current servicing source. They do not configure a provider, access a real profile, approve spending, install over an existing application, or publish a release. "Offline tests" means provider-free: installing tools and restoring NuGet/Python packages can still require Internet access.
 
+## Reusable checked entry points
+
+For a committed candidate, [Verification runners](VERIFICATION_RUNNERS.md) provides one full-suite command that records exact source/tool identity, per-stage logs, failures, skips and blocked checks. The separate native-evidence collector helps check package, process and synthetic fixture integrity; it never substitutes for actual UI, listening, screen-reader or display acceptance. The detailed manual commands below remain available for focused work and diagnosis.
+
 ## 1. Prerequisites and checkout
 
 - Windows. Current CI uses `windows-2025`; do not assume a non-Windows pass covers Windows behavior.
@@ -198,7 +202,8 @@ $packageChecks = @(
     'Test-ArticleVoicePolicy-SelfTests.ps1',
     'Test-AdditiveArticleAdmission-SelfTests.ps1',
     'Test-AdditiveArticleBuildRebind-SelfTests.ps1',
-    'Test-ChirpReservationResumePolicy-SelfTests.ps1'
+    'Test-ChirpReservationResumePolicy-SelfTests.ps1',
+    'Test-VerificationRunners-SelfTests.ps1'
 )
 foreach ($check in $packageChecks) {
     Invoke-RepositoryCheck "./scripts/$check"
@@ -236,7 +241,7 @@ A runnable build can be published after the Release build using the manual proce
 
 For an actual handoff, follow [clean sharing](SHARING_WINDOWS.md) and [Windows installation/update](WINDOWS_INSTALLATION.md). Inspect the existing installation, close the app normally, preserve the profile and stable shortcut, and complete the required native launch/runtime checks. Never distribute profiles, databases, service-account JSON, credentials, documents, recordings, private admission evidence or rollback folders.
 
-The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.5 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
+The [Stage8 full-certification workflow](../.github/workflows/cloudscribe-stage8-full-certification.yml) is a separate formal gate with certified lineage, exact-candidate and no-mutation requirements and retained evidence. Historical 1.0.1/Stage3/Stage4 workflow names do not make them current 1.0.6 acceptance commands. Do not rewrite stage governance or loosen a gate merely to get a green result.
 
 Source verification, compiled tests, offline completion tests, real Windows/native behavior, live provider acceptance and formal certification are distinct evidence. None of these developer commands approves paid calls, retries, production profile changes, an upload or release promotion.
 
@@ -263,6 +268,16 @@ Review the manifest diff before committing. Untracked logs, virtual environments
 After committing the intended source and manifest, rerun required checks on that exact candidate. Record the commit, tool versions, scope, pass/fail/skip totals and log locations. For a clean final verification, confirm `git status --porcelain=v1 --untracked-files=all` is empty and the manifest still verifies. Do not refresh the manifest after unexplained test mutations.
 
 `SESSION_STATE.json` deliberately retains Stage8 **1.0.0** governance while the app is a **1.0.x** servicing release. Do not change that identity to match the executable version.
+
+## URL omission compatibility checks (1.0.6)
+
+`NarrationUrlOmission.Transform(text, version)` dispatches only immutable supported policies. New preparations select v2; old copies, imports, settings hashes, provenance and saved previews replay their stored version. Do not migrate approved text, alter `BatchSettings.Sha256`/copy-key formats, update a frozen suffix policy in place or make a network suffix refresh. The 1.0.5 package uses v1; the 1.0.6 source uses v2 for new preparations without rewriting older saved text.
+
+The original v1 recognition cases are retained with only a v1 type alias. A separate v2 compatibility suite repeats those explicit-URL/Markdown/Unicode/processing-budget cases, with bare-domain preservation differences (including a valid domain containing `www` inside a label) tested separately by version. Additional tests cover bare-domain false positives, adversarial inputs, exact v1/v2 copy reuse, interrupted imports, no-omission v1 identities, draft/session retention, version corruption, consent changes and existing-job recovery. Run focused `NarrationUrlOmission`, `NarrationCopyStoreTests`, `BatchNarrationTests`, `BatchDraftVersionTests` and narration architecture tests, then the full compiled/offline suites under the normal checks above. Focused success is not release certification.
+
+## Tracked follow-up defects
+
+See [Follow-up fixes](FOLLOW_UP_FIXES.md) for the scoped comparison-catalog cancellation defect and its pending test/acceptance requirements. It remains open independently of passing source or mocked tests.
 
 ## Troubleshooting
 
