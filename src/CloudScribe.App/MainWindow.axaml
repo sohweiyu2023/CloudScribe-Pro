@@ -285,7 +285,7 @@
         CornerRadius="{DynamicResource Radius.Panel}"
         Padding="16,10"
         BoxShadow="{DynamicResource Elevation.Panel}">
-      <Grid x:Name="CommandLayout" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12">
+      <Grid x:Name="CommandLayout" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
           <Button
               x:Name="NavigationDrawerButton"
@@ -381,6 +381,25 @@
             </Button>
           </StackPanel>
         </WrapPanel>
+        <Border x:Name="FirstRunWelcomeCard" Grid.Row="2" Grid.ColumnSpan="3" IsVisible="False"
+                Margin="0,12,0,0" Padding="14,10" CornerRadius="10"
+                Background="{DynamicResource Brush.SurfaceInset}"
+                BorderBrush="{DynamicResource Brush.SecondaryBright}" BorderThickness="1">
+          <StackPanel Spacing="6">
+            <TextBlock Text="First time here?" FontSize="20" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Brush.TextOnDark}" />
+            <TextBlock Text="Take a guided tour: add text, choose a voice, review the cost and save your audio."
+                       TextWrapping="Wrap" Foreground="{DynamicResource Brush.TextOnDark}" />
+            <TextBlock Text="Explore at your pace. Nothing is generated or charged by the tutorial. Replay it anytime from Help."
+                       TextWrapping="Wrap" Foreground="{DynamicResource Brush.TextOnDark}" />
+            <WrapPanel Orientation="Horizontal">
+              <Button x:Name="StartTutorialButton" Classes="primary" Content="Start tutorial"
+                      AutomationProperties.Name="Start the CloudScribe tutorial" Margin="0,4,8,0" />
+              <Button x:Name="DismissTutorialButton" Classes="secondary" Content="Skip for now"
+                      AutomationProperties.Name="Dismiss tutorial invitation" Margin="0,4,0,0" />
+            </WrapPanel>
+          </StackPanel>
+        </Border>
       </Grid>
     </Border>
 

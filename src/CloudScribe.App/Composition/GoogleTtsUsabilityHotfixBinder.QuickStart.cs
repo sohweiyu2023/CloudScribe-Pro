@@ -20,6 +20,7 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
     {
         if (_walkthroughRunning) return;
         _walkthroughRunning = true;
+        DismissFirstRunInvitation(owner, model);
         try
         {
             bool saved = false;
