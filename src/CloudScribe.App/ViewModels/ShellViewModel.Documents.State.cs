@@ -137,7 +137,7 @@ public sealed partial class ShellViewModel
 
     [RelayCommand]
     private async Task RefreshDocumentLibraryAsync() =>
-        await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
+        await RefreshDocumentLibraryObservedAsync().ConfigureAwait(true);
 
     partial void OnLibrarySearchQueryChanged(string value)
     {
