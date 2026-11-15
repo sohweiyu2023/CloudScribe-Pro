@@ -122,6 +122,78 @@ public sealed partial class ShellViewModelStateTests
         await model.RefreshDocumentLibraryCommand.ExecuteAsync(null);
         Assert.False(model.IsLibraryPageLoading);
         Assert.Contains(model.LocalDocuments, document => document.Id == original);
+        Assert.NotEqual("Local document search could not be refreshed", model.StatusMessage, StringComparer.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OlderRefreshFailureCannotReplaceNewerSuccess(bool search)
+    {
+        await using var fixture = await AutosaveDiskFixture.CreateAsync();
+        var library = new FailingDocumentLibrary(fixture.NewLibrary());
+        var logger = new DocumentFailureLogger(0);
+        await using var autosave = new DocumentAutosaveCoordinator(library, TimeProvider.System);
+        using var model = CreateViewModel(logger);
+        model.ConfigureStage3DocumentWorkflow(library, autosave);
+        await model.NewDocumentCommand.ExecuteAsync(null);
+        model.LibrarySearchQuery = search ? "synthetic" : string.Empty;
+        var pending = new TaskCompletionSource<IReadOnlyList<DocumentSummary>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        library.NextRead = pending.Task;
+        Task older = model.RefreshDocumentLibraryCommand.ExecuteAsync(null);
+        await model.RefreshDocumentLibraryCommand.ExecuteAsync(null);
+        string successfulStatus = model.StatusMessage;
+        pending.SetException(new IOException(FailingDocumentLibrary.Sensitive));
+        await older;
+        Assert.Equal(successfulStatus, model.StatusMessage);
+        Assert.False(model.IsLibraryPageLoading);
+        Assert.Contains("LibrarySearch", logger.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(FailingDocumentLibrary.Sensitive, logger.Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RefreshCompletionPreservesNewerUnrelatedStatus(bool fails)
+    {
+        await using var fixture = await AutosaveDiskFixture.CreateAsync();
+        var library = new FailingDocumentLibrary(fixture.NewLibrary());
+        await using var autosave = new DocumentAutosaveCoordinator(library, TimeProvider.System);
+        using var model = CreateViewModel(new DocumentFailureLogger(0));
+        model.ConfigureStage3DocumentWorkflow(library, autosave);
+        await model.NewDocumentCommand.ExecuteAsync(null);
+        library.FailReads = true;
+        await model.RefreshDocumentLibraryCommand.ExecuteAsync(null);
+        library.FailReads = false;
+        var pending = new TaskCompletionSource<IReadOnlyList<DocumentSummary>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        library.NextRead = pending.Task;
+        Task retry = model.RefreshDocumentLibraryCommand.ExecuteAsync(null);
+        model.StatusMessage = "Synthetic newer unrelated operation";
+        if (fails) pending.SetException(new IOException(FailingDocumentLibrary.Sensitive));
+        else pending.SetResult(model.LocalDocuments.ToArray());
+        await retry;
+        Assert.Equal("Synthetic newer unrelated operation", model.StatusMessage);
+        Assert.False(model.IsLibraryPageLoading);
+    }
+
+    [Fact]
+    public async Task OlderRefreshSuccessCannotClearNewerFailure()
+    {
+        await using var fixture = await AutosaveDiskFixture.CreateAsync();
+        var library = new FailingDocumentLibrary(fixture.NewLibrary());
+        await using var autosave = new DocumentAutosaveCoordinator(library, TimeProvider.System);
+        using var model = CreateViewModel(new DocumentFailureLogger(0));
+        model.ConfigureStage3DocumentWorkflow(library, autosave);
+        await model.NewDocumentCommand.ExecuteAsync(null);
+        var pending = new TaskCompletionSource<IReadOnlyList<DocumentSummary>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        library.NextRead = pending.Task;
+        Task older = model.RefreshDocumentLibraryCommand.ExecuteAsync(null);
+        library.FailReads = true;
+        await model.RefreshDocumentLibraryCommand.ExecuteAsync(null);
+        pending.SetResult(model.LocalDocuments.ToArray());
+        await older;
+        Assert.Equal("Local document search could not be refreshed", model.StatusMessage);
+        Assert.False(model.IsLibraryPageLoading);
     }
 
     private sealed class FailingDocumentLibrary(IDocumentLibrary? inner = null, bool failAfterSave = false) : IDocumentLibrary
@@ -130,14 +202,21 @@ public sealed partial class ShellViewModelStateTests
         internal const string Sensitive = "fake-private-key article-fragment C:\\private\\document.txt";
         public int CreateCalls { get; private set; }
         public bool FailReads { get; set; }
+        public Task<IReadOnlyList<DocumentSummary>>? NextRead { get; set; }
+        private Task<IReadOnlyList<DocumentSummary>>? TakeNextRead()
+        {
+            var next = NextRead;
+            NextRead = null;
+            return next;
+        }
         public Task<DocumentSnapshot> CreateAsync(string title, string text, CancellationToken token = default)
         {
             CreateCalls++;
             return inner?.CreateAsync(title, text, token) ?? Task.FromException<DocumentSnapshot>(new IOException(Sensitive));
         }
         public Task<DocumentSnapshot?> OpenAsync(Guid id, CancellationToken token = default) => inner?.OpenAsync(id, token) ?? Task.FromResult<DocumentSnapshot?>(null);
-        public Task<IReadOnlyList<DocumentSummary>> ListAsync(DocumentStatus status = DocumentStatus.Active, int limit = 100, CancellationToken token = default) => _saved || FailReads ? Task.FromException<IReadOnlyList<DocumentSummary>>(new IOException(Sensitive)) : inner?.ListAsync(status, limit, token) ?? Task.FromResult<IReadOnlyList<DocumentSummary>>([]);
-        public Task<IReadOnlyList<DocumentSummary>> SearchAsync(string query, DocumentStatus status = DocumentStatus.Active, int limit = 50, CancellationToken token = default) => FailReads ? Task.FromException<IReadOnlyList<DocumentSummary>>(new IOException(Sensitive)) : inner?.SearchAsync(query, status, limit, token) ?? Task.FromResult<IReadOnlyList<DocumentSummary>>([]);
+        public Task<IReadOnlyList<DocumentSummary>> ListAsync(DocumentStatus status = DocumentStatus.Active, int limit = 100, CancellationToken token = default) => TakeNextRead() ?? (_saved || FailReads ? Task.FromException<IReadOnlyList<DocumentSummary>>(new IOException(Sensitive)) : inner?.ListAsync(status, limit, token) ?? Task.FromResult<IReadOnlyList<DocumentSummary>>([]));
+        public Task<IReadOnlyList<DocumentSummary>> SearchAsync(string query, DocumentStatus status = DocumentStatus.Active, int limit = 50, CancellationToken token = default) => TakeNextRead() ?? (FailReads ? Task.FromException<IReadOnlyList<DocumentSummary>>(new IOException(Sensitive)) : inner?.SearchAsync(query, status, limit, token) ?? Task.FromResult<IReadOnlyList<DocumentSummary>>([]));
         public async Task<DocumentSnapshot> SaveAsync(DocumentSaveRequest request, CancellationToken token = default)
         {
             if (!failAfterSave || inner is null) throw new IOException(Sensitive);
