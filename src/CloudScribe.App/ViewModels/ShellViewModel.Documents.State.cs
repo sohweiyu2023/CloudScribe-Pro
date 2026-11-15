@@ -21,6 +21,10 @@ public sealed partial class ShellViewModel
     private bool _suppressDocumentChangeTracking;
     private INarrationPartGroupStore? _narrationPartGroups;
     private int _libraryRefreshVersion;
+    private long _statusMessageVersion;
+    private long? _libraryRefreshFailureStatusVersion;
+
+    partial void OnStatusMessageChanged(string value) => _statusMessageVersion++;
 
     public ObservableCollection<DocumentSummary> LocalDocuments { get; } = [];
     public ObservableCollection<LibraryArticleViewModel> LibraryArticles { get; } = [];
@@ -137,7 +141,7 @@ public sealed partial class ShellViewModel
 
     [RelayCommand]
     private async Task RefreshDocumentLibraryAsync() =>
-        await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
+        await RefreshDocumentLibraryObservedAsync().ConfigureAwait(true);
 
     partial void OnLibrarySearchQueryChanged(string value)
     {
@@ -187,28 +191,18 @@ public sealed partial class ShellViewModel
         }
     }
 
-    private async Task RefreshDocumentLibraryObservedAsync()
-    {
-        try
-        {
-            await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
-        }
-        catch (Exception exception) when (!IsFatalUiException(exception))
-        {
-            ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.LibrarySearch, exception);
-            StatusMessage = "Local document search could not be refreshed";
-        }
-    }
+    private Task RefreshDocumentLibraryObservedAsync() => RefreshDocumentLibraryCoreAsync(observeFailure: true);
 
-    private async Task RefreshDocumentLibraryCoreAsync()
+    private async Task RefreshDocumentLibraryCoreAsync(bool observeFailure = false)
     {
-        EnsureDocumentWorkflowConfigured();
         int refreshVersion = Interlocked.Increment(ref _libraryRefreshVersion);
+        long statusVersion = _statusMessageVersion;
         string query = LibrarySearchQuery.Trim();
         int offset = LibraryPageOffset;
         IsLibraryPageLoading = true;
         try
         {
+            EnsureDocumentWorkflowConfigured();
             IReadOnlyList<DocumentSummary> documents;
             IReadOnlyList<NarrationLibraryArticle> articles;
             int total;
@@ -241,11 +235,28 @@ public sealed partial class ShellViewModel
             }
             if (refreshVersion != Volatile.Read(ref _libraryRefreshVersion)) return;
             ApplyLibraryPage(documents, articles, total, offset, paged, query);
+            CompleteLibraryRefreshStatus();
+        }
+        catch (Exception exception) when (observeFailure && !IsFatalUiException(exception))
+        {
+            ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.LibrarySearch, exception);
+            if (refreshVersion == Volatile.Read(ref _libraryRefreshVersion) && statusVersion == _statusMessageVersion)
+            {
+                StatusMessage = "Local document search could not be refreshed";
+                _libraryRefreshFailureStatusVersion = _statusMessageVersion;
+            }
         }
         finally
         {
             if (refreshVersion == Volatile.Read(ref _libraryRefreshVersion)) IsLibraryPageLoading = false;
         }
+    }
+
+    private void CompleteLibraryRefreshStatus()
+    {
+        if (_libraryRefreshFailureStatusVersion != _statusMessageVersion) return;
+        StatusMessage = LibraryPageStatus;
+        _libraryRefreshFailureStatusVersion = null;
     }
 
     private void ApplyLibraryPage(IReadOnlyList<DocumentSummary> documents, IReadOnlyList<NarrationLibraryArticle> articles,
