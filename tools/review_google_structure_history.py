@@ -9,6 +9,8 @@ import argparse
 from collections import Counter
 from datetime import datetime, timezone
 import json
+import os
+import stat
 from pathlib import Path
 import re
 import uuid
@@ -50,25 +52,108 @@ def safe_timestamp(event):
         return None
 
 
-def review(directory: Path, max_files=256, max_bytes=33_554_432):
+def reverse_lines(stream, start, end, max_line_bytes, coverage):
+    """Yield newest JSONL records using bounded blocks and a bounded line buffer."""
+    stream.seek(start - 1 if start else 0)
+    preceding = stream.read(1) if start else b""
+    partial_first = bool(start and preceding not in (b"\n", b"\r"))
+    if preceding == b"\r" and stream.read(1) == b"\n":
+        start += 1  # A budget boundary inside CRLF must not create an empty record.
+    position, fragments, pending_size, oversized = end, [], 0, False
+    trailing = True
+    while position > start:
+        amount = min(65_536, position - start)
+        position -= amount
+        stream.seek(position)
+        block = stream.read(amount)
+        if len(block) != amount:
+            raise ValueError("Log changed during bounded snapshot; retry after a safe checkpoint")
+        if position > start and block.startswith(b"\n"):
+            stream.seek(position - 1)
+            if stream.read(1) == b"\r":
+                position -= 1
+                block = b"\r" + block
+        parts = re.split(b"\r\n|\r|\n", block)
+        for index in range(len(parts) - 1, -1, -1):
+            fragment = parts[index]
+            if not oversized:
+                if len(fragment) + pending_size > max_line_bytes:
+                    fragments, pending_size, oversized = [], 0, True
+                else:
+                    fragments.append(fragment)
+                    pending_size += len(fragment)
+            if index:
+                if trailing and not pending_size and not oversized:
+                    pass  # splitlines does not emit an empty row after the final newline.
+                elif oversized:
+                    coverage["OversizedLines"] += 1
+                else:
+                    yield b"".join(reversed(fragments))
+                trailing = False
+                fragments, pending_size, oversized = [], 0, False
+    if partial_first:
+        coverage["PartialBoundaryLines"] += 1
+    elif oversized:
+        coverage["OversizedLines"] += 1
+    elif pending_size or (end > start and not trailing):
+        yield b"".join(reversed(fragments))
+
+
+def snapshot_lines(path, start, expected, max_line_bytes, coverage):
+    """Reject changed/non-regular sources without exposing paths or exception text."""
+    # Windows Python may expose creation time via lstat ctime but change time via
+    # fstat ctime. Compare shared fields across APIs and each API's full snapshot
+    # against its own baseline, retaining native ctime mutation detection.
+    shared_identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_mode)
+    identity = lambda s: (*shared_identity(s), s.st_ctime_ns)
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        with os.fdopen(os.open(path, flags), "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode) or shared_identity(opened) != shared_identity(expected):
+                raise ValueError("Log changed during bounded snapshot; retry after a safe checkpoint")
+            yield from reverse_lines(stream, start, expected.st_size, max_line_bytes, coverage)
+            after = path.lstat()
+            if (identity(os.fstat(stream.fileno())) != identity(opened)
+                    or identity(after) != identity(expected) or stat.S_ISLNK(after.st_mode)):
+                raise ValueError("Log changed during bounded snapshot; retry after a safe checkpoint")
+    except OSError:
+        raise ValueError("Log could not be read safely; retry after a safe checkpoint") from None
+
+
+def review(directory: Path, max_files=256, max_bytes=33_554_432, max_line_bytes=1_048_576):
+    if any(type(x) is not int or x < 1 for x in (max_files, max_bytes, max_line_bytes)):
+        raise ValueError("Scan limits must be positive integers")
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("A physical existing log directory is required")
-    all_files = sorted(directory.glob("*.jsonl"), key=lambda p: p.stat().st_mtime_ns, reverse=True)
+    try:
+        all_files = sorted(directory.glob("*.jsonl"), key=lambda p: p.lstat().st_mtime_ns, reverse=True)
+    except OSError:
+        raise ValueError("Log inventory could not be read safely") from None
     requests, identities = {}, {}
     read_bytes = bad_lines = skipped_files = incomplete_events = 0
-    stamps = []
+    first_stamp = last_stamp = None
+    coverage = {"OversizedLines": 0, "PartialBoundaryLines": 0, "PartiallyScannedFiles": 0,
+                "OmittedBytes": 0, "ScanByteLimit": max_bytes, "LineByteLimit": max_line_bytes}
     scanned = 0
     for path in all_files[:max_files]:
-        size = path.stat().st_size
-        if path.is_symlink() or size > 4_194_304 or read_bytes + size > max_bytes:
+        try:
+            metadata = path.lstat()
+        except OSError:
+            raise ValueError("Log inventory changed; retry after a safe checkpoint") from None
+        size = metadata.st_size
+        if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode) or read_bytes >= max_bytes:
             skipped_files += 1
+            if stat.S_ISREG(metadata.st_mode):
+                coverage["OmittedBytes"] += size
             continue
-        data = path.read_bytes()
-        if len(data) != size:
-            raise ValueError("Log changed during bounded snapshot; retry after a safe checkpoint")
-        read_bytes += len(data)
+        start = max(0, size - (max_bytes - read_bytes))
+        if start:
+            coverage["PartiallyScannedFiles"] += 1
+            coverage["OmittedBytes"] += start
+        read_bytes += size - start
         scanned += 1
-        for line in reversed(data.splitlines()):
+        for line in snapshot_lines(path, start, metadata, max_line_bytes, coverage):
             try:
                 event = json.loads(line)
                 if not isinstance(event, dict):
@@ -82,7 +167,8 @@ def review(directory: Path, max_files=256, max_bytes=33_554_432):
                     incomplete_events += 1
                 stamp = safe_timestamp(event)
                 if isinstance(stamp, int) and stamp >= 0:
-                    stamps.append(stamp)
+                    first_stamp = stamp if first_stamp is None else min(first_stamp, stamp)
+                    last_stamp = stamp if last_stamp is None else max(last_stamp, stamp)
                 eid = event.get("EventId")
                 key = safe_token(fields.get("IdempotencyKeySha256"), HEX)
                 if eid in (1613, 1617) and key:
@@ -148,14 +234,14 @@ def review(directory: Path, max_files=256, max_bytes=33_554_432):
                       r.get("HttpStatus"), r.get("ErrorHint")) for r in rows if r.get("StructureComplete"))
     return {"SchemaVersion": 1, "GeneratedUtc": datetime.now(timezone.utc).isoformat(),
             "OfflineOnly": True, "ProviderCalls": 0, "AutomaticTuning": False,
-            "Coverage": {"ScannedFiles": scanned, "OmittedFiles": max(0, len(all_files) - max_files) + skipped_files,
+            "Coverage": {**coverage, "ScannedFiles": scanned, "OmittedFiles": max(0, len(all_files) - max_files) + skipped_files,
                          "ReadBytes": read_bytes, "MalformedLines": bad_lines, "IncompleteEvents": incomplete_events,
-                         "ObservedFirstUnixMilliseconds": min(stamps, default=None),
-                         "ObservedLastUnixMilliseconds": max(stamps, default=None),
+                         "ObservedFirstUnixMilliseconds": first_stamp,
+                         "ObservedLastUnixMilliseconds": last_stamp,
                          "RequestsWithoutCompleteStructure": sum(not x.get("StructureComplete") for x in rows),
                          "RequestsWithoutTimeline": sum("FirstObservedUnixMilliseconds" not in x for x in rows),
                          "RequestsWithoutBuildIdentity": sum("ModuleId" not in x for x in rows),
-                         "SourceRetention": "Content-free trend history has no automatic age/count rotation; routine logs may rotate. This bounded scan can omit sources (see coverage). Separate protected response text is not read."},
+                         "SourceRetention": "Content-free trend history has no automatic age/count rotation; routine logs may rotate. This bounded scan reads newest file tails; file-count/total-byte and per-line limits can omit sources or records (see coverage). Separate protected response text is not read."},
             "Caution": "Descriptive sample only. Voice/model/code/input-mode changes confound comparisons. No universal optimum or causal conclusion.",
             "Groups": [{"VoiceName": k[0], "InputMode": k[1], "ApplicationVersion": k[2], "ModuleId": k[3], "MaximumSentenceScalars": k[4],
                         "HttpStatus": k[5], "ErrorHint": k[6], "Count": n} for k, n in groups.items()],
