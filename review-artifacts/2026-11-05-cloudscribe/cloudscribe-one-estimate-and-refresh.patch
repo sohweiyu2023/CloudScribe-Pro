@@ -1,0 +1,366 @@
+--- a/src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.VoiceLoading.cs
++++ b/src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.VoiceLoading.cs
+@@ -12,13 +12,17 @@
+         if (model.IsConnectedVoiceCatalogLoading) return false;
+         model.IsConnectedVoiceCatalogLoading = true;
+         model.InvalidateVoiceLanguageCatalog();
+-        model.ConnectedVoiceCatalogStatus = "Loading voices from your saved Google connection. This does not generate speech. You can close this window to stop waiting.";
++        bool restrictedRefresh = true; // Unknown gate state must not suggest an ordinary retry.
+         model.SelectedVoiceLabVoice = null;
+         model.VoiceLabCatalogResults.Clear();
+         Guid refreshId = Guid.NewGuid();
+         GoogleCatalogRefreshPhase phase = GoogleCatalogRefreshPhase.UiBootstrap;
+         try
+         {
++            restrictedRefresh = _bootstrapService.RequiresReviewedRefresh;
++            model.ConnectedVoiceCatalogStatus = restrictedRefresh
++                ? "Checking voices within the diagnostic run. Closing or timing out can stop this run and require review. Existing audio and reservations are retained."
++                : "Loading voices from your saved Google connection. This does not generate speech. You can close this window to stop waiting.";
+             using var completion = _bootstrapService.BeginUiRefresh(refreshId);
+             GoogleCatalogRefreshDiagnostics.Phase(catalogLogger, refreshId, phase);
+             var observed = await _bootstrapService.RefreshConfiguredAsync(refreshId, token).ConfigureAwait(true);
+@@ -28,14 +32,12 @@
+             token.ThrowIfCancellationRequested();
+             if (!model.VoiceLabCatalogLastRefreshSucceeded)
+             {
+-                model.ConnectedVoiceCatalogStatus = model.StatusMessage;
+-                return false;
++                return VoiceCatalogRefreshPresentation.RejectIncomplete(model, restrictedRefresh, model.StatusMessage);
+             }
+             model.SetVoiceLanguageCatalog(observed.Voices.SelectMany(voice => voice.LanguageCodes), observed.ExpiresAtUtc, observed.CatalogProvenanceId);
+             if (!model.HasCurrentVoiceLanguageCatalog)
+             {
+-                model.StatusMessage = model.ConnectedVoiceCatalogStatus;
+-                return false;
++                return VoiceCatalogRefreshPresentation.RejectIncomplete(model, restrictedRefresh, model.ConnectedVoiceCatalogStatus);
+             }
+             model.ConnectedVoiceCatalogStatus = model.VoiceLabCatalogResults.Count == 0
+                 ? "No verified voices match the selected language and search. Choose a language from the list or clear the voice search, then refresh."
+@@ -48,7 +50,7 @@
+             model.SelectedVoiceLabVoice = null;
+             model.VoiceLabCatalogResults.Clear();
+             GoogleCatalogRefreshDiagnostics.Failure(catalogLogger, refreshId, phase, exception);
+-            model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception, phase);
++            model.ConnectedVoiceCatalogStatus = VoiceCatalogErrorMessages.For(exception, phase, restrictedRefresh);
+             model.StatusMessage = model.ConnectedVoiceCatalogStatus;
+             return false;
+         }
+@@ -61,6 +63,11 @@
+         {
+             int count = (await accounts.ListAsync(token).ConfigureAwait(true)).Count(account => account.IsEnabled &&
+                 string.Equals(account.Reference.ProviderStableId, GoogleGenerationProvider.StableProviderId, StringComparison.Ordinal));
++            if (count == 1 && _bootstrapService.RequiresReviewedRefresh)
++            {
++                model.ConnectedVoiceCatalogStatus = "Diagnostic mode is active. Opening this window has not started verification or consumed a refresh. Review the diagnostic state before explicitly refreshing; interrupted verification can stop the run. Existing audio and reservations are retained.";
++                return;
++            }
+             if (count == 1) await refresh().ConfigureAwait(true);
+             else model.ConnectedVoiceCatalogStatus = count == 0
+                 ? "Connect Google once before voices can load. Use Help and Include Google setup guide; your document stays local."
+--- a/src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.WholeArticle.cs
++++ b/src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.WholeArticle.cs
+@@ -39,17 +39,17 @@
+             var review = await chirpArticles.PrepareWholeArticleAsync(document, lifetime.Token).ConfigureAwait(true);
+             var dialog = CreateArticleExportDialog(); dialog.Title = "Generate complete article MP3"; dialog.Width = 720; dialog.Height = 620;
+             var body = new StackPanel { Margin = new Thickness(20), Spacing = 14 };
+-            var status = NewDescription($"Voice: {review.VoiceName}. {review.AcceptedParts}/{review.TotalParts} parts already accepted; {review.RemainingRequests} internal requests remain. "
+-                + $"Maximum new cost: {review.Currency} {review.MaximumAdditionalMinorUnits / 100m:F2} before tax. Existing commitments: {review.Currency} {review.RetainedCommitmentsMinorUnits / 100m:F2}, retained. "
+-                + $"Confirm this review by {review.ConfirmByUtc:O}. Independent authority expires {review.ExpiresAtUtc:O}. Up to {review.MaximumCatalogRefreshes} non-speech catalog/bootstrap refreshes may occur between completed requests, including an empty capability-validation request. Stops on failure or uncertainty; no automatic paid retry. Accepted audio is reused. Final output is one continuous MP3, fully decoded locally.");
+-            AutomationProperties.SetName(status, "Whole article cost, retained holds and generation progress");
+-            var consent = new CheckBox { Content = new TextBlock { Text = "I authorize this complete article with the displayed voice and maximum cost, preserving all historical holds.", TextWrapping = TextWrapping.Wrap, MaxWidth = 620 } };
+-            AutomationProperties.SetName(consent, "Approve the displayed complete article and maximum cost");
++            var status = NewDescription(WholeArticleReviewPresentation.Estimate(review));
++            AutomationProperties.SetName(status, "Article estimate, budget and generation progress");
++            var details = new Expander
++            {
++                Header = "Budget and recovery details",
++                Content = NewDescription(WholeArticleReviewPresentation.Details(review))
++            };
+             var choose = NewButton("Choose MP3 destination and installed FFmpeg…");
+             var generate = NewButton("Generate complete article MP3"); generate.IsEnabled = false;
+             string? destination = null, ffmpeg = null;
+-            void Update() => generate.IsEnabled = consent.IsChecked == true && destination is not null && ffmpeg is not null && active is not { IsCompleted: false };
+-            consent.IsCheckedChanged += (_, _) => Update();
++            void Update() => generate.IsEnabled = destination is not null && ffmpeg is not null && active is not { IsCompleted: false };
+             choose.Click += async (_, _) =>
+             {
+                 var tools = await dialog.StorageProvider.OpenFilePickerAsync(new()
+@@ -75,7 +75,7 @@
+             stop.Click += (_, _) => lifetime.Cancel();
+             async Task GenerateAsync()
+             {
+-                generate.IsEnabled = choose.IsEnabled = consent.IsEnabled = close.IsEnabled = false; stop.IsEnabled = true;
++                generate.IsEnabled = choose.IsEnabled = close.IsEnabled = false; stop.IsEnabled = true;
+                 try
+                 {
+                     if (destination is null || ffmpeg is null || File.Exists(destination) || !File.Exists(ffmpeg)
+@@ -84,6 +84,8 @@
+                     await model.RunWholeArticleOperationAsync(async (selection, token) =>
+                     {
+                         if (selection.DocumentId != review.DocumentId) throw new InvalidOperationException("The selected article changed after review.");
++                        // This explicit Generate click confirms the one displayed article review.
++                        // Per-request reservations remain automatic within the unchanged article grant.
+                         var job = await chirpArticles.StartWholeArticleAsync(new(review.PreviewId, review.ReviewSha256,
+                             review.MaximumAdditionalMinorUnits, true, true), token).ConfigureAwait(true);
+                         var runtime = new ChirpWholeArticleRuntime(chirpPreparation, chirpArticles, wholeArticleRequests,
+@@ -101,7 +103,7 @@
+                 finally { stop.IsEnabled = false; close.IsEnabled = true; }
+             }
+             generate.Click += (_, _) => { if (generate.IsEnabled && active is not { IsCompleted: false }) active = GenerateAsync(); };
+-            foreach (Control control in new Control[] { status, choose, consent, generate, stop, close }) body.Children.Add(control);
++            foreach (Control control in new Control[] { status, details, choose, generate, stop, close }) body.Children.Add(control);
+             dialog.Content = new ScrollViewer { Content = body, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
+             dialog.Closing += (_, e) => { if (active is { IsCompleted: false }) e.Cancel = true; };
+             await dialog.ShowDialog(owner).ConfigureAwait(true);
+--- a/src/CloudScribe.App/Composition/VoiceCatalogErrorMessages.cs
++++ b/src/CloudScribe.App/Composition/VoiceCatalogErrorMessages.cs
+@@ -6,18 +6,23 @@
+ 
+ public static class VoiceCatalogErrorMessages
+ {
+-    public static string For(Exception exception, GoogleCatalogRefreshPhase? phase = null)
++    public static string For(Exception exception, GoogleCatalogRefreshPhase? phase = null) =>
++        For(exception, phase, restrictedRefresh: false);
++
++    public static string For(Exception exception, GoogleCatalogRefreshPhase? phase, bool restrictedRefresh)
+     {
+         var reported = GoogleCatalogRefreshDiagnostics.ReportedPhase(exception, phase);
+         int status = GoogleCatalogRefreshDiagnostics.HttpStatus(exception);
+-        return Message(exception, status) + $" Diagnostic: {GoogleCatalogRefreshDiagnostics.Category(exception)}"
++        return Message(exception, status, restrictedRefresh) + $" Diagnostic: {GoogleCatalogRefreshDiagnostics.Category(exception)}"
+             + (reported is null ? string.Empty : $" at {reported}")
+             + (exception is CompletionGateException gate && gate.Code != CompletionProtocolCode.Unknown && Enum.IsDefined(gate.Code) ? $"; local code {gate.Code}" : string.Empty)
+             + (GoogleCatalogRefreshDiagnostics.OAuthFailure(exception) is var oauth && oauth != GoogleOAuthFailure.None ? $"; OAuth {oauth}" : string.Empty)
+             + (status == 0 ? "." : $"; HTTP {status}.");
+     }
+ 
+-    private static string Message(Exception exception, int status) => GoogleCatalogRefreshDiagnostics.Category(exception) is "saved-credential-unavailable"
++    private static string Message(Exception exception, int status, bool restrictedRefresh) => restrictedRefresh && exception is not CompletionGateException
++        ? "Diagnostic voice verification did not complete. The run may be stopped or awaiting reconciliation. Review its recorded state before another attempt. Existing audio and reservations are retained; no automatic retry was made."
++        : GoogleCatalogRefreshDiagnostics.Category(exception) is "saved-credential-unavailable"
+         ? "The saved Google connection's local credential material is unavailable in this Windows user context. Check the Windows account and Setups, and keep your original service-account file for recovery. No speech was requested and no key was changed."
+         : status switch
+         {
+--- /dev/null
++++ b/src/CloudScribe.App/Composition/VoiceCatalogRefreshPresentation.cs
+@@ -0,0 +1,18 @@
++using CloudScribe.App.ViewModels;
++
++namespace CloudScribe.App.Composition;
++
++public static class VoiceCatalogRefreshPresentation
++{
++    // UiQuery catches provider/cancellation errors itself and filter changes return early.
++    // The outer owned refresh still ends unsuccessfully, so do not forward ordinary retry advice.
++    public static bool RejectIncomplete(ShellViewModel model, bool restrictedRefresh, string ordinaryMessage)
++    {
++        string message = restrictedRefresh
++            ? "Diagnostic voice verification did not complete. The run may be stopped or awaiting reconciliation. Review its recorded state before another attempt. Existing audio and reservations are retained; no automatic retry was made."
++            : ordinaryMessage;
++        model.ConnectedVoiceCatalogStatus = message;
++        model.StatusMessage = message;
++        return false;
++    }
++}
+--- /dev/null
++++ b/src/CloudScribe.App/Composition/WholeArticleReviewPresentation.cs
+@@ -0,0 +1,27 @@
++using CloudScribe.Infrastructure.Generation;
++
++namespace CloudScribe.App.Composition;
++
++public static class WholeArticleReviewPresentation
++{
++    public static string Estimate(ChirpWholeArticleReview review) =>
++        $"Voice: {review.VoiceName}. Estimated additional cost: up to {Amount(review.Currency, review.MaximumAdditionalMinorUnits, review.Scale)} (not the final Google bill). "
++        + "Actual charges may differ because of taxes, credits or currency conversion. "
++        + $"Generate authorizes up to this amount for this article within the existing approved spending limit, without separate confirmations for its {review.RemainingRequests} remaining parts. "
++        + $"Existing commitments: {Amount(review.Currency, review.RetainedCommitmentsMinorUnits, review.Scale)} remain retained; Generate acknowledges these existing holds. "
++        + "Accepted audio is reused. The app stops if a request has an uncertain outcome; it will not automatically pay to repeat it.";
++
++    public static string Details(ChirpWholeArticleReview review) =>
++        $"{review.AcceptedParts}/{review.TotalParts} parts already accepted. "
++        + $"This review is valid until {review.ConfirmByUtc:O}; existing generation authority expires {review.ExpiresAtUtc:O}. "
++        + $"Up to {review.MaximumCatalogRefreshes} already-admitted non-speech verification refreshes may occur between completed requests. "
++        + "This action does not raise the configured spending ceiling or clear an unresolved charge.";
++
++    private static string Amount(string currency, long minorUnits, int scale)
++    {
++        if (scale is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(scale));
++        decimal divisor = 1;
++        for (int index = 0; index < scale; index++) divisor *= 10;
++        return currency + " " + (minorUnits / divisor).ToString("F" + scale.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
++    }
++}
+--- /dev/null
++++ b/src/CloudScribe.Infrastructure/Generation/GoogleTextToSpeechCatalogBootstrapService.RefreshMode.cs
+@@ -0,0 +1,7 @@
++namespace CloudScribe.Infrastructure.Generation;
++
++public sealed partial class GoogleTextToSpeechCatalogBootstrapService
++{
++    /// <summary>Read-only diagnostic activation check; does not claim, renew or retire a run.</summary>
++    public bool RequiresReviewedRefresh => completionGate?.IsRequired == true;
++}
+--- /dev/null
++++ b/tests/CloudScribe.Architecture.Tests/ShellViewModelStateTests.RestrictedCatalogOutcome.cs
+@@ -0,0 +1,49 @@
++using CloudScribe.App.Composition;
++using CloudScribe.App.ViewModels;
++using CloudScribe.Application.Generation;
++using CloudScribe.Domain.Generation;
++
++namespace CloudScribe.Architecture.Tests;
++
++public sealed partial class ShellViewModelStateTests
++{
++    [Theory]
++    [InlineData(false)]
++    [InlineData(true)]
++    public async Task CaughtUiQueryFailureUsesTheOuterRefreshMode(bool restricted)
++    {
++        using ShellViewModel model = CreateViewModel();
++        model.ConfigureStage7VoiceLabCatalog(new VoiceLabCatalogQueryService((_, _) =>
++            Task.FromException<IReadOnlyList<VoiceLabCatalogSelection>>(new OperationCanceledException("private"))),
++            _ => Task.FromResult(CatalogState(accountAuthorized: true)));
++        await model.RefreshVoiceCatalogForUiAsync(TestContext.Current.CancellationToken);
++        Assert.False(model.VoiceLabCatalogLastRefreshSucceeded);
++        bool result = VoiceCatalogRefreshPresentation.RejectIncomplete(model, restricted, model.StatusMessage);
++        Assert.False(result);
++        Assert.Equal(model.StatusMessage, model.ConnectedVoiceCatalogStatus);
++        if (restricted)
++        {
++            Assert.Contains("Review its recorded state", model.StatusMessage, StringComparison.Ordinal);
++            Assert.DoesNotContain("Refresh real Google voices to retry", model.StatusMessage, StringComparison.Ordinal);
++        }
++        else Assert.Contains("Refresh real Google voices to retry", model.StatusMessage, StringComparison.Ordinal);
++        Assert.DoesNotContain("private", model.StatusMessage, StringComparison.Ordinal);
++    }
++
++    [Fact]
++    public async Task ChangedFilterFalseOutcomeCannotOfferRestrictedRetry()
++    {
++        using ShellViewModel model = CreateViewModel();
++        var pending = new TaskCompletionSource<IReadOnlyList<VoiceLabCatalogSelection>>(TaskCreationOptions.RunContinuationsAsynchronously);
++        model.ConfigureStage7VoiceLabCatalog(new VoiceLabCatalogQueryService((_, _) => pending.Task),
++            _ => Task.FromResult(CatalogState(accountAuthorized: true)));
++        Task refresh = model.RefreshVoiceCatalogForUiAsync(TestContext.Current.CancellationToken);
++        model.VoiceLabSearchText = "changed while loading";
++        pending.SetResult([]);
++        await refresh;
++        Assert.False(model.VoiceLabCatalogLastRefreshSucceeded);
++        Assert.False(VoiceCatalogRefreshPresentation.RejectIncomplete(model, true, model.StatusMessage));
++        Assert.Contains("Review its recorded state", model.StatusMessage, StringComparison.Ordinal);
++        Assert.DoesNotContain("Refresh voices for the current selection", model.StatusMessage, StringComparison.Ordinal);
++    }
++}
+--- /dev/null
++++ b/tests/CloudScribe.Architecture.Tests/VoiceCatalogRestrictedRefreshTests.cs
+@@ -0,0 +1,37 @@
++using CloudScribe.App.Composition;
++using CloudScribe.Infrastructure.Generation;
++
++namespace CloudScribe.Architecture.Tests;
++
++public sealed class VoiceCatalogRestrictedRefreshTests
++{
++    [Fact]
++    public void OrdinaryCancellationStillOffersAnExplicitRetry()
++    {
++        string message = VoiceCatalogErrorMessages.For(new OperationCanceledException("private"),
++            GoogleCatalogRefreshPhase.CatalogRead);
++        Assert.Contains("Refresh real Google voices to retry", message, StringComparison.Ordinal);
++        Assert.DoesNotContain("private", message, StringComparison.Ordinal);
++    }
++
++    [Fact]
++    public void RestrictedCancellationRequiresReconciliationInsteadOfAnImpossibleRetry()
++    {
++        string message = VoiceCatalogErrorMessages.For(new OperationCanceledException("private"),
++            GoogleCatalogRefreshPhase.CatalogRead, restrictedRefresh: true);
++        Assert.Contains("Review its recorded state", message, StringComparison.Ordinal);
++        Assert.Contains("CatalogRead", message, StringComparison.Ordinal);
++        Assert.DoesNotContain("Refresh real Google voices to retry", message, StringComparison.Ordinal);
++        Assert.DoesNotContain("private", message, StringComparison.Ordinal);
++    }
++
++    [Fact]
++    public void RestrictedTransportFailureDoesNotOfferUnconditionalRetry()
++    {
++        string message = VoiceCatalogErrorMessages.For(new HttpRequestException("private"),
++            GoogleCatalogRefreshPhase.CatalogRequest, restrictedRefresh: true);
++        Assert.Contains("no automatic retry", message, StringComparison.Ordinal);
++        Assert.DoesNotContain("try Refresh real Google voices", message, StringComparison.Ordinal);
++        Assert.DoesNotContain("private", message, StringComparison.Ordinal);
++    }
++}
+--- /dev/null
++++ b/tests/CloudScribe.Architecture.Tests/WholeArticleReviewPresentationTests.cs
+@@ -0,0 +1,39 @@
++using CloudScribe.App.Composition;
++using CloudScribe.Infrastructure.Generation;
++
++namespace CloudScribe.Architecture.Tests;
++
++public sealed class WholeArticleReviewPresentationTests
++{
++    private static ChirpWholeArticleReview Review(int scale = 2) => new(Guid.NewGuid(), new string('a', 64), Guid.NewGuid(),
++        new string('b', 64), "synthetic-voice", "USD", scale, 23, 25, 2, 17, 175,
++        DateTimeOffset.UnixEpoch.AddHours(1), 2, DateTimeOffset.UnixEpoch.AddMinutes(10));
++
++    [Fact]
++    public void OneEstimateIsExplicitlyNotAFinalBillOrPerPartApproval()
++    {
++        string text = WholeArticleReviewPresentation.Estimate(Review());
++        Assert.Contains("up to USD 0.17", text, StringComparison.Ordinal);
++        Assert.Contains("Generate authorizes up to this amount", text, StringComparison.Ordinal);
++        Assert.Contains("Existing commitments: USD 1.75", text, StringComparison.Ordinal);
++        Assert.Contains("acknowledges these existing holds", text, StringComparison.Ordinal);
++        Assert.Contains("not the final Google bill", text, StringComparison.Ordinal);
++        Assert.Contains("without separate confirmations", text, StringComparison.Ordinal);
++        Assert.Contains("existing approved spending limit", text, StringComparison.Ordinal);
++        Assert.Contains("uncertain outcome", text, StringComparison.Ordinal);
++    }
++
++    [Fact]
++    public void EstimateUsesDeclaredCurrencyScale()
++    {
++        Assert.Contains("USD 0.017", WholeArticleReviewPresentation.Estimate(Review(3)), StringComparison.Ordinal);
++    }
++
++    [Fact]
++    public void ExistingCommitmentsAndAuthorityRemainExplicit()
++    {
++        string text = WholeArticleReviewPresentation.Details(Review());
++        Assert.Contains("does not raise the configured spending ceiling", text, StringComparison.Ordinal);
++        Assert.Contains("clear an unresolved charge", text, StringComparison.Ordinal);
++    }
++}
+--- /dev/null
++++ b/tests/CloudScribe.Infrastructure.Tests/GoogleCatalogBootstrapTests.RefreshMode.cs
+@@ -0,0 +1,25 @@
++namespace CloudScribe.Infrastructure.Tests;
++
++public sealed partial class GoogleCatalogBootstrapTests
++{
++    [Fact]
++    public void OrdinaryConnectionDoesNotRequireReviewedRefresh()
++    {
++        using var fixture = new CompletionFixture();
++        Assert.False(fixture.Service.RequiresReviewedRefresh);
++        Assert.Equal(0, fixture.Handler.Calls);
++        Assert.Equal(0, fixture.Runner.Refreshes);
++    }
++
++    [Fact]
++    public async Task InspectingRestrictedModeDoesNotConsumeAClaimOrCallTheProvider()
++    {
++        using var fixture = new CompletionFixture();
++        await fixture.InitializeAsync().ConfigureAwait(true);
++        int calls = fixture.Handler.Calls;
++        Assert.True(fixture.Service.RequiresReviewedRefresh);
++        Assert.Equal(calls, fixture.Handler.Calls);
++        Assert.Equal(0, fixture.Runner.Refreshes);
++        Assert.Null(fixture.Runner.Pending);
++    }
++}

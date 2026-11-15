@@ -1,0 +1,318 @@
+diff -ruN original/src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.WholeArticle.cs candidate/src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.WholeArticle.cs
+--- original/src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.WholeArticle.cs	2026-11-05 10:19:34.486790249 +0800
++++ candidate/src/CloudScribe.App/Composition/GoogleTtsUsabilityHotfixBinder.WholeArticle.cs	2026-11-05 10:21:07.976573666 +0800
+@@ -75,19 +75,22 @@
+             stop.Click += (_, _) => lifetime.Cancel();
+             async Task GenerateAsync()
+             {
++                bool startAttempted = false;
+                 generate.IsEnabled = choose.IsEnabled = consent.IsEnabled = close.IsEnabled = false; stop.IsEnabled = true;
+                 try
+                 {
+-                    if (destination is null || ffmpeg is null || File.Exists(destination) || !File.Exists(ffmpeg)
+-                        || !File.Exists(Path.Combine(Path.GetDirectoryName(ffmpeg)!, "ffprobe.exe")))
++                    if (destination is null || ffmpeg is null)
+                         throw new InvalidOperationException("Choose a new output filename and installed FFmpeg with ffprobe before Generate.");
++                    // Reject deterministic export failures before any durable job or paid request.
++                    var exportPaths = ArticleAudioExportService.PreflightExport(destination, ffmpeg);
+                     await model.RunWholeArticleOperationAsync(async (selection, token) =>
+                     {
+                         if (selection.DocumentId != review.DocumentId) throw new InvalidOperationException("The selected article changed after review.");
++                        startAttempted = true;
+                         var job = await chirpArticles.StartWholeArticleAsync(new(review.PreviewId, review.ReviewSha256,
+                             review.MaximumAdditionalMinorUnits, true, true), token).ConfigureAwait(true);
+                         var runtime = new ChirpWholeArticleRuntime(chirpPreparation, chirpArticles, wholeArticleRequests,
+-                            wholeArticleResolver, articleAudio, selection, destination, ffmpeg,
++                            wholeArticleResolver, articleAudio, selection, exportPaths.Destination, exportPaths.Ffmpeg,
+                             () => !model.HasCurrentVoiceLanguageCatalog,
+                             token => RefreshWholeArticleSelectionOnUiAsync(model, selection, token));
+                         var progress = new Progress<ChirpArticleProgress>(p => status.Text = $"{p.SavedCoverageParts}/{p.TotalCoverageParts} parts verified and saved. Internal requests are processed in order; accepted audio is never regenerated.");
+@@ -98,7 +101,15 @@
+                 }
+                 catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+                 { status.Text = ReportLocalFailure(LocalRequestStage.ArticleOpen, error); }
+-                finally { stop.IsEnabled = false; close.IsEnabled = true; }
++                finally
++                {
++                    stop.IsEnabled = false; close.IsEnabled = true;
++                    if (!startAttempted && !lifetime.IsCancellationRequested)
++                    {
++                        choose.IsEnabled = consent.IsEnabled = true;
++                        generate.IsEnabled = consent.IsChecked == true && destination is not null && ffmpeg is not null;
++                    }
++                }
+             }
+             generate.Click += (_, _) => { if (generate.IsEnabled && active is not { IsCompleted: false }) active = GenerateAsync(); };
+             foreach (Control control in new Control[] { status, choose, consent, generate, stop, close }) body.Children.Add(control);
+diff -ruN original/src/CloudScribe.Application/Generation/AudioAssemblyNativePlanner.cs candidate/src/CloudScribe.Application/Generation/AudioAssemblyNativePlanner.cs
+--- original/src/CloudScribe.Application/Generation/AudioAssemblyNativePlanner.cs	2026-11-05 10:05:42.733374143 +0800
++++ candidate/src/CloudScribe.Application/Generation/AudioAssemblyNativePlanner.cs	2026-11-05 10:10:54.325910360 +0800
+@@ -5,6 +5,27 @@
+ 
+ public static class AudioAssemblyNativePlanner
+ {
++    /// <summary>File-based concat for homogeneous, integrity-verified article snapshots named input-NNN.mp3.</summary>
++    public static (NativeMediaToolInvocation Invocation, string Manifest) PlanArticleSnapshots(
++        int inputCount, string outputDirectory, string ffmpegExecutablePath)
++    {
++        if (inputCount is < 1 or > ChirpNarrationPlanner.MaximumCoverageParts)
++            throw new ArgumentOutOfRangeException(nameof(inputCount));
++        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
++        if (!Path.IsPathFullyQualified(outputDirectory))
++            throw new ArgumentException("Article snapshot directory must be absolute.", nameof(outputDirectory));
++        // Only generated basenames enter the manifest. User paths never become concat directives.
++        string manifest = "ffconcat version 1.0\n" + string.Concat(Enumerable.Range(1, inputCount)
++            .Select(index => $"file 'input-{index.ToString("D3", CultureInfo.InvariantCulture)}.mp3'\n"));
++        var invocation = new NativeMediaToolInvocation(ffmpegExecutablePath,
++            ["-hide_banner", "-nostdin", "-n", "-f", "concat", "-safe", "1", "-i",
++                Path.Combine(outputDirectory, "article-inputs.ffconcat"), "-map", "0:a:0", "-vn", "-af", "alimiter=limit=1",
++                "-c:a", "libmp3lame", "-q:a", "2", Path.Combine(outputDirectory, "article.part-001.mp3")],
++            outputDirectory, TimeSpan.FromMinutes(30), 64_000);
++        invocation.Validate();
++        return (invocation, manifest);
++    }
++
+     public static IReadOnlyList<NativeMediaToolInvocation> Plan(
+         AudioAssemblyPlan assembly,
+         string ffmpegExecutablePath,
+diff -ruN original/src/CloudScribe.Infrastructure/Generation/ArticleAudioExportService.Export.cs candidate/src/CloudScribe.Infrastructure/Generation/ArticleAudioExportService.Export.cs
+--- original/src/CloudScribe.Infrastructure/Generation/ArticleAudioExportService.Export.cs	2026-11-05 10:05:49.369350483 +0800
++++ candidate/src/CloudScribe.Infrastructure/Generation/ArticleAudioExportService.Export.cs	2026-11-05 10:20:18.055635928 +0800
+@@ -15,7 +15,7 @@
+         string? temporary = null;
+         try
+         {
+-            var resolved = ResolveExportPaths(destination, ffmpegPath);
++            var resolved = PreflightExport(destination, ffmpegPath);
+             destination = resolved.Destination;
+             ffmpegPath = resolved.Ffmpeg;
+             string ffprobePath = resolved.Ffprobe;
+@@ -25,12 +25,24 @@
+             Directory.CreateDirectory(temporary);
+             var segments = await SnapshotInputsAsync(ordered, ffprobePath, temporary, cancellationToken).ConfigureAwait(false);
+             TimeSpan total = TimeSpan.FromTicks(segments.Sum(x => x.MeasuredDuration.Ticks));
+-            var assembly = new AudioAssemblyPlan(segments, new GenerationMasteringProfile("article-continuous", 0, null, 0, 0),
++            var validated = new AudioAssemblyPlan(segments, new GenerationMasteringProfile("article-continuous", 0, null, 0, 0),
+                 ReleaseAudioFormat.Mp3, total + TimeSpan.FromTicks(1), temporary, "article");
+-            if (assembly.Parts.Count != 1) throw new InvalidOperationException("Article export must produce one continuous file.");
+-            await new AudioAssemblyNativeExecutor(native).ExecuteAsync(assembly, ffmpegPath, TimeSpan.FromMinutes(30),
+-                cancellationToken: cancellationToken).ConfigureAwait(false);
+-            string resultPath = assembly.OutputPaths[0];
++            if (validated.Parts.Count != 1) throw new InvalidOperationException("Article export must produce one continuous file.");
++            var assembly = AudioAssemblyNativePlanner.PlanArticleSnapshots(validated.Segments.Count, temporary, ffmpegPath);
++            await File.WriteAllTextAsync(Path.Combine(temporary, "article-inputs.ffconcat"), assembly.Manifest,
++                new System.Text.UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
++            var assembled = await native.RunAsync(assembly.Invocation, cancellationToken).ConfigureAwait(false);
++            if (!assembled.Succeeded) throw new InvalidOperationException("Continuous MP3 assembly failed.");
++            string resultPath = assembly.Invocation.Arguments[^1];
++            if (!File.Exists(resultPath) || new FileInfo(resultPath).Length is < 12 or > 512L * 1024 * 1024)
++                throw new InvalidDataException("Continuous MP3 is missing or outside its supported size bound.");
++            byte[] prefix = new byte[12];
++            using (var output = new FileStream(resultPath, FileMode.Open, FileAccess.Read, FileShare.Read,
++                4096, FileOptions.Asynchronous | FileOptions.SequentialScan))
++                await output.ReadExactlyAsync(prefix, cancellationToken).ConfigureAwait(false);
++            if (!(prefix[0] == 'I' && prefix[1] == 'D' && prefix[2] == '3')
++                && !(prefix[0] == 0xFF && (prefix[1] & 0xE0) == 0xE0))
++                throw new InvalidDataException("Continuous media does not have an MP3 container signature.");
+             var finalProbe = await ProbeAsync(ffprobePath, resultPath, temporary, cancellationToken).ConfigureAwait(false);
+             if (Math.Abs((finalProbe.Duration - total).TotalSeconds) > 1 + segments.Count * 0.1)
+                 throw new InvalidOperationException("Continuous output duration does not match its complete ordered inputs.");
+@@ -59,7 +71,8 @@
+         }
+     }
+ 
+-    private static (string Destination, string Ffmpeg, string Ffprobe) ResolveExportPaths(string destination, string ffmpegPath)
++    /// <summary>Read-only local path checks. Repeated by export because preflight cannot prevent later filesystem changes.</summary>
++    public static (string Destination, string Ffmpeg, string Ffprobe) PreflightExport(string destination, string ffmpegPath)
+     {
+         destination = Path.GetFullPath(destination);
+         RejectLinks(destination);
+diff -ruN original/tests/CloudScribe.Application.Tests/ArticleAudioConcatPlannerTests.cs candidate/tests/CloudScribe.Application.Tests/ArticleAudioConcatPlannerTests.cs
+--- original/tests/CloudScribe.Application.Tests/ArticleAudioConcatPlannerTests.cs	1970-01-01 07:30:00.000000000 +0730
++++ candidate/tests/CloudScribe.Application.Tests/ArticleAudioConcatPlannerTests.cs	2026-11-05 10:10:54.326265647 +0800
+@@ -0,0 +1,39 @@
++using System.Globalization;
++using CloudScribe.Application.Generation;
++
++namespace CloudScribe.Application.Tests;
++
++public sealed class ArticleAudioConcatPlannerTests
++{
++    [Theory]
++    [InlineData(1)]
++    [InlineData(350)]
++    [InlineData(10_000)]
++    public void ArticleConcatKeepsCommandBoundedAndManifestInExactOrder(int count)
++    {
++        string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "article user's [test]"));
++        var plan = AudioAssemblyNativePlanner.PlanArticleSnapshots(count, root, Path.Combine(root, "ffmpeg.exe"));
++        Assert.True(plan.Invocation.Arguments.Sum(x => x.Length + 3) < 4096);
++        Assert.Single(plan.Invocation.Arguments.Where(x => string.Equals(x, "-i", StringComparison.Ordinal)));
++        Assert.DoesNotContain("-filter_complex", plan.Invocation.Arguments, StringComparer.Ordinal);
++        Assert.Contains("0:a:0", plan.Invocation.Arguments, StringComparer.Ordinal);
++        Assert.Contains("-vn", plan.Invocation.Arguments, StringComparer.Ordinal);
++        string[] lines = plan.Manifest.Split('\n');
++        Assert.Equal("ffconcat version 1.0", lines[0]);
++        Assert.Equal(count + 2, lines.Length);
++        Assert.Equal("", lines[^1]);
++        for (int index = 1; index <= count; index++)
++            Assert.Equal($"file 'input-{index.ToString("D3", CultureInfo.InvariantCulture)}.mp3'", lines[index]);
++        Assert.DoesNotContain(root, plan.Manifest, StringComparison.Ordinal);
++        Assert.Equal(Path.Combine(root, "article.part-001.mp3"), plan.Invocation.Arguments[^1]);
++    }
++
++    [Theory]
++    [InlineData(0)]
++    [InlineData(10_001)]
++    public void ArticleConcatRejectsUnsupportedCoverageCount(int count)
++    {
++        string root = Path.GetFullPath(Path.GetTempPath());
++        Assert.Throws<ArgumentOutOfRangeException>(() => AudioAssemblyNativePlanner.PlanArticleSnapshots(count, root, Path.Combine(root, "ffmpeg.exe")));
++    }
++}
+diff -ruN original/tests/CloudScribe.Architecture.Tests/GoogleRecoveryProductionRoutingTests.WholeArticle.cs candidate/tests/CloudScribe.Architecture.Tests/GoogleRecoveryProductionRoutingTests.WholeArticle.cs
+--- original/tests/CloudScribe.Architecture.Tests/GoogleRecoveryProductionRoutingTests.WholeArticle.cs	2026-11-05 10:19:41.438756857 +0800
++++ candidate/tests/CloudScribe.Architecture.Tests/GoogleRecoveryProductionRoutingTests.WholeArticle.cs	2026-11-05 10:20:18.056159293 +0800
+@@ -148,9 +148,10 @@
+             string output = string.Empty;
+             if (invocation.Arguments.Contains("-show_entries", StringComparer.Ordinal))
+                 output = JsonSerializer.Serialize(new { streams = new[] { new { codec_name = "mp3", sample_rate = "24000", channels = 1 } }, format = new { duration = Math.Max(1, _inputs).ToString(System.Globalization.CultureInfo.InvariantCulture) } });
+-            else if (invocation.Arguments.Contains("-filter_complex", StringComparer.Ordinal))
++            else if (invocation.Arguments.Contains("concat", StringComparer.Ordinal))
+             {
+-                _inputs = invocation.Arguments.Count(x => string.Equals(x, "-i", StringComparison.Ordinal));
++                string manifest = await File.ReadAllTextAsync(Path.Combine(invocation.WorkingDirectory, "article-inputs.ffconcat"), cancellationToken).ConfigureAwait(false);
++                _inputs = manifest.Split('\n').Count(line => line.StartsWith("file '", StringComparison.Ordinal));
+                 byte[] bytes = new byte[128]; Encoding.ASCII.GetBytes("ID3").CopyTo(bytes, 0);
+                 await File.WriteAllBytesAsync(invocation.Arguments[^1], bytes, cancellationToken).ConfigureAwait(false);
+             }
+diff -ruN original/tests/CloudScribe.Infrastructure.Tests/NarrationPartGroupTests.ArticleExport.cs candidate/tests/CloudScribe.Infrastructure.Tests/NarrationPartGroupTests.ArticleExport.cs
+--- original/tests/CloudScribe.Infrastructure.Tests/NarrationPartGroupTests.ArticleExport.cs	2026-11-05 10:05:56.445326678 +0800
++++ candidate/tests/CloudScribe.Infrastructure.Tests/NarrationPartGroupTests.ArticleExport.cs	2026-11-05 10:10:07.771290813 +0800
+@@ -39,6 +39,23 @@
+     }
+ 
+     [Fact]
++    public async Task ArticleExportRejectsInvalidContainerBeforeProbeOrPublication()
++    {
++        using var fixture = new Fixture(); await fixture.InitializeAsync();
++        var batch = await fixture.CreateBatchAsync("Invalid native output", 1);
++        await fixture.Groups.RegisterAsync(batch.Preparation.GroupId, batch.Members, TestContext.Current.CancellationToken);
++        var queue = new ArticleQueue(); var media = new ArticleNative { InvalidSignature = true };
++        var service = new ArticleAudioExportService(fixture, fixture.Library, queue, fixture.Paths, media);
++        await RecordArticlePartAsync(service, queue, batch.Children[0], fixture.Root, 0);
++        string destination = Path.Combine(fixture.Root, "invalid.mp3");
++        await Assert.ThrowsAsync<InvalidDataException>(() => service.ExportAsync(batch.Parent.Id, destination,
++            CreateArticleTools(fixture.Root), TestContext.Current.CancellationToken));
++        Assert.Equal(2, media.Calls); // Input probe, assembly; never final probe/decode.
++        Assert.False(File.Exists(destination));
++        Assert.Equal(0, queue.Writes);
++    }
++
++    [Fact]
+     public async Task ChangedOrUncertainAudioFailsBeforeAssemblyWithoutPrivateErrorText()
+     {
+         using var fixture = new Fixture(); await fixture.InitializeAsync();
+@@ -113,6 +130,7 @@
+     private sealed class ArticleNative : INativeMediaTool
+     {
+         public int Calls { get; private set; }
++        public bool InvalidSignature { get; init; }
+         public List<byte> InputMarkers { get; } = [];
+         public async Task<NativeMediaToolResult> RunAsync(NativeMediaToolInvocation invocation, CancellationToken cancellationToken = default)
+         {
+@@ -120,11 +138,16 @@
+             string output = "";
+             if (invocation.Arguments.Contains("-show_entries", StringComparer.Ordinal))
+                 output = JsonSerializer.Serialize(new { streams = new[] { new { codec_name = "mp3", sample_rate = "24000", channels = 1 } }, format = new { duration = InputMarkers.Count > 0 ? "2" : "1" } });
+-            else if (invocation.Arguments.Contains("-filter_complex", StringComparer.Ordinal))
++            else if (invocation.Arguments.Contains("concat", StringComparer.Ordinal))
+             {
+-                for (int i = 0; i < invocation.Arguments.Count; i++)
+-                    if (string.Equals(invocation.Arguments[i], "-i", StringComparison.Ordinal)) InputMarkers.Add((await File.ReadAllBytesAsync(invocation.Arguments[i + 1], cancellationToken).ConfigureAwait(false))[10]);
+-                byte[] bytes = new byte[128]; Encoding.ASCII.GetBytes("ID3").CopyTo(bytes, 0);
++                string manifest = await File.ReadAllTextAsync(Path.Combine(invocation.WorkingDirectory, "article-inputs.ffconcat"), cancellationToken).ConfigureAwait(false);
++                foreach (string line in manifest.Split('\n').Where(line => line.StartsWith("file '", StringComparison.Ordinal)))
++                {
++                    string name = line[6..^1];
++                    InputMarkers.Add((await File.ReadAllBytesAsync(Path.Combine(invocation.WorkingDirectory, name), cancellationToken).ConfigureAwait(false))[10]);
++                }
++                byte[] bytes = new byte[128];
++                if (!InvalidSignature) Encoding.ASCII.GetBytes("ID3").CopyTo(bytes, 0);
+                 await File.WriteAllBytesAsync(invocation.Arguments[^1], bytes, cancellationToken).ConfigureAwait(false);
+             }
+             return new(0, false, output, "", TimeSpan.Zero);
+diff -ruN original/tests/CloudScribe.Infrastructure.Tests/NarrationPartGroupTests.ExportPreflight.cs candidate/tests/CloudScribe.Infrastructure.Tests/NarrationPartGroupTests.ExportPreflight.cs
+--- original/tests/CloudScribe.Infrastructure.Tests/NarrationPartGroupTests.ExportPreflight.cs	1970-01-01 07:30:00.000000000 +0730
++++ candidate/tests/CloudScribe.Infrastructure.Tests/NarrationPartGroupTests.ExportPreflight.cs	2026-11-05 10:21:30.897346331 +0800
+@@ -0,0 +1,70 @@
++using CloudScribe.Infrastructure.Generation;
++
++namespace CloudScribe.Infrastructure.Tests;
++
++public sealed partial class NarrationPartGroupTests
++{
++    [Theory]
++    [InlineData("extension")]
++    [InlineData("file")]
++    [InlineData("directory")]
++    [InlineData("parent")]
++    [InlineData("executable-name")]
++    [InlineData("missing-ffmpeg")]
++    [InlineData("missing-ffprobe")]
++    public void ExportPreflightRejectsDeterministicLocalFailuresWithoutWriting(string failure)
++    {
++        using var fixture = new Fixture();
++        Directory.CreateDirectory(fixture.Root);
++        string tool = CreateArticleTools(fixture.Root);
++        string destination = Path.Combine(fixture.Root, "new.mp3");
++        switch (failure)
++        {
++            case "extension": destination = Path.Combine(fixture.Root, "new.wav"); break;
++            case "file": File.WriteAllBytes(destination, [1, 2, 3]); break;
++            case "directory": Directory.CreateDirectory(destination); break;
++            case "parent": destination = Path.Combine(fixture.Root, "missing", "new.mp3"); break;
++            case "executable-name":
++                tool = Path.Combine(fixture.Root, "other.exe"); File.WriteAllBytes(tool, [0]); break;
++            case "missing-ffmpeg": File.Delete(tool); break;
++            case "missing-ffprobe": File.Delete(Path.Combine(fixture.Root, "ffprobe.exe")); break;
++        }
++        string[] before = Directory.GetFileSystemEntries(fixture.Root, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToArray();
++        Assert.Throws<InvalidOperationException>(() => ArticleAudioExportService.PreflightExport(destination, tool));
++        Assert.Equal(before, Directory.GetFileSystemEntries(fixture.Root, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToArray());
++        if (string.Equals(failure, "file", StringComparison.Ordinal)) Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(destination));
++    }
++
++    [Fact]
++    public void ExportPreflightReturnsCanonicalPathsWithoutCreatingDestination()
++    {
++        using var fixture = new Fixture();
++        Directory.CreateDirectory(fixture.Root);
++        string tool = CreateArticleTools(fixture.Root);
++        string destination = Path.Combine(fixture.Root, ".", "new.MP3");
++        var result = ArticleAudioExportService.PreflightExport(destination, tool);
++        Assert.Equal(Path.GetFullPath(destination), result.Destination);
++        Assert.Equal(Path.GetFullPath(tool), result.Ffmpeg);
++        Assert.Equal(Path.Combine(fixture.Root, "ffprobe.exe"), result.Ffprobe);
++        Assert.False(File.Exists(result.Destination));
++        Assert.Equal(2, Directory.GetFiles(fixture.Root).Length);
++    }
++
++    public static bool CanTestExportSymlinks => !OperatingSystem.IsWindows();
++
++    [Fact(Skip = "Windows symlink privileges are not assumed; native Windows coverage remains required.", SkipUnless = nameof(CanTestExportSymlinks))]
++    public void ExportPreflightRejectsLinkedParentWithoutCreatingDestination()
++    {
++        using var fixture = new Fixture();
++        Directory.CreateDirectory(fixture.Root);
++        string tool = CreateArticleTools(fixture.Root);
++        string real = Path.Combine(fixture.Root, "real"); Directory.CreateDirectory(real);
++        string link = Path.Combine(fixture.Root, "linked"); Directory.CreateSymbolicLink(link, real);
++        try
++        {
++            Assert.Throws<InvalidOperationException>(() => ArticleAudioExportService.PreflightExport(Path.Combine(link, "new.mp3"), tool));
++            Assert.Empty(Directory.GetFiles(real));
++        }
++        finally { Directory.Delete(link); }
++    }
++}
