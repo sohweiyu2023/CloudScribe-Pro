@@ -1,0 +1,4 @@
+# Display-only mapping for Git commands that support mailmap.
+# Original commit objects and signatures remain unchanged.
+# Git matches mailmap names and email addresses case-insensitively.
+sohweiyu2023 <134089475+sohweiyu2023@users.noreply.github.com> sohweiyutprawks <142377279+sohweiyutprawks@users.noreply.github.com>
