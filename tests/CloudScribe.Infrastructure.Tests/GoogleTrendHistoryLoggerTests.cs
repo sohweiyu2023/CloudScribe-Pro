@@ -154,6 +154,69 @@ public sealed class GoogleTrendHistoryLoggerTests
         Identity(first.CreateLogger("ignored"), 1); Assert.True(first.IsAvailable);
     }
 
+    [Fact]
+    public void LosingHistoryWriterCannotMutateOrReleaseTheOwnersClaim()
+    {
+        using var f = new TrendFixture();
+        using var first = new GoogleTrendHistoryLoggerProvider(f.Paths, TimeProvider.System);
+        string before = ReadHistory(f.History);
+        using (var second = new GoogleTrendHistoryLoggerProvider(f.Paths, TimeProvider.System))
+        {
+            Assert.False(second.IsAvailable);
+            Assert.Equal(before, ReadHistory(f.History));
+        }
+        using (var third = new GoogleTrendHistoryLoggerProvider(f.Paths, TimeProvider.System))
+            Assert.False(third.IsAvailable);
+        Identity(first.CreateLogger("ignored"), 1);
+        first.RequireReady();
+        first.Dispose();
+        first.Dispose();
+        using var replacement = new GoogleTrendHistoryLoggerProvider(f.Paths, TimeProvider.System);
+        replacement.RequireReady();
+    }
+
+    [Fact]
+    public async Task ConcurrentHistoryConstructorsHaveExactlyOneOwner()
+    {
+        using var f = new TrendFixture();
+        var providers = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(
+            () => new GoogleTrendHistoryLoggerProvider(f.Paths, TimeProvider.System), TestContext.Current.CancellationToken)));
+        try
+        {
+            Assert.Single(providers, provider => provider.IsAvailable);
+            Assert.Single(ReadHistoryLines(f.History));
+        }
+        finally { foreach (var provider in providers) provider.Dispose(); }
+    }
+
+    [Fact]
+    public void SeparateHistoriesCanBeOwnedIndependently()
+    {
+        using var a = new TrendFixture();
+        using var b = new TrendFixture();
+        using var first = new GoogleTrendHistoryLoggerProvider(a.Paths, TimeProvider.System);
+        using var second = new GoogleTrendHistoryLoggerProvider(b.Paths, TimeProvider.System);
+        first.RequireReady();
+        second.RequireReady();
+    }
+
+    [Fact]
+    public void FailedHistoryOpenReleasesItsClaimBeforeDisposal()
+    {
+        using var f = new TrendFixture();
+        string occupied = Path.Combine(f.Root, "data");
+        File.WriteAllText(occupied, "Synthetic occupied directory");
+        using var failed = new GoogleTrendHistoryLoggerProvider(f.Paths, TimeProvider.System);
+        Assert.False(failed.IsAvailable);
+        File.Delete(occupied);
+        using var repaired = new GoogleTrendHistoryLoggerProvider(f.Paths, TimeProvider.System);
+        repaired.RequireReady();
+        failed.Dispose();
+        using var duplicate = new GoogleTrendHistoryLoggerProvider(f.Paths, TimeProvider.System);
+        Assert.False(duplicate.IsAvailable);
+        repaired.RequireReady();
+    }
+
     private static string ReadHistory(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
