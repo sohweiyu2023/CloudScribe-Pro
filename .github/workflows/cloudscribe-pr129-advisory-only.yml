@@ -35,7 +35,7 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import datetime, hashlib, json, os, re, shutil, subprocess, sys
+          import datetime, hashlib, json, os, re, shutil, stat, subprocess, sys
 
           workspace = Path(os.environ["GITHUB_WORKSPACE"])
           source = workspace / "candidate"
@@ -97,6 +97,7 @@ jobs:
           allowed = {
               "PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "SYSTEMDRIVE",
               "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "LANG", "LC_ALL", "TZ",
+              "PROGRAMFILES", "PROGRAMFILES(X86)",
               "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
               "NO_PROXY", "DOTNET_ROOT"
           }
@@ -116,6 +117,41 @@ jobs:
               "AVALONIA_TELEMETRY_OPTOUT": "1",
               "PYTHONDONTWRITEBYTECODE": "1"
           })
+          # NuGet needs these ordinary Windows locations even with an explicit config.
+          # Machine-wide defaults can add sources despite <clear>; reject their presence.
+          location_env = {key.upper(): value for key, value in env.items()}
+          location_names = ("PROGRAMFILES(X86)", "PROGRAMFILES")
+          selected_location = next((name for name in location_names if location_env.get(name)), None)
+          default_config_checks = []
+          for name in location_names:
+              value = location_env.get(name)
+              if not value:
+                  continue
+              if not Path(value).is_absolute():
+                  raise RuntimeError("Windows program-directory variable is not absolute")
+              metadata = Path(value).lstat()
+              if (not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)
+                      or getattr(metadata, "st_file_attributes", 0)
+                      & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)):
+                  raise RuntimeError("Windows program-directory variable is not a physical directory")
+              default_config = Path(value) / "NuGet" / "NuGetDefaults.Config"
+              try:
+                  default_config.lstat()
+                  present = True
+              except FileNotFoundError:
+                  present = False
+              default_config_checks.append({"variable": name, "defaults_config_present": present})
+          (evidence / "environment-preflight.json").write_text(json.dumps({
+              "ordinary_program_directory_variables_present": {
+                  name: bool(location_env.get(name)) for name in location_names},
+              "selected_program_directory_variable": selected_location,
+              "machine_defaults_checks": default_config_checks,
+              "nuget_credential_provider_variables_inherited": False
+          }, indent=2) + "\n")
+          if not default_config_checks or any(item["defaults_config_present"]
+                                              for item in default_config_checks):
+              raise RuntimeError("Required Windows locations missing or unreviewed NuGet defaults present")
+
           dotnet = shutil.which("dotnet")
           if not dotnet:
               raise RuntimeError("Pinned SDK executable unavailable")
