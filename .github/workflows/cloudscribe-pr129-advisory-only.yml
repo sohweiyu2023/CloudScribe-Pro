@@ -1,0 +1,316 @@
+# Auxiliary advisory-only verification; no runtime source changes or release publication.
+# Audits fixed PR129 source; this workflow itself is not part of that candidate.
+# Reports are exported into normal job logs as bounded base64 records so existing
+# read-only decoded-job-log tools can recover exact bytes. No artifact upload.
+name: PR129 dedicated advisory audit
+
+on:
+  push:
+    branches: [agent/pr129-advisory-only-20261118-v1]
+    paths: [.github/workflows/cloudscribe-pr129-advisory-only.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  advisory-only:
+    runs-on: windows-2025
+    # 32 bounded commands allow 160 minutes; reserve twenty for setup/preservation/export.
+    timeout-minutes: 180
+    steps:
+      - name: Check out immutable candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # observed checkout@v6
+        with:
+          ref: c634e3d7eaf0807db07b70851e88e6e875172699
+          persist-credentials: false
+          fetch-depth: 1
+          path: candidate
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # observed setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # observed setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.402'
+      - name: Nine strict restores, eighteen reports, coverage and real validator
+        shell: python
+        run: |
+          from pathlib import Path
+          import datetime, hashlib, json, os, re, shutil, subprocess, sys
+
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          source = workspace / "candidate"
+          evidence = workspace / "audit-evidence"
+          evidence.mkdir(exist_ok=False)
+          logs = evidence / "logs"
+          reports = evidence / "package-scans"
+          logs.mkdir()
+          reports.mkdir()
+          temp = Path(os.environ["RUNNER_TEMP"]) / "cloudscribe-pr129-advisory"
+          temp.mkdir(exist_ok=False)
+          for name in ("cli-home", "packages", "http-cache", "tmp"):
+              (temp / name).mkdir()
+          head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+          expected_head = "c634e3d7eaf0807db07b70851e88e6e875172699"
+          expected_branch = "refs/heads/agent/pr129-advisory-only-20261118-v1"
+          if os.environ.get("GITHUB_EVENT_NAME") != "push" or os.environ.get("GITHUB_REF") != expected_branch:
+              raise RuntimeError("Unexpected auxiliary-workflow trigger")
+          workflow_trigger_commit = os.environ["GITHUB_SHA"]
+          if workflow_trigger_commit == expected_head:
+              raise RuntimeError("Auxiliary workflow identity must remain distinct from runtime candidate")
+          if head != expected_head:
+              raise RuntimeError("Checkout does not match the authorized candidate")
+          manifest = source / "SHA256SUMS.txt"
+          manifest_sha = hashlib.sha256(manifest.read_bytes()).hexdigest()
+          if manifest_sha != "1979427052b5e507baba083909e2de8bcab17858378f49a63c2d03a77a6018a1":
+              raise RuntimeError("Candidate source manifest identity changed")
+          members = [line.split("  ", 1)[1] for line in manifest.read_text().splitlines()]
+          if len(members) != 2036 or len(set(members)) != 2036:
+              raise RuntimeError("Unexpected source inventory")
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          baseline = {name: digest(source / name) for name in members + ["SHA256SUMS.txt"]}
+          (evidence / "source-before.json").write_text(json.dumps(baseline, indent=2) + "\n")
+          stage = (source / "scripts/verify-stage2.sh").read_text()
+          block = re.search(r"^all_projects=\((.*?)^\)", stage, re.M | re.S)
+          projects = re.findall(r"  ((?:src|tests)/\S+\.csproj)", block.group(1)) if block else []
+          if len(projects) != 9 or len(set(projects)) != 9:
+              raise RuntimeError("Expected the unchanged nine-project Stage2 inventory")
+          for relative in projects:
+              target = source / relative
+              if not target.is_file() or target.is_symlink():
+                  raise RuntimeError("Invalid audit project")
+              for ancestor in target.parents:
+                  if ancestor.is_symlink() or (hasattr(ancestor, "is_junction") and ancestor.is_junction()):
+                      raise RuntimeError("Linked audit project ancestor")
+                  if ancestor == source:
+                      break
+          (evidence / "targets.json").write_text(json.dumps({
+              "candidate_commit": head, "manifest_sha256": manifest_sha,
+              "workflow_trigger_commit": workflow_trigger_commit,
+              "workflow_source_commit": os.environ.get("GITHUB_WORKFLOW_SHA"),
+              "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF"),
+              "workflow_branch": expected_branch,
+              "projects": projects, "expected_reports": 18,
+              "route": "single orchestration attempt of unchanged strict inner commands"
+          }, indent=2) + "\n")
+
+          allowed = {
+              "PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "SYSTEMDRIVE",
+              "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "LANG", "LC_ALL", "TZ",
+              "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+              "NO_PROXY", "DOTNET_ROOT"
+          }
+          env = {key: value for key, value in os.environ.items() if key.upper() in allowed}
+          env.update({
+              "DOTNET_CLI_HOME": str(temp / "cli-home"),
+              "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+              "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+              "DOTNET_NOLOGO": "1",
+              "DOTNET_GENERATE_ASPNET_CERTIFICATE": "false",
+              "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE": "true",
+              "DOTNET_CLI_USE_MSBUILD_SERVER": "0",
+              "MSBUILDDISABLENODEREUSE": "1",
+              "NUGET_PACKAGES": str(temp / "packages"),
+              "NUGET_HTTP_CACHE_PATH": str(temp / "http-cache"),
+              "TEMP": str(temp / "tmp"), "TMP": str(temp / "tmp"),
+              "AVALONIA_TELEMETRY_OPTOUT": "1",
+              "PYTHONDONTWRITEBYTECODE": "1"
+          })
+          dotnet = shutil.which("dotnet")
+          if not dotnet:
+              raise RuntimeError("Pinned SDK executable unavailable")
+          ledger = evidence / "commands.jsonl"
+          def record(value):
+              with ledger.open("a", encoding="utf-8") as stream:
+                  stream.write(json.dumps(value) + "\n")
+          def run(label, command, stdout=None, allow_failure=False):
+              out = stdout or logs / (label + ".stdout.log")
+              err = logs / (label + ".stderr.log")
+              started = datetime.datetime.now(datetime.timezone.utc).isoformat()
+              record({"label": label, "command": command, "cwd": str(source),
+                      "status": "started", "started_utc": started,
+                      "stdout": str(out.relative_to(evidence)),
+                      "stderr": str(err.relative_to(evidence)),
+                      "single_orchestration_attempt": True})
+              bounded = [sys.executable, str(source / "tools/run_bounded_process.py"),
+                         "--timeout-seconds", "300", "--max-output-bytes", "5242880",
+                         "--stdout-file", str(out), "--stderr-file", str(err), "--", *command]
+              result = subprocess.run(bounded, cwd=source, env=env, check=False)
+              record({"label": label, "status": "completed", "exit_code": result.returncode,
+                      "finished_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                      "outputs": [{"path": str(p.relative_to(evidence)), "bytes": p.stat().st_size,
+                                   "sha256": digest(p)} for p in (out, err) if p.exists()]})
+              if result.returncode and not allow_failure:
+                  raise RuntimeError(label + " failed; no orchestration retry")
+              return result.returncode
+
+          try:
+              run("manifest-preflight", [sys.executable, "-B", "tools/update_sha256_manifest.py", "--check"])
+              run("sdk-version", [dotnet, "--version"])
+              actual = (logs / "sdk-version.stdout.log").read_text().strip()
+              required = json.loads((source / "global.json").read_text())["sdk"]["version"]
+              if actual != required or actual != "10.0.402":
+                  raise RuntimeError("SDK identity mismatch")
+              run("msbuild-version", [dotnet, "msbuild", "-version", "-nologo"])
+              msbuild = [s.strip() for s in (logs / "msbuild-version.stdout.log").read_text().splitlines() if s.strip()][-1]
+              run("sdk-policy", [sys.executable, "-B", "tools/verify_dotnet_sdk_version.py",
+                                "--required", required, "--actual", actual, "--msbuild", msbuild])
+              for index, relative in enumerate(projects):
+                  target = str(source / relative)
+                  run(str(index) + "-restore", [
+                      dotnet, "restore", target, "--locked-mode", "--disable-parallel",
+                      "--configfile", "NuGet.config", "--force", "--no-http-cache",
+                      "-p:CloudScribeNuGetAuditPipeline=true"])
+                  for kind in ("vulnerable", "deprecated"):
+                      run(str(index) + "-" + kind, [
+                          dotnet, "package", "list", "--project", target, "--" + kind,
+                          "--include-transitive", "--no-restore", "--format", "json",
+                          "--output-version", "1"], reports / (str(index) + "-" + kind + ".json"))
+              # Supplement the unchanged validator's generic pair checks with exact
+              # target coverage. Any report diagnostics require separate review.
+              coverage_errors = []
+              expected_files = {str(i) + "-" + kind + ".json" for i in range(9)
+                                for kind in ("vulnerable", "deprecated")}
+              if {p.name for p in reports.iterdir()} != expected_files:
+                  coverage_errors.append("Expected exactly eighteen paired reports")
+              coverage = []
+              def reject_duplicate_members(pairs):
+                  result = {}
+                  for key, value in pairs:
+                      if key in result:
+                          raise ValueError("Duplicate JSON member: " + key)
+                      result[key] = value
+                  return result
+              for index, relative in enumerate(projects):
+                  for kind in ("vulnerable", "deprecated"):
+                      name = str(index) + "-" + kind + ".json"
+                      try:
+                          document = json.loads((reports / name).read_text(encoding="utf-8-sig"),
+                                                object_pairs_hook=reject_duplicate_members)
+                          if type(document.get("version")) is not int or document["version"] != 1:
+                              raise ValueError("Unexpected report version")
+                          if "--" + kind not in document.get("parameters", "").split():
+                              raise ValueError("Report kind not proven")
+                          paths = [os.path.normcase(str(Path(p["path"]).resolve())) for p in document["projects"]]
+                          wanted = os.path.normcase(str((source / relative).resolve()))
+                          if paths != [wanted]:
+                              raise ValueError("Report does not identify exactly its requested project")
+                          if document.get("logs"):
+                              raise ValueError("Nonempty report diagnostics require review")
+                          coverage.append({"report": name, "requested_project": relative, "reported_paths": paths})
+                      except Exception as exc:
+                          coverage_errors.append(name + ": " + type(exc).__name__ + ": " + str(exc))
+              (evidence / "coverage.json").write_text(json.dumps({
+                  "expected_projects": projects, "coverage": coverage, "errors": coverage_errors
+              }, indent=2) + "\n")
+              validator_code = run("real-report-validator", [
+                  sys.executable, "-B", "tools/verify_dotnet_package_scan.py", str(reports)],
+                  allow_failure=True)
+              if coverage_errors or validator_code:
+                  raise RuntimeError("Coverage or real-report validation failed; preserve findings")
+          finally:
+              changed = [name for name, before in baseline.items()
+                         if not (source / name).is_file() or digest(source / name) != before]
+              (evidence / "source-preservation.json").write_text(json.dumps({
+                  "files_checked": len(baseline), "changed": changed
+              }, indent=2) + "\n")
+              failures = list((temp / "tmp").rglob("*.failure.txt"))
+              if failures:
+                  retained = evidence / "process-failures"
+                  retained.mkdir()
+                  for index, path in enumerate(failures):
+                      if path.is_symlink() or not path.is_file():
+                          raise RuntimeError("Unexpected linked process-failure evidence")
+                      (retained / (str(index) + "-" + path.name)).write_bytes(path.read_bytes())
+              if changed:
+                  raise RuntimeError("Tracked source changed during audit")
+      - name: Independently record source preservation after the audit
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib, json, os
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          source = workspace / "candidate"
+          evidence = workspace / "audit-evidence"
+          evidence.mkdir(exist_ok=True)
+          before = evidence / "source-before.json"
+          if not before.is_file():
+              result = {"status": "BLOCKED", "reason": "No completed source inventory was captured"}
+          else:
+              baseline = json.loads(before.read_text())
+              changed = [name for name, expected in baseline.items()
+                         if not (source / name).is_file()
+                         or hashlib.sha256((source / name).read_bytes()).hexdigest() != expected]
+              result = {"status": "PASS" if not changed else "FAIL",
+                        "files_checked": len(baseline), "changed": changed}
+          with (evidence / "source-preservation-final.json").open("x") as stream:
+              stream.write(json.dumps(result, indent=2) + "\n")
+          failure_root = Path(os.environ["RUNNER_TEMP"]) / "cloudscribe-pr129-advisory/tmp"
+          retained = evidence / "process-failures"
+          if failure_root.is_dir() and not retained.exists():
+              failures = sorted(failure_root.rglob("*.failure.txt"))
+              if failures:
+                  retained.mkdir()
+                  for index, path in enumerate(failures):
+                      if path.is_symlink() or not path.is_file():
+                          raise RuntimeError("Unexpected linked failure evidence")
+                      (retained / (str(index) + "-" + path.name)).write_bytes(path.read_bytes())
+          if result["status"] != "PASS":
+              raise SystemExit("Source preservation not established")
+      - name: Preserve exact bounded evidence in job logs
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import base64, hashlib, json, os
+          root = Path(os.environ["GITHUB_WORKSPACE"]) / "audit-evidence"
+          if not root.is_dir():
+              raise SystemExit("Audit did not create evidence; no success claim")
+          files = sorted(path for path in root.rglob("*") if path.is_file())
+          def priority(path):
+              relative = path.relative_to(root).as_posix()
+              if "/" not in relative:
+                  return (0, relative)  # ledger, identities, coverage and preservation
+              if relative.startswith("process-failures/"):
+                  return (1, relative)
+              if relative.endswith(".stderr.log"):
+                  return (2, relative)
+              if relative.startswith("package-scans/"):
+                  return (3, relative)
+              return (4, relative)
+          ordered = sorted(files, key=priority)
+          selected = ordered[:256]
+          inventory = []
+          remaining = 16 * 1024 * 1024
+          incomplete = len(ordered) > len(selected)
+          for path in selected:
+              if path.is_symlink():
+                  raise SystemExit("Linked evidence cannot be exported")
+              size = path.stat().st_size
+              hasher = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                      hasher.update(chunk)
+              item = {"path": path.relative_to(root).as_posix(), "bytes": size,
+                      "sha256": hasher.hexdigest(), "exported": size <= remaining}
+              inventory.append(item)
+              if size > remaining:
+                  incomplete = True
+                  print("CLOUDSCRIBE_AUDIT_FILE_OMITTED " + json.dumps(item))
+                  continue
+              data = path.read_bytes()
+              if len(data) != size or hashlib.sha256(data).hexdigest() != item["sha256"]:
+                  raise SystemExit("Evidence changed during export")
+              remaining -= size
+              print("CLOUDSCRIBE_AUDIT_FILE_BEGIN " + json.dumps(item))
+              encoded = base64.b64encode(data).decode("ascii")
+              for offset in range(0, len(encoded), 4096):
+                  print(encoded[offset:offset + 4096])
+              print("CLOUDSCRIBE_AUDIT_FILE_END")
+          print("CLOUDSCRIBE_AUDIT_INVENTORY " + json.dumps({
+              "files": inventory, "total_file_count": len(ordered),
+              "files_outside_inventory_bound": [p.relative_to(root).as_posix() for p in ordered[256:]],
+              "complete": not incomplete}))
+          if incomplete:
+              raise SystemExit("Partial bounded export only; no complete evidence/acceptance claim")
