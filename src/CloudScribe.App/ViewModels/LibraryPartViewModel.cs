@@ -13,5 +13,6 @@ public sealed class LibraryPartViewModel
     }
     public DocumentSummary Document { get; }
     public string Status { get; }
+    public string OpenAccessibleName => $"Open part: {Document.Title}";
     public IAsyncRelayCommand<Guid> OpenCommand { get; }
 }

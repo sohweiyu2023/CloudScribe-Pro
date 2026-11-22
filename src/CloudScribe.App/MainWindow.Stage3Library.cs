@@ -40,8 +40,8 @@ public sealed partial class MainWindow
 
             // Lifecycle state can change after Opened while the durable local library is
             // initialized. Observe those changes so an Empty/Error transition cannot restore
-            // historical Stage 3 placeholder copy into a Final build.
-            viewModel.PropertyChanged += (_, args) =>
+            // historical Stage 3 placeholder copy into a Final build, and unsubscribe on close.
+            System.ComponentModel.PropertyChangedEventHandler onLifecycleChanged = (_, args) =>
             {
                 if (string.Equals(
                     args.PropertyName,
@@ -53,6 +53,14 @@ public sealed partial class MainWindow
                         DispatcherPriority.Background);
                 }
             };
+            viewModel.PropertyChanged += onLifecycleChanged;
+            void OnWindowClosed(object? sender, EventArgs closedArgs)
+            {
+                window.Closed -= OnWindowClosed;
+                window.Opened -= HandleStage3WindowOpened;
+                viewModel.PropertyChanged -= onLifecycleChanged;
+            }
+            window.Closed += OnWindowClosed;
         }
     }
 

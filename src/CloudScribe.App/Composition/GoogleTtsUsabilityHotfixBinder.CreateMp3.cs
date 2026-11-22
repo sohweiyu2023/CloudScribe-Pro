@@ -139,7 +139,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
             { _ = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.PreferenceWrite, e); model.StatusMessage = "Voice loaded for this session, but its preference could not be saved."; return; }
             model.StatusMessage = "Saved voice chosen. Loading verified voices before cost review.";
-            if (reloadVoices is not null) await reloadVoices().ConfigureAwait(true);
+            if (reloadVoices is not null)
+            {
+                try { await reloadVoices().ConfigureAwait(true); }
+                catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+                { model.StatusMessage = ReportLocalFailure(CloudScribe.Application.Logging.LocalRequestStage.Review, e); }
+            }
         };
         TextBox locale = NewTextBox("Language, for example en-US");
         locale.Text = model.VoiceLabLocaleFilter;

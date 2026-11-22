@@ -21,6 +21,6 @@ public sealed class LibraryArticleViewModel
     public bool HasParts => Parts.Count > 0;
     public bool ExpandParts { get; }
     public string PartsLabel => $"Technical narration parts ({Parts.Count})";
+    public string OpenAccessibleName => $"Open article: {Document.Title}";
     public string PreparationStatus { get; }
 }
-

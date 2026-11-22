@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using CloudScribe.Application.Diagnostics;
 using CloudScribe.Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,10 @@ namespace CloudScribe.Infrastructure.Diagnostics;
 /// <summary>Permanent safe trend metadata. No free-form log text, exception detail or private response is serialized.</summary>
 public sealed partial class GoogleTrendHistoryLoggerProvider : ILoggerProvider, IGoogleTrendHistoryHealth
 {
+    private static readonly ConcurrentDictionary<string, byte> HistoryOwners = new(
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly System.Threading.Lock gate = new();
+    private string? ownedHistoryPath;
     private readonly TimeProvider clock;
     private FileStream? stream;
     private bool available, disposed, partialTail;
@@ -28,10 +32,18 @@ public sealed partial class GoogleTrendHistoryLoggerProvider : ILoggerProvider, 
         {
             try
             {
-                OpenHistory(Path.Combine(paths.RootDirectory, "data", "google-trend-history-v1.jsonl"));
+                string path = Path.GetFullPath(Path.Combine(paths.RootDirectory, "data", "google-trend-history-v1.jsonl"));
+                if (!HistoryOwners.TryAdd(path, 0)) throw new IOException("Trend history already has a writer in this process.");
+                ownedHistoryPath = path;
+                OpenHistory(path);
                 available = true; failureReason = "None";
             }
-            catch (Exception error) when (NonFatal(error)) { Fail("OpenFailed", error); }
+            catch (Exception error) when (NonFatal(error))
+            {
+                try { CloseHistory(); }
+                catch (Exception cleanupError) when (NonFatal(cleanupError)) { /* Preserve the original open failure. */ }
+                Fail("OpenFailed", error);
+            }
         }
     }
 
@@ -51,9 +63,22 @@ public sealed partial class GoogleTrendHistoryLoggerProvider : ILoggerProvider, 
             if (disposed) return;
             disposed = true; available = false;
             if (string.Equals(failureReason, "None", StringComparison.Ordinal)) failureReason = "Disposed";
-            try { stream?.Dispose(); }
+            try { CloseHistory(); }
             catch (Exception error) when (NonFatal(error)) { Fail("CloseFailed", error); }
+        }
+    }
+
+    private void CloseHistory()
+    {
+        try { stream?.Dispose(); }
+        finally
+        {
             stream = null;
+            if (ownedHistoryPath is not null)
+            {
+                HistoryOwners.TryRemove(ownedHistoryPath, out _);
+                ownedHistoryPath = null;
+            }
         }
     }
 

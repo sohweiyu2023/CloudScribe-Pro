@@ -26,3 +26,11 @@ Failed article review/reservation UI state is discarded in memory and its acknow
 Private one-response provider diagnostics retain their separate explicit consent, exact-request binding, ten-minute one-response window, local retention and normal export exclusion. This change does not enable that mode. See [private diagnostics](PRIVATE_PROVIDER_DIAGNOSTICS.md) and [Google failure diagnostics](GOOGLE_FAILURE_DIAGNOSTICS.md).
 
 Offline tests cover the exact ten-minute boundary, expired preparation/service reviews without reservation, unchanged fresh-review behavior, unknown and wrapped exceptions, hostile metadata, sensitive-message exclusion and throwing loggers. They do not establish a historical runtime cause when an older build discarded the original exception, nor prove a provider request succeeds. No live provider request is needed to test these diagnostics.
+
+## Explicit Library refresh and recovery
+
+Explicit Refresh and search failures retain the LibrarySearch stage and a fixed, privacy-safe status without discarding the existing document workspace. Diagnostic logging still runs for an older failed read, even when a newer refresh makes its visible error obsolete.
+
+Only the current refresh generation may replace the page or publish a refresh error. A successful current read replaces a still-owned refresh failure with the current page summary. Status revision ownership preserves a newer unrelated operation message, including a message that changed away and back while the read was pending. Refresh does not reset unrelated status unconditionally, retry a provider request, or change stored documents.
+
+Deterministic tests exercise actual ShellViewModel list/search failure and explicit recovery, older failure after newer success, older success after newer failure, and unrelated status changes while a read is pending. These tests do not replace native UI acceptance or certify an installed build.

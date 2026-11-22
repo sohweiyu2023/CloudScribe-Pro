@@ -21,6 +21,10 @@ public sealed partial class ShellViewModel
     private bool _suppressDocumentChangeTracking;
     private INarrationPartGroupStore? _narrationPartGroups;
     private int _libraryRefreshVersion;
+    private long _statusMessageVersion;
+    private long? _libraryRefreshFailureStatusVersion;
+
+    partial void OnStatusMessageChanged(string value) => _statusMessageVersion++;
 
     public ObservableCollection<DocumentSummary> LocalDocuments { get; } = [];
     public ObservableCollection<LibraryArticleViewModel> LibraryArticles { get; } = [];
@@ -38,7 +42,10 @@ public sealed partial class ShellViewModel
     private string _documentSaveState = "Local document";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLibrarySearchQuery))]
     private string _librarySearchQuery = string.Empty;
+
+    public bool HasLibrarySearchQuery => !string.IsNullOrWhiteSpace(LibrarySearchQuery);
 
     public bool HasOpenDocument => _currentDocumentId.HasValue;
 
@@ -137,7 +144,16 @@ public sealed partial class ShellViewModel
 
     [RelayCommand]
     private async Task RefreshDocumentLibraryAsync() =>
-        await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
+        await RefreshDocumentLibraryObservedAsync().ConfigureAwait(true);
+
+    [RelayCommand]
+    private void ClearLibrarySearch()
+    {
+        if (LibrarySearchQuery.Length > 0)
+        {
+            LibrarySearchQuery = string.Empty;
+        }
+    }
 
     partial void OnLibrarySearchQueryChanged(string value)
     {
@@ -174,6 +190,10 @@ public sealed partial class ShellViewModel
             }
 
             await OpenDocumentCoreAsync(first.Id).ConfigureAwait(true);
+            if (LifecycleState == WorkspaceLifecycleState.Loading)
+            {
+                LifecycleState = WorkspaceLifecycleState.Error;
+            }
         }
         catch (Exception exception) when (!IsFatalUiException(exception))
         {
@@ -187,28 +207,19 @@ public sealed partial class ShellViewModel
         }
     }
 
-    private async Task RefreshDocumentLibraryObservedAsync()
-    {
-        try
-        {
-            await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
-        }
-        catch (Exception exception) when (!IsFatalUiException(exception))
-        {
-            ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.LibrarySearch, exception);
-            StatusMessage = "Local document search could not be refreshed";
-        }
-    }
+    private Task RefreshDocumentLibraryObservedAsync(int? requestedOffset = null) =>
+        RefreshDocumentLibraryCoreAsync(observeFailure: true, requestedOffset: requestedOffset);
 
-    private async Task RefreshDocumentLibraryCoreAsync()
+    private async Task RefreshDocumentLibraryCoreAsync(bool observeFailure = false, int? requestedOffset = null)
     {
-        EnsureDocumentWorkflowConfigured();
         int refreshVersion = Interlocked.Increment(ref _libraryRefreshVersion);
+        long statusVersion = _statusMessageVersion;
         string query = LibrarySearchQuery.Trim();
-        int offset = LibraryPageOffset;
+        int offset = requestedOffset ?? LibraryPageOffset;
         IsLibraryPageLoading = true;
         try
         {
+            EnsureDocumentWorkflowConfigured();
             IReadOnlyList<DocumentSummary> documents;
             IReadOnlyList<NarrationLibraryArticle> articles;
             int total;
@@ -241,11 +252,28 @@ public sealed partial class ShellViewModel
             }
             if (refreshVersion != Volatile.Read(ref _libraryRefreshVersion)) return;
             ApplyLibraryPage(documents, articles, total, offset, paged, query);
+            CompleteLibraryRefreshStatus();
+        }
+        catch (Exception exception) when (observeFailure && !IsFatalUiException(exception))
+        {
+            ObserveLocalDocumentFailure(CloudScribe.Application.Logging.LocalRequestStage.LibrarySearch, exception);
+            if (refreshVersion == Volatile.Read(ref _libraryRefreshVersion) && statusVersion == _statusMessageVersion)
+            {
+                StatusMessage = "Local document search could not be refreshed";
+                _libraryRefreshFailureStatusVersion = _statusMessageVersion;
+            }
         }
         finally
         {
             if (refreshVersion == Volatile.Read(ref _libraryRefreshVersion)) IsLibraryPageLoading = false;
         }
+    }
+
+    private void CompleteLibraryRefreshStatus()
+    {
+        if (_libraryRefreshFailureStatusVersion != _statusMessageVersion) return;
+        StatusMessage = LibraryPageStatus;
+        _libraryRefreshFailureStatusVersion = null;
     }
 
     private void ApplyLibraryPage(IReadOnlyList<DocumentSummary> documents, IReadOnlyList<NarrationLibraryArticle> articles,
@@ -282,9 +310,11 @@ public sealed partial class ShellViewModel
             DocumentSnapshot? snapshot = await _documentLibrary!.OpenAsync(documentId).ConfigureAwait(true);
             if (snapshot is null)
             {
+                IsDocumentSaving = false;
+                DocumentSaveState = "Open failed";
                 StatusMessage = "The selected local document no longer exists";
                 await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
-                if (LocalDocuments.Count == 0)
+                if (LocalDocuments.Count == 0 && string.IsNullOrWhiteSpace(LibrarySearchQuery))
                 {
                     ClearDocumentWorkspace();
                 }
@@ -317,6 +347,7 @@ public sealed partial class ShellViewModel
             _suppressDocumentChangeTracking = false;
         }
 
+        _ = Interlocked.Increment(ref _autosaveSequence);
         _currentDocumentId = snapshot.Id;
         ApplySaveMetadata(snapshot);
         IsDocumentDirty = false;
@@ -341,6 +372,7 @@ public sealed partial class ShellViewModel
             _suppressDocumentChangeTracking = false;
         }
 
+        _ = Interlocked.Increment(ref _autosaveSequence);
         _currentDocumentId = null;
         _currentRevisionId = null;
         _currentDocumentConcurrencyVersion = 0;

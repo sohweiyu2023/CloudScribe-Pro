@@ -13,6 +13,7 @@ public sealed class DocumentAutosaveCoordinator : IAsyncDisposable
     private readonly TimeProvider _timeProvider;
     private CancellationTokenSource? _pendingCancellation;
     private Task<DocumentSnapshot?> _pendingTask = Task.FromResult<DocumentSnapshot?>(null);
+    private (Guid DocumentId, long ConcurrencyVersion)? _lastCompletedAutosave;
     private int _disposed;
 
     public DocumentAutosaveCoordinator(IDocumentLibrary documentLibrary, TimeProvider timeProvider)
@@ -63,10 +64,40 @@ public sealed class DocumentAutosaveCoordinator : IAsyncDisposable
         }
 
         cancellation?.Cancel();
-        _ = await pending.ConfigureAwait(false);
-        return await _documentLibrary.SaveAsync(
-            request with { RevisionKind = DocumentRevisionKind.Checkpoint },
+        DocumentSnapshot? completedAutosave = await DrainPendingAutosaveAsync(pending).ConfigureAwait(false);
+        long effectiveVersion = request.ExpectedConcurrencyVersion;
+        if (completedAutosave is not null
+            && completedAutosave.Id == request.DocumentId
+            && completedAutosave.ConcurrencyVersion > effectiveVersion)
+        {
+            effectiveVersion = completedAutosave.ConcurrencyVersion;
+        }
+
+        lock (_gate)
+        {
+            if (_lastCompletedAutosave is { } last
+                && last.DocumentId == request.DocumentId
+                && last.ConcurrencyVersion > effectiveVersion)
+            {
+                effectiveVersion = last.ConcurrencyVersion;
+            }
+        }
+
+        DocumentSaveRequest effectiveRequest = effectiveVersion != request.ExpectedConcurrencyVersion
+            ? request with { ExpectedConcurrencyVersion = effectiveVersion }
+            : request;
+        DocumentSnapshot saved = await _documentLibrary.SaveAsync(
+            effectiveRequest with { RevisionKind = DocumentRevisionKind.Checkpoint },
             cancellationToken).ConfigureAwait(false);
+        lock (_gate)
+        {
+            if (_lastCompletedAutosave is { } last && last.DocumentId == saved.Id)
+            {
+                _lastCompletedAutosave = null;
+            }
+        }
+
+        return saved;
     }
 
     public async ValueTask DisposeAsync()
@@ -87,7 +118,23 @@ public sealed class DocumentAutosaveCoordinator : IAsyncDisposable
         }
 
         cancellation?.Cancel();
-        _ = await pending.ConfigureAwait(false);
+        _ = await DrainPendingAutosaveAsync(pending).ConfigureAwait(false);
+    }
+
+    private static async Task<DocumentSnapshot?> DrainPendingAutosaveAsync(Task<DocumentSnapshot?> pending)
+    {
+        try
+        {
+            return await pending.ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException
+            and not StackOverflowException
+            and not AccessViolationException)
+        {
+            // Pending autosave errors are already observed by the caller of QueueAsync;
+            // they must not block an explicit checkpoint retry or coordinator disposal.
+            return null;
+        }
     }
 
     private async Task<DocumentSnapshot?> SaveAfterDelayAsync(
@@ -98,9 +145,15 @@ public sealed class DocumentAutosaveCoordinator : IAsyncDisposable
         try
         {
             await Task.Delay(debounce, _timeProvider, cancellation.Token).ConfigureAwait(false);
-            return await _documentLibrary.SaveAsync(
+            DocumentSnapshot saved = await _documentLibrary.SaveAsync(
                 request with { RevisionKind = DocumentRevisionKind.Autosave },
                 cancellation.Token).ConfigureAwait(false);
+            lock (_gate)
+            {
+                _lastCompletedAutosave = (saved.Id, saved.ConcurrencyVersion);
+            }
+
+            return saved;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
