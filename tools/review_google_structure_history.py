@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 import stat
@@ -99,11 +100,24 @@ def reverse_lines(stream, start, end, max_line_bytes, coverage):
         yield b"".join(reversed(fragments))
 
 
+def _tail_digest(stream, start, end):
+    """Compute a bounded O(1)-memory digest of the newest <=64 KiB in the scan window."""
+    tail_len = min(65_536, max(0, end - start))
+    if tail_len == 0:
+        return b""
+    stream.seek(end - tail_len)
+    data = stream.read(tail_len)
+    if len(data) != tail_len:
+        raise ValueError("Log changed during bounded snapshot; retry after a safe checkpoint")
+    return hashlib.blake2b(data, digest_size=16).digest()
+
+
 def snapshot_lines(path, start, expected, max_line_bytes, coverage):
     """Reject changed/non-regular sources without exposing paths or exception text."""
     # Windows Python may expose creation time via lstat ctime but change time via
-    # fstat ctime. Compare shared fields across APIs and each API's full snapshot
-    # against its own baseline, retaining native ctime mutation detection.
+    # fstat ctime, and NTFS timestamps can remain unchanged for same-size in-place
+    # writes within a single OS timer tick. Combine API-local stat checks with a
+    # bounded tail-block digest check so same-size mutations are detected everywhere.
     shared_identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_mode)
     identity = lambda s: (*shared_identity(s), s.st_ctime_ns)
     try:
@@ -112,9 +126,12 @@ def snapshot_lines(path, start, expected, max_line_bytes, coverage):
             opened = os.fstat(stream.fileno())
             if not stat.S_ISREG(opened.st_mode) or shared_identity(opened) != shared_identity(expected):
                 raise ValueError("Log changed during bounded snapshot; retry after a safe checkpoint")
+            before_tail = _tail_digest(stream, start, expected.st_size)
             yield from reverse_lines(stream, start, expected.st_size, max_line_bytes, coverage)
+            after_tail = _tail_digest(stream, start, expected.st_size)
             after = path.lstat()
-            if (identity(os.fstat(stream.fileno())) != identity(opened)
+            if (after_tail != before_tail
+                    or identity(os.fstat(stream.fileno())) != identity(opened)
                     or identity(after) != identity(expected) or stat.S_ISLNK(after.st_mode)):
                 raise ValueError("Log changed during bounded snapshot; retry after a safe checkpoint")
     except OSError:

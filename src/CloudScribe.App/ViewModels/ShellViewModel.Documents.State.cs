@@ -42,7 +42,10 @@ public sealed partial class ShellViewModel
     private string _documentSaveState = "Local document";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLibrarySearchQuery))]
     private string _librarySearchQuery = string.Empty;
+
+    public bool HasLibrarySearchQuery => !string.IsNullOrWhiteSpace(LibrarySearchQuery);
 
     public bool HasOpenDocument => _currentDocumentId.HasValue;
 
@@ -143,6 +146,15 @@ public sealed partial class ShellViewModel
     private async Task RefreshDocumentLibraryAsync() =>
         await RefreshDocumentLibraryObservedAsync().ConfigureAwait(true);
 
+    [RelayCommand]
+    private void ClearLibrarySearch()
+    {
+        if (LibrarySearchQuery.Length > 0)
+        {
+            LibrarySearchQuery = string.Empty;
+        }
+    }
+
     partial void OnLibrarySearchQueryChanged(string value)
     {
         LibraryPageOffset = 0;
@@ -195,14 +207,15 @@ public sealed partial class ShellViewModel
         }
     }
 
-    private Task RefreshDocumentLibraryObservedAsync() => RefreshDocumentLibraryCoreAsync(observeFailure: true);
+    private Task RefreshDocumentLibraryObservedAsync(int? requestedOffset = null) =>
+        RefreshDocumentLibraryCoreAsync(observeFailure: true, requestedOffset: requestedOffset);
 
-    private async Task RefreshDocumentLibraryCoreAsync(bool observeFailure = false)
+    private async Task RefreshDocumentLibraryCoreAsync(bool observeFailure = false, int? requestedOffset = null)
     {
         int refreshVersion = Interlocked.Increment(ref _libraryRefreshVersion);
         long statusVersion = _statusMessageVersion;
         string query = LibrarySearchQuery.Trim();
-        int offset = LibraryPageOffset;
+        int offset = requestedOffset ?? LibraryPageOffset;
         IsLibraryPageLoading = true;
         try
         {
@@ -301,7 +314,7 @@ public sealed partial class ShellViewModel
                 DocumentSaveState = "Open failed";
                 StatusMessage = "The selected local document no longer exists";
                 await RefreshDocumentLibraryCoreAsync().ConfigureAwait(true);
-                if (LocalDocuments.Count == 0)
+                if (LocalDocuments.Count == 0 && string.IsNullOrWhiteSpace(LibrarySearchQuery))
                 {
                     ClearDocumentWorkspace();
                 }
@@ -334,6 +347,7 @@ public sealed partial class ShellViewModel
             _suppressDocumentChangeTracking = false;
         }
 
+        _ = Interlocked.Increment(ref _autosaveSequence);
         _currentDocumentId = snapshot.Id;
         ApplySaveMetadata(snapshot);
         IsDocumentDirty = false;
@@ -358,6 +372,7 @@ public sealed partial class ShellViewModel
             _suppressDocumentChangeTracking = false;
         }
 
+        _ = Interlocked.Increment(ref _autosaveSequence);
         _currentDocumentId = null;
         _currentRevisionId = null;
         _currentDocumentConcurrencyVersion = 0;

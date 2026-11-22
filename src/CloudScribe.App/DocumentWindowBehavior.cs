@@ -15,6 +15,7 @@ internal sealed class DocumentWindowBehavior
     };
 
     private readonly MainWindow _window;
+    private readonly Control? _studioDropSurface;
     private bool _closeApproved;
     private bool _closeInProgress;
 
@@ -27,6 +28,15 @@ internal sealed class DocumentWindowBehavior
         if (ViewModel is { } viewModel)
         {
             viewModel.ImportDocumentRequested += OnImportDocumentRequested;
+        }
+
+        _studioDropSurface = _window.FindControl<Control>("WorkspaceScrollViewer");
+        if (_studioDropSurface is not null)
+        {
+            DragDrop.SetAllowDrop(_studioDropSurface, true);
+            DragDrop.AddDragEnterHandler(_studioDropSurface, OnStudioDragOver);
+            DragDrop.AddDragOverHandler(_studioDropSurface, OnStudioDragOver);
+            DragDrop.AddDropHandler(_studioDropSurface, OnStudioDrop);
         }
     }
 
@@ -56,6 +66,66 @@ internal sealed class DocumentWindowBehavior
         if (eventArgs.KeyModifiers == KeyModifiers.Control && eventArgs.Key == Key.O)
         {
             eventArgs.Handled = Execute(viewModel.ImportDocumentCommand);
+        }
+    }
+
+    private void OnStudioDragOver(object? sender, DragEventArgs eventArgs)
+    {
+        if (ViewModel is not { IsStudioSelected: true })
+        {
+            return;
+        }
+
+        bool allowed = eventArgs.DataTransfer.Contains(DataFormat.File);
+        eventArgs.DragEffects = allowed ? DragDropEffects.Copy : DragDropEffects.None;
+        eventArgs.Handled = true;
+    }
+
+    private void OnStudioDrop(object? sender, DragEventArgs eventArgs)
+    {
+        if (ViewModel is not { IsStudioSelected: true } viewModel)
+        {
+            return;
+        }
+
+        IStorageItem[]? items = eventArgs.DataTransfer.TryGetFiles();
+        eventArgs.Handled = true;
+        if (items is null || items.Length == 0)
+        {
+            viewModel.StatusMessage = "Drop a supported TXT, Markdown, HTML or DOCX file to import it locally.";
+            return;
+        }
+
+        if (items.Length > 1 || items[0] is not IStorageFile file)
+        {
+            viewModel.StatusMessage = "Drop one TXT, Markdown, HTML or DOCX file here, or open Batch MP3 for multiple TXT files and folders.";
+            return;
+        }
+
+        _ = ImportDroppedFileObservedAsync(viewModel, file);
+    }
+
+    private static async Task ImportDroppedFileObservedAsync(ShellViewModel viewModel, IStorageFile file)
+    {
+        try
+        {
+            if (!TryResolveImportKind(file.Name, out LocalDocumentImportKind kind))
+            {
+                NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Unsupported);
+                viewModel.StatusMessage = "Unsupported local document type · use TXT, Markdown, HTML or DOCX";
+                return;
+            }
+
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Open);
+            using Stream content = await file.OpenReadAsync().ConfigureAwait(true);
+            await viewModel.ImportDocumentAsync(kind, file.Name, content).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException
+            and not StackOverflowException
+            and not AccessViolationException)
+        {
+            NativeUiDiagnosticLog.Action(NativeUiOperation.Import, NativeUiPhase.Failed, exception);
+            viewModel.StatusMessage = "Dropped file could not be imported safely · no existing document was changed";
         }
     }
 
@@ -122,9 +192,7 @@ internal sealed class DocumentWindowBehavior
             active.StatusMessage = "Generation is still running. Use Stop waiting before closing; a dispatched request may still be charged.";
             return;
         }
-        if (_closeApproved
-            || _closeInProgress
-            || ViewModel is not { RequiresDocumentSaveBeforeClose: true } viewModel)
+        if (ViewModel is not { RequiresDocumentSaveBeforeClose: true } viewModel)
         {
             return;
         }
@@ -136,8 +204,22 @@ internal sealed class DocumentWindowBehavior
 
     private async Task CompleteCloseAsync(ShellViewModel viewModel)
     {
-        bool canClose = await viewModel.PrepareDocumentCloseAsync().ConfigureAwait(true);
-        _closeInProgress = false;
+        bool canClose = false;
+        try
+        {
+            canClose = await viewModel.PrepareDocumentCloseAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException
+            and not StackOverflowException
+            and not AccessViolationException)
+        {
+            viewModel.StatusMessage = "Close checkpoint failed safely · the editor remains open with your current text";
+        }
+        finally
+        {
+            _closeInProgress = false;
+        }
+
         if (!canClose)
         {
             return;
@@ -152,6 +234,13 @@ internal sealed class DocumentWindowBehavior
         if (ViewModel is { } viewModel)
         {
             viewModel.ImportDocumentRequested -= OnImportDocumentRequested;
+        }
+
+        if (_studioDropSurface is not null)
+        {
+            DragDrop.RemoveDragEnterHandler(_studioDropSurface, OnStudioDragOver);
+            DragDrop.RemoveDragOverHandler(_studioDropSurface, OnStudioDragOver);
+            DragDrop.RemoveDropHandler(_studioDropSurface, OnStudioDrop);
         }
 
         _window.KeyDown -= OnKeyDown;

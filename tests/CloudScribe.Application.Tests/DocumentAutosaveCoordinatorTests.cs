@@ -62,8 +62,82 @@ public sealed class DocumentAutosaveCoordinatorTests
         Assert.Equal(DocumentRevisionKind.Checkpoint, library.Saves[0].RevisionKind);
     }
 
+    [Fact]
+    public async Task FaultedPendingAutosaveDoesNotBlockCheckpointOrDispose()
+    {
+        RecordingDocumentLibrary library = new() { FailFirstSave = true };
+        DocumentAutosaveCoordinator coordinator = new(library, TimeProvider.System);
+        Guid documentId = Guid.NewGuid();
+        DocumentSaveRequest request = new(
+            documentId,
+            "Draft",
+            "retryable",
+            1,
+            DocumentRevisionKind.Autosave);
+
+        Task<DocumentSnapshot?> failedAutosave = coordinator.QueueAsync(
+            request,
+            TimeSpan.Zero,
+            TestContext.Current.CancellationToken);
+        _ = await Assert.ThrowsAsync<IOException>(() => failedAutosave);
+
+        DocumentSnapshot checkpoint = await coordinator.SaveCheckpointAsync(
+            request with { Text = "recovered checkpoint" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("recovered checkpoint", checkpoint.Text);
+        Assert.Equal(DocumentRevisionKind.Checkpoint, library.Saves[^1].RevisionKind);
+
+        library.FailFirstSave = true;
+        Task<DocumentSnapshot?> trailingFailure = coordinator.QueueAsync(
+            request with { ExpectedConcurrencyVersion = checkpoint.ConcurrencyVersion },
+            TimeSpan.Zero,
+            TestContext.Current.CancellationToken);
+        _ = await Assert.ThrowsAsync<IOException>(() => trailingFailure);
+
+        await coordinator.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task CompletedInFlightAutosaveAdvancesCheckpointConcurrencyVersion()
+    {
+        RecordingDocumentLibrary library = new() { EnforceStrictConcurrency = true };
+        await using DocumentAutosaveCoordinator coordinator = new(library, TimeProvider.System);
+        Guid documentId = Guid.NewGuid();
+        DocumentSaveRequest request = new(
+            documentId,
+            "Draft",
+            "autosaved first",
+            1,
+            DocumentRevisionKind.Autosave);
+
+        Task<DocumentSnapshot?> inFlight = coordinator.QueueAsync(
+            request,
+            TimeSpan.Zero,
+            TestContext.Current.CancellationToken);
+        DocumentSnapshot? autosaved = await inFlight;
+        Assert.NotNull(autosaved);
+        Assert.Equal(2, autosaved.ConcurrencyVersion);
+
+        // Caller still holds the pre-autosave concurrency version (1) when requesting a checkpoint.
+        DocumentSnapshot checkpoint = await coordinator.SaveCheckpointAsync(
+            request with { Text = "checkpoint after autosave", ExpectedConcurrencyVersion = 1 },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("checkpoint after autosave", checkpoint.Text);
+        Assert.Equal(3, checkpoint.ConcurrencyVersion);
+        Assert.Equal(2, library.Saves.Count);
+        Assert.Equal(2, library.Saves[1].ExpectedConcurrencyVersion);
+    }
+
     private sealed class RecordingDocumentLibrary : IDocumentLibrary
     {
+        private long _currentVersion = 1;
+
+        public bool FailFirstSave { get; set; }
+
+        public bool EnforceStrictConcurrency { get; set; }
+
         public List<DocumentSaveRequest> Saves { get; } = [];
 
         public Task<DocumentSnapshot> CreateAsync(string title, string text, CancellationToken cancellationToken = default) =>
@@ -90,7 +164,19 @@ public sealed class DocumentAutosaveCoordinatorTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (FailFirstSave)
+            {
+                FailFirstSave = false;
+                throw new IOException("Simulated transient disk failure");
+            }
+
+            if (EnforceStrictConcurrency && request.ExpectedConcurrencyVersion != _currentVersion)
+            {
+                throw new DocumentConcurrencyException(request.DocumentId, request.ExpectedConcurrencyVersion);
+            }
+
             Saves.Add(request);
+            _currentVersion = request.ExpectedConcurrencyVersion + 1;
             return Task.FromResult(new DocumentSnapshot(
                 request.DocumentId,
                 request.Title,
@@ -102,7 +188,7 @@ public sealed class DocumentAutosaveCoordinatorTests
                 Guid.NewGuid(),
                 null,
                 null,
-                request.ExpectedConcurrencyVersion + 1));
+                _currentVersion));
         }
 
         public Task<DocumentSummary> ChangeStatusAsync(

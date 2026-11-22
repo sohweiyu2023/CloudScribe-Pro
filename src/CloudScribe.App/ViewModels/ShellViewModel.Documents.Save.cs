@@ -33,6 +33,7 @@ public sealed partial class ShellViewModel
             return true;
         }
 
+        _ = Interlocked.Increment(ref _autosaveSequence);
         IsDocumentSaving = true;
         DocumentSaveState = "Saving checkpoint…";
         DocumentSaveRequest request = BuildSaveRequest(
@@ -120,7 +121,9 @@ public sealed partial class ShellViewModel
         try
         {
             DocumentSnapshot? snapshot = await pending.ConfigureAwait(true);
-            if (snapshot is null || sequence != Volatile.Read(ref _autosaveSequence))
+            if (snapshot is null
+                || sequence != Volatile.Read(ref _autosaveSequence)
+                || snapshot.Id != _currentDocumentId)
             {
                 return;
             }

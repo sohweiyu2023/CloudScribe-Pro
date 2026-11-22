@@ -34,15 +34,15 @@ public sealed partial class ShellViewModel
     private async Task PreviousLibraryPageAsync()
     {
         if (!CanPreviousLibraryPage()) return;
-        LibraryPageOffset = Math.Max(0, LibraryPageOffset - LibraryPageSize);
-        await RefreshDocumentLibraryObservedAsync().ConfigureAwait(true);
+        int targetOffset = Math.Max(0, LibraryPageOffset - LibraryPageSize);
+        await RefreshDocumentLibraryObservedAsync(requestedOffset: targetOffset).ConfigureAwait(true);
     }
 
     [RelayCommand(CanExecute = nameof(CanNextLibraryPage))]
     private async Task NextLibraryPageAsync()
     {
         if (!CanNextLibraryPage()) return;
-        LibraryPageOffset += LibraryPageSize;
-        await RefreshDocumentLibraryObservedAsync().ConfigureAwait(true);
+        int targetOffset = LibraryPageOffset + LibraryPageSize;
+        await RefreshDocumentLibraryObservedAsync(requestedOffset: targetOffset).ConfigureAwait(true);
     }
 }

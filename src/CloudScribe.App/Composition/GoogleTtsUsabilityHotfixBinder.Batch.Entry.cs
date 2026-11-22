@@ -21,7 +21,12 @@ public sealed partial class GoogleTtsUsabilityHotfixBinder
             var zone = owner.FindControl<Border>(zoneName);
             var button = owner.FindControl<Button>(buttonName);
             if (surface is null || zone is null || button is null) return;
-            button.Click += async (_, _) => await OpenFromQueueAsync(null).ConfigureAwait(true);
+            button.Click += async (_, _) =>
+            {
+                try { await OpenFromQueueAsync(null).ConfigureAwait(true); }
+                catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+                { model.StatusMessage = "Batch MP3 could not be opened safely. Your local documents were unchanged."; }
+            };
             DragDrop.AddDragEnterHandler(surface, (_, e) => UpdateDrop(e));
             DragDrop.AddDragOverHandler(surface, (_, e) => UpdateDrop(e));
             DragDrop.AddDragLeaveHandler(surface, (_, _) => Highlight(false));

@@ -68,6 +68,21 @@ class StreamingHistoryTests(unittest.TestCase):
                 actual = list(reader.reverse_lines(io.BytesIO(data), 0, len(data), 200000, coverage))
                 self.assertEqual(actual, list(reversed(data.splitlines())))
 
+    def test_same_size_same_metadata_in_place_mutation_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="PRIVATE_PATH_") as folder:
+            root = Path(folder)
+            p = root / "history.jsonl"
+            p.write_bytes(row(200))
+            frozen_stat = p.lstat()
+            original = reader.reverse_lines
+            def changed(*args):
+                yield from original(*args)
+                p.write_bytes(row(400))
+            with patch.object(reader, "reverse_lines", side_effect=changed),                     patch.object(reader.os, "fstat", return_value=frozen_stat),                     patch.object(Path, "lstat", return_value=frozen_stat):
+                with self.assertRaisesRegex(ValueError, "Log changed") as error:
+                    reader.review(root)
+            self.assertNotIn("PRIVATE_PATH", str(error.exception))
+
     def test_in_place_source_change_fails_without_path_disclosure(self):
         with tempfile.TemporaryDirectory(prefix="PRIVATE_PATH_") as folder:
             root = Path(folder)

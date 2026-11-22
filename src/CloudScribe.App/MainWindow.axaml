@@ -831,7 +831,7 @@
 
     <Border Grid.Row="4" MinHeight="32" Background="Transparent" Padding="20,0,20,5">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MinWidth="0" />
+        <TextBlock Text="{Binding StatusMessage}" ToolTip.Tip="{Binding StatusMessage}" AutomationProperties.LiveSetting="Polite" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="{DynamicResource Typography.Meta}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MinWidth="0" />
         <Border Grid.Column="1" Background="{DynamicResource Brush.SuccessSoft}" BorderBrush="{DynamicResource Brush.Success}" BorderThickness="1" CornerRadius="9" Padding="9,4" VerticalAlignment="Center" IsVisible="{Binding IsFullLayout}">
           <TextBlock Text="LOCAL-FIRST · OFFLINE READY" Foreground="{DynamicResource Brush.Success}" FontWeight="Bold" FontSize="{DynamicResource Typography.Caption}" />
         </Border>
