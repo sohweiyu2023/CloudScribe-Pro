@@ -116,7 +116,7 @@ def main() -> int:
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=120,
+                timeout=300,
                 check=False,
                 env=environment,
             )

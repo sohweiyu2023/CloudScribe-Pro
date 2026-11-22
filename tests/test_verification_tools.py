@@ -68,6 +68,7 @@ def _copy_source(destination: Path) -> Path:
         ROOT,
         root,
         ignore=shutil.ignore_patterns("bin", "obj", "TestResults", "__pycache__", ".vs", ".git"),
+        copy_function=shutil.copy,
     )
     return root
 
