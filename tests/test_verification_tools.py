@@ -658,10 +658,28 @@ class ServicingReleaseIdentityTests(unittest.TestCase):
         {"file_version": ""},
     )
 
+    IDENTITY_FILES = (
+        "SESSION_STATE.json",
+        "SHA256SUMS.txt",
+        "global.json",
+        "src/CloudScribe.App/CloudScribe.App.csproj",
+        "src/CloudScribe.App/MainWindow.VisualCapture.cs",
+        "tools/verify_stage2_visual_evidence.py",
+        "src/CloudScribe.App/MainWindow.axaml.cs",
+        "src/CloudScribe.App/MainWindow.axaml",
+        "src/CloudScribe.App/CloudScribeApplication.axaml",
+        "tests/CloudScribe.Architecture.Tests/AdaptiveShellTests.cs",
+        "scripts/verify-stage2.ps1",
+    )
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="cloudscribe-servicing-identity-")
         self.addCleanup(temporary.cleanup)
-        self.root = _copy_source(Path(temporary.name))
+        self.root = Path(temporary.name) / "source"
+        for relative in self.IDENTITY_FILES:
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, target)
         self.set_identity()
 
     def set_identity(self, version="1.0.8", informational=None, file_version=None,
